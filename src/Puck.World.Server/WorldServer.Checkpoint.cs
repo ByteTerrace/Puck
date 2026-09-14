@@ -71,6 +71,7 @@ public sealed partial class WorldServer {
                 current: candidate,
                 mutation: entry.Mutation,
                 tick: entry.Tick,
+                engineTick: entry.EngineTick,
                 instanceIdentity: InstanceIdentity,
                 candidate: out var next,
                 reason: out var composeReason,
@@ -86,15 +87,16 @@ public sealed partial class WorldServer {
                 );
             }
 
-            // An advancing or easing cell's trait re-bases to the ORIGINAL journal tick it was set at, exactly as it
-            // did on the live apply this replays — see RebaseCellTraits' remarks. Doing this BEFORE revalidation is
-            // what lets world.undo rewind a regen row's accumulation, or a dynamics cell's follower state,
-            // bit-identically, same as it already does for a generator's $cursor.
+            // An advancing or easing cell's trait re-bases to the ORIGINAL journal tick/engine tick it was set at,
+            // exactly as it did on the live apply this replays — see RebaseCellTraits' remarks. Doing this BEFORE
+            // revalidation is what lets world.undo rewind a regen row's accumulation, or a dynamics cell's follower
+            // state, bit-identically, same as it already does for a generator's $cursor.
             next = RebaseCellTraits(
                 original: candidate,
                 candidate: next,
                 mutation: entry.Mutation,
-                tick: entry.Tick
+                tick: entry.Tick,
+                engineTick: entry.EngineTick
             );
 
             // Cross-document claims were proved before the journal was admitted; replay repeats only local checks.
@@ -362,6 +364,7 @@ public sealed partial class WorldServer {
                     current: candidate,
                     mutation: entry.Mutation,
                     tick: entry.Tick,
+                    engineTick: entry.EngineTick,
                     instanceIdentity: InstanceIdentity,
                     candidate: out var next,
                     reason: out _,
@@ -375,7 +378,8 @@ public sealed partial class WorldServer {
                     original: candidate,
                     candidate: next,
                     mutation: entry.Mutation,
-                    tick: entry.Tick
+                    tick: entry.Tick,
+                    engineTick: entry.EngineTick
                 );
             }
 
@@ -395,7 +399,7 @@ public sealed partial class WorldServer {
         byte[] DefinitionJson,
         byte[] BaseDefinitionJson,
         string BaseOrigin,
-        IReadOnlyList<(ulong Tick, WorldMutation Mutation)> Journal,
+        IReadOnlyList<(ulong Tick, ulong EngineTick, WorldMutation Mutation)> Journal,
         ulong LastCompletedTick,
         ulong LastCompletedEngineTicks,
         ulong LastStepTicks,
@@ -507,10 +511,10 @@ public sealed partial class WorldServer {
                 }
             }
 
-            var journal = new (ulong, WorldMutation)[m_journal.Count];
+            var journal = new (ulong, ulong, WorldMutation)[m_journal.Count];
 
             for (var index = 0; (index < m_journal.Count); index++) {
-                journal[index] = (m_journal[index].Tick, m_journal[index].Mutation);
+                journal[index] = (m_journal[index].Tick, m_journal[index].EngineTick, m_journal[index].Mutation);
             }
 
             var ruleGateHeld = new List<(string, bool)>(capacity: m_ruleGateHeld.Count);
@@ -607,10 +611,11 @@ public sealed partial class WorldServer {
         m_base = WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson);
         m_baseOrigin = server.BaseOrigin;
         m_journal.Clear();
-        foreach (var (tick, mutation) in server.Journal) {
+        foreach (var (tick, engineTick, mutation) in server.Journal) {
             m_journal.Add(item: new JournalEntry(
                 Mutation: mutation,
-                Tick: tick
+                Tick: tick,
+                EngineTick: engineTick
             ));
         }
         m_lastCompletedTick = server.LastCompletedTick;
@@ -719,15 +724,20 @@ public sealed partial class WorldServer {
     /// recorded, and the caller should refuse the activation rather than diverge silently.</summary>
     /// <param name="mutation">The recorded mutation.</param>
     /// <param name="tick">The recorded application tick.</param>
+    /// <param name="engineTick">The recorded application engine tick — the exact coordinate the live apply rebased
+    /// an Advance epoch against; never re-derived from <paramref name="tick"/> at any rate.</param>
     /// <returns><see langword="true"/> when the mutation re-applied.</returns>
-    public bool TryApplyJournalTailMutation(WorldMutation mutation, ulong tick) => TryApplyMutation(
+    public bool TryApplyJournalTailMutation(WorldMutation mutation, ulong tick, ulong engineTick) => TryApplyMutation(
         connectionId: -1,
         correlationId: 0L,
         mutation: mutation,
         preMetered: false,
-        tick: tick
+        tick: tick,
+        engineTick: engineTick
     );
 
-    // One journal entry — the tick a mutation applied and the mutation itself (the edit history replay reproduces).
-    private readonly record struct JournalEntry(ulong Tick, WorldMutation Mutation);
+    // One journal entry — the tick and engine tick a mutation applied at, and the mutation itself (the edit history
+    // replay reproduces). The two clocks are independent: Tick is the simulation-tick coordinate undo/replay rebase
+    // a Cycle epoch against, EngineTick the engine-tick coordinate they rebase an Advance epoch against.
+    private readonly record struct JournalEntry(ulong Tick, ulong EngineTick, WorldMutation Mutation);
 }

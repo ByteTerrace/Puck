@@ -28,14 +28,11 @@ public abstract partial class StateRowJsonConverter<TRow> {
         ("value", "cells"),
         ("value", "capacity"),
         ("advance", "draw"),
-        ("advance", "capacity"),
         ("dynamics", "draw"),
         ("dynamics", "advance"),
-        ("dynamics", "capacity"),
         ("cycle", "draw"),
         ("cycle", "advance"),
         ("cycle", "dynamics"),
-        ("cycle", "capacity"),
     ];
 
     /// <inheritdoc/>
@@ -52,7 +49,7 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["min"] = KindConditionalEnvelopeSchema(),
             ["max"] = KindConditionalEnvelopeSchema(),
             ["capacity"] = new JsonObject { ["type"] = "integer" },
-            ["nonNegative"] = new JsonObject { ["type"] = "boolean" },
+            ["overflow"] = exportType(typeof(StateOverflow)),
             ["evicts"] = new JsonObject { ["type"] = "boolean" },
             ["advance"] = exportType(typeof(StateAdvance)),
             ["draw"] = exportType(typeof(Draw)),
@@ -69,8 +66,9 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["valuesFrom"] = new JsonObject { ["type"] = "string" },
             ["domain"] = exportType(typeof(StateDomain)),
             ["inverse"] = exportType(typeof(StateInverse)),
-            ["dynamics"] = DynamicsSchema(),
+            ["dynamics"] = exportType(typeof(StateDynamics)),
             ["cycle"] = exportType(typeof(StateCycle)),
+            ["clock"] = ClockSchema(),
         };
 
         foreach (var member in claimed) {
@@ -98,6 +96,11 @@ public abstract partial class StateRowJsonConverter<TRow> {
         }
 
         allOf.Add(item: DrawSiteDependency());
+        // 'clock' is the slot cell's own timing state (see StateCellClock) and rides beside 'value' alone.
+        allOf.Add(item: new JsonObject {
+            ["if"] = new JsonObject { ["required"] = new JsonArray("clock") },
+            ["then"] = new JsonObject { ["required"] = new JsonArray("value") },
+        });
 
         return new JsonObject {
             ["type"] = "object",
@@ -173,37 +176,33 @@ public abstract partial class StateRowJsonConverter<TRow> {
         new JsonObject { ["type"] = "string" }
     ),
     };
-    // ReadDynamics' own shape: "row" and the fixed-native "y0"/"v0" (the decimal FixedQ4816 spelling regardless of
-    // the carrying row's own kind) required, "epochTick" defaulting to zero when absent. Never delegated to a
-    // nested type's own converter — StateDynamics carries no JSON contract of its own, only this converter's
-    // hand-rolled Read/Write. Left undescribed at the leaf: a row-level occurrence picks up StateDynamics.Y0/V0's
-    // own XML doc through RestoreSkippedPropertyAnnotations once this shape lands under a reflectable "dynamics"
-    // property, and a second description here would collide with it.
-    private static JsonObject DynamicsSchema() => new() {
+    // ReadClock's own shape: every member optional (a fresh cell has no "clock" at all), the fixed-native "y0"/"v0"
+    // (the decimal FixedQ4816 spelling regardless of the carrying row's own kind) among them. Never delegated to a
+    // nested type's own converter — StateCellClock carries no JSON contract of its own, only this converter's
+    // hand-rolled Read/Write.
+    private static JsonObject ClockSchema() => new() {
         ["type"] = "object",
         ["properties"] = new JsonObject {
-            ["row"] = new JsonObject { ["type"] = "string" },
+            ["epochTick"] = new JsonObject { ["type"] = "integer" },
+            ["epochEngineTick"] = new JsonObject { ["type"] = "integer" },
             ["y0"] = new JsonObject { ["type"] = "string" },
             ["v0"] = new JsonObject { ["type"] = "string" },
-            ["epochTick"] = new JsonObject { ["type"] = "integer" },
+            ["substepTicks"] = new JsonObject { ["type"] = "integer" },
         },
-        ["required"] = new JsonArray(
-        "row",
-        "y0",
-        "v0"
-    ),
         ["additionalProperties"] = false,
     };
     // ReadCells' own per-entry shape: "key"/"value" required, every other member optional and read through the
-    // options' resolver (advance/cycle/visibility/observation) or hand-rolled (dynamics — see DynamicsSchema).
+    // options' resolver (advance/dynamics/cycle/visibility/observation) or hand-rolled (clock — see ClockSchema).
     private static JsonObject CellSchema(Func<Type, JsonNode> exportType) => new() {
         ["type"] = "object",
         ["properties"] = new JsonObject {
             ["key"] = new JsonObject { ["type"] = "string" },
             ["value"] = KindConditionalValueSchema(),
             ["advance"] = exportType(typeof(StateAdvance)),
-            ["dynamics"] = DynamicsSchema(),
+            ["dynamics"] = exportType(typeof(StateDynamics)),
             ["cycle"] = exportType(typeof(StateCycle)),
+            ["behavior"] = exportType(typeof(StateCellBehavior)),
+            ["clock"] = ClockSchema(),
             ["visibility"] = exportType(typeof(StateVisibility)),
             ["observation"] = exportType(typeof(StateObservation)),
             ["provenance"] = new JsonObject { ["type"] = "string" },
@@ -213,6 +212,22 @@ public abstract partial class StateRowJsonConverter<TRow> {
         "value"
     ),
         ["additionalProperties"] = false,
+        // A cell opting out with behavior="none" declares no trait of its own either — see EffectiveBehavior.Resolve.
+        ["allOf"] = new JsonArray(new JsonObject {
+            ["if"] = new JsonObject {
+                ["required"] = new JsonArray("behavior"),
+                ["properties"] = new JsonObject { ["behavior"] = new JsonObject { ["const"] = nameof(StateCellBehavior.None) } },
+            },
+            ["then"] = new JsonObject {
+                ["not"] = new JsonObject {
+                    ["anyOf"] = new JsonArray(
+                new JsonObject { ["required"] = new JsonArray("advance") },
+                new JsonObject { ["required"] = new JsonArray("dynamics") },
+                new JsonObject { ["required"] = new JsonArray("cycle") }
+            ),
+                },
+            },
+        }),
     };
     private static JsonObject MutuallyExclusive(string first, string second) => new() {
         ["not"] = new JsonObject {

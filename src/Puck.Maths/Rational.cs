@@ -139,10 +139,12 @@ public readonly record struct Rational : IComparable<Rational> {
         var magnitudeBits = (((long)magnitude.GetBitLength()) - ((long)Denominator.GetBitLength()));
 
         // Below 2^-1100 the value is under every subnormal's half, so the nearest double is zero at either sign.
-        if (magnitudeBits < -1100L) { return ((Numerator.Sign < 0)
+        if (magnitudeBits < -1100L) {
+            return ((Numerator.Sign < 0)
             ? -0.0
             : 0.0
-        ); }
+        );
+        }
 
         var scale = DoubleScale(magnitudeBitLength: magnitudeBits);
         var quotient = BigInteger.DivRem(

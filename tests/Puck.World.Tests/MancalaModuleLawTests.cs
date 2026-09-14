@@ -50,6 +50,7 @@ public sealed class MancalaModuleLawTests {
             rowName: row,
             key: key,
             tick: fixture.Server.NextInputTick,
+            engineTick: fixture.Server.CompletedEngineTicks,
             row: out _,
             rawValue: out var raw,
             text: out _

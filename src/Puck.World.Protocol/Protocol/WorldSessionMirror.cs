@@ -65,6 +65,7 @@ public sealed class WorldSessionMirror : IClientSink {
     private int m_stepSecondsBits;
     private long m_stepTicksBits;
     private long m_tickBits;
+    private long m_engineTickBits;
 
     private readonly Vector3[] m_previousPosition = new Vector3[EntityCapacity];
     private readonly Quaternion[] m_previousOrientation = new Quaternion[EntityCapacity];
@@ -144,6 +145,9 @@ public sealed class WorldSessionMirror : IClientSink {
     /// AND the presentation clock <c>WorldSessionSceneEmitter</c> resolves its render alpha against (via
     /// <see cref="StepSeconds"/>/<see cref="SnapshotArrivalTimestamp"/>).</summary>
     public ulong Tick => unchecked((ulong)Interlocked.Read(location: ref m_tickBits));
+    /// <summary>The destination's latest delivered engine-tick coordinate — what a <c>StateAdvance</c> row's live
+    /// value is computed at; never derived from <see cref="Tick"/> at a simulation rate.</summary>
+    public ulong EngineTick => unchecked((ulong)Interlocked.Read(location: ref m_engineTickBits));
 
     private static WorldBodyContactMode[] CompileBodyContacts(WorldDefinition definition) =>
         definition.Kits.Select(selector: static kit => kit.BodyContact).ToArray();
@@ -390,6 +394,10 @@ public sealed class WorldSessionMirror : IClientSink {
                 ? m_seededRouteTick
                 : 0UL)
                 ))
+            );
+            _ = Interlocked.Exchange(
+                location1: ref m_engineTickBits,
+                value: unchecked((long)snapshot.EngineTick)
             );
             if (!preserveSeed) {
                 Volatile.Write(

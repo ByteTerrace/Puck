@@ -188,232 +188,6 @@ public sealed partial class WorldServer {
         mutation: mutation
     ) || (mutation is
         WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus or WorldMutation.SetHostDefaults));
-    // An EXPLICIT write to a cell carrying StateAdvance or StateDynamics — a whole-row UpsertStateRow
-    // (which re-bases the row's OWN slot trait AND every keyed cell's own trait, since it re-declares the whole
-    // row), or an UpsertStateCell (which re-bases ONLY the one cell it names — the row's slot trait when that cell IS
-    // the slot key, or that cell's own trait otherwise) — re-bases the trait to `tick`,
-    // unconditionally overwriting whatever epoch the write's own payload carried. An Advance trait's base becomes
-    // exactly the value the write installed (see StateAdvance's remarks); a Dynamics trait's Y0/V0 become the
-    // eased value/velocity the OLD trait would report at this tick plus a Retarget kick for the target's own jump
-    // (see RebaseDynamics) — never the raw write, so the follower keeps chasing from wherever it actually was. Runs
-    // AFTER TryCompose so it sees the row/cell TryCompose just installed, and BEFORE validation/journal so a rebased
-    // trait is what gets journaled, replayed by world.undo, and read back. `original` is the document the mutation
-    // composed against (before this mutation applied) — a Dynamics rebase needs it to evaluate the OLD trait/target
-    // at `tick`. A no-op for every other mutation kind, and for a cell (row-level or per-cell) that carries neither
-    // trait.
-    private static WorldDefinition RebaseCellTraits(WorldDefinition original, WorldDefinition candidate, WorldMutation mutation, ulong tick) {
-        string? rowName;
-        string? cellKey; // null on a whole-row write (every trait-bearing cell re-bases); the named key on a per-cell write.
-
-        switch (mutation) {
-            case WorldMutation.UpsertStateRow m:
-                rowName = m.Row.Name.Value;
-                cellKey = null;
-                break;
-            case WorldMutation.UpsertStateCell m:
-                rowName = m.Row;
-                cellKey = m.Key;
-                break;
-            default:
-                return candidate;
-        }
-
-        if (WorldDefinitionRows.FindStateRow(
-            rows: candidate.State,
-            name: rowName
-        ) is not { } row) {
-            return candidate;
-        }
-
-        var rebasedRow = RebaseCellTraits(
-            cellKey: cellKey,
-            original: original,
-            originalRow: WorldDefinitionRows.FindStateRow(
-                rows: original.State,
-                name: rowName
-            ),
-            row: row,
-            tick: tick
-        );
-
-        return (ReferenceEquals(
-            objA: rebasedRow,
-            objB: row
-        )
-            ? candidate
-            : candidate.WithWorldState(rows: Upsert(
-                list: candidate.State,
-                item: rebasedRow,
-                keyOf: static (WorldStateRow r) => r.Name
-            ))
-        );
-    }
-    // The row-level rebase the mutation-level overload and a batch's workspace share: `row` is the written row as
-    // composed, `originalRow` the same row before the write (null when the write declared it), `cellKey` null for
-    // a whole-row write. Returns `row` itself when nothing it carries needed re-basing.
-    private static WorldStateRow RebaseCellTraits(WorldDefinition original, WorldStateRow? originalRow, WorldStateRow row, string? cellKey, ulong tick) {
-        var epoch = unchecked((long)tick);
-        var rebasedRow = row;
-        var addressesSlot = ((cellKey is null) || string.Equals(
-            a: cellKey,
-            b: WorldStateRow.SlotKey,
-            comparisonType: StringComparison.Ordinal
-        ));
-
-        if (addressesSlot) {
-            if (row.Advance is { } rowAdvance) {
-                rebasedRow = (rebasedRow with { Advance = (rowAdvance with { EpochTick = epoch }) });
-            }
-
-            if (row.Dynamics is { } rowDynamics) {
-                rebasedRow = (rebasedRow with {
-                    Dynamics = RebaseDynamics(
-                    candidateTrait: rowDynamics,
-                    newTarget: (StateRows.FindCell(
-                        cells: row.Cells,
-                        key: WorldStateRow.SlotKey
-                    )?.Value ?? 0L),
-                    original: original,
-                    originalCell: StateRows.FindCell(
-                        cells: originalRow?.Cells,
-                        key: WorldStateRow.SlotKey
-                    ),
-                    originalRow: originalRow,
-                    tick: tick
-                ),
-                });
-            }
-        }
-
-        var cells = (rebasedRow.Cells ?? []);
-        List<StateCell>? rebasedCells = null;
-
-        for (var index = 0; (index < cells.Count); index++) {
-            var cell = cells[index];
-
-            if (
-                (cellKey is not null) &&
-                !string.Equals(
-                a: cell.Key.Value,
-                b: cellKey,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                continue;
-            }
-
-            if (RebaseOneCell(
-                cell: cell,
-                definition: original,
-                row: originalRow,
-                tick: tick
-            ) is not { } rebased) {
-                continue;
-            }
-
-            rebasedCells ??= new List<StateCell>(collection: cells);
-            rebasedCells[index] = rebased;
-        }
-
-        if (rebasedCells is not null) {
-            rebasedRow = (rebasedRow with { Cells = rebasedCells });
-        }
-
-        return rebasedRow;
-    }
-    // Rebases ONE cell's Advance/Dynamics trait to `tick`, against the PRE-write `row`/`definition` — the shared
-    // body RebaseCellTraits' per-cell loop and RebaseKeyedCellTraits' single-cell arm both perform. Returns null
-    // for a cell that carries neither trait, so a caller's own loop can skip an untouched cell in one check.
-    private static StateCell? RebaseOneCell(StateCell cell, WorldStateRow? row, WorldDefinition definition, ulong tick) {
-        var advance = cell.Advance;
-        var dynamics = cell.Dynamics;
-        var changed = false;
-
-        if (advance is { } cellAdvance) {
-            advance = (cellAdvance with { EpochTick = unchecked((long)tick) });
-            changed = true;
-        }
-
-        if (dynamics is { } cellDynamics) {
-            dynamics = RebaseDynamics(
-                candidateTrait: cellDynamics,
-                newTarget: cell.Value,
-                original: definition,
-                originalCell: StateRows.FindCell(
-                    cells: row?.Cells,
-                    key: cell.Key
-                ),
-                originalRow: row,
-                tick: tick
-            );
-            changed = true;
-        }
-
-        return (changed
-            ? (cell with { Advance = advance, Dynamics = dynamics })
-            : null
-        );
-    }
-    // The write-side counterpart of WorldStateReader.TryEvaluateDynamics: a cell's StateDynamics trait is
-    // rebased, never replaced wholesale, by an explicit write to its own truth value. The trait's Y0/V0 become the
-    // eased sample the OLD trait (against original/originalCell's own PRE-write target) would report AT `tick` —
-    // never the raw write, so the follower keeps chasing from wherever it actually was — plus a Retarget velocity
-    // kick for the target's own jump from the old truth to `newTarget`, both computed through the SAME dynamics row
-    // that produced the sample. A cell that had no PRIOR active trait (originalRow/originalCell absent, or its own
-    // trait unresolvable) keeps whatever Y0/V0 candidateTrait's own payload carries — there is nothing yet to ease
-    // from — and only re-bases the epoch, mirroring StateAdvance's own rebase rule.
-    private static StateDynamics? RebaseDynamics(
-        StateDynamics? candidateTrait,
-        WorldDefinition original,
-        WorldStateRow? originalRow,
-        StateCell? originalCell,
-        long newTarget,
-        ulong tick
-    ) {
-        if (candidateTrait is null) {
-            return null;
-        }
-
-        var epoch = unchecked((long)tick);
-
-        if (
-            (originalRow is null) ||
-            (originalCell is null) ||
-            !WorldStateReader.TryEvaluateDynamics(
-            cell: originalCell,
-            definition: original,
-            row: originalRow,
-            sample: out var sample,
-            tick: tick,
-            trait: out var originalTrait
-        ) ||
-            (StateRows.FindDynamics(
-            dynamics: original.Dynamics,
-            name: originalTrait.Row
-        ) is not { } dynamicsRow)
-        ) {
-            return (candidateTrait with { EpochTick = epoch });
-        }
-
-        var kicked = dynamicsRow.Compiled.Retarget(
-            current: sample,
-            newTarget: StateReader.DynamicsRowRawToFixed(
-                raw: newTarget,
-                row: originalRow
-            ),
-            oldTarget: StateReader.DynamicsRowRawToFixed(
-                row: originalRow,
-                raw: originalCell.Value
-            )
-        );
-
-        return new StateDynamics(
-            Row: candidateTrait.Row,
-            Y0: StateReader.DynamicsFixedToTraitRaw(value: sample.Value),
-            V0: StateReader.DynamicsFixedToTraitRaw(value: kicked.Velocity),
-            EpochTick: epoch
-        );
-    }
     // Drop the first row whose key matches — reports whether a row was actually removed.
     private static bool Remove<T, TKey>(IReadOnlyList<T> list, TKey key, Func<T, TKey> keyOf, out IReadOnlyList<T> result) {
         var kept = new List<T>(capacity: list.Count);
@@ -719,10 +493,11 @@ public sealed partial class WorldServer {
     // never silently compose against tick zero. `evictedKey` is non-null only when an UpsertStateCell write against an
     // Evicts row dropped its oldest cell to make room — the same pure function every re-composition (live apply,
     // world.undo's journal replay) runs, so the reported victim and the actually-dropped cell can never disagree.
-    private static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns = null) {
+    private static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns = null) {
         if (!TryComposeCore(
             candidate: out candidate,
             current: current,
+            engineTick: engineTick,
             evictedKey: out evictedKey,
             instanceIdentity: instanceIdentity,
             mutation: mutation,
@@ -925,7 +700,7 @@ public sealed partial class WorldServer {
     // Scratch for the rows the look graph binds; the step is single-threaded, so one set serves every door.
     private readonly HashSet<string> m_lookReferencedRows = new(comparer: StringComparer.Ordinal);
 
-    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns = null) {
+    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns = null) {
         reason = string.Empty;
         evictedKey = null;
 
@@ -1055,6 +830,7 @@ public sealed partial class WorldServer {
                     batch: batch,
                     candidate: out candidate,
                     current: current,
+                    engineTick: engineTick,
                     evictedKey: out evictedKey,
                     instanceIdentity: instanceIdentity,
                     patterns: patterns,
@@ -1786,7 +1562,8 @@ public sealed partial class WorldServer {
                     evictedKey: out evictedKey,
                     mutation: m,
                     reason: out reason,
-                    tick: tick
+                    tick: tick,
+                    engineTick: engineTick
                 )) {
                     candidate = current;
 

@@ -9,16 +9,20 @@ public sealed class RemoteMcpAuthorizationException : Exception {
     /// <param name="claims">Optional JSON claims request; never a raw header or token.</param>
     public RemoteMcpAuthorizationException(string? claims = null) : base("User authorization is required before this operation can proceed.") {
         if (claims is not null) {
-            if (Encoding.UTF8.GetByteCount(s: claims) > 4096) { throw new ArgumentException(
+            if (Encoding.UTF8.GetByteCount(s: claims) > 4096) {
+                throw new ArgumentException(
                 message: "Claims challenge exceeds its byte budget.",
                 paramName: nameof(claims)
-            ); }
+            );
+            }
             using var document = JsonDocument.Parse(claims);
 
-            if (document.RootElement.ValueKind != JsonValueKind.Object) { throw new ArgumentException(
+            if (document.RootElement.ValueKind != JsonValueKind.Object) {
+                throw new ArgumentException(
                 message: "Claims challenge must be a JSON object.",
                 paramName: nameof(claims)
-            ); }
+            );
+            }
             EncodedClaims = Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: document.RootElement.GetRawText()));
         }
     }

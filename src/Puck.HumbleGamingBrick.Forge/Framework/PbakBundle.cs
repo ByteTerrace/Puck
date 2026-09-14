@@ -296,10 +296,10 @@ public sealed record PbakBundle(PbakBackground? Background, IReadOnlyList<PbakSp
                 length: 4,
                 state: (blob, offset),
                 action: static (span, state) => {
-                for (var character = 0; (character < 4); character++) {
-                    span[character] = ((char)state.blob[(state.offset + character)]);
+                    for (var character = 0; (character < 4); character++) {
+                        span[character] = ((char)state.blob[(state.offset + character)]);
+                    }
                 }
-            }
             );
             var byteLength = ReadU32(
                 blob: blob,

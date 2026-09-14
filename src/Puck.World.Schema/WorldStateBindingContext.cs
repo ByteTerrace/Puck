@@ -188,6 +188,9 @@ public static class WorldStateBindingContext {
             ? entityIndex.ToString(provider: CultureInfo.InvariantCulture)
             : null),
             tick: tick,
+            // Advances(row) refused above, so no read this door reaches can be a StateAdvance trait — the engine
+            // tick coordinate is unreachable and irrelevant here.
+            engineTick: 0UL,
             row: out _,
             rawValue: out var rawValue,
             text: out var text

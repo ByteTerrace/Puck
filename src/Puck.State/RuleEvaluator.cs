@@ -35,6 +35,11 @@ public sealed partial class RuleEvaluator {
     /// before reading.</summary>
     public ulong Tick { get; set; }
 
+    /// <summary>Gets or sets the engine tick (<see cref="Puck.Maths.FixedTickConversion.TicksPerSecond"/> per second)
+    /// every read answers as of; each entry point that takes an engine tick sets it before reading. Read only by a
+    /// <see cref="StateAdvance"/> trait — never derived from <see cref="Tick"/> at a simulation rate.</summary>
+    public ulong EngineTick { get; set; }
+
     /// <summary>Gets or sets the participant index bound to <see cref="BoundKey.Each"/>, or -1.</summary>
     public int BoundEach { get; set; } = -1;
 
@@ -68,8 +73,10 @@ public sealed partial class RuleEvaluator {
     /// <summary>Reads one operand as of a tick.</summary>
     /// <param name="operand">The compiled operand.</param>
     /// <param name="tick">The tick.</param>
-    public RuleFact Read(OperandFact operand, ulong tick) {
+    /// <param name="engineTick">The engine tick.</param>
+    public RuleFact Read(OperandFact operand, ulong tick, ulong engineTick) {
         Tick = tick;
+        EngineTick = engineTick;
 
         return operand.Read(reader: m_host);
     }
@@ -77,8 +84,10 @@ public sealed partial class RuleEvaluator {
     /// <param name="key">The literal key.</param>
     /// <param name="keyFrom">The indirection, or <see langword="null"/>.</param>
     /// <param name="tick">The tick.</param>
-    public string ResolveKey(string? key, CompiledCellRef? keyFrom, ulong tick) {
+    /// <param name="engineTick">The engine tick.</param>
+    public string ResolveKey(string? key, CompiledCellRef? keyFrom, ulong tick, ulong engineTick) {
         Tick = tick;
+        EngineTick = engineTick;
 
         return RuleEvaluation.ResolveKey(
             key: key,
@@ -90,25 +99,29 @@ public sealed partial class RuleEvaluator {
     /// <param name="program">The postfix program.</param>
     /// <param name="kind">The kind to evaluate in.</param>
     /// <param name="tick">The tick.</param>
+    /// <param name="engineTick">The engine tick.</param>
     /// <param name="value">The raw result.</param>
     /// <returns><see langword="true"/> when the expression evaluated.</returns>
-    public bool TryEvaluateExpression(CompiledExpressionToken[] program, CellKind kind, ulong tick, out long value) =>
+    public bool TryEvaluateExpression(CompiledExpressionToken[] program, CellKind kind, ulong tick, ulong engineTick, out long value) =>
         TryEvaluateExpression(
             fault: out _,
             kind: kind,
             program: program,
             tick: tick,
+            engineTick: engineTick,
             value: out value
         );
     /// <summary>Evaluates a compiled expression as of a tick, naming why it did not evaluate.</summary>
     /// <param name="program">The postfix program.</param>
     /// <param name="kind">The kind to evaluate in.</param>
     /// <param name="tick">The tick.</param>
+    /// <param name="engineTick">The engine tick.</param>
     /// <param name="value">The raw result.</param>
     /// <param name="fault">Why the expression failed, or <see cref="ExpressionFault.None"/>.</param>
     /// <returns><see langword="true"/> when the expression evaluated.</returns>
-    public bool TryEvaluateExpression(CompiledExpressionToken[] program, CellKind kind, ulong tick, out long value, out ExpressionFault fault) {
+    public bool TryEvaluateExpression(CompiledExpressionToken[] program, CellKind kind, ulong tick, ulong engineTick, out long value, out ExpressionFault fault) {
         Tick = tick;
+        EngineTick = engineTick;
 
         return RuleEvaluation.TryEvaluateExpression(
             fault: out fault,
@@ -124,20 +137,41 @@ public sealed partial class RuleEvaluator {
     /// rather than a gate that silently stopped holding.</summary>
     /// <param name="gate">The compiled gate.</param>
     /// <param name="tick">The tick.</param>
+    /// <param name="engineTick">The engine tick.</param>
     /// <param name="ruleName">The rule the gate belongs to, for the refusal ledger.</param>
     /// <param name="trace">An optional per-conjunct narration sink.</param>
-    public bool GateOpen(GateToken[] gate, ulong tick, string ruleName, List<string>? trace = null) {
+    public bool GateOpen(GateToken[] gate, ulong tick, ulong engineTick, string ruleName, List<string>? trace = null) =>
+        GateOpen(
+            engineTick: engineTick,
+            faulted: out _,
+            gate: gate,
+            ruleName: ruleName,
+            tick: tick,
+            trace: trace
+        );
+    /// <summary>Evaluates a compiled gate as of a tick, additionally reporting whether it faulted — a conjunct's
+    /// expression overflowed, left a function's domain, or read a fact with no number, or a dynamic table read named
+    /// a key its table lacks. An <c>if</c> effect's condition uses this to distinguish a genuinely false condition
+    /// (<paramref name="faulted"/> false) from one that could not evaluate, which runs neither branch.</summary>
+    /// <param name="gate">The compiled gate.</param>
+    /// <param name="tick">The tick.</param>
+    /// <param name="engineTick">The engine tick.</param>
+    /// <param name="ruleName">The rule the gate belongs to, for the refusal ledger.</param>
+    /// <param name="faulted">Whether some conjunct could not evaluate; already reported against the rule in flight.</param>
+    /// <param name="trace">An optional per-conjunct narration sink.</param>
+    public bool GateOpen(GateToken[] gate, ulong tick, ulong engineTick, string ruleName, out bool faulted, List<string>? trace = null) {
         Tick = tick;
+        EngineTick = engineTick;
         m_host.TableKeyMissing = false;
 
         var open = RuleEvaluation.GateHolds(
-            faulted: out var faulted,
+            faulted: out var conjunctFaulted,
             gate: gate,
             reader: m_host,
             trace: trace
         );
 
-        if (faulted) {
+        if (conjunctFaulted) {
             ReportRefusal(
                 detail: "a gate conjunct's expression overflowed, divided by zero, left a function's domain, or read a fact with no number; the conjunct read false",
                 effect: "gate",
@@ -147,13 +181,18 @@ public sealed partial class RuleEvaluator {
             );
         }
 
-        if (m_host.TableKeyMissing) {
-            m_host.TableKeyMissing = false;
+        var tableKeyMissing = m_host.TableKeyMissing;
 
-            return false;
+        if (tableKeyMissing) {
+            m_host.TableKeyMissing = false;
         }
 
-        return open;
+        faulted = (conjunctFaulted || tableKeyMissing);
+
+        return (tableKeyMissing
+            ? false
+            : open
+        );
     }
     /// <summary>Snapshots the authored cell keys of <paramref name="row"/> in cell order before a forEach sweep.
     /// Cells minted during the sweep join the next sweep; removals and reordering do not change its bound keys.</summary>
@@ -198,9 +237,10 @@ public sealed partial class RuleEvaluator {
     /// change what this tick evaluates.</param>
     /// <param name="latch">The family's edge latch.</param>
     /// <param name="tick">The simulation tick.</param>
+    /// <param name="engineTick">The engine tick.</param>
     /// <param name="stepTicks">How many ticks the step spans.</param>
     /// <returns><see langword="true"/> when any effect installed a mutation.</returns>
-    public bool Evaluate(CompiledRule[] rules, RuleLatch latch, ulong tick, ulong stepTicks) {
+    public bool Evaluate(CompiledRule[] rules, RuleLatch latch, ulong tick, ulong engineTick, ulong stepTicks) {
         var applied = false;
 
         foreach (var rule in rules) {
@@ -263,6 +303,7 @@ public sealed partial class RuleEvaluator {
                             Right: -1
                         ),
                         tick: tick,
+                        engineTick: engineTick,
                         stepTicks: stepTicks
                     );
                 }
@@ -285,7 +326,8 @@ public sealed partial class RuleEvaluator {
                 latch: latch,
                 rule: rule,
                 stepTicks: stepTicks,
-                tick: tick
+                tick: tick,
+                engineTick: engineTick
             );
         }
 
@@ -299,9 +341,10 @@ public sealed partial class RuleEvaluator {
     /// <param name="bindings">The rule's latch bindings.</param>
     /// <param name="binding">The binding this evaluation runs under.</param>
     /// <param name="tick">The simulation tick.</param>
+    /// <param name="engineTick">The engine tick.</param>
     /// <param name="stepTicks">How many ticks the step spans.</param>
     /// <returns><see langword="true"/> when any effect installed a mutation.</returns>
-    public bool EvaluateOnce(CompiledRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong tick, ulong stepTicks) {
+    public bool EvaluateOnce(CompiledRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong tick, ulong engineTick, ulong stepTicks) {
         RuleName = rule.Name;
 
         var trace = BeginTrace(
@@ -385,6 +428,7 @@ public sealed partial class RuleEvaluator {
                 program: declared.Expression,
                 kind: declared.Kind,
                 tick: tick,
+                engineTick: engineTick,
                 value: out var value,
                 fault: out var fault
             )) {
@@ -429,10 +473,12 @@ public sealed partial class RuleEvaluator {
         var open = (ZonesSelected(
             rule: rule,
             tick: tick,
+            engineTick: engineTick,
             trace: trace?.Zones
         ) && GateOpen(
             gate: rule.Gate,
             tick: tick,
+            engineTick: engineTick,
             ruleName: rule.Name,
             trace: trace?.Conjuncts
         ));
@@ -537,11 +583,12 @@ public sealed partial class RuleEvaluator {
             );
         }
     }
-    private bool ZonesSelected(CompiledRule rule, ulong tick, List<string>? trace) {
+    private bool ZonesSelected(CompiledRule rule, ulong tick, ulong engineTick, List<string>? trace) {
         if (rule.Zones is not { References.Count: > 0 } zones) {
             return true;
         }
         Tick = tick;
+        EngineTick = engineTick;
         var selected = true;
 
         foreach (var reference in zones.References) {

@@ -149,7 +149,8 @@ public sealed class PresentationReadsStateLawTests {
         var settings = track.Resolve(
             definition: definition,
             revision: 1,
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         );
 
         Assert.Equal(
@@ -184,7 +185,8 @@ public sealed class PresentationReadsStateLawTests {
         var first = track.Resolve(
             definition: (Fixtures.BuildDocument().WithWorldState(rows: [colorsRow]) with { RenderRaw = WorldRenderDefaults.Absent with { Sky = sky } }),
             revision: 1,
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         );
 
         Assert.Equal(
@@ -207,7 +209,8 @@ public sealed class PresentationReadsStateLawTests {
         var second = track.Resolve(
             definition: (Fixtures.BuildDocument().WithWorldState(rows: [moved]) with { RenderRaw = WorldRenderDefaults.Absent with { Sky = sky } }),
             revision: 2,
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         );
 
         // No re-bake: the same track instance, told only that the revision moved, reads the new cell straight through.

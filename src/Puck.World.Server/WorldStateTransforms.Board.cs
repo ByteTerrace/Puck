@@ -52,7 +52,13 @@ public static partial class WorldStateTransforms {
             );
         }
         if (
-            (row.ClampToEnvelope(value: writeSet.Value) != writeSet.Value) ||
+            !row.TryAdmitWrite(
+            current: 0L,
+            operand: writeSet.Value,
+            write: StateWriteKind.Set,
+            stored: out var admittedValue,
+            reason: out _
+        ) ||
             ((row.Kind == CellKind.Bool) && (writeSet.Value is not (0 or 1)))
         ) {
             return Refuse(
@@ -91,12 +97,12 @@ public static partial class WorldStateTransforms {
                     continue;
                 }
                 if (position[cell] >= 0) {
-                    cells[position[cell]] = cells[position[cell]] with { Value = writeSet.Value };
+                    cells[position[cell]] = cells[position[cell]] with { Value = admittedValue };
                 } else {
                     position[cell] = cells.Count;
                     cells.Add(item: new(
                         topology.NameOf(cell: cell),
-                        writeSet.Value
+                        admittedValue
                     ));
                 }
             }
@@ -140,6 +146,7 @@ public static partial class WorldStateTransforms {
             topology,
             out var direction,
             out var element,
+            out var admittedValue,
             out reason
         )) {
             return false;
@@ -191,7 +198,8 @@ public static partial class WorldStateTransforms {
             result,
             board.Empty,
             direction,
-            element
+            element,
+            admittedValue
         );
         var written = 0;
 
@@ -342,7 +350,13 @@ public static partial class WorldStateTransforms {
                 reason: out reason
             );
         }
-        if (row.ClampToEnvelope(value: push.Value) != push.Value) {
+        if (!row.TryAdmitWrite(
+            current: 0L,
+            operand: push.Value,
+            write: StateWriteKind.Set,
+            stored: out var admittedValue,
+            reason: out _
+        )) {
             return Refuse(
                 message: "push writes a value the history row does not admit",
                 reason: out reason
@@ -354,7 +368,7 @@ public static partial class WorldStateTransforms {
 
         if (slot < cells.Length) {
             written = cells;
-            written[slot] = written[slot] with { Value = push.Value };
+            written[slot] = written[slot] with { Value = admittedValue };
         } else if (slot == cells.Length) {
             written = new StateCell[(cells.Length + 1)];
             cells.CopyTo(
@@ -363,7 +377,7 @@ public static partial class WorldStateTransforms {
             );
             written[slot] = new(
                 CellName.Parse(candidate: slot.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
-                push.Value
+                admittedValue
             );
         } else {
             return Refuse(

@@ -454,10 +454,12 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
             );
             ID3D12DescriptorHeap* gpuHeap;
 
-            try { gpuHeap = CreateHeap(
+            try {
+                gpuHeap = CreateHeap(
                 device,
                 D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
-            ); } catch { _ = ((IUnknown*)cpuHeap)->Release(); throw; }
+            );
+            } catch { _ = ((IUnknown*)cpuHeap)->Release(); throw; }
             var result = new DirectXClearImageDescriptors {
                 m_cpuHeap = ((nint)cpuHeap),
                 m_gpuHeap = ((nint)gpuHeap),
@@ -521,10 +523,12 @@ public sealed unsafe class DirectXGpuComputeRecorder : IGpuComputeRecorder, IGpu
             );
             ID3D12DescriptorHeap* gpuHeap;
 
-            try { gpuHeap = CreateHeap(
+            try {
+                gpuHeap = CreateHeap(
                 device,
                 D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
-            ); } catch { _ = ((IUnknown*)cpuHeap)->Release(); throw; }
+            );
+            } catch { _ = ((IUnknown*)cpuHeap)->Release(); throw; }
             var result = new DirectXClearBufferDescriptors {
                 m_cpuHeap = ((nint)cpuHeap),
                 m_gpuHeap = ((nint)gpuHeap),

@@ -266,7 +266,8 @@ public sealed partial class WorldServer {
             row: out var declared,
             rowName: row,
             text: out _,
-            tick: tick
+            tick: tick,
+            engineTick: CompletedEngineTicks
         ) ||
             (rawValue is not { } raw)
         ) {
@@ -289,6 +290,7 @@ public sealed partial class WorldServer {
             handle: handle,
             key: key,
             tick: tick,
+            engineTick: CompletedEngineTicks,
             row: out var declared,
             rawValue: out var rawValue,
             text: out _
@@ -316,6 +318,7 @@ public sealed partial class WorldServer {
             handle: handle,
             op: op,
             tick: tick,
+            engineTick: CompletedEngineTicks,
             state: (Server: this, Capacity: m_population.Capacity, HasFilter: hasFilter, FilterHandle: filterHandle, Tick: tick),
             isCandidateIndex: static (index, state) =>
                 ((index < state.Capacity) &&

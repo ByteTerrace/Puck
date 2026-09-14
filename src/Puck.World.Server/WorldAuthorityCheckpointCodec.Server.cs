@@ -308,6 +308,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.Journal,
             writeItem: static (w, entry) => {
                 w.WriteUInt64(value: entry.Tick);
+                w.WriteUInt64(value: entry.EngineTick);
                 w.WriteBlock(value: EncodeLeafBlock<WorldMutation>(
                     tryEncode: WorldSubmissionCodec.TryEncodeCommittedMutation,
                     value: entry.Mutation,
@@ -423,13 +424,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "server journal",
             readItem: static (ref WireReader r) => {
                 var tick = r.ReadUInt64();
+                var engineTick = r.ReadUInt64();
                 var mutation = ReadLeafBlock<WorldMutation>(
                     field: "journal mutation",
                     reader: ref r,
                     tryDecode: WorldSubmissionCodec.TryDecodeCommittedMutation
                 );
 
-                return (tick, mutation!);
+                return (tick, engineTick, mutation!);
             }
         );
         var lastCompletedTick = reader.ReadUInt64();

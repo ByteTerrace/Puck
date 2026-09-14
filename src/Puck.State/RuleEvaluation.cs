@@ -403,6 +403,7 @@ public static class RuleEvaluation {
             handle: handle,
             key: key,
             tick: reader.Tick,
+            engineTick: reader.EngineTick,
             row: out var declared,
             rawValue: out var rawValue,
             text: out _
@@ -429,6 +430,7 @@ public static class RuleEvaluation {
             handle: handle,
             key: key,
             tick: reader.Tick,
+            engineTick: reader.EngineTick,
             row: out var declared,
             rawValue: out var rawValue,
             text: out _
@@ -461,6 +463,7 @@ public static class RuleEvaluation {
             handle: handle,
             key: key,
             tick: reader.Tick,
+            engineTick: reader.EngineTick,
             row: out var declared,
             rawValue: out var rawValue,
             text: out _
@@ -490,6 +493,7 @@ public static class RuleEvaluation {
             handle: handle,
             key: key,
             tick: reader.Tick,
+            engineTick: reader.EngineTick,
             row: out var declared,
             rawValue: out var rawValue,
             text: out _

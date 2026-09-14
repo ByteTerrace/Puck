@@ -1441,6 +1441,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             definition: m_client.Definition,
             revision: m_client.DefinitionRevision,
             tick: m_client.Tick,
+            engineTick: m_client.EngineTick,
             resolveLightAnchor: ResolveLightAnchor
         );
 

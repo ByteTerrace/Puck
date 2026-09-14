@@ -52,6 +52,7 @@ public sealed partial class WorldServer {
                     Reclaim: true
                 ),
                 tick: tick,
+                engineTick: CompletedEngineTicks,
                 connectionId: SubmissionEnvelope.LocalConnectionId,
                 correlationId: 0,
                 preMetered: false

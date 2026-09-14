@@ -172,7 +172,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         using var fixture = Fixtures.FreshServer(definition: Scenario(includeBadSecondPlacement: false));
         var installs = 0;
 
-        fixture.Server.MutationJournalTap = (_, _) => installs++;
+        fixture.Server.MutationJournalTap = (_, _, _) => installs++;
 
         fixture.Step();
 

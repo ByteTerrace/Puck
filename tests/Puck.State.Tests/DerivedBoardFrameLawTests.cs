@@ -167,7 +167,8 @@ public sealed class DerivedBoardFrameLawTests {
                 range: null,
                 row: source,
                 store: frame,
-                tick: 0
+                tick: 0,
+                engineTick: 0
             )
         );
         Assert.True(condition: frame.TryWrite(
@@ -185,7 +186,8 @@ public sealed class DerivedBoardFrameLawTests {
                 range: null,
                 row: source,
                 store: frame,
-                tick: 0
+                tick: 0,
+                engineTick: 0
             )
         );
         Assert.True(condition: frame.TryWrite(
@@ -203,7 +205,8 @@ public sealed class DerivedBoardFrameLawTests {
                 range: null,
                 row: source,
                 store: frame,
-                tick: 0
+                tick: 0,
+                engineTick: 0
             )
         );
         Assert.Empty(collection: filter.Cells!);

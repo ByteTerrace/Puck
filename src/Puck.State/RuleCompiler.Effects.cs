@@ -23,7 +23,7 @@ public static partial class RuleCompiler {
         }
         if (effects.Count > RuleCapacity.MaxEffectsPerRule) {
             throw new RuleException(
-                detail: $"a {subject} carries {effects.Count} effects, exceeding the {RuleCapacity.MaxEffectsPerRule}-effect ceiling",
+                detail: $"{Article(subject: subject)} {subject} carries {effects.Count} effects, exceeding the {RuleCapacity.MaxEffectsPerRule}-effect ceiling",
                 refusal: RuleRefusal.EffectKindInadmissible,
                 ruleName: ruleName,
                 subject: subject
@@ -142,8 +142,25 @@ public static partial class RuleCompiler {
                     effect: transaction,
                     ruleName: ruleName
                 );
+            case ActionEffect.If ifEffect:
+                return ResolveIf(
+                    context: context,
+                    effect: ifEffect,
+                    ruleName: ruleName
+                );
             default:
                 if (context.Vocabulary.EffectOf(effect: effect) is { } family) {
+                    if (
+                        context.InsideBranch &&
+                        !family.AllowsInsideBranch
+                    ) {
+                        throw new RuleException(
+                            refusal: RuleRefusal.EffectKindInadmissible,
+                            ruleName: ruleName,
+                            detail: $"'{family.Discriminator}' cannot appear inside an 'if' branch"
+                        );
+                    }
+
                     return family.Compile(
                         context: context,
                         effect: effect,
@@ -312,19 +329,30 @@ public static partial class RuleCompiler {
             );
         }
 
-        var effects = CompileTransactionSteps(
-            steps: effect.Effects,
-            ruleName: ruleName,
-            context: context
-        );
-        var failure = ((effect.OnFailure is { Count: > 0 })
-            ? CompileTransactionSteps(
-                steps: effect.OnFailure,
+        var wasInsideTransaction = context.InsideTransaction;
+
+        context.InsideTransaction = true;
+
+        EffectFact[] effects;
+        EffectFact[] failure;
+
+        try {
+            effects = CompileTransactionSteps(
+                steps: effect.Effects,
                 ruleName: ruleName,
                 context: context
-            )
-            : []
-        );
+            );
+            failure = ((effect.OnFailure is { Count: > 0 })
+                ? CompileTransactionSteps(
+                    steps: effect.OnFailure,
+                    ruleName: ruleName,
+                    context: context
+                )
+                : []
+            );
+        } finally {
+            context.InsideTransaction = wasInsideTransaction;
+        }
 
         return new TransactionEffect(
             effects: effects,
@@ -372,7 +400,7 @@ public static partial class RuleCompiler {
             detail: "transaction contains a null step"
         ),
             ActionEffect.TransformState or ActionEffect.SetState or ActionEffect.AddState or ActionEffect.PushState or
-                ActionEffect.CountdownState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Generate => true,
+                ActionEffect.CountdownState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Generate or ActionEffect.If => true,
             _ => (context.Vocabulary.EffectOf(effect: step)?.AllowsTransaction == true),
         };
 
@@ -389,6 +417,59 @@ public static partial class RuleCompiler {
             ruleName: ruleName
         );
     }
+    // The condition compiles as an ordinary gate. Each branch compiles as an ordinary effect list — its own
+    // non-empty/ceiling checks are CompileEffects' own (subject "if") — under InsideBranch so a family opting out
+    // (save) refuses at any nesting depth, and with a Transaction admitted in the branch only when this 'if' is not
+    // itself inside one (context.InsideTransaction, set by ResolveTransaction around its own steps): transactions
+    // never nest, whether directly or through an intervening 'if'.
+    private static EffectFact ResolveIf(ActionEffect.If effect, string ruleName, RuleCompileContext context) {
+        if (effect.Condition is null) {
+            throw new RuleException(
+                refusal: RuleRefusal.PredicateKindInadmissible,
+                ruleName: ruleName,
+                detail: "'if' must carry a 'condition'"
+            );
+        }
+
+        var condition = CompileGate(
+            predicate: effect.Condition,
+            ruleName: ruleName,
+            context: context
+        );
+        var wasInsideBranch = context.InsideBranch;
+        var allowTransaction = !context.InsideTransaction;
+
+        context.InsideBranch = true;
+
+        try {
+            var then = CompileEffects(
+                allowTransaction: allowTransaction,
+                context: context,
+                effects: effect.Then,
+                ruleName: ruleName,
+                subject: "if"
+            );
+            var elseEffects = ((effect.Else is { Count: > 0 })
+                ? CompileEffects(
+                    allowTransaction: allowTransaction,
+                    context: context,
+                    effects: effect.Else,
+                    ruleName: ruleName,
+                    subject: "if"
+                )
+                : []
+            );
+
+            return new IfEffect(
+                condition: condition,
+                elseEffects: elseEffects,
+                then: then,
+                describe: $"if {then.Length} then-effect(s), else {elseEffects.Length}"
+            );
+        } finally {
+            context.InsideBranch = wasInsideBranch;
+        }
+    }
     private static EffectFact ResolveCountdown(ActionEffect.CountdownState effect, string ruleName, RuleCompileContext context) {
         var row = (context.FindRow(name: effect.State)
             ?? throw new RuleException(
@@ -399,12 +480,12 @@ public static partial class RuleCompiler {
 
         if (
             (row.Kind != CellKind.Int) ||
-            !row.NonNegative
+            (row.Min != 0L)
         ) {
             throw new RuleException(
                 refusal: RuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName,
-                detail: $"state row '{effect.State}' is kind={StateSpelling.Kind(kind: row.Kind)} nonNegative={row.NonNegative.ToString().ToLowerInvariant()} — 'countdownState' requires kind=Int nonNegative=true so its computed final partial step can saturate at zero"
+                detail: $"state row '{effect.State}' is kind={StateSpelling.Kind(kind: row.Kind)} min={(row.Min?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "none")} — 'countdownState' requires kind=Int min=0 so its computed final partial step can saturate at zero"
             );
         }
 
@@ -1003,7 +1084,13 @@ public static partial class RuleCompiler {
                     name: ray.Pattern
                 ) is not { } pattern) ||
                     (pattern.Kind != CellKind.Int) ||
-                    (row.ClampToEnvelope(value: ray.Value) != ray.Value) ||
+                    !row.TryAdmitWrite(
+                    current: 0L,
+                    operand: ray.Value,
+                    write: StateWriteKind.Set,
+                    stored: out _,
+                    reason: out _
+                ) ||
                     ((row.Kind == CellKind.Bool) && (ray.Value is not (0 or 1)))
                 ) {
                     throw Invalid(message: "setRay requires valid board addressing, a declared integer-kind pattern, and an admitted replacement");
@@ -1049,7 +1136,13 @@ public static partial class RuleCompiler {
                         (context.FindTopology(name: writtenBoard.Topology) is not { } writtenTopology) ||
                         (writtenTopology.CellCount > BoardMask.MaxCells) ||
                         (setSource.Kind != CellKind.Int) ||
-                        (written.ClampToEnvelope(value: writeSet.Value) != writeSet.Value) ||
+                        !written.TryAdmitWrite(
+                    current: 0L,
+                    operand: writeSet.Value,
+                    write: StateWriteKind.Set,
+                    stored: out _,
+                    reason: out _
+                ) ||
                         ((written.Kind == CellKind.Bool) && (writeSet.Value is not (0 or 1)))
                     ) {
                         throw Invalid(message: $"writeSet requires a board of at most {BoardMask.MaxCells} cells, an integer set row, and an admitted value");
@@ -1098,6 +1191,7 @@ public static partial class RuleCompiler {
                         targetTopology,
                         out _,
                         out _,
+                        out _,
                         out var combineReason
                     )) {
                         throw Invalid(message: combineReason);
@@ -1135,7 +1229,13 @@ public static partial class RuleCompiler {
                 var ring = Row(name: push.Row);
                 if (
                     (ring.EffectiveDomain is not StateDomain.Ring) ||
-                    (ring.ClampToEnvelope(value: push.Value) != push.Value)
+                    !ring.TryAdmitWrite(
+                    current: 0L,
+                    operand: push.Value,
+                    write: StateWriteKind.Set,
+                    stored: out _,
+                    reason: out _
+                )
                 ) {
                     throw Invalid(message: "push requires a history row and an admitted value");
                 }

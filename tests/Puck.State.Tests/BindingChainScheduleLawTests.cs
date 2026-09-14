@@ -139,7 +139,8 @@ public sealed class BindingChainScheduleLawTests {
             latch: latch,
             rules: compiled,
             stepTicks: 1UL,
-            tick: 1UL
+            tick: 1UL,
+            engineTick: 1UL
         );
         Assert.Equal(
             expected: 2L,
@@ -158,7 +159,8 @@ public sealed class BindingChainScheduleLawTests {
             latch: latch,
             rules: compiled,
             stepTicks: 1UL,
-            tick: 2UL
+            tick: 2UL,
+            engineTick: 2UL
         );
         Assert.Equal(
             expected: 20L,
@@ -220,6 +222,7 @@ public sealed class BindingChainScheduleLawTests {
             ),
             latch: latch,
             tick: 1UL,
+            engineTick: 1UL,
             stepTicks: 1UL
         );
         Assert.Equal(
@@ -256,6 +259,7 @@ public sealed class BindingChainScheduleLawTests {
             ),
             latch: latch,
             tick: 2UL,
+            engineTick: 2UL,
             stepTicks: 1UL
         );
 

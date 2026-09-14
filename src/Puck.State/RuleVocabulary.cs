@@ -46,6 +46,10 @@ public abstract class KeyFamily {
 /// <summary>One authored effect arm a document project owns: the record type and its <c>$type</c> discriminator
 /// (registered onto <see cref="ActionEffect"/>'s polymorphism at serializer resolution), its transaction admission, and its compile.</summary>
 public abstract class EffectFamily {
+    /// <summary>Whether this effect may appear inside an <c>if</c> branch (<see cref="ActionEffect.If.Then"/> or
+    /// <see cref="ActionEffect.If.Else"/>), at any nesting depth. Families opt out explicitly; an effect that
+    /// performs whole-document engine I/O (<c>save</c>) is refused there rather than run conditionally.</summary>
+    public virtual bool AllowsInsideBranch => true;
     /// <summary>Whether this effect has a bounded rollback representation and may appear in a transaction.
     /// Families opt in explicitly; effects with irreversible external work must remain excluded.</summary>
     public virtual bool AllowsTransaction => false;

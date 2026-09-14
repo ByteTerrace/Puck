@@ -62,6 +62,7 @@ public sealed partial class WorldServer {
             rowName: binding.Row,
             key: binding.Key,
             tick: tick,
+            engineTick: CompletedEngineTicks,
             row: out _,
             rawValue: out var raw,
             text: out _
@@ -153,6 +154,7 @@ public sealed partial class WorldServer {
                 Kind: WorldDocumentWriteKind.Set
             ),
             tick: tick,
+            engineTick: CompletedEngineTicks,
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
             preMetered: false

@@ -1845,7 +1845,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// live <c>world.state.cell.set</c> that flips a gate row's cell is settled before the next tick's intent drain
     /// reads it. Resolves each gatesDrive row once through <see cref="StateCatalog.TryResolve(StateLane,string,out StateHandle)"/>
     /// and reads every candidate cell through that handle
-    /// (<see cref="StateReader.TryReadHandle(IReadOnlyList{StateRow},StateCatalog,StateHandle,string?,ulong,out StateRow?,out long?,out string?)"/>)
+    /// (<see cref="StateReader.TryReadHandle(IReadOnlyList{StateRow},StateCatalog,StateHandle,string?,ulong,ulong,out StateRow?,out long?,out string?)"/>)
     /// rather than re-resolving the row by name per cell, or a bespoke scan of <see cref="StateCell.Value"/>. The tick
     /// this resolves at is inert for every row this index can ever hold: <see cref="WorldStateRow.GatesDrive"/>
     /// requires a declared <see cref="StateRow.Capacity"/> (WorldDefinitionValidator), and
@@ -1891,6 +1891,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                     handle: handle,
                     key: cell.Key.Value,
                     tick: 0UL,
+                    engineTick: 0UL,
                     row: out _,
                     rawValue: out var raw,
                     text: out _

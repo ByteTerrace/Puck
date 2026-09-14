@@ -120,10 +120,12 @@ public sealed class ShaderPipelineLoader {
             );
             // Capture every root stage before invoking tools. A candidate cannot combine different revisions
             // of a file reused by several passes; includes are snapshotted by the source compiler.
-            foreach (var pass in plan.Passes) { Capture(sourcePath: Path.GetFullPath(
+            foreach (var pass in plan.Passes) {
+                Capture(sourcePath: Path.GetFullPath(
                 pass.Declaration.Source,
                 directory
-            )); }
+            ));
+            }
             foreach (var planned in plan.Passes) {
                 cancellationToken.ThrowIfCancellationRequested();
                 var pass = planned.Declaration;
@@ -261,10 +263,12 @@ public sealed class ShaderPipelineLoader {
                 values: plan.Outputs.Select(selector: output => output.Name)
             )}";
 
-            if (diagnostics.Count != 0) { message += $"; {string.Join(
+            if (diagnostics.Count != 0) {
+                message += $"; {string.Join(
                 separator: " | ",
                 values: diagnostics
-            )}"; }
+            )}";
+            }
             return new ShaderPipelineLoadResult(
                 candidate,
                 dependencies.ToArray(),

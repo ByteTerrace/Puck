@@ -176,18 +176,24 @@ public readonly record struct SquareIndex
         var (radius, offset) = Locate(value: Value);
         var perimeter = (offset + 1);
 
-        if (perimeter <= (2 * radius)) { return new(
+        if (perimeter <= (2 * radius)) {
+            return new(
             X: ((int)radius),
             Y: ((int)(perimeter - radius))
-        ); }
-        if (perimeter <= (4 * radius)) { return new(
+        );
+        }
+        if (perimeter <= (4 * radius)) {
+            return new(
             X: ((int)((3 * radius) - perimeter)),
             Y: ((int)radius)
-        ); }
-        if (perimeter <= (6 * radius)) { return new(
+        );
+        }
+        if (perimeter <= (6 * radius)) {
+            return new(
             X: ((int)-radius),
             Y: ((int)((5 * radius) - perimeter))
-        ); }
+        );
+        }
         return new(
             X: ((int)(perimeter - (7 * radius))),
             Y: ((int)-radius)

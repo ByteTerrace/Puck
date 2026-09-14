@@ -14,36 +14,36 @@ public static partial class RemoteMcpServer {
         services.AddAuthentication().AddJwtBearer(
             authenticationScheme: ProxyAuthenticationScheme,
             configureOptions: jwt => {
-            // Reuse the strict signature/lifetime policy, never the caller's token-selection events.
-            jwt.TokenValidationParameters = TokenValidation(
-                proxy.Issuer,
-                proxy.Audience
-            );
-            jwt.Authority = proxy.Issuer;
-            jwt.RequireHttpsMetadata = true;
-            jwt.MapInboundClaims = false;
-            jwt.SaveToken = false;
-            jwt.IncludeErrorDetails = false;
-        }
+                // Reuse the strict signature/lifetime policy, never the caller's token-selection events.
+                jwt.TokenValidationParameters = TokenValidation(
+                    proxy.Issuer,
+                    proxy.Audience
+                );
+                jwt.Authority = proxy.Issuer;
+                jwt.RequireHttpsMetadata = true;
+                jwt.MapInboundClaims = false;
+                jwt.SaveToken = false;
+                jwt.IncludeErrorDetails = false;
+            }
         );
         services.Configure<JwtBearerOptions>(
             AuthenticationScheme,
             jwt => jwt.Events.OnMessageReceived = context => {
-            var values = context.Request.Headers["ClientAuthorization"];
+                var values = context.Request.Headers["ClientAuthorization"];
 
-            if (
-                (values.Count != 1) ||
-                !values[0]!.StartsWith(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "Bearer "
-            ) ||
-                string.IsNullOrWhiteSpace(value: values[0]![7..])
-            ) {
-                // No fallback to the proxy's Authorization token, including anonymous discovery requests.
-                context.NoResult();
-            } else { context.Token = values[0]![7..].Trim(); }
-            return Task.CompletedTask;
-        }
+                if (
+                    (values.Count != 1) ||
+                    !values[0]!.StartsWith(
+                    comparisonType: StringComparison.OrdinalIgnoreCase,
+                    value: "Bearer "
+                ) ||
+                    string.IsNullOrWhiteSpace(value: values[0]![7..])
+                ) {
+                    // No fallback to the proxy's Authorization token, including anonymous discovery requests.
+                    context.NoResult();
+                } else { context.Token = values[0]![7..].Trim(); }
+                return Task.CompletedTask;
+            }
         );
     }
     private static void UseProxy(IApplicationBuilder app, RemoteMcpProxyOptions proxy) => app.Use(middleware: async (context, next) => {

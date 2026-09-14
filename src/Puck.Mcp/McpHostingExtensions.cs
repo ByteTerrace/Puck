@@ -17,17 +17,21 @@ public static class McpHostingExtensions {
         Func<IServiceProvider, RemoteMcpHost>? hostFactory = null) {
         ArgumentNullException.ThrowIfNull(builder);
         options = options.Validate();
-        if (options.Target is null) { throw new ArgumentException(
+        if (options.Target is null) {
+            throw new ArgumentException(
             message: "An in-process MCP extension requires a target.",
             paramName: nameof(options)
-        ); }
+        );
+        }
         if (
             (options.Services is not null) &&
             (hostFactory is null)
-        ) { throw new ArgumentException(
+        ) {
+            throw new ArgumentException(
             message: "Service settings require an explicitly installed host adapter.",
             paramName: nameof(hostFactory)
-        ); }
+        );
+        }
         var path = Path.GetFullPath(path: configurationPath);
 
         builder.Services.AddHostedService(implementationFactory: sp => new McpHostedService(
@@ -49,9 +53,9 @@ public static class McpHostingExtensions {
             await using var app = RemoteMcpServer.Build(
                 options,
                 builder => {
-                builder.Services.AddSingleton(implementationInstance: host);
-                builder.Services.AddSingleton<IHostLifetime, NestedLifetime>();
-            }
+                    builder.Services.AddSingleton(implementationInstance: host);
+                    builder.Services.AddSingleton<IHostLifetime, NestedLifetime>();
+                }
             );
 
             m_app = app;

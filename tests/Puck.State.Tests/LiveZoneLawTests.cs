@@ -193,7 +193,8 @@ public sealed class LiveZoneLawTests {
 
         Assert.True(condition: host.Judge(
             rules: rules,
-            tick: 2
+            tick: 2,
+            engineTick: 2
         ));
         Assert.Equal(
             6,
@@ -272,7 +273,8 @@ public sealed class LiveZoneLawTests {
             selects,
             host.Judge(
                 rules: [rules[0]],
-                tick: 2
+                tick: 2,
+                engineTick: 2
             )
         );
         Assert.Equal(
@@ -290,7 +292,8 @@ public sealed class LiveZoneLawTests {
             (first.Length != 0),
             host.Judge(
                 rules: [rules[1]],
-                tick: 3
+                tick: 3,
+                engineTick: 3
             )
         );
         Assert.Equal(
@@ -310,7 +313,8 @@ public sealed class LiveZoneLawTests {
             (index == 0),
             host.Judge(
                 rules: [rules[2]],
-                tick: 4
+                tick: 4,
+                engineTick: 4
             )
         );
         var reads = RuleDataflow.Reads(rule: rules[2]);
@@ -399,7 +403,8 @@ public sealed class LiveZoneLawTests {
             moves,
             host.Judge(
                 rules: rules,
-                tick: 2
+                tick: 2,
+                engineTick: 2
             )
         );
         Assert.True(condition: RuleCompiler.TryResolveDynamicKey(
@@ -446,7 +451,8 @@ public sealed class LiveZoneLawTests {
         );
         Assert.True(condition: host.Judge(
             rules: rules,
-            tick: 2
+            tick: 2,
+            engineTick: 2
         ));
         // deck reads face values [gamma=1, alpha=1, beta=0]: the accepted prefix is two cards long.
         Assert.Equal(
@@ -470,7 +476,8 @@ public sealed class LiveZoneLawTests {
         ));
         Assert.False(condition: host.Judge(
             rules: rules,
-            tick: 3
+            tick: 3,
+            engineTick: 3
         ));
         Assert.Equal(
             12,
@@ -500,7 +507,8 @@ public sealed class LiveZoneLawTests {
         ));
         Assert.True(condition: host.Judge(
             rules: rules,
-            tick: 4
+            tick: 4,
+            engineTick: 4
         ));
         Assert.Contains(
             "zones [$zones[cards[beta]] -> hand] gate=open",
@@ -602,7 +610,8 @@ public sealed class LiveZoneLawTests {
         );
         Assert.True(condition: host.Judge(
             rules: rules,
-            tick: 2
+            tick: 2,
+            engineTick: 2
         ));
         // deck (index 0) holds three cards, hand (index 1) none: 5 + (3 + 1) + (0 + 1).
         Assert.Equal(
@@ -755,7 +764,8 @@ public sealed class LiveZoneLawTests {
         );
         Assert.True(condition: host.Judge(
             rules: rules,
-            tick: 2
+            tick: 2,
+            engineTick: 2
         ));
         Assert.Equal(
             3,
@@ -782,7 +792,8 @@ public sealed class LiveZoneLawTests {
         );
         Assert.True(condition: host.Judge(
             rules: rules,
-            tick: 3
+            tick: 3,
+            engineTick: 3
         ));
         Assert.Equal(
             0,

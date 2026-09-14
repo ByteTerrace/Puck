@@ -54,11 +54,11 @@ public sealed class Shares(
             .GetAsync(
             cancellationToken: cancellationToken,
             requestConfiguration: requestConfiguration => {
-                    requestConfiguration.QueryParameters.Filter =
-                        $"mail eq '{recipientIdentifier}' or userPrincipalName eq '{recipientIdentifier}'";
-                    requestConfiguration.QueryParameters.Select = ["displayName", "id"];
-                    requestConfiguration.QueryParameters.Top = 1;
-                }
+                requestConfiguration.QueryParameters.Filter =
+                    $"mail eq '{recipientIdentifier}' or userPrincipalName eq '{recipientIdentifier}'";
+                requestConfiguration.QueryParameters.Select = ["displayName", "id"];
+                requestConfiguration.QueryParameters.Top = 1;
+            }
         );
         var recipient = matches?.Value?.FirstOrDefault();
 

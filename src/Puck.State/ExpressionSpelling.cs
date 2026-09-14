@@ -19,12 +19,14 @@ namespace Puck.State;
 /// <c>bitField(value, offset, width)</c>, <c>bitInsert(value, field, offset, width)</c>,
 /// <c>boardShift(mask, topology, direction)</c>, <c>boardImage(mask, topology, element)</c>, and
 /// <c>select(condition, whenTrue, whenFalse)</c>.</item>
-/// <item>A state read is its row name, keyed as <c>row[key]</c>. A bare name starts with a letter, <c>_</c>, or
-/// <c>$</c> and continues with letters, digits, <c>_</c>, <c>$</c>, and <c>.</c>; a reserved channel (one starting
-/// with <c>$</c>) may also carry <c>:</c> between name characters and a signed segment after a colon, so
+/// <item>A state read is its row name, keyed as <c>row[key]</c> or, for a literal key, <c>row.key</c> — one dot,
+/// on an unreserved, unquoted name; more than one dot is a parse error naming the fix. A bare name starts with a
+/// letter, <c>_</c>, or <c>$</c> and continues with letters, digits, <c>_</c>, <c>$</c>, and <c>.</c>; a reserved
+/// channel (one starting with <c>$</c>) keeps every dotted segment it carries — the dot-access split never applies
+/// there — and may also carry <c>:</c> between name characters and a signed segment after a colon, so
 /// <c>$table:armor:$each</c> and <c>$board:mask:board:-6:-6</c> are one name each. Any
-/// other name — one carrying a hyphen or a space — is spelled between backquotes: <c>`seat-1`</c>. A key is a bare
-/// name, a number, or a backquoted name.</item>
+/// other name — one carrying a hyphen or a space — is spelled between backquotes: <c>`seat-1`</c>, which likewise
+/// never splits at a dot. A key is a bare name, a number, or a backquoted name.</item>
 /// <item>A table read indexes with the same brackets: <c>$table:moves:power[$bind:move]</c> is the
 /// <c>$table:moves:power:$bind:move</c> channel, and prints that way. A key indexed once more —
 /// <c>buffs[minion[$each]]</c> — is the <c>$cell:minion:$each</c> indirection: the key read live from that cell.</item>
@@ -69,6 +71,38 @@ public static class ExpressionSpelling {
     // ":-6" inside a reserved name is a signed offset segment, never a subtraction: a name cannot end in a colon.
     private static bool IsSignedSegment(string text, int index) =>
         (((index + 1) < text.Length) && (text[index] == '-') && char.IsAsciiDigit(c: text[(index + 1)]));
+    // Dot access's one rule: an unreserved name splits at its FIRST dot into a row and a literal key, and admits no
+    // second one. The reserved ($) exclusion is the caller's job (ParsePrimary checks it before calling; a public
+    // caller rewriting text, not compiling it, does the same). False with `error` empty means "no dot to split";
+    // false with `error` set names the fix for a dot the name carries but cannot split on (trailing, or more than
+    // one) — the parser turns that into a diagnostic, a text rewriter leaves the name untouched.
+    private static bool TrySplitDot(string name, out string row, out string key, out string? error) {
+        row = name;
+        key = string.Empty;
+        error = null;
+
+        var dot = name.IndexOf(value: '.');
+
+        if (dot < 0) {
+            return false;
+        }
+        var rest = name[(dot + 1)..];
+
+        if (rest.Length == 0) {
+            error = $"'{name}' ends with a dot; a dotted read is 'row.key' — write the key after the dot";
+
+            return false;
+        }
+        if (rest.Contains(value: '.')) {
+            error = $"'{name}' carries more than one dot; a dotted read admits exactly one — write '{name[..dot]}[{rest}]' to key by the rest";
+
+            return false;
+        }
+        row = name[..dot];
+        key = rest;
+
+        return true;
+    }
     // Binding strength, C's order: the ternary is loosest, a primary tightest.
     private static int Level(string symbol) => symbol switch {
         "|" => 2,
@@ -352,6 +386,28 @@ public static class ExpressionSpelling {
         }
 
         return (index - start);
+    }
+    /// <summary>Splits a candidate name at dot access's exactly-one-dot rule — the same rule <see cref="TryParse"/>
+    /// applies to an unreserved, unquoted name (<c>row.key</c> becomes the state read <c>row[key]</c>). Excluding a
+    /// reserved (<c>$</c>-prefixed) or backquoted name is the caller's own job, exactly as <see cref="TryParse"/>'s
+    /// own parser does it before calling this; used by <c>WorldModuleNamespace</c>'s import-alias text rewrite so it
+    /// reads a dotted name on the grammar's own terms instead of a second copy of the rule.</summary>
+    /// <param name="name">The candidate name.</param>
+    /// <param name="row">The part before the dot, on success.</param>
+    /// <param name="key">The literal key after the dot, on success.</param>
+    /// <returns><see langword="true"/> when <paramref name="name"/> splits cleanly at one dot; <see
+    /// langword="false"/> — leaving <paramref name="row"/>/<paramref name="key"/> empty — when it carries no dot, or
+    /// carries one it cannot split on (trailing, or more than one), which a text rewriter should leave untouched and
+    /// let compilation report.</returns>
+    public static bool TrySplitDottedName(string name, out string row, out string key) {
+        ArgumentNullException.ThrowIfNull(argument: name);
+
+        return TrySplitDot(
+            error: out _,
+            key: out key,
+            name: name,
+            row: out row
+        );
     }
     /// <summary>Parses an infix spelling to its postfix token list.</summary>
     /// <param name="text">The spelling.</param>
@@ -951,28 +1007,52 @@ public static class ExpressionSpelling {
                         ) {
                             throw Fail(message: $"'{name}' is not a function; a state read is a bare name (or `{name}` to read a row of that name)");
                         }
+                        var stateName = name;
                         string? key = null;
 
+                        // An unreserved, unquoted "a.b" is the state read "a[b]" — a reserved ($) name keeps its
+                        // dotted segments unchanged, and a backquoted name is never split.
+                        if (
+                            !quoted &&
+                            !name.StartsWith(value: '$')
+                        ) {
+                            if (
+                                TrySplitDot(
+                                error: out var dotError,
+                                key: out var dotKey,
+                                name: name,
+                                row: out var dotRow
+                            )
+                            ) {
+                                stateName = dotRow;
+                                key = dotKey;
+                            } else if (dotError is not null) {
+                                throw Fail(message: dotError);
+                            }
+                        }
                         if (Accept(punctuation: "[")) {
+                            if (key is not null) {
+                                throw Fail(message: $"'{name}' already names a key with '.'; a dotted read does not also take '[...]'");
+                            }
                             key = ParseKey();
                             Expect(punctuation: "]");
                         }
                         if (
                             (key is not null) &&
                             !quoted &&
-                            name.StartsWith(
+                            stateName.StartsWith(
                             comparisonType: StringComparison.Ordinal,
                             value: RuleFacts.TablePrefix
                         )
                         ) {
                             return new StateRead(
                                 Key: null,
-                                Name: $"{name}:{key}"
+                                Name: $"{stateName}:{key}"
                             );
                         }
                         return new StateRead(
                             Key: key,
-                            Name: name
+                            Name: stateName
                         );
                     }
                 case Lexeme.Punctuation when (m_value == "("): {

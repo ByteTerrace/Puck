@@ -22,17 +22,19 @@ public sealed class StateCycleWordLawTests {
             row: out _,
             rowName: row,
             text: out _,
-            tick: tick
+            tick: tick,
+            engineTick: tick
         ));
 
         return raw!.Value;
     }
-    private static WorldStateRow SlotRow(string name, CellKind kind, long value, StateCycle cycle) => new(
+    private static WorldStateRow SlotRow(string name, CellKind kind, long value, StateCycle cycle, StateCellClock? clock = null) => new(
         Name: CellName.Parse(candidate: name),
         Kind: kind,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: value,
+                Clock: clock
             )],
         Cycle: cycle
     );
@@ -400,10 +402,10 @@ public sealed class StateCycleWordLawTests {
                 Word: letters,
                 Power: 5,
                 Output: output,
-                EpochTick: 3,
                 TicksPerStep: 4
             );
             var liveRow = SlotRow(
+                clock: new StateCellClock(EpochTick: 3),
                 cycle: cycle,
                 kind: CellKind.Int,
                 name: "r",
@@ -417,9 +419,14 @@ public sealed class StateCycleWordLawTests {
                 value: cycle.SettledPhase(
                     baseValue: 9L,
                     currentTick: settledAt,
+                    epochTick: 3L,
                     row: liveRow
                 ),
-                cycle: (cycle with { EpochTick = 0, SubstepTicks = cycle.SettledSubstep(currentTick: settledAt) })
+                clock: new StateCellClock(SubstepTicks: cycle.SettledSubstep(
+                    currentTick: settledAt,
+                    epochTick: 3L
+                )),
+                cycle: cycle
             ));
 
             for (var elapsed = 0UL; (elapsed < 30UL); elapsed++) {

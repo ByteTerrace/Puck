@@ -118,6 +118,36 @@ public sealed class McpInteropTests {
         }
     }
     [Fact]
+    public async Task OfficialClientConnectsWithAttachLatest() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
+        using var host = new LocalControlServer(createSession: () => new FixtureSession());
+
+        await using var client = await ConnectAsync(
+            path: "latest",
+            revision: "2026-07-28"
+        );
+        var tools = await client.ListToolsAsync(cancellationToken: Token);
+
+        Assert.Equal(
+            ["puck_capture_frame", "puck_exec"],
+            tools.Select(selector: tool => tool.Name).Order()
+        );
+        var echo = await client.CallToolAsync(
+            "puck_exec",
+            new Dictionary<string, object?> { ["command"] = "echo latest" },
+            cancellationToken: Token
+        );
+
+        Assert.NotEqual(
+            true,
+            echo.IsError
+        );
+        Assert.Equal(
+            "echo latest",
+            echo.StructuredContent!.Value.GetProperty(propertyName: "output").GetString()
+        );
+    }
+    [Fact]
     public async Task EscapedInvalidUnicodeIsInvalidParamsAndDoesNotCloseTheAttachment() {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
         using var host = new LocalControlServer(createSession: () => new FixtureSession());

@@ -17,10 +17,12 @@ public sealed class CartridgeDraft {
     }
 
     private static void CheckSize(string json) {
-        if (Encoding.UTF8.GetByteCount(s: json) > CartridgeDocuments.MaximumSourceBytes) { throw new ArgumentException(
+        if (Encoding.UTF8.GetByteCount(s: json) > CartridgeDocuments.MaximumSourceBytes) {
+            throw new ArgumentException(
             message: "The draft exceeds the cartridge source size limit.",
             paramName: nameof(json)
-        ); }
+        );
+        }
     }
     private void Edit(string pointer, JsonNode? value, bool remove) {
         var parts = Parts(pointer: pointer);
@@ -30,10 +32,12 @@ public sealed class CartridgeDraft {
             if (
                 remove ||
                 (value is not JsonObject)
-            ) { throw new ArgumentException(
+            ) {
+                throw new ArgumentException(
                 message: "The draft root must remain an object.",
                 paramName: nameof(pointer)
-            ); }
+            );
+            }
             next = value;
         } else {
             var parent = Resolve(

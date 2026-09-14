@@ -338,7 +338,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
 
         var cells = 0;
 
-        fixture.Server.MutationJournalTap = (_, mutation) => cells += CountCells(mutation: mutation);
+        fixture.Server.MutationJournalTap = (_, _, mutation) => cells += CountCells(mutation: mutation);
 
         var before = GC.GetAllocatedBytesForCurrentThread();
 
@@ -410,7 +410,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
         var installs = 0;
         var cells = 0;
 
-        fixture.Server.MutationJournalTap = (_, mutation) => { installs++; cells += CountCells(mutation: mutation); };
+        fixture.Server.MutationJournalTap = (_, _, mutation) => { installs++; cells += CountCells(mutation: mutation); };
 
         var before = GC.GetAllocatedBytesForCurrentThread();
 
@@ -472,7 +472,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
         var installs = 0;
         var cells = 0;
 
-        fixture.Server.MutationJournalTap = (_, mutation) => { installs++; cells += CountCells(mutation: mutation); };
+        fixture.Server.MutationJournalTap = (_, _, mutation) => { installs++; cells += CountCells(mutation: mutation); };
 
         var before = GC.GetAllocatedBytesForCurrentThread();
 

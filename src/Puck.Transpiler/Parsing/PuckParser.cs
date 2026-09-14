@@ -299,6 +299,14 @@ public static partial class PuckParser {
             return ParseRuleBlock(context, startOffset, line, col, diagnostics);
         }
 
+        if (TryMatchDeclarationKeyword(context: context, keyword: "table")) {
+            return ParseStateTableDeclaration(context, startOffset, line, col, diagnostics);
+        }
+
+        if (TryMatchDeclarationKeyword(context: context, keyword: "slot")) {
+            return ParseStateSlotDeclaration(context, startOffset, line, col, diagnostics);
+        }
+
         // Addon capability request: request Mutate "section:state"
         if (TryMatchKeyword(context, "request")) {
             SkipWhiteSpace(context);

@@ -67,15 +67,16 @@ public enum StateReduceOp : byte {
 /// </remarks>
 public static class StateReader {
     // Known-cell reads share advancing-value semantics and use the store's ordinal path, including scratch frames.
-    internal static long LiveAt(StateStore? store, StateRow row, int index, ulong tick) =>
+    internal static long LiveAt(StateStore? store, StateRow row, int index, ulong tick, ulong engineTick) =>
         LiveAt(
+            engineTick: engineTick,
             index: index,
             row: row,
             rowOrdinal: -1,
             store: store,
             tick: tick
         );
-    internal static long LiveAt(StateStore? store, int rowOrdinal, StateRow row, int index, ulong tick) {
+    internal static long LiveAt(StateStore? store, int rowOrdinal, StateRow row, int index, ulong tick, ulong engineTick) {
         var stored = 0L;
         var found = ((store is not null) && ((rowOrdinal >= 0)
             ? store.TryStoredAt(
@@ -139,7 +140,8 @@ public static class StateReader {
             (found
             ? stored
             : (cell?.Value ?? 0L)),
-            tick
+            tick,
+            engineTick
         );
     }
 
@@ -147,6 +149,7 @@ public static class StateReader {
         StateRow declared,
         StateReduceOp op,
         ulong tick,
+        ulong engineTick,
         TState state,
         Func<int, TState, bool> isCandidateIndex
     ) {
@@ -179,7 +182,8 @@ public static class StateReader {
                 rawValue: out var raw,
                 row: declared,
                 text: out _,
-                tick: tick
+                tick: tick,
+                engineTick: engineTick
             );
             var value = raw!.Value;
             var better = ((bestIndex < 0) || ((op == StateReduceOp.Max)
@@ -248,70 +252,58 @@ public static class StateReader {
         }
         return count;
     }
-    // The live value of a stored base under the row's and the cell's own value-over-time traits; a cell the row
-    // does not list (a frame's dense board cell) carries no trait of its own.
-    private static long Live(StateRow row, StateCell? cell, long baseValue, ulong tick) {
-        var isSlot = ((cell is null)
-            ? false
-            : (cell.Key == StateRow.SlotKey)
+    // The live value of a stored base under the cell's effective behavior (its own trait, or its row's default) —
+    // a cell the row does not list (a frame's dense board cell) resolves the row's own default the same way an
+    // absent cell would.
+    private static long Live(StateRow row, StateCell? cell, long baseValue, ulong tick, ulong engineTick) {
+        var behavior = EffectiveBehavior.Resolve(
+            cell: cell,
+            row: row
         );
+        var clock = cell?.Clock;
 
-        if (
-            (row.Advance is { } advance) &&
-            isSlot
-        ) {
+        if (behavior.Advance is { } advance) {
             return advance.ComputeCurrentValue(
                 baseValue: baseValue,
-                currentTick: tick,
+                currentEngineTick: engineTick,
+                epochEngineTick: (clock?.EpochEngineTick ?? 0L),
                 row: row
             );
         }
-        if (
-            (row.Cycle is { } cycle) &&
-            isSlot
-        ) {
+        if (behavior.Cycle is { } cycle) {
             return cycle.ComputeCurrentValue(
                 baseValue: baseValue,
                 currentTick: tick,
-                row: row
-            );
-        }
-        if (cell?.Advance is { } cellAdvance) {
-            return cellAdvance.ComputeCurrentValue(
-                baseValue: baseValue,
-                currentTick: tick,
-                row: row
-            );
-        }
-        if (cell?.Cycle is { } cellCycle) {
-            return cellCycle.ComputeCurrentValue(
-                baseValue: baseValue,
-                currentTick: tick,
-                row: row
+                epochTick: (clock?.EpochTick ?? 0L),
+                row: row,
+                substepTicks: (clock?.SubstepTicks ?? 0L)
             );
         }
 
         return baseValue;
     }
-    private static void ReadKnownCell(StateRow row, StateCell cell, ulong tick, out long? rawValue, out string? text) {
+    private static void ReadKnownCell(StateRow row, StateCell cell, ulong tick, ulong engineTick, out long? rawValue, out string? text) {
         rawValue = Live(
             row: row,
             cell: cell,
             baseValue: cell.Value,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
         text = cell.Text;
     }
 
     /// <summary>Finds the winning cell's key over a keyed row under <paramref name="op"/>
     /// (<see cref="StateReduceOp.Max"/> or <see cref="StateReduceOp.Min"/>), resolving each candidate cell's value
-    /// through the same known-cell computation as <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/> after resolving the row once. A cell key
+    /// through the same known-cell computation as <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, ulong, out StateRow?, out long?, out string?)"/> after resolving the row once. A cell key
     /// that does not parse as a non-negative integer, or that <paramref name="isCandidateIndex"/> rejects, is
     /// excluded from the comparison; ties go to the lowest parsed index.</summary>
     /// <param name="rows">The section's rows.</param>
     /// <param name="rowName">The state row's name.</param>
     /// <param name="op">The extremum to find (<see cref="StateReduceOp.Max"/> or <see cref="StateReduceOp.Min"/>).</param>
     /// <param name="tick">The tick this read is answering as of; used by each candidate's value-over-time trait.</param>
+    /// <param name="engineTick">The engine tick (<see cref="Puck.Maths.FixedTickConversion.TicksPerSecond"/> per
+    /// second) this read is answering as of; used by each candidate's <see cref="StateAdvance"/> trait.</param>
     /// <param name="isCandidateIndex">An optional additional filter over a cell key's parsed index (for example, a
     /// caller-side capacity bound). <see langword="null"/> admits every non-negative parsed index.</param>
     /// <returns>The winning cell's key, or <see langword="null"/> when the row is absent, holds no cells, or no cell
@@ -321,22 +313,26 @@ public static class StateReader {
         string rowName,
         StateReduceOp op,
         ulong tick,
+        ulong engineTick,
         Func<int, bool>? isCandidateIndex = null
     ) => ArgExtremum(
         rows: rows,
         rowName: rowName,
         op: op,
         tick: tick,
+        engineTick: engineTick,
         state: isCandidateIndex,
         isCandidateIndex: static (index, predicate) => ((predicate is null) || predicate(arg: index))
     );
-    /// <summary>Finds the winning cell like <see cref="ArgExtremum(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,Func{int,bool}?)"/>,
+    /// <summary>Finds the winning cell like <see cref="ArgExtremum(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,ulong,Func{int,bool}?)"/>,
     /// passing caller state separately to a static candidate predicate so hot callers need not allocate a closure.</summary>
     /// <typeparam name="TState">The caller's filter-state carrier.</typeparam>
     /// <param name="rows">The section's rows.</param>
     /// <param name="rowName">The state row's name.</param>
     /// <param name="op">The extremum to find.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by each candidate's
+    /// <see cref="StateAdvance"/> trait.</param>
     /// <param name="state">State passed to <paramref name="isCandidateIndex"/>.</param>
     /// <param name="isCandidateIndex">The allocation-free candidate predicate.</param>
     /// <returns>The winning cell key, or <see langword="null"/> when none qualifies.</returns>
@@ -345,6 +341,7 @@ public static class StateReader {
         string rowName,
         StateReduceOp op,
         ulong tick,
+        ulong engineTick,
         TState state,
         Func<int, TState, bool> isCandidateIndex
     ) {
@@ -355,7 +352,8 @@ public static class StateReader {
             rowName: rowName,
             rows: rows,
             text: out _,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         )) {
             return null;
         }
@@ -365,10 +363,11 @@ public static class StateReader {
             isCandidateIndex: isCandidateIndex,
             op: op,
             state: state,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
     }
-    /// <summary>Finds the winning cell like <see cref="ArgExtremum{TState}(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,TState,Func{int,TState,bool})"/>,
+    /// <summary>Finds the winning cell like <see cref="ArgExtremum{TState}(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,ulong,TState,Func{int,TState,bool})"/>,
     /// resolving the row through a compiled <paramref name="handle"/> instead of a name scan.</summary>
     /// <typeparam name="TState">The caller's filter-state carrier.</typeparam>
     /// <param name="rows">The section's rows.</param>
@@ -376,6 +375,8 @@ public static class StateReader {
     /// <param name="handle">The compiled handle for the row to search.</param>
     /// <param name="op">The extremum to find.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by each candidate's
+    /// <see cref="StateAdvance"/> trait.</param>
     /// <param name="state">State passed to <paramref name="isCandidateIndex"/>.</param>
     /// <param name="isCandidateIndex">The allocation-free candidate predicate.</param>
     /// <returns>The winning cell key, or <see langword="null"/> when none qualifies.</returns>
@@ -386,6 +387,7 @@ public static class StateReader {
         StateHandle handle,
         StateReduceOp op,
         ulong tick,
+        ulong engineTick,
         TState state,
         Func<int, TState, bool> isCandidateIndex
     ) {
@@ -397,7 +399,8 @@ public static class StateReader {
             row: out var declared,
             rows: rows,
             text: out _,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
 
         return ArgExtremumOverRow(
@@ -405,7 +408,8 @@ public static class StateReader {
             isCandidateIndex: isCandidateIndex,
             op: op,
             state: state,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
     }
     /// <summary>Returns <see cref="ArrangementRank(IReadOnlyList{StateRow}?, StateRow)"/> over a store's rows — the
@@ -532,9 +536,11 @@ public static class StateReader {
     /// <param name="row">The resolved row.</param>
     /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by the cell's <see cref="StateAdvance"/>
+    /// trait.</param>
     /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
-    public static void ReadCell(StateStore store, StateRow row, string? key, ulong tick, out long? rawValue, out string? text) =>
+    public static void ReadCell(StateStore store, StateRow row, string? key, ulong tick, ulong engineTick, out long? rawValue, out string? text) =>
         ReadCell(
             key: key,
             rawValue: out rawValue,
@@ -542,7 +548,8 @@ public static class StateReader {
             rowOrdinal: -1,
             store: store,
             text: out text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
     /// <summary>Reads one cell of a resolved row through a store by row ordinal and string key.</summary>
     /// <param name="store">Where the cell's stored value is read.</param>
@@ -550,9 +557,11 @@ public static class StateReader {
     /// <param name="row">The resolved row.</param>
     /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by the cell's <see cref="StateAdvance"/>
+    /// trait.</param>
     /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
-    public static void ReadCell(StateStore store, int rowOrdinal, StateRow row, string? key, ulong tick, out long? rawValue, out string? text) {
+    public static void ReadCell(StateStore store, int rowOrdinal, StateRow row, string? key, ulong tick, ulong engineTick, out long? rawValue, out string? text) {
         ArgumentNullException.ThrowIfNull(argument: store);
         rawValue = null;
         text = null;
@@ -573,7 +582,8 @@ public static class StateReader {
             rowOrdinal: rowOrdinal,
             store: store,
             text: out text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
     }
     /// <summary>Reads one cell of a resolved row through a store by row ordinal and pre-parsed cell key.</summary>
@@ -582,9 +592,11 @@ public static class StateReader {
     /// <param name="row">The resolved row.</param>
     /// <param name="key">The pre-parsed cell key.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by the cell's <see cref="StateAdvance"/>
+    /// trait.</param>
     /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
-    public static void ReadCell(StateStore store, int rowOrdinal, StateRow row, CellName key, ulong tick, out long? rawValue, out string? text) {
+    public static void ReadCell(StateStore store, int rowOrdinal, StateRow row, CellName key, ulong tick, ulong engineTick, out long? rawValue, out string? text) {
         ArgumentNullException.ThrowIfNull(argument: store);
         rawValue = null;
         text = null;
@@ -614,7 +626,8 @@ public static class StateReader {
             baseValue: stored,
             cell: cell,
             row: row,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
     }
     /// <summary>Reads one cell of an already resolved row: the live raw value as of <paramref name="tick"/> under the
@@ -622,9 +635,11 @@ public static class StateReader {
     /// <param name="row">The resolved row.</param>
     /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by the cell's <see cref="StateAdvance"/>
+    /// trait.</param>
     /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
-    public static void ReadCell(StateRow row, string? key, ulong tick, out long? rawValue, out string? text) {
+    public static void ReadCell(StateRow row, string? key, ulong tick, ulong engineTick, out long? rawValue, out string? text) {
         rawValue = null;
         text = null;
         var target = (key ?? StateRow.SlotKey.Value);
@@ -648,11 +663,12 @@ public static class StateReader {
             rawValue: out rawValue,
             row: row,
             text: out text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
     }
     /// <summary>Reduces a keyed row's cell values with <paramref name="op"/>, resolving the row once and each cell
-    /// once through the same known-cell computation as <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/> — so a table whose cells independently
+    /// once through the same known-cell computation as <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, ulong, out StateRow?, out long?, out string?)"/> — so a table whose cells independently
     /// advance (<see cref="StateCell.Advance"/>) reduces over every cell's live value for free, never a stale base
     /// read straight off <see cref="StateCell.Value"/>.</summary>
     /// <param name="rows">The section's rows.</param>
@@ -660,8 +676,10 @@ public static class StateReader {
     /// <param name="op">The reduction to apply. <see cref="StateReduceOp.Count"/> answers with the row's cell count
     /// as an integer regardless of the row's <see cref="StateRow.Kind"/>; the others preserve that kind.</param>
     /// <param name="tick">The tick this read is answering as of; used by each cell's value-over-time trait.</param>
+    /// <param name="engineTick">The engine tick this read is answering as of; used by each cell's
+    /// <see cref="StateAdvance"/> trait.</param>
     /// <returns>The reduced value, or <see cref="FixedQ4816.Zero"/> when the row is absent or holds no cells.</returns>
-    public static FixedQ4816 Reduce(IReadOnlyList<StateRow>? rows, string rowName, StateReduceOp op, ulong tick) {
+    public static FixedQ4816 Reduce(IReadOnlyList<StateRow>? rows, string rowName, StateReduceOp op, ulong tick, ulong engineTick) {
         if (!TryRead(
             key: null,
             rawValue: out _,
@@ -669,7 +687,8 @@ public static class StateReader {
             rowName: rowName,
             rows: rows,
             text: out _,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         )) {
             return FixedQ4816.Zero;
         }
@@ -682,7 +701,8 @@ public static class StateReader {
             : ReduceRaw(
                 op: op,
                 row: declared,
-                tick: tick
+                tick: tick,
+                engineTick: engineTick
             )
         );
         var kind = ((op is StateReduceOp.Count or StateReduceOp.ArrangementRank)
@@ -700,25 +720,29 @@ public static class StateReader {
     /// <param name="row">The already-resolved row.</param>
     /// <param name="op">The reduction to apply.</param>
     /// <param name="tick">The tick at which value-over-time traits are evaluated.</param>
+    /// <param name="engineTick">The engine tick at which <see cref="StateAdvance"/> traits are evaluated.</param>
     /// <returns>The native raw reduction, or zero for an empty row.</returns>
-    public static long ReduceRaw(StateRow row, StateReduceOp op, ulong tick) => ReduceRaw(
+    public static long ReduceRaw(StateRow row, StateReduceOp op, ulong tick, ulong engineTick) => ReduceRaw(
         op: op,
         row: row,
         store: null,
-        tick: tick
+        tick: tick,
+        engineTick: engineTick
     );
-    /// <summary>Reduces a resolved row through a store, on <see cref="ReduceRaw(StateRow, StateReduceOp, ulong)"/>'s terms.</summary>
+    /// <summary>Reduces a resolved row through a store, on <see cref="ReduceRaw(StateRow, StateReduceOp, ulong, ulong)"/>'s terms.</summary>
     /// <param name="store">Where each cell's stored value is read, or <see langword="null"/> for the row's own cells.</param>
     /// <param name="row">The already-resolved row.</param>
     /// <param name="op">The reduction to apply.</param>
     /// <param name="tick">The tick at which value-over-time traits are evaluated.</param>
-    public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick) => ReduceRaw(
+    /// <param name="engineTick">The engine tick at which <see cref="StateAdvance"/> traits are evaluated.</param>
+    public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick, ulong engineTick) => ReduceRaw(
         filter: null,
         op: op,
         range: null,
         row: row,
         store: store,
-        tick: tick
+        tick: tick,
+        engineTick: engineTick
     );
     /// <summary>Reduces current membership with an optional nonzero keyed filter and inclusive raw range.
     /// The filter is indexed in read-local scratch; unfiltered count remains constant-time.</summary>
@@ -726,10 +750,11 @@ public static class StateReader {
     /// <param name="row">The source row.</param>
     /// <param name="op">The aggregate.</param>
     /// <param name="tick">The evaluation tick.</param>
+    /// <param name="engineTick">The evaluation engine tick.</param>
     /// <param name="filter">The row whose nonzero values admit matching keys, or null.</param>
     /// <param name="range">Inclusive bounds in the source's raw encoding, or null.</param>
     /// <returns>The aggregate, zero for no admitted cells, or -1 for arrangement rank, which requires its own reader.</returns>
-    public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick, StateRow? filter, (long Lower, long Upper)? range) =>
+    public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick, ulong engineTick, StateRow? filter, (long Lower, long Upper)? range) =>
         ReduceRaw(
             filter: filter,
             filterOrdinal: -1,
@@ -738,7 +763,8 @@ public static class StateReader {
             row: row,
             rowOrdinal: -1,
             store: store,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
     /// <summary>Reduces a resolved row through a store with pre-resolved row ordinals.</summary>
     /// <param name="store">Where stored values are read, or null to read the row's own cells.</param>
@@ -746,11 +772,12 @@ public static class StateReader {
     /// <param name="row">The resolved source row.</param>
     /// <param name="op">The aggregate to compute.</param>
     /// <param name="tick">The tick whose live values are reduced.</param>
+    /// <param name="engineTick">The engine tick whose live values are reduced.</param>
     /// <param name="filterOrdinal">The filter's ordinal in the store, or -1 to resolve by row.</param>
     /// <param name="filter">The row whose nonzero values admit matching keys, or null.</param>
     /// <param name="range">Inclusive bounds in the source's raw encoding, or null.</param>
     /// <returns>The aggregate, zero for no admitted cells, or -1 for arrangement rank.</returns>
-    public static long ReduceRaw(StateStore? store, int rowOrdinal, StateRow row, StateReduceOp op, ulong tick, int filterOrdinal, StateRow? filter, (long Lower, long Upper)? range) {
+    public static long ReduceRaw(StateStore? store, int rowOrdinal, StateRow row, StateReduceOp op, ulong tick, ulong engineTick, int filterOrdinal, StateRow? filter, (long Lower, long Upper)? range) {
         ArgumentNullException.ThrowIfNull(row);
         var count = ((store is null)
             ? (row.Cells?.Count ?? 0)
@@ -841,7 +868,8 @@ public static class StateReader {
                             rowOrdinal: filterOrdinal,
                             store: store!,
                             text: out _,
-                            tick: tick
+                            tick: tick,
+                            engineTick: engineTick
                         );
                         if (admitted is null or 0L) { continue; }
                     } else {
@@ -854,7 +882,8 @@ public static class StateReader {
                             row: filter,
                             rowOrdinal: filterOrdinal,
                             store: store,
-                            tick: tick
+                            tick: tick,
+                            engineTick: engineTick
                         ) == 0L)
                         ) { continue; }
                     }
@@ -865,7 +894,8 @@ public static class StateReader {
                         row: row,
                         rowOrdinal: rowOrdinal,
                         store: store,
-                        tick: tick
+                        tick: tick,
+                        engineTick: engineTick
                     )
                     : 0L
                 );
@@ -940,9 +970,10 @@ public static class StateReader {
         ArgumentNullException.ThrowIfNull(argument: row);
         ArgumentNullException.ThrowIfNull(argument: cell);
 
-        trait = (((cell.Key == StateRow.SlotKey)
-            ? row.Dynamics
-            : null) ?? cell.Dynamics);
+        trait = EffectiveBehavior.Resolve(
+            cell: cell,
+            row: row
+        ).Dynamics;
         sample = default;
 
         if (trait is null) {
@@ -961,9 +992,11 @@ public static class StateReader {
             return false;
         }
 
-        var epoch = ((trait.EpochTick < 0L)
+        var clock = cell.Clock;
+        var clockEpoch = (clock?.EpochTick ?? 0L);
+        var epoch = ((clockEpoch < 0L)
             ? 0UL
-            : (ulong)trait.EpochTick
+            : (ulong)clockEpoch
         );
         var elapsed = ((tick > epoch)
             ? (tick - epoch)
@@ -972,8 +1005,8 @@ public static class StateReader {
 
         sample = dynamicsRow.Compiled.Evaluate(
             elapsedTicks: elapsed,
-            initialValue: DynamicsTraitRawToFixed(raw: trait.Y0),
-            initialVelocity: DynamicsTraitRawToFixed(raw: trait.V0),
+            initialValue: DynamicsTraitRawToFixed(raw: (clock?.Y0 ?? 0L)),
+            initialVelocity: DynamicsTraitRawToFixed(raw: (clock?.V0 ?? 0L)),
             target: DynamicsRowRawToFixed(
                 row: row,
                 raw: cell.Value
@@ -1006,11 +1039,13 @@ public static class StateReader {
 
         return false;
     }
-    /// <summary>Resolves one (row, key) pair against a store, on <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
+    /// <summary>Resolves one (row, key) pair against a store, on <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
     /// <param name="store">Where the cell's stored value is read.</param>
     /// <param name="rowName">The state row's name.</param>
     /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by the cell's <see cref="StateAdvance"/>
+    /// trait.</param>
     /// <param name="row">The named row, or <see langword="null"/>.</param>
     /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
@@ -1019,6 +1054,7 @@ public static class StateReader {
         string rowName,
         string? key,
         ulong tick,
+        ulong engineTick,
         [NotNullWhen(true)] out StateRow? row,
         out long? rawValue,
         out string? text
@@ -1038,7 +1074,8 @@ public static class StateReader {
             row: row,
             store: store,
             text: out text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
 
         return true;
@@ -1048,10 +1085,12 @@ public static class StateReader {
     /// <param name="rowName">The state row's name.</param>
     /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell
     /// (<see cref="StateRow.SlotKey"/>).</param>
-    /// <param name="tick">The tick this read is answering as of — what an advancing row's value is computed at.
-    /// Callers pass the tick their frame already knows: the authority's completed tick on the authoritative side,
-    /// the last delivered snapshot's tick on a client (which is an authority tick, so it is comparable to an epoch;
-    /// it lags by delivery, never by a different clock).</param>
+    /// <param name="tick">The simulation tick this read is answering as of — what a <see cref="StateCycle"/> row's
+    /// value is computed at. Callers pass the tick their frame already knows: the authority's completed tick on the
+    /// authoritative side, the last delivered snapshot's tick on a client.</param>
+    /// <param name="engineTick">The engine tick this read is answering as of — what a <see cref="StateAdvance"/>
+    /// row's value is computed at. Never a simulation tick converted at the world's current rate: callers pass the
+    /// engine-tick coordinate their frame already knows, the same one <paramref name="tick"/> is paired with.</param>
     /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
     /// <param name="rawValue">The addressed cell's live raw value, or <see langword="null"/> when the row declares no
     /// cell under that key — a distinct outcome from an unknown row, because a rule effect's read-modify-write treats
@@ -1064,6 +1103,7 @@ public static class StateReader {
         string rowName,
         string? key,
         ulong tick,
+        ulong engineTick,
         [NotNullWhen(true)] out StateRow? row,
         out long? rawValue,
         out string? text
@@ -1084,18 +1124,19 @@ public static class StateReader {
             rawValue: out rawValue,
             row: row,
             text: out text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
 
         return true;
     }
-    /// <summary>Resolves one (row, key) pair the same way <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/> does, except a cell carrying a
+    /// <summary>Resolves one (row, key) pair the same way <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, ulong, out StateRow?, out long?, out string?)"/> does, except a cell carrying a
     /// <see cref="StateDynamics"/> easing trait reads its EASED value at <paramref name="tick"/>
     /// (<see cref="TryEvaluateDynamics"/>) rather than its stored truth — the read a plain presentation binding takes;
-    /// a rule gate, an arithmetic write's operand, and a target facet all keep reading <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>'s truth
+    /// a rule gate, an arithmetic write's operand, and a target facet all keep reading <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>'s truth
     /// instead. A cell with no trait, or one whose trait names a <c>dynamics</c> row the section no longer declares
     /// (live only mid-tick — every other door refuses a dangling reference at author time), reads bit-identically to
-    /// <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>.</summary>
+    /// <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>.</summary>
     /// <param name="rows">The section's rows.</param>
     /// <param name="dynamics">The declared dynamics rows the trait's reference resolves against.</param>
     /// <param name="ticksPerSecond">The simulation rate the follower is stepped at; a rate of zero or below reads
@@ -1103,6 +1144,9 @@ public static class StateReader {
     /// <param name="rowName">The state row's name.</param>
     /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
     /// <param name="tick">The tick this read is answering as of.</param>
+    /// <param name="engineTick">The engine tick this read is answering as of; used only by
+    /// <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>'s
+    /// fallback truth read — the dynamics evaluation below stays on <paramref name="tick"/> alone.</param>
     /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
     /// <param name="rawValue">The addressed cell's live eased raw value, or <see langword="null"/> when the row
     /// declares no cell under that key.</param>
@@ -1116,6 +1160,7 @@ public static class StateReader {
         string rowName,
         string? key,
         ulong tick,
+        ulong engineTick,
         [NotNullWhen(true)] out StateRow? row,
         out long? rawValue,
         out string? text
@@ -1127,7 +1172,8 @@ public static class StateReader {
             rowName: rowName,
             rows: rows,
             text: out text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         )) {
             return false;
         }
@@ -1175,12 +1221,14 @@ public static class StateReader {
     /// <param name="handle">A document-lane handle minted by <paramref name="catalog"/>.</param>
     /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by the cell's <see cref="StateAdvance"/>
+    /// trait.</param>
     /// <param name="row">The resolved row.</param>
     /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the row resolves. Never returns <see langword="false"/>: a handle either
     /// addresses a row in the current catalog or the call throws, which is the one rule every per-tick handle read
-    /// follows. This differs from <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>'s name-resolving door, which reads an unknown row as absent:
+    /// follows. This differs from <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>'s name-resolving door, which reads an unknown row as absent:
     /// a compiled handle is only ever minted against a row the rule compiler already proved present in the same
     /// section, and every install revalidates by recompiling every rule against it — so an installed section can
     /// never carry a rule whose compiled row a handle addresses has vanished. A throw here is therefore a caught
@@ -1193,6 +1241,7 @@ public static class StateReader {
         StateHandle handle,
         string? key,
         ulong tick,
+        ulong engineTick,
         [NotNullWhen(true)] out StateRow? row,
         out long? rawValue,
         out string? text
@@ -1218,18 +1267,21 @@ public static class StateReader {
             rawValue: out rawValue,
             row: row,
             text: out text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
 
         return true;
     }
     /// <summary>Resolves one document-owned row by its compiled handle and reads a cell through a store, on
-    /// <see cref="TryReadHandle(IReadOnlyList{StateRow}, StateCatalog, StateHandle, string?, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
+    /// <see cref="TryReadHandle(IReadOnlyList{StateRow}, StateCatalog, StateHandle, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
     /// <param name="store">Where the cell's stored value is read.</param>
     /// <param name="catalog">The section's current state catalog.</param>
     /// <param name="handle">A document-lane handle minted by <paramref name="catalog"/>.</param>
     /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by the cell's <see cref="StateAdvance"/>
+    /// trait.</param>
     /// <param name="row">The resolved row.</param>
     /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
@@ -1239,6 +1291,7 @@ public static class StateReader {
         StateHandle handle,
         string? key,
         ulong tick,
+        ulong engineTick,
         [NotNullWhen(true)] out StateRow? row,
         out long? rawValue,
         out string? text
@@ -1267,18 +1320,21 @@ public static class StateReader {
             rowOrdinal: ordinal,
             store: store,
             text: out text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
 
         return true;
     }
     /// <summary>Resolves one document-owned row by its compiled handle and reads a cell through a store by pre-parsed key,
-    /// on <see cref="TryReadHandle(StateStore, StateCatalog, StateHandle, string?, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
+    /// on <see cref="TryReadHandle(StateStore, StateCatalog, StateHandle, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
     /// <param name="store">Where the cell's stored value is read.</param>
     /// <param name="catalog">The section's current state catalog.</param>
     /// <param name="handle">A document-lane handle minted by <paramref name="catalog"/>.</param>
     /// <param name="key">The pre-parsed cell key.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by the cell's <see cref="StateAdvance"/>
+    /// trait.</param>
     /// <param name="row">The resolved row.</param>
     /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
@@ -1288,6 +1344,7 @@ public static class StateReader {
         StateHandle handle,
         CellName key,
         ulong tick,
+        ulong engineTick,
         [NotNullWhen(true)] out StateRow? row,
         out long? rawValue,
         out string? text
@@ -1316,7 +1373,8 @@ public static class StateReader {
             rowOrdinal: ordinal,
             store: store,
             text: out text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
 
         return true;

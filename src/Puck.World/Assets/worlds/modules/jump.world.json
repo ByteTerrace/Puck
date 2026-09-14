@@ -237,13 +237,13 @@
       {
         "name": "reached",
         "kind": "Int",
-        "nonNegative": true,
+        "min": 0,
         "value": 0
       },
       {
         "name": "falls",
         "kind": "Int",
-        "nonNegative": true,
+        "min": 0,
         "value": 0
       }
     ],

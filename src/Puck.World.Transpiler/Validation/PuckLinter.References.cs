@@ -10,8 +10,9 @@ namespace Puck.World.Transpiler.Validation;
 // Symbol resolution over the LOWERED JSON, not the AST: it sees exactly what ships, template-expanded and ready to
 // compose. Four reference families — state row, prototypeId, placement parent, camera/spawn-point — plus a
 // best-effort `$`-prefix typo check and a shape-parent check, each Information severity except shape-parent
-// (Warning). Zero false positives is the bar: a `$`-prefixed or dotted (import-alias) name is never checked against
-// a declared-row set.
+// (Warning). Zero false positives is the bar: a `$`-prefixed name is never checked against a declared-row set. A
+// dotted "row.key" read is checked on its row half like any bracketed read — ExpressionSpelling already split it
+// by the time a token reaches this pass.
 //
 // A document naming a `basis` or `imports` composes its whole graph through PuckDocumentComposer — the same
 // composition the game boot path and `compile --validate` run — so a name only a basis or import supplies resolves
@@ -505,8 +506,10 @@ public static partial class PuckLinter {
             }
         }
     }
-    // Reserved ($-prefixed) and dotted (import-alias) names are outside this pass's declared-row universe.
-    private static bool IsSkippableName(string name) => ((name.Length == 0) || (name[0] == '$') || name.Contains(value: '.'));
+    // Reserved ($-prefixed) names are outside this pass's declared-row universe. A dotted "row.key" read already
+    // resolves to its undotted row name by the time it reaches here — ExpressionSpelling splits it at parse time —
+    // so it is checked like any other read, never skipped.
+    private static bool IsSkippableName(string name) => ((name.Length == 0) || (name[0] == '$'));
     private static void CheckChannelPrefixTypo(string name, string atPointer, SourceMap? sourceMap, DiagnosticBag diagnostics) {
         if (
             (name.Length == 0) ||

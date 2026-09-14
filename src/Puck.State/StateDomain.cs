@@ -11,7 +11,7 @@ namespace Puck.State;
 /// <see cref="StateRow.Draw"/>/<see cref="StateRow.Visibility"/>/<see cref="StateRow.Knowledge"/>/
 /// <see cref="StateRow.Phase"/>/<see cref="StateRow.PhaseOf"/>/
 /// <see cref="StateRow.Evicts"/>/<see cref="StateRow.Min"/>/<see cref="StateRow.Max"/>/
-/// <see cref="StateRow.NonNegative"/> — are unaffected by which case a row declares; every combination the
+/// <see cref="StateRow.Overflow"/> — are unaffected by which case a row declares; every combination the
 /// validator already refused (a lattice row carrying <c>advance</c>, a phase row carrying <c>capacity</c>) is refused
 /// the identical way with the case substituted for the old field.
 /// </summary>

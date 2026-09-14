@@ -33,6 +33,7 @@ public sealed class ZoneEndKey(string row, StateHandle handle, LiveZone? rowFrom
             handle: zoneHandle,
             key: null,
             tick: reader.Tick,
+            engineTick: reader.EngineTick,
             row: out var zone,
             rawValue: out _,
             text: out _

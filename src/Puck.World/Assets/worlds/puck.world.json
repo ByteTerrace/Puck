@@ -10661,14 +10661,14 @@
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "eventSeq",
-        "nonNegative": true,
         "value": 0
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "claimSeq",
-        "nonNegative": true,
         "value": 0
       },
       {
@@ -10702,7 +10702,6 @@
         "max": 50400,
         "min": 0,
         "name": "claimTicks",
-        "nonNegative": true,
         "value": 0
       },
       {
@@ -10818,8 +10817,8 @@
       {
         "capacity": 64,
         "kind": "Int",
-        "name": "boneHolderClaimMark",
-        "nonNegative": true
+        "min": 0,
+        "name": "boneHolderClaimMark"
       },
       {
         "cells": [

@@ -50,6 +50,7 @@ public sealed partial class WorldPopulation {
                 rowName: row.Name,
                 key: cell.Key.Value,
                 tick: 0UL,
+                engineTick: 0UL,
                 row: out _,
                 rawValue: out var raw,
                 text: out _

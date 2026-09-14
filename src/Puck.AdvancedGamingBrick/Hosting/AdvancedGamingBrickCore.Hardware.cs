@@ -89,17 +89,20 @@ public sealed partial class AdvancedGamingBrickCore : IMachineHardwareAccess {
             }
         } else {
             switch (address.Width) {
-                case 1: bus.Write8(
+                case 1:
+                    bus.Write8(
                     access: BusAccessType.NonSequential,
                     address: location,
                     value: ((byte)value)
                 ); break;
-                case 2: bus.Write16(
+                case 2:
+                    bus.Write16(
                     access: BusAccessType.NonSequential,
                     address: location,
                     value: ((ushort)value)
                 ); break;
-                case 4: bus.Write32(
+                case 4:
+                    bus.Write32(
                     access: BusAccessType.NonSequential,
                     address: location,
                     value: ((uint)value)

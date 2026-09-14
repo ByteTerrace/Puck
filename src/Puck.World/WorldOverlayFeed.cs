@@ -101,7 +101,10 @@ internal sealed class WorldOverlayFeed {
                 row: out _,
                 rowName: row,
                 text: out var iconName,
-                tick: tick
+                tick: tick,
+                // GetRoutedState carries no per-seat engine-tick coordinate; the routed tick doubles as the
+                // engine-tick coordinate here, and an icon lookup is presentation only.
+                engineTick: tick
             ))
                 ? icons.ResolveIcon(name: iconName)
                 : OverlayResolvedGlyph.None

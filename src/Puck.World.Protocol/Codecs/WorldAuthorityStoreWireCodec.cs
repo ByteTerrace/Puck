@@ -3,10 +3,13 @@ using Puck.Networking;
 namespace Puck.World.Protocol;
 
 /// <summary>One mutation journal entry — opaque encoded bytes (a mutation-codec leaf, opaque to the store) plus the
-/// engine tick it was recorded at.</summary>
-/// <param name="Tick">The engine tick the mutation was recorded at.</param>
+/// simulation tick and engine tick it was recorded at. The two clocks are independent: <see cref="Tick"/> is the
+/// simulation-tick coordinate a replayed Cycle epoch rebases against, <see cref="EngineTick"/> the engine-tick
+/// coordinate a replayed Advance epoch rebases against — never derived from one another at any simulation rate.</summary>
+/// <param name="Tick">The simulation tick the mutation was recorded at.</param>
+/// <param name="EngineTick">The engine tick the mutation was recorded at.</param>
 /// <param name="Encoded">The mutation's own encoded bytes.</param>
-public readonly record struct WorldMutationJournalEntry(ulong Tick, ReadOnlyMemory<byte> Encoded);
+public readonly record struct WorldMutationJournalEntry(ulong Tick, ulong EngineTick, ReadOnlyMemory<byte> Encoded);
 /// <summary>Encodes and decodes the two small wire shapes <c>Puck.World.Server.WorldAuthorityBlobStore</c> owns
 /// beside the checkpoint blob itself: the <c>checkpoints/latest</c> pointer, and one journal page's sequence of
 /// entries. Both use the same bounded <see cref="WireWriter"/>/<see cref="WireReader"/> discipline every peer
@@ -15,7 +18,7 @@ public readonly record struct WorldMutationJournalEntry(ulong Tick, ReadOnlyMemo
 public static class WorldAuthorityStoreWireCodec {
     // "PJNL" — Puck Journal.
     private const uint JournalMagic = 0x4C4E4A50U;
-    private const ushort JournalVersion = 1;
+    private const ushort JournalVersion = 2;
     // "PLTP" — Puck Latest Pointer.
     private const uint LatestPointerMagic = 0x50544C50U;
     private const ushort LatestPointerVersion = 1;
@@ -34,6 +37,7 @@ public static class WorldAuthorityStoreWireCodec {
 
         foreach (var entry in entries) {
             writer.WriteUInt64(value: entry.Tick);
+            writer.WriteUInt64(value: entry.EngineTick);
             writer.WriteBlock(value: entry.Encoded.Span);
         }
 
@@ -93,6 +97,7 @@ public static class WorldAuthorityStoreWireCodec {
 
         for (var index = 0; ((index < count) && !reader.Failed); index++) {
             var tick = reader.ReadUInt64();
+            var engineTick = reader.ReadUInt64();
             var encoded = reader.ReadBlock(
                 field: "entry",
                 maxBytes: MaxEntryBytes
@@ -100,7 +105,8 @@ public static class WorldAuthorityStoreWireCodec {
 
             decoded[index] = new WorldMutationJournalEntry(
                 Encoded: encoded,
-                Tick: tick
+                Tick: tick,
+                EngineTick: engineTick
             );
         }
 

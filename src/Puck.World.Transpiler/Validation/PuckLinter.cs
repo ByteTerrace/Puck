@@ -172,6 +172,63 @@ public static partial class PuckLinter {
                 );
                 break;
 
+            case StateTableDeclarationNode table:
+                foreach (var modifier in table.Modifiers) {
+                    CollectReferences(
+                        modifier,
+                        references,
+                        diagnostics,
+                        inLet: false
+                    );
+                }
+                foreach (var cell in table.Cells) {
+                    CollectReferences(
+                        cell.Value,
+                        references,
+                        diagnostics,
+                        inLet: false
+                    );
+                    foreach (var modifier in cell.Modifiers) {
+                        CollectReferences(
+                            modifier,
+                            references,
+                            diagnostics,
+                            inLet: false
+                        );
+                    }
+                }
+                break;
+
+            case StateSlotDeclarationNode slot:
+                if (slot.Value is not null) {
+                    CollectReferences(
+                        slot.Value,
+                        references,
+                        diagnostics,
+                        inLet: false
+                    );
+                }
+                foreach (var modifier in slot.Modifiers) {
+                    CollectReferences(
+                        modifier,
+                        references,
+                        diagnostics,
+                        inLet: false
+                    );
+                }
+                break;
+
+            case StateModifierNode modifier:
+                foreach (var arg in modifier.Arguments) {
+                    CollectReferences(
+                        arg.Value,
+                        references,
+                        diagnostics,
+                        inLet: false
+                    );
+                }
+                break;
+
             case TemplateNode tmpl:
                 foreach (var param in tmpl.Parameters) {
                     if (param.DefaultValue is not null) {

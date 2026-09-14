@@ -150,11 +150,13 @@ public sealed class AuthorityWireCodecLawTests {
         IReadOnlyList<WorldMutationJournalEntry> entries = [
             new WorldMutationJournalEntry(
                 Encoded: new byte[] { 1, 2, 3 },
-                Tick: 1UL
+                Tick: 1UL,
+                EngineTick: 1UL
             ),
             new WorldMutationJournalEntry(
                 Encoded: new byte[] { 4, 5 },
-                Tick: 2UL
+                Tick: 2UL,
+                EngineTick: 2UL
             ),
         ];
         var encoded = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: entries);

@@ -100,7 +100,7 @@ internal static class SdfFieldMarch {
 
             if (exact
                 ? (exactSamples >= exactBudget)
-                : (boundSamples >= boundBudget)            ) {
+                : (boundSamples >= boundBudget)) {
                 return Exhaust(
                     hit: out hit,
                     material: lastMaterial,

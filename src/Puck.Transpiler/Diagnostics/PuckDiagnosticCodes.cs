@@ -127,4 +127,29 @@ public static class PuckDiagnosticCodes {
     /// shape is straight-line. The language parses control flow for every vocabulary; whether one can CARRY a branch
     /// is the vocabulary's own answer.</summary>
     public const string UnsupportedControlFlow = "PUCK037";
+    /// <summary>PUCK049: a <c>table</c>/<c>slot</c> declaration outside <c>state.world</c> — in <c>state.body</c>,
+    /// <c>state.identity</c>, or anywhere else the owning vocabulary does not admit one.</summary>
+    public const string StateDeclarationOutsideWorld = "PUCK049";
+    /// <summary>PUCK050: <c>state.world</c> authored more than once — as the array form and a declaration block, as
+    /// two declaration blocks, or as two arrays.</summary>
+    public const string StateWorldSectionMixed = "PUCK050";
+    /// <summary>PUCK051: a <c>table</c>/<c>slot</c> declaration reusing a row name already declared in the same
+    /// <c>state.world</c>, or a <c>table</c> cell reusing a key already declared in the same row.</summary>
+    public const string StateDeclarationDuplicateName = "PUCK051";
+    /// <summary>PUCK052: a declared row name or cell key carrying the reserved <c>$</c> prefix.</summary>
+    public const string StateDeclarationReservedKey = "PUCK052";
+    /// <summary>PUCK053: a default value or a <c>bounds</c> argument that does not fit the row's declared kind.</summary>
+    public const string StateDeclarationInvalidDefault = "PUCK053";
+    /// <summary>PUCK054: a <c>table</c>'s <c>capacity(...)</c> smaller than its own authored cell count.</summary>
+    public const string StateDeclarationCapacityTooSmall = "PUCK054";
+    /// <summary>PUCK055: a modifier the declaration's shape or kind does not admit — <c>bounds</c>/<c>advance</c> on
+    /// a <c>Bool</c>/<c>Text</c> row, or <c>capacity</c> on a <c>slot</c>.</summary>
+    public const string StateDeclarationModifierNotAdmitted = "PUCK055";
+    /// <summary>PUCK056: more than one behavior on a row or cell — a repeated <c>advance</c>/<c>bounds</c> modifier,
+    /// or a cell combining <c>advance</c> with <c>behavior(none)</c>.</summary>
+    public const string StateDeclarationBehaviorConflict = "PUCK056";
+    /// <summary>PUCK057: an unrecognized modifier name, or a modifier argument the modifier's own shape refuses.</summary>
+    public const string StateDeclarationUnknownModifier = "PUCK057";
+    /// <summary>PUCK058: an <c>advance(perSecond: ...)</c> rate that does not reduce to an exact 64-bit fraction.</summary>
+    public const string StateDeclarationRateInexact = "PUCK058";
 }

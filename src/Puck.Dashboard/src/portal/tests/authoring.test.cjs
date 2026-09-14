@@ -74,7 +74,7 @@ function syntheticDocument() {
           name: 'cell', kind: 'Int', domain: { $type: 'cellsOf', topology: 'board', empty: 0 },
           cells: [{ key: '0', value: 5 }, { key: '3', value: '9' }],
         },
-        { name: 'score', kind: 'Int', value: 0, min: 0, max: 10, nonNegative: true },
+        { name: 'score', kind: 'Int', value: 0, min: 0, max: 10 },
       ],
     },
   };
@@ -132,7 +132,7 @@ test('authoredCellValue/authoredCellValues decode by String(ordinal), and emptyV
 });
 
 test('parsePaintValue validates Int bounds and Bool tokens with a readable message, and throws on a bad literal', () => {
-  const row = { name: 'score', kind: 'Int', min: 0, max: 10, nonNegative: true };
+  const row = { name: 'score', kind: 'Int', min: 0, max: 10 };
   assert.equal(parsePaintValue(row, ' 5 '), 5n);
   assert.throws(() => parsePaintValue(row, '11'), /maximum/);
   assert.throws(() => parsePaintValue(row, '-1'));

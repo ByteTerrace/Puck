@@ -209,6 +209,19 @@ public static partial class WorldDecompiler {
             if (
                 string.Equals(
                 a: key,
+                b: "state",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            ) &&
+                (value is JsonObject stateObj)
+            ) {
+                DecompileStateBlock(
+                    indentLevel: 0,
+                    sb: sb,
+                    state: stateObj
+                );
+            } else if (
+                string.Equals(
+                a: key,
                 b: "views",
                 comparisonType: StringComparison.OrdinalIgnoreCase
             ) &&

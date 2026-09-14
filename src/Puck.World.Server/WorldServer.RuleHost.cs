@@ -9,6 +9,7 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
     private long[] m_boardScratch = [];
 
     ulong IRuleReader.Tick => m_evaluator.Tick;
+    ulong IRuleReader.EngineTick => m_evaluator.EngineTick;
     // While EvaluateWorldRules holds the frame active, a read answers from it (EnsureRuleFrame's own reference
     // check keeps this cheap between writes). Every other reader (flock affinity, and anything else that reaches
     // IRuleReader outside EvaluateWorldRules) reads the installed document instead — the frame-commit contract: a
@@ -473,17 +474,20 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
     }
     private RuleFact ReadWorldFact(OperandFact operand, ulong tick) => m_evaluator.Read(
         operand: operand,
-        tick: tick
+        tick: tick,
+        engineTick: CompletedEngineTicks
     );
     private string ResolveOperandKey(string? key, CompiledCellRef? keyFrom, ulong tick) => m_evaluator.ResolveKey(
         key: key,
         keyFrom: keyFrom,
-        tick: tick
+        tick: tick,
+        engineTick: CompletedEngineTicks
     );
     private bool TryEvaluateExpression(CompiledExpressionToken[] program, CellKind kind, ulong tick, out long value) => m_evaluator.TryEvaluateExpression(
         kind: kind,
         program: program,
         tick: tick,
+        engineTick: CompletedEngineTicks,
         value: out value
     );
     // A gate read outside the evaluator's own loop (a decision's option or interrupt) reports against the rule the
@@ -491,6 +495,7 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
     private bool RuleGateOpen(GateToken[] gate, ulong tick) => m_evaluator.GateOpen(
         gate: gate,
         tick: tick,
+        engineTick: CompletedEngineTicks,
         ruleName: m_evaluator.RuleName
     );
 }

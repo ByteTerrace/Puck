@@ -451,26 +451,26 @@
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "tttMoveRequest",
-        "nonNegative": true,
         "value": 0
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "tttMoveApplied",
-        "nonNegative": true,
         "value": 0
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "tttBoardVersion",
-        "nonNegative": true,
         "value": 0
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "tttWinCheckVersion",
-        "nonNegative": true,
         "value": 0
       },
       {

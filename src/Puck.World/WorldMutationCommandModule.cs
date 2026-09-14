@@ -364,8 +364,9 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 try {
                     // The same completed-tick derivation WorldStateCommandModule's own read-backs use (NextInputTick
-                    // is m_lastCompletedTick + 1, and Step is its one writer) — the instant every advancing state
-                    // row/cell settles at in the snapshot (see WorldSessionCapture's remarks).
+                    // is m_lastCompletedTick + 1, and Step is its one writer) — the instant every cycling/dynamics
+                    // state cell settles at in the snapshot; CompletedEngineTicks is the same instant's engine-tick
+                    // coordinate, the one an advancing cell settles against (see WorldSessionCapture's remarks).
                     var snapshot = WorldSessionCapture.Capture(
                         definition: server.Definition,
                         render: renderSettings,
@@ -374,7 +375,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         audio: audioDirector,
                         bindingBar: bindingBarVisibility,
                         pacing: pacing,
-                        tick: (server.NextInputTick - 1UL)
+                        tick: (server.NextInputTick - 1UL),
+                        engineTick: server.CompletedEngineTicks
                     );
                     var bytes = WorldDefinitionSerialization.SavePreservingBasis(
                         basisPath: out var basisPath,

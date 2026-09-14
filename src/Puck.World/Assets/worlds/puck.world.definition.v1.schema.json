@@ -195,14 +195,14 @@
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },
-    "imports": {
-      "$ref": "./schema/imports.schema.json"
+    "documentId": {
+      "$ref": "./schema/documentId.schema.json"
     },
     "exports": {
       "$ref": "./schema/exports.schema.json"
     },
-    "documentId": {
-      "$ref": "./schema/documentId.schema.json"
+    "imports": {
+      "$ref": "./schema/imports.schema.json"
     },
     "schema": {
       "$ref": "./schema/schema.schema.json"

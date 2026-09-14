@@ -25,7 +25,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const int MaxStringBytes = WireLimits.MaxStringBytes;
     // The first format is still under development. Change its shape directly; no compatibility reader or
     // development-only version sequence is maintained.
-    private const ushort SupportedVersion = 3;
+    private const ushort SupportedVersion = 4;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;

@@ -15,7 +15,7 @@ public sealed class WorldRuleFrameFoldLawTests {
         using var fixture = Fixtures.FreshServer(definition: Game(game: "solitaireKlondike"));
         var installsByTick = new Dictionary<ulong, int>();
 
-        fixture.Server.MutationJournalTap = (tick, mutation) => {
+        fixture.Server.MutationJournalTap = (tick, _, mutation) => {
             if (mutation.Principal == WorldPrincipal.World) {
                 installsByTick[tick] = (installsByTick.GetValueOrDefault(key: tick) + 1);
             }

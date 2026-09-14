@@ -569,8 +569,14 @@ public sealed class StateFrame : StateStore {
 
             return false;
         }
-        if (row.ClampToEnvelope(value: value) != value) {
-            reason = $"row '{row.Name}' refuses a pushed value outside its envelope";
+        if (!row.TryAdmitWrite(
+            current: 0L,
+            operand: value,
+            write: StateWriteKind.Set,
+            stored: out var admitted,
+            reason: out reason
+        )) {
+            reason = $"row '{row.Name}' refuses a pushed value that {reason}";
 
             return false;
         }
@@ -581,7 +587,7 @@ public sealed class StateFrame : StateStore {
 
         Write(
             index: (layout.Offset + ((int)(cursor % capacity))),
-            value: value
+            value: admitted
         );
         Write(
             index: cursorIndex,
@@ -1121,6 +1127,7 @@ public sealed class StateFrame : StateStore {
             topology,
             out var direction,
             out var element,
+            out var admittedValue,
             out reason
         )) {
             return false;
@@ -1185,7 +1192,8 @@ public sealed class StateFrame : StateStore {
                 target,
                 layout.Empty,
                 direction,
-                element
+                element,
+                admittedValue
             );
             JournalChanged(
                 offset: layout.Offset,
@@ -1203,7 +1211,8 @@ public sealed class StateFrame : StateStore {
                 target,
                 layout.Empty,
                 direction,
-                element
+                element,
+                admittedValue
             );
         }
 
@@ -1827,14 +1836,21 @@ public sealed class StateFrame : StateStore {
 
         var absolute = (layout.Offset + index);
         var previous = m_values[absolute];
-        var next = ((write == StateWriteKind.Add)
-            ? unchecked((previous + value))
-            : value
-        );
 
+        if (!row.TryAdmitWrite(
+            current: previous,
+            operand: value,
+            write: write,
+            stored: out var next,
+            reason: out reason
+        )) {
+            reason = $"row '{row.Name}' cell '{key}' {reason}";
+
+            return false;
+        }
         if (
-            (row.ClampToEnvelope(value: next) != next) ||
-            ((row.Kind == CellKind.Bool) && (next is not (0L or 1L)))
+            (row.Kind == CellKind.Bool) &&
+            (next is not (0L or 1L))
         ) {
             reason = $"row '{row.Name}' cell '{key}' would leave the row's envelope";
 
@@ -1907,7 +1923,13 @@ public sealed class StateFrame : StateStore {
         var row = Rows[ordinal];
 
         if (
-            (row.ClampToEnvelope(value: writeSet.Value) != writeSet.Value) ||
+            !row.TryAdmitWrite(
+            current: 0L,
+            operand: writeSet.Value,
+            write: StateWriteKind.Set,
+            stored: out var admittedValue,
+            reason: out _
+        ) ||
             ((row.Kind == CellKind.Bool) && (writeSet.Value is not (0L or 1L)))
         ) {
             reason = "writeSet writes a value the board row does not admit";
@@ -1951,7 +1973,7 @@ public sealed class StateFrame : StateStore {
             if (cell < layout.Length) {
                 Write(
                     index: (layout.Offset + cell),
-                    value: writeSet.Value
+                    value: admittedValue
                 );
             }
         }

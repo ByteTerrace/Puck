@@ -53,6 +53,14 @@ public class RuleCompileContext {
     public string? ForEachRow { get; set; }
     /// <summary>Gets the section's generator rows.</summary>
     public IReadOnlyList<GeneratorRow>? Generators { get; }
+    /// <summary>Gets or sets whether the effect being compiled sits inside an <see cref="ActionEffect.If"/> branch,
+    /// at any nesting depth — an effect family opting out of <see cref="EffectFamily.AllowsInsideBranch"/> is refused
+    /// while this is set.</summary>
+    public bool InsideBranch { get; set; }
+    /// <summary>Gets or sets whether the effect being compiled sits inside a <see cref="ActionEffect.Transaction"/>'s
+    /// own steps, at any nesting depth — an <see cref="ActionEffect.If"/> compiled while this is set refuses a nested
+    /// <see cref="ActionEffect.Transaction"/> in its own branches, since transactions never nest.</summary>
+    public bool InsideTransaction { get; set; }
     /// <summary>Gets the section's lattice topologies.</summary>
     public IReadOnlyList<LatticeTopology> Lattices { get; }
     /// <summary>Gets the section's pattern rows.</summary>
@@ -81,6 +89,8 @@ public class RuleCompileContext {
         RuleBindings = null;
         ForEachRow = null;
         Zones = null;
+        InsideBranch = false;
+        InsideTransaction = false;
         KeyExpressions.Clear();
         m_scope.Clear();
     }

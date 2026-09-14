@@ -64,14 +64,22 @@ public static class ShaderConfigBinding {
                 ShaderScalarKind.Int => (((double?)int.MinValue), ((double?)int.MaxValue)),
                 _ => (((double?)null), ((double?)null)),
             };
-            var minimum = ((field.Min, floor) switch { ( { } a, { } b) => Math.Max(
+            var minimum = ((field.Min, floor) switch {
+                ( { } a, { } b) => Math.Max(
                 val1: a,
                 val2: b
-            ), ( { } a, null) => a, (null, var b) => b });
-            var maximum = ((field.Max, ceiling) switch { ( { } a, { } b) => Math.Min(
+            ),
+                ( { } a, null) => a,
+                (null, var b) => b
+            });
+            var maximum = ((field.Max, ceiling) switch {
+                ( { } a, { } b) => Math.Min(
                 val1: a,
                 val2: b
-            ), ( { } a, null) => a, (null, var b) => b });
+            ),
+                ( { } a, null) => a,
+                (null, var b) => b
+            });
 
             if (minimum is { } min) {
                 component["minimum"] = min;

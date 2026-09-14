@@ -33,6 +33,7 @@ public sealed class StateCellToggleLawTests {
             rowName: RowName,
             key: CellKey,
             tick: fixture.Server.NextInputTick,
+            engineTick: fixture.Server.CompletedEngineTicks,
             row: out _,
             rawValue: out var raw,
             text: out _
@@ -46,6 +47,7 @@ public sealed class StateCellToggleLawTests {
             rowName: RowName,
             key: CellKey,
             tick: fixture.Server.NextInputTick,
+            engineTick: fixture.Server.CompletedEngineTicks,
             row: out _,
             rawValue: out _,
             text: out var text

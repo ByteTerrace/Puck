@@ -652,6 +652,7 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                 scenario.Identity,
                 new WorldMutationJournalEntry(
                     (checkpoint.Server.LastCompletedTick + 1),
+                    (checkpoint.Server.LastCompletedEngineTicks + 1),
                     "uncheckpointed tail"u8.ToArray()
                 ),
                 Token,

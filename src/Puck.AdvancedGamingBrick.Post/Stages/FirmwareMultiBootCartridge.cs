@@ -53,11 +53,13 @@ internal static class FirmwareMultiBootCartridge {
             0xEAFFFFFE,
         ];
 
-        for (var index = 0; (index < program.Length); ++index) { Write(
+        for (var index = 0; (index < program.Length); ++index) {
+            Write(
             image: bytes,
             word: ((0x100 / 4) + index),
             value: program[index]
-        ); }
+        );
+        }
         return bytes;
     }
     internal static byte HandshakeFor(int clients) => ((byte)(((0x11 + 0x11) + ((clients >= 2)
@@ -204,11 +206,13 @@ internal static class FirmwareMultiBootCartridge {
             );
             code[49] = code[45] | 0x80;
         }
-        for (var index = 0; (index < code.Length); ++index) { Write(
+        for (var index = 0; (index < code.Length); ++index) {
+            Write(
             image: rom,
             word: index,
             value: code[index]
-        ); }
+        );
+        }
         for (var index = 0; (index < negotiation.Length); ++index) {
             BinaryPrimitives.WriteUInt16LittleEndian(
                 destination: rom.AsSpan(start: (TableOffset + (index * 2))),

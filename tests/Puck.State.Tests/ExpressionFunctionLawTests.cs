@@ -19,6 +19,7 @@ public sealed class ExpressionFunctionLawTests {
         public StateStore Store => RowStore.Empty;
         public bool TableKeyMissing { get; set; }
         public ulong Tick => 0UL;
+        public ulong EngineTick => 0UL;
 
         public long BindingValue(int ordinal) => 0L;
         public Span<long> BoardScratch(int cells) => new long[cells];

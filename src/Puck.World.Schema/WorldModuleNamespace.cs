@@ -623,26 +623,6 @@ public static class WorldModuleNamespace {
     private sealed class Rewriter(IReadOnlyDictionary<string, string> declared) {
         private const string BindingPrefix = "state.";
 
-        private static bool EndsWithLiveZonePrefix(string text, int bracket) {
-            var prefix = (RuleFacts.LiveZonePrefix.Length - 1);
-
-            return (
-                (bracket >= prefix) &&
-                (string.CompareOrdinal(
-                indexA: (bracket - prefix),
-                indexB: 0,
-                length: prefix,
-                strA: text,
-                strB: RuleFacts.LiveZonePrefix
-            ) == 0)
-            );
-        }
-        private static bool IsNamePart(char character) =>
-            (char.IsLetterOrDigit(c: character) || (character == '_') || (character == '$') || (character == '.'));
-        private static bool IsNameStart(char character) =>
-            (char.IsLetter(c: character) || (character == '_') || (character == '$'));
-        private static bool IsSignedSegment(string text, int index) =>
-            (((index + 1) < text.Length) && (text[index] == '-') && char.IsAsciiDigit(c: text[(index + 1)]));
         private string Map(string name) =>
             (declared.TryGetValue(
                 key: name,
@@ -667,74 +647,22 @@ public static class WorldModuleNamespace {
 
             return -1;
         }
-        // The span of one bare name in the infix grammar: letters, digits, '_', '$', '.'; a reserved name also takes
-        // ':' before a name character or a signed digit segment, and a "$zones[" index span whole.
-        private static int NameEnd(string text, int start) {
-            var reserved = (text[start] == '$');
-            var index = (start + 1);
-
-            while (index < text.Length) {
-                var character = text[index];
-
-                if (IsNamePart(character: character)) {
-                    index++;
-
-                    continue;
-                }
-
-                if (
-                    reserved &&
-                    (character == ':') &&
-                    ((index + 1) < text.Length) &&
-                    (IsNamePart(character: text[(index + 1)]) || IsSignedSegment(
-                    index: (index + 1),
-                    text: text
-                ))
-                ) {
-                    index++;
-
-                    continue;
-                }
-
-                if (
-                    reserved &&
-                    (character == '-') &&
-                    (text[(index - 1)] == ':') &&
-                    ((index + 1) < text.Length) &&
-                    char.IsAsciiDigit(c: text[(index + 1)])
-                ) {
-                    index++;
-
-                    continue;
-                }
-
-                if (
-                    reserved &&
-                    (character == '[') &&
-                    EndsWithLiveZonePrefix(
-                    bracket: index,
-                    text: text
-                )
-                ) {
-                    var close = MatchingBracket(
-                        open: index,
-                        text: text
-                    );
-
-                    if (close < 0) {
-                        break;
-                    }
-
-                    index = (close + 1);
-
-                    continue;
-                }
-
-                break;
-            }
-
-            return index;
-        }
+        // A declared non-cell name (a topology, table, or generator name) may itself carry a dot — SafeName admits
+        // one where CellName never does — so a name found whole in `declared` is renamed whole; only a name that
+        // is NOT itself declared falls to ExpressionSpelling's own dot-access rule, which never yields a row
+        // carrying a dot (a real row name is a CellName). The key half of a split is never renamed — a cell key is
+        // never itself a `Declares` site.
+        private string MapNameOrSplit(string name) =>
+            (declared.ContainsKey(key: name)
+                ? Map(name: name)
+                : (ExpressionSpelling.TrySplitDottedName(
+                key: out var key,
+                name: name,
+                row: out var row
+            )
+                    ? $"{Map(name: row)}.{key}"
+                    : Map(name: name))
+            );
         private string RewriteBinding(string token) {
             if (!token.StartsWith(
                 comparisonType: StringComparison.Ordinal,
@@ -815,16 +743,18 @@ public static class WorldModuleNamespace {
                     continue;
                 }
 
-                if (IsNameStart(character: character)) {
-                    var end = NameEnd(
-                        start: index,
-                        text: text
-                    );
+                var nameLength = ExpressionSpelling.ScanBareName(
+                    start: index,
+                    text: text
+                );
+
+                if (nameLength > 0) {
+                    var end = (index + nameLength);
                     var name = text[index..end];
 
                     _ = output.Append(value: (name.StartsWith(value: '$')
                         ? RewriteReserved(name: name)
-                        : Map(name: name)));
+                        : MapNameOrSplit(name: name)));
                     index = end;
 
                     if (

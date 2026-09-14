@@ -270,6 +270,20 @@ public static partial class WorldDocumentEmitter {
                 // Parser error recovery placeholder; already recorded in DiagnosticBag
                 break;
 
+            case StateTableDeclarationNode or StateSlotDeclarationNode: {
+                    var keyword = ((statement is StateTableDeclarationNode)
+                        ? "table"
+                        : "slot"
+                    );
+
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.StateDeclarationOutsideWorld,
+                        message: $"'{keyword}' is only legal directly inside 'state.world' — declarations in 'state.body', 'state.identity', or anywhere else are refused",
+                        span: statement.Span
+                    );
+                    break;
+                }
+
             case BlockNode blockNode: {
                     LowerBlock(
                         block: blockNode,
@@ -364,6 +378,22 @@ public static partial class WorldDocumentEmitter {
             comparisonType: StringComparison.OrdinalIgnoreCase
         )) {
             LowerShapeBlock(
+                block: block,
+                parent: parent,
+                scope: scope
+            );
+            return;
+        }
+
+        // State section — `state { world { table/slot/row declarations } body [...] identity [...] }`. Only
+        // `world` gets the declaration-block treatment; `body`/`identity`/`lattices` fall through to the general
+        // per-child handling below exactly as before (an array, or an ordinary nested block).
+        if (string.Equals(
+            a: id,
+            b: "state",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
+            LowerStateSectionBlock(
                 block: block,
                 parent: parent,
                 scope: scope

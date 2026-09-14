@@ -193,7 +193,8 @@ public sealed class WorldStateCatalogLawTests {
             rawValue: out var raw,
             row: out var row,
             text: out _,
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ));
         Assert.Equal(
             expected: "score",
@@ -214,7 +215,8 @@ public sealed class WorldStateCatalogLawTests {
             rawValue: out _,
             row: out _,
             text: out _,
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ));
     }
     [Fact]

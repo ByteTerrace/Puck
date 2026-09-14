@@ -38,10 +38,12 @@ internal sealed class BoundedMcpTransport(Stream input, Stream output, Action<Ex
             await send.WaitAsync(cancellationToken: deadline.Token).ConfigureAwait(continueOnCapturedContext: false);
         } catch (Exception error) {
             // A partially written line cannot be resumed by sending the next reply on the same stream.
-            if (!m_lifetime.IsCancellationRequested) { m_fail(new IOException(
+            if (!m_lifetime.IsCancellationRequested) {
+                m_fail(new IOException(
                 innerException: error,
                 message: "MCP output failed or stalled; attachment closed."
-            )); }
+            ));
+            }
             if (send is not null) { _ = ObserveAsync(send: send); }
             throw;
         } finally { Interlocked.Decrement(location: ref m_pendingSends); }

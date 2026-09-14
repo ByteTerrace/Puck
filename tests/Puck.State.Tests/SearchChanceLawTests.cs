@@ -237,6 +237,7 @@ public sealed class SearchChanceLawTests {
 
         IReadOnlyList<SearchWrite>? landed = null;
         var installed = runtime.Step(
+            engineTick: 0UL,
             tick: 1UL,
             apply: writes => { landed = writes; return true; }
         );
@@ -334,6 +335,7 @@ public sealed class SearchChanceLawTests {
         IReadOnlyList<SearchWrite>? landed = null;
 
         Assert.True(condition: runtime.Step(
+            engineTick: 0UL,
             tick: 1UL,
             apply: writes => { landed = writes; return true; }
         ));
@@ -349,10 +351,12 @@ public sealed class SearchChanceLawTests {
 
         for (var tick = 0; (tick < 200); tick++) {
             first.Step(
+                engineTick: 0UL,
                 apply: static _ => true,
                 tick: ((ulong)tick)
             );
             second.Step(
+                engineTick: 0UL,
                 apply: static _ => true,
                 tick: ((ulong)tick)
             );

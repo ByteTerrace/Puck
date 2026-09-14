@@ -555,7 +555,8 @@ public sealed partial class WorldServer {
                 correlationId: 0,
                 mutation: mutation,
                 preMetered: false,
-                tick: tick
+                tick: tick,
+                engineTick: CompletedEngineTicks
             );
         }
 

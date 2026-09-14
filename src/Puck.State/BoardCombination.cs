@@ -16,14 +16,18 @@ public static class BoardCombination {
     /// <param name="topology">The target's topology.</param>
     /// <param name="direction">The resolved shift direction, or -1.</param>
     /// <param name="element">The resolved image element, or -1.</param>
+    /// <param name="value">The admitted member value to write — <see cref="StateTransform.BoardCombine.Value"/> as
+    /// the row's <see cref="StateRow.TryAdmitWrite"/> decides it (clamped under
+    /// <see cref="StateOverflow.Saturate"/>), or zero when refused.</param>
     /// <param name="reason">The refusal, or empty.</param>
     /// <returns>Whether the operation is admissible; source existence and topology agreement remain the adapter's responsibility.</returns>
-    public static bool TryValidate(StateTransform.BoardCombine combine, StateRow row, long empty, CompiledTopology topology, out int direction, out int element, out string reason) {
+    public static bool TryValidate(StateTransform.BoardCombine combine, StateRow row, long empty, CompiledTopology topology, out int direction, out int element, out long value, out string reason) {
         ArgumentNullException.ThrowIfNull(combine);
         ArgumentNullException.ThrowIfNull(row);
         ArgumentNullException.ThrowIfNull(topology);
         direction = -1;
         element = -1;
+        value = 0L;
         var operation = combine.Operation;
 
         if (
@@ -37,10 +41,17 @@ public static class BoardCombination {
             return false;
         }
         if (
-            (row.ClampToEnvelope(value: combine.Value) != combine.Value) ||
+            !row.TryAdmitWrite(
+            current: 0L,
+            operand: combine.Value,
+            write: StateWriteKind.Set,
+            stored: out value,
+            reason: out _
+        ) ||
             ((row.Kind == CellKind.Bool) && (combine.Value is not (0 or 1))) ||
-            (combine.Value == empty)
+            (value == empty)
         ) {
+            value = 0L;
             reason = "boardCombine writes a member value the board admits and that is not the board's own empty value";
             return false;
         }
@@ -74,7 +85,8 @@ public static class BoardCombination {
     /// <param name="empty">The target's empty value.</param>
     /// <param name="direction">The validated direction.</param>
     /// <param name="element">The validated element.</param>
-    public static void Write(StateTransform.BoardCombine combine, CompiledTopology topology, ReadOnlySpan<long> left, long leftEmpty, ReadOnlySpan<long> right, long rightEmpty, Span<long> target, long empty, int direction, int element) {
+    /// <param name="value">The admitted member value <see cref="TryValidate"/> resolved.</param>
+    public static void Write(StateTransform.BoardCombine combine, CompiledTopology topology, ReadOnlySpan<long> left, long leftEmpty, ReadOnlySpan<long> right, long rightEmpty, Span<long> target, long empty, int direction, int element, long value) {
         ArgumentNullException.ThrowIfNull(combine);
         ArgumentNullException.ThrowIfNull(topology);
         var operation = combine.Operation;
@@ -107,7 +119,7 @@ public static class BoardCombination {
             };
 
             if (member) {
-                target[destination] = combine.Value;
+                target[destination] = value;
             }
         }
     }

@@ -4,7 +4,7 @@
 // Regenerate: dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
 //             ./src/Puck.Cli/publish/puck.exe schema --bundle <bundle.json>
 //             node scripts/generateWorldTypes.mjs --bundle <bundle.json>
-// Source bundle: schemaVersion=puck.world.def.v1 generator=Puck.World.WorldSchema
+// Source bundle: schemaVersion=puck.world.definition.v1 generator=Puck.World.WorldSchema
 
 /**
  * The definition of this world — the aggregate describing what the world is, distinct from the live session state that plays in it. It gathers named spawn points (SpawnPoints), motion defaults (Motion), and render-lever defaults and quality presets (Render). Every consumer takes it by construction.
@@ -69,26 +69,27 @@ export type WorldDefinition = {
   patterns?: (PatternRow | null)[] | null;
   tables?: (TableRow | null)[] | null;
   search?: WorldSearchSection | null;
+  machines?: (WorldMachine | null)[] | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
   basis?: string | null;
   /**
-   * Gets the ordered fragment documents this file imports — each a WorldImport naming a file path resolved against this document's own directory and an optional alias its names compose under — the fan-in half of composition beside Basis's single-parent chain (see WorldDocumentBasis). Composition order is the basis chain, then each import in list order, then this file's own body.
+   * Gets the stable document id used when this world submits to another document.
    */
-  imports?: (WorldImport | null)[] | null;
+  documentId?: string | null;
   /**
    * Gets the surface this document offers a host that imports it (WorldExports): the names the host may read, drive, and bind to. Every other name the document declares is private to it. Consumed where the document is imported (WorldModuleExports), so a live document always carries null here and the validator refuses anything else.
    */
   exports?: WorldExports | null;
   /**
-   * Gets the stable document id used when this world submits to another document.
+   * Gets the ordered fragment documents this file imports — each a WorldImport naming a file path resolved against this document's own directory and an optional alias its names compose under — the fan-in half of composition beside Basis's single-parent chain (see WorldDocumentBasis). Composition order is the basis chain, then each import in list order, then this file's own body.
    */
-  documentId?: string | null;
+  imports?: (WorldImport | null)[] | null;
   /**
    * Gets the document schema tag — SchemaVersion for a well-formed document.
    */
-  schema?: "puck.world.def.v1";
+  schema?: "puck.world.definition.v1";
   /**
    * This interface was referenced by `undefined`'s JSON-Schema definition
    * via the `patternProperty` "^[$_]".
@@ -118,15 +119,72 @@ export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter
  */
 export type WorldRenderExtensionEntry = WorldRenderExtensionEntry1;
 /**
+ * One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderLight".
+ */
+export type WorldRenderLight =
+  | (WorldRenderLightDirectional | null)
+  | (WorldRenderLightHemisphere | null)
+  | (WorldRenderLightRim | null)
+  | (WorldRenderLightPoint | null)
+  | (WorldRenderLightOccluder | null);
+/**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "BindableColor".
  */
 export type BindableColor = string;
 /**
+ * WHERE a placeable thing rides — the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldAnchor".
+ */
+export type WorldAnchor =
+  | (WorldAnchorEntity | null)
+  | (WorldAnchorEntityPart | null)
+  | (WorldAnchorPlacement | null)
+  | (WorldAnchorGroup | null)
+  | (WorldAnchorSeat | null)
+  | (WorldAnchorRecentSpeaker | null);
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "Int32List".
+ */
+export type Int32List = number[];
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderLightList".
+ */
+export type WorldRenderLightList = (WorldRenderLight | null)[];
+/**
+ * One sky layer. The $type string is the JSON discriminator.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderSkyLayer".
+ */
+export type WorldRenderSkyLayer =
+  | (WorldRenderSkyLayerGradient | null)
+  | (WorldRenderSkyLayerFog | null)
+  | (WorldRenderSkyLayerSunDisc | null)
+  | (WorldRenderSkyLayerStars | null)
+  | (WorldRenderSkyLayerClouds | null);
+/**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "DocumentVector2".
  */
 export type DocumentVector2 = [number, number] | string;
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderSkyLayerList".
+ */
+export type WorldRenderSkyLayerList = (WorldRenderSkyLayer | null)[];
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldTonemap".
+ */
+export type WorldTonemap = "None" | "Filmic";
 /**
  * The signal carried by a WorldScreen's lit face. A source declares which provider feeds a slot; the engine resolves and samples it. The $type string is the JSON discriminator; a new source kind is a new derived record plus its JsonDerivedTypeAttribute line.
  *
@@ -168,24 +226,6 @@ export type StringList = (string | null)[];
  */
 export type WorldScreenMemoryDirection = "Read" | "Write";
 /**
- * WHERE a placeable thing rides — the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldAnchor".
- */
-export type WorldAnchor =
-  | (WorldAnchorEntity | null)
-  | (WorldAnchorEntityPart | null)
-  | (WorldAnchorPlacement | null)
-  | (WorldAnchorGroup | null)
-  | (WorldAnchorSeat | null)
-  | (WorldAnchorRecentSpeaker | null);
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "Int32List".
- */
-export type Int32List = number[];
-/**
  * One instruction in an authored camera program's ordered op list — the presentation-side pose algebra bodyMotionPrograms established for sim-side movement, promoted to cameras: an authored rig is an ordered list of these trivial ops rather than a bespoke closed motion/aim union, so a new camera behavior is authored data, never new engine code. This is the AUTHORING vocabulary only: Puck.World.Client.WorldCameraRigCompiler translates it to Puck.SdfVm.Views.SdfCameraOp and resolves each frame's bindings and subject poses, and Puck.SdfVm.Views.SdfCameraProgramEvaluator — which parses no document — walks the result. Floats throughout; presentation carries no fixed-point burden.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -199,9 +239,9 @@ export type WorldCameraProgramOp =
   | (WorldCameraProgramOpPath | null)
   | (WorldCameraProgramOpDynamics | null)
   | (WorldCameraProgramOpClampPitch | null)
-  | (WorldCameraProgramOpFov | null)
+  | (WorldCameraProgramOpFieldOfView | null)
   | (WorldCameraProgramOpBlend | null)
-  | (WorldCameraProgramOpSelect | null);
+  | (WorldCameraProgramOpSelectProgram | null);
 /**
  * The subject an Anchor/LookAt op resolves against — the closed "what a camera program can key off" vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table — a placement's pose resolves through the same static stamped-transform math a placeable camera's own anchor and a speaker read (Puck.World.Client.WorldAnchorGeometry).
  *
@@ -233,6 +273,19 @@ export type WorldCameraSelectCaseList = (WorldCameraSelectCase | null)[];
  * via the `definition` "WorldCameraProgramOpList".
  */
 export type WorldCameraProgramOpList = (WorldCameraProgramOp | null)[];
+/**
+ * WHERE a placeable thing rides — the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldAnchorNonNullable".
+ */
+export type WorldAnchorNonNullable =
+  | (WorldAnchorEntity | null)
+  | (WorldAnchorEntityPart | null)
+  | (WorldAnchorPlacement | null)
+  | (WorldAnchorGroup | null)
+  | (WorldAnchorSeat | null)
+  | (WorldAnchorRecentSpeaker | null);
 /**
  * An overlay element's visibility condition — the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.
  *
@@ -668,6 +721,7 @@ export type ActionEffect =
   | (ActionEffectRemoveStateCell | null)
   | (ActionEffectScheduleState | null)
   | (ActionEffectTransaction | null)
+  | (ActionEffectIf | null)
   | (WorldEffectSetVerticalVelocity | null)
   | (WorldEffectScaleVerticalVelocity | null)
   | (WorldEffectPlanarImpulse | null)
@@ -726,6 +780,22 @@ export type ZoneSelector = "Key" | "First" | "Last" | "Random" | "Slice";
  * via the `definition` "BoardCombineOp".
  */
 export type BoardCombineOp = "Copy" | "Fill" | "Clear" | "And" | "Or" | "Xor" | "AndNot" | "Not" | "Shift" | "Image";
+/**
+ * A data-composable gate over named state. A rule fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the ones this library owns, and a document project appends its own derived arms through a RuleVocabulary (see ExtendJson) rather than by editing this list.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ActionPredicateNonNullable".
+ */
+export type ActionPredicateNonNullable =
+  | (ActionPredicateCompareState | null)
+  | (ActionPredicateCompareValue | null)
+  | (ActionPredicateAll | null)
+  | (ActionPredicateAny | null)
+  | (ActionPredicateNot | null)
+  | (WorldPredicateNow | null)
+  | (WorldPredicateRecently | null)
+  | (WorldPredicateTimerElapsed | null)
+  | (WorldPredicateHeld | null);
 /**
  * How a rule-triggered body designation chooses its target.
  *
@@ -987,26 +1057,173 @@ export type BindingBarEdge = "Bottom" | "Top" | "Left" | "Right";
  * The canonical (validated + normalized) creation document.
  */
 export type CreationDocument = {
+  /**
+   * The document version tag (puck.creation.v1).
+   */
   schema?: string | null;
-  name?: unknown;
+  /**
+   * The creation's handle, authored literally or through a containing world's Text state cell; normalization narrows a literal value to letters, digits, dashes, and underscores.
+   */
+  name?: {
+    [k: string]: unknown;
+  };
+  /**
+   * The material palette (null = the default sweep).
+   */
   palette?:
     | ({
+        /**
+         * The base color as #RRGGBB (see HexColor).
+         */
         color: string;
+        /**
+         * The emissive strength (null = 0 — optional members are nullable and normalized at load).
+         */
         emissive?: number | null;
+        /**
+         * The specular strength (null = the material default).
+         */
         specular?: number | null;
-        shininess?: number | null;
+        /**
+         * The GGX roughness in [0, 1] (null = DefaultRoughness) — see SdfMaterial for the roughness-floor formula. A document still spelling shininess is an unmapped member and is refused.
+         */
+        roughness?: number | null;
+        /**
+         * The fresnel edge-lift strength in [0, 1] (null = 0 — no lift) — see SdfMaterial.
+         */
+        sheen?: number | null;
+        /**
+         * The metalness in [0, 1] (null = 0 — dielectric) — see SdfMaterial.
+         */
+        metal?: number | null;
+        /**
+         * The clearcoat strength in [0, 1] (null = 0 — no coat) — see SdfMaterial.
+         */
+        coat?: number | null;
+        /**
+         * Optional generic coverage and reveal surfaces.
+         */
+        weathering?: {
+          edge?: number;
+          lines?: number;
+          settle?: number;
+          reach?: number;
+          seed?: number;
+          scale?: number;
+          floor?: number;
+          lane?: number;
+          under?:
+            | ({
+                threshold: number;
+                surface: {
+                  color: string;
+                  roughness: number;
+                  metal: number;
+                };
+              } | null)[]
+            | null;
+          deposit?: {
+            color: string;
+            roughness: number;
+            metal: number;
+          } | null;
+        } | null;
+        /**
+         * The wrap-lighting share in [0, 1] (null = 0 — the plain Lambert term) — see Wrap.
+         */
+        wrap?: number | null;
+        /**
+         * The shading-normal broadening in [0, 1] (null = 0 — no broadening) — see Soften.
+         */
+        soften?: number | null;
+        /**
+         * The bounce tint as #RRGGBB or a state binding (null = black — no bounce) — see Bounce.
+         */
+        bounce?: string | null;
+        /**
+         * Optional refractive paint layer.
+         */
+        inset?: {
+          origin: {
+            [k: string]: unknown;
+          };
+          rotation: {
+            [k: string]: unknown;
+          };
+          depth: number;
+          ior: number;
+          paint: {
+            /**
+             * Items: One ascending radial ramp stop.
+             */
+            stops: ({
+              radius: number;
+              color: string;
+            } | null)[];
+            softness?: number;
+            modulationAmplitude?: number;
+            modulationFrequency?: number;
+            seed?: number;
+          };
+        } | null;
       } | null)[]
     | null;
+  /**
+   * The authored shapes (null = empty).
+   */
   shapes?:
     | ({
+        /**
+         * The shape's stable id.
+         */
         id: number;
-        name?: unknown;
+        /**
+         * The optional player-given name, authored literally or through a containing world's Text state cell.
+         */
+        name?: {
+          [k: string]: unknown;
+        };
+        /**
+         * The primitive.
+         */
         type:
-          "Sphere" | "Box" | "Torus" | "Cylinder" | "Capsule" | "Ellipsoid" | "RoundCone" | "Plane" | "Cone" | "Prism";
-        position: unknown;
-        rotation: unknown;
-        scale: unknown;
+          | "Sphere"
+          | "Box"
+          | "Torus"
+          | "Cylinder"
+          | "Capsule"
+          | "Ellipsoid"
+          | "RoundCone"
+          | "Plane"
+          | "Cone"
+          | "Prism"
+          | "Superellipsoid"
+          | "Sweep";
+        /**
+         * The shape's position (the author frame's workbench space).
+         */
+        position: {
+          [k: string]: unknown;
+        };
+        /**
+         * The orientation.
+         */
+        rotation: {
+          [k: string]: unknown;
+        };
+        /**
+         * The per-axis scale — the primitive's size (see CreationGeometry).
+         */
+        scale: {
+          [k: string]: unknown;
+        };
+        /**
+         * The palette slot (null = 0).
+         */
         material?: number | null;
+        /**
+         * The blend op name (null = Union).
+         */
         blend?:
           | "Union"
           | "SmoothUnion"
@@ -1018,36 +1235,107 @@ export type CreationDocument = {
           | "ChamferUnion"
           | "ChamferIntersection"
           | "ChamferSubtraction"
+          | "GrooveUnion"
+          | "PipeUnion"
+          | "Morph"
+          | "GrooveSubtraction"
+          | "PipeSubtraction"
+          | "StairsUnion"
+          | "StairsSubtraction"
           | null;
+        /**
+         * The smooth-blend radius (null = 0).
+         */
         smooth?: number | null;
+        /**
+         * The composition group (null = ungrouped).
+         */
         group?: number | null;
+        /**
+         * The shape's local twist rate (null = 0).
+         */
         twist?: number | null;
+        /**
+         * The shape's shell thickness (null = 0, solid).
+         */
         onion?: number | null;
+        /**
+         * The shape's local bend rate about Y (null = 0).
+         */
         bend?: number | null;
+        /**
+         * The shape's inflation radius (null = 0).
+         */
         dilate?: number | null;
+        /**
+         * The ordered SDF VM domain operators (ShapeDomainOp) applied to the shape's point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers reaches contact as well as render; wallpaper does not expand, and a solid placement carrying one is refused at validation.
+         */
         domain?:
           | ((
               | {
                   $type?: "symmetry";
-                  normal: unknown;
+                  /**
+                   * The plane normal, in the shape's creation-space frame (normalized at canonicalization; a zero/non-finite normal falls back to UnitX — the retired Mirror: true flag's exact fold).
+                   */
+                  normal: {
+                    [k: string]: unknown;
+                  };
+                  /**
+                   * The plane's signed offset along Normal (null = 0, through the creation origin).
+                   */
                   offset?: number | null;
                 }
               | {
                   $type?: "repeat";
-                  spacing: unknown;
+                  /**
+                   * The per-axis cell spacing, creation units (clamped to >= 0.001 per axis, matching the builder's own floor).
+                   */
+                  spacing: {
+                    [k: string]: unknown;
+                  };
+                  /**
+                   * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedLimit per axis, far past any authored reach).
+                   */
                   limit?: {
+                    [k: string]: unknown;
+                  };
+                  /**
+                   * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
+                   */
+                  origin?: {
                     [k: string]: unknown;
                   };
                 }
               | {
                   $type?: "polar";
+                  /**
+                   * The sector count around the axis (clamped >= 1).
+                   */
                   count: number;
+                  /**
+                   * The rotation axis (null = Y, the XZ ground plane).
+                   */
                   axis?: "X" | "Y" | "Z" | null;
+                  /**
+                   * Whether adjacent sectors mirror across their shared bisector (null = false).
+                   */
                   mirror?: boolean | null;
+                  /**
+                   * The per-sector palette stride (null = 0, geometric only).
+                   */
                   materialStride?: number | null;
+                  /**
+                   * The point the sector fold pivots around, creation units (null = the creation origin, the pivot this op has always used). A null origin is byte-identical to today's fold.
+                   */
+                  origin?: {
+                    [k: string]: unknown;
+                  };
                 }
               | {
                   $type?: "wallpaper";
+                  /**
+                   * The wallpaper group.
+                   */
                   group:
                     | "P1"
                     | "P2"
@@ -1066,12 +1354,29 @@ export type CreationDocument = {
                     | "P31M"
                     | "P6"
                     | "P6M";
-                  cell: unknown;
+                  /**
+                   * The lattice cell extents in the fold plane, creation units.
+                   */
+                  cell: {
+                    [k: string]: unknown;
+                  };
+                  /**
+                   * The repeat-cell limit per plane axis (null = UnboundedLimit per axis).
+                   */
                   limit?: {
                     [k: string]: unknown;
                   };
+                  /**
+                   * The fold plane (null = XZ).
+                   */
                   plane?: "XZ" | "XY" | "YZ" | null;
+                  /**
+                   * The parity-material stride (null = 0, geometric only).
+                   */
                   materialStride?: number | null;
+                  /**
+                   * The symmetry-LOD distance threshold (null = 0, off).
+                   */
                   lodDistance?: number | null;
                 }
             ) &
@@ -1079,25 +1384,68 @@ export type CreationDocument = {
                 | (
                     | {
                         $type?: "symmetry";
-                        normal: unknown;
+                        /**
+                         * The plane normal, in the shape's creation-space frame (normalized at canonicalization; a zero/non-finite normal falls back to UnitX — the retired Mirror: true flag's exact fold).
+                         */
+                        normal: {
+                          [k: string]: unknown;
+                        };
+                        /**
+                         * The plane's signed offset along Normal (null = 0, through the creation origin).
+                         */
                         offset?: number | null;
                       }
                     | {
                         $type?: "repeat";
-                        spacing: unknown;
+                        /**
+                         * The per-axis cell spacing, creation units (clamped to >= 0.001 per axis, matching the builder's own floor).
+                         */
+                        spacing: {
+                          [k: string]: unknown;
+                        };
+                        /**
+                         * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedLimit per axis, far past any authored reach).
+                         */
                         limit?: {
+                          [k: string]: unknown;
+                        };
+                        /**
+                         * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
+                         */
+                        origin?: {
                           [k: string]: unknown;
                         };
                       }
                     | {
                         $type?: "polar";
+                        /**
+                         * The sector count around the axis (clamped >= 1).
+                         */
                         count: number;
+                        /**
+                         * The rotation axis (null = Y, the XZ ground plane).
+                         */
                         axis?: "X" | "Y" | "Z" | null;
+                        /**
+                         * Whether adjacent sectors mirror across their shared bisector (null = false).
+                         */
                         mirror?: boolean | null;
+                        /**
+                         * The per-sector palette stride (null = 0, geometric only).
+                         */
                         materialStride?: number | null;
+                        /**
+                         * The point the sector fold pivots around, creation units (null = the creation origin, the pivot this op has always used). A null origin is byte-identical to today's fold.
+                         */
+                        origin?: {
+                          [k: string]: unknown;
+                        };
                       }
                     | {
                         $type?: "wallpaper";
+                        /**
+                         * The wallpaper group.
+                         */
                         group:
                           | "P1"
                           | "P2"
@@ -1116,37 +1464,97 @@ export type CreationDocument = {
                           | "P31M"
                           | "P6"
                           | "P6M";
-                        cell: unknown;
+                        /**
+                         * The lattice cell extents in the fold plane, creation units.
+                         */
+                        cell: {
+                          [k: string]: unknown;
+                        };
+                        /**
+                         * The repeat-cell limit per plane axis (null = UnboundedLimit per axis).
+                         */
                         limit?: {
                           [k: string]: unknown;
                         };
+                        /**
+                         * The fold plane (null = XZ).
+                         */
                         plane?: "XZ" | "XY" | "YZ" | null;
+                        /**
+                         * The parity-material stride (null = 0, geometric only).
+                         */
                         materialStride?: number | null;
+                        /**
+                         * The symmetry-LOD distance threshold (null = 0, off).
+                         */
                         lodDistance?: number | null;
                       }
                   )
                 | ((
                     | {
                         $type?: "symmetry";
-                        normal: unknown;
+                        /**
+                         * The plane normal, in the shape's creation-space frame (normalized at canonicalization; a zero/non-finite normal falls back to UnitX — the retired Mirror: true flag's exact fold).
+                         */
+                        normal: {
+                          [k: string]: unknown;
+                        };
+                        /**
+                         * The plane's signed offset along Normal (null = 0, through the creation origin).
+                         */
                         offset?: number | null;
                       }
                     | {
                         $type?: "repeat";
-                        spacing: unknown;
+                        /**
+                         * The per-axis cell spacing, creation units (clamped to >= 0.001 per axis, matching the builder's own floor).
+                         */
+                        spacing: {
+                          [k: string]: unknown;
+                        };
+                        /**
+                         * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedLimit per axis, far past any authored reach).
+                         */
                         limit?: {
+                          [k: string]: unknown;
+                        };
+                        /**
+                         * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
+                         */
+                        origin?: {
                           [k: string]: unknown;
                         };
                       }
                     | {
                         $type?: "polar";
+                        /**
+                         * The sector count around the axis (clamped >= 1).
+                         */
                         count: number;
+                        /**
+                         * The rotation axis (null = Y, the XZ ground plane).
+                         */
                         axis?: "X" | "Y" | "Z" | null;
+                        /**
+                         * Whether adjacent sectors mirror across their shared bisector (null = false).
+                         */
                         mirror?: boolean | null;
+                        /**
+                         * The per-sector palette stride (null = 0, geometric only).
+                         */
                         materialStride?: number | null;
+                        /**
+                         * The point the sector fold pivots around, creation units (null = the creation origin, the pivot this op has always used). A null origin is byte-identical to today's fold.
+                         */
+                        origin?: {
+                          [k: string]: unknown;
+                        };
                       }
                     | {
                         $type?: "wallpaper";
+                        /**
+                         * The wallpaper group.
+                         */
                         group:
                           | "P1"
                           | "P2"
@@ -1165,196 +1573,813 @@ export type CreationDocument = {
                           | "P31M"
                           | "P6"
                           | "P6M";
-                        cell: unknown;
+                        /**
+                         * The lattice cell extents in the fold plane, creation units.
+                         */
+                        cell: {
+                          [k: string]: unknown;
+                        };
+                        /**
+                         * The repeat-cell limit per plane axis (null = UnboundedLimit per axis).
+                         */
                         limit?: {
                           [k: string]: unknown;
                         };
+                        /**
+                         * The fold plane (null = XZ).
+                         */
                         plane?: "XZ" | "XY" | "YZ" | null;
+                        /**
+                         * The parity-material stride (null = 0, geometric only).
+                         */
                         materialStride?: number | null;
+                        /**
+                         * The symmetry-LOD distance threshold (null = 0, off).
+                         */
                         lodDistance?: number | null;
                       }
                   ) &
                     null)
               ))[]
           | null;
+        /**
+         * The driver-fed rotations this shape rides (ShapeSwingDocument), at most MaxSwings (null = none).
+         */
         swings?:
           | ({
+              /**
+               * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
+               */
               driver: string;
-              pivot: unknown;
-              axis: unknown;
-              amplitude: unknown;
+              /**
+               * The joint the shape turns about, in the creation's author frame (see CreationFrame) — a shoulder or a hip, not the shape's own centre.
+               */
+              pivot: {
+                [k: string]: unknown;
+              };
+              /**
+               * The rotation axis, in the creation's author frame; normalized at canonicalization. A positive angle turns right-handed about it.
+               */
+              axis: {
+                [k: string]: unknown;
+              };
+              /**
+               * The peak angle in radians, magnitude at most MaxAmplitude. A negative amplitude mirrors the swing, which is how a limb on the body's other side reads.
+               */
+              amplitude: {
+                [k: string]: unknown;
+              };
+              /**
+               * The phase offset added to the driver's phase, radians (null = 0) — how two limbs on one driver are put out of step (contralateral arms differ by π).
+               */
               phase?: {
                 [k: string]: unknown;
               };
+              /**
+               * The waveform name (null = Sine); see CreationWave.
+               */
               wave?: string | null;
             } | null)[]
           | null;
+        /**
+         * The driver-fed translations this shape rides (ShapeSlideDocument), at most MaxSlides (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain's rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation.
+         */
         slides?:
           | ({
+              /**
+               * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
+               */
               driver: string;
-              axis: unknown;
-              amplitude: unknown;
+              /**
+               * The slide direction, in the creation's author frame; normalized at canonicalization.
+               */
+              axis: {
+                [k: string]: unknown;
+              };
+              /**
+               * The peak offset in creation units, magnitude at most MaxAmplitude.
+               */
+              amplitude: {
+                [k: string]: unknown;
+              };
+              /**
+               * The phase offset added to the driver's phase, radians (null = 0).
+               */
               phase?: {
                 [k: string]: unknown;
               };
+              /**
+               * The waveform name (null = Sine); see CreationWave.
+               */
               wave?: string | null;
             } | null)[]
           | null;
+        /**
+         * The Name of the shape this one hangs from (null = the creation root): the parent's animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides the upper arm's swing at the shoulder. The parent must be declared earlier in shapes (so a chain resolves in one pass and can never cycle); presentation-only on the same terms as the swings it composes with.
+         */
         parent?: string | null;
+        /**
+         * The point this shape hinges about when it acts as a bone of a CreationEffectorDocument chain and declares no Swings (null = the pivot of the first swing, or the shape's own position when it has neither). Author-frame, like every other point here. Read only by the effector solve, so it changes no pose on its own.
+         */
         joint?: {
           [k: string]: unknown;
         };
+        /**
+         * Only for Prism: top width divided by bottom width, finite in [0, 1]. Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width, half-height and extrusion half-depth. Rotate the prism to reverse its taper.
+         */
         taper?: number | null;
+        /**
+         * Optional Prism cross-section controls. Null uses a trapezoid; other profiles expose rounded rectangles, polygons, and ellipses with flat extruded caps.
+         */
         profile?: {
-          kind: "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse";
+          /**
+           * The profile family.
+           */
+          kind: "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse" | "ChamferedRectangle" | "Convex";
+          /**
+           * A fraction of the profile's smaller half-extent, in [0, 1]: RoundedRectangle's corner radius, ChamferedRectangle's chamfer radius, or Convex's uniform corner rounding.
+           */
           cornerRadius?: number;
+          /**
+           * Polygon side count, from 3 through 32.
+           */
           sides?: number;
+          /**
+           * Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.
+           */
+          vertices?: unknown[] | null;
+        } | null;
+        /**
+         * Only for Prism: how the XY profile becomes a solid. Null or extrude sweeps it along local Z to scale.z. revolve sweeps it about the local Y axis with scale.z as the radial offset — zero gives a solid of revolution (a cowl, a boot cuff, a pauldron dome), a positive offset a ring. Renderable for every profile; a solid placement refuses it, because both contact compilers read a per-axis-scaled local box and a revolve reads scale.z as an offset rather than an extent.
+         */
+        lift?: "Revolve" | "Extrude" | null;
+        /**
+         * Only for Prism, Cylinder and Cone: the edge-rounding radius in the creation's own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet. Refused by name past MaxRounding.
+         */
+        rounding?: number | null;
+        /**
+         * The shape's second-material inset face region (null = none) — see ShapePanelDocument. Render-only; refused by name on a Plane, on a shape carrying Domain ops or a non-zero Group, and on a creation that otherwise needs its own field scope.
+         */
+        panel?: {
+          /**
+           * How far the panel copy shrinks on every local axis before it is placed — the copy's own scale is shape scale − Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion: MaxFieldScopeDepth is 1, so nothing is free to isolate a Dilate field op to the copy alone inside the shared scope this and the plate ride. Creation units. Finite and non-negative; refused by name past the shape's smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) — past that the eroded copy is empty everywhere.
+           */
+          inset: number;
+          /**
+           * How far the panel's own face sits from the plate's face along Face, in creation units, exact whatever the Inset. Positive recesses it: the eroded copy is composed with Subtraction so its near face becomes the recess floor exactly Depth below the plate's face — the floor and walls shade with Material, the subtraction-shades-with-the-subtrahend convention the Moth's hood opening rides. Negative raises the panel proud by |Depth| instead: the copy is composed with Union, its far face standing |Depth| past the plate's own and its back end buried inside the plate. Finite; refused by name past ±2·h′, the eroded copy's own full extent along Face — deeper, a recess carves an enclosed void and a raise floats detached, both silent no-ops on the surface. See Resolve for the offset each case translates the copy by.
+           */
+          depth: number;
+          /**
+           * The panel's own palette slot — see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization.
+           */
+          material: number;
+          /**
+           * The local direction the panel erodes and offsets against, read in the primitive's own local frame — before its placement transform, the same frame Domain ops read. Null defaults to +Z (the Prism extrude axis / a Box's front); a non-finite or zero-length authored value is refused by name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op's own normal. Any primitive may author a curved face (a Cylinder's +X rim, say) — the erode/translate/blend recipe reads only HalfExtent along the axis, never the primitive's curvature.
+           */
+          face?: {
+            [k: string]: unknown;
+          };
+        } | null;
+        /**
+         * Only for Box, Cylinder and Prism (an extruded prism only — a revolve has no cap seam to bevel): the 45-degree edge-chamfer radius in the creation's own units, finite and non-negative. Refused by name past MaxChamfer, and refused by name alongside a nonzero Rounding on the same shape.
+         */
+        chamfer?: number | null;
+        /**
+         * The shape's second-material surface bands against other, earlier-declared shapes (null = none), at most MaxTrims — see ShapeTrimDocument. Render-only, like Panel; refused by name on a shape carrying Domain ops, a non-zero Group, or on a creation that otherwise needs its own field scope.
+         */
+        trims?:
+          | ({
+              /**
+               * The Name of another shape in the same creation, declared EARLIER in shapes (so a chain resolves in one pass and can never cycle — mirrors Parent's own rule). A Subtraction cutter riding the host's own Group is the common case; a plain plane-like Box with blend Union works too. Only the reference's own primitive geometry (type, scale, taper, profile, lift, rounding, chamfer) and pose are re-read; its own blend, domain, panel, and trims play no part in the band.
+               */
+              shape: string;
+              /**
+               * How far outward from the reference shape's own surface the band reaches, in creation units. Finite and positive; refused by name otherwise. Baked into the reference copy's own scale (a sharp-cornered growth — the mirror image of, and the same imprecision, Inset's own erosion already accepts) rather than a field-op dilation: it is the only way the reference's own offset survives composing through the macro's Intersection blend inside the one field scope both copies share — a field op applied after that blend would dilate the ALREADY-INTERSECTED result (eroding the host's own copy a second time by Width too), not the reference alone.
+               */
+              width: number;
+              /**
+               * The trim's own palette slot — see Material. Clamped into [0, CreationDocument.PaletteSize) at normalization. Used for both copies the macro composes, so whichever term the blend resolves to at a given point still paints the same color.
+               */
+              material: number;
+              /**
+               * The margin the trim's own scope must beat the host's already-present, unmodified surface by to render at all — a real Dilate field op at a POSITIVE radius on the host's own copy (exact and isolated: the copy is alone in the trim's scope at that point, so nothing else is affected). The scope pops via Union into the accumulator the host's own plain shape already folded into, and max(a, b) >= a makes a genuine erosion (a negative radius) provably always lose to that plain surface — the trim would never render — so the copy is instead nudged narrowly CLOSER than the plain surface by Inset, imperceptibly proud rather than inward: it loses everywhere by default (small) and wins only where the reference's own dilated copy does not additionally push the Intersection candidate past it, i.e. near the reference. Creation units, finite, in [0, MaxInset]; refused by name otherwise. Default 0.003 — just enough to clear the plain surface without z-fighting, the pipeline's own shin margin.
+               */
+              inset?: number;
+            } | null)[]
+          | null;
+        /**
+         * Whether this shape is SHADING-ONLY (null = false): skipped by the beam and fine march (so it never carves the silhouette, the contact field, or the collider) and included only in the shading evaluation at an already-found hit, where its own material and its perturbation of the surface normal paint its footprint — a seam (a thin subtraction) or a rivet (a small union, its own material) that stays a crisp mark at any distance instead of dotting out. Refused by name alongside Panel or Trims on the same shape.
+         */
+        detail?: boolean | null;
+        /**
+         * The shape's radial flare warp (null = none) — see ShapeFlareDocument. Admitted on every primitive; applies to the shape's own local point after Twist/Bend, in that order (twist, then bend, then flare), before the primitive's own scale. Render-only, like Twist/Bend.
+         */
+        flare?: {
+          /**
+           * The linear flare rate at the far end of the span (dimensionless; s(1) = StartScale + Amount). Clamped to [MinAmount, MaxAmount].
+           */
+          amount: number;
+          /**
+           * The mid-span sinusoidal bulge amplitude (dimensionless, peaks at the span's midpoint). Clamped to [-MaxBulge, MaxBulge].
+           */
+          bulge: number;
+          /**
+           * The axial distance the profile runs over, in creation units; finite and strictly greater than zero, or the shape is refused at validation.
+           */
+          span: number;
+          /**
+           * The axial coordinate where the profile begins, in creation units (null = 0).
+           */
+          top?: number | null;
+          /**
+           * Profile axis in [0, 2].
+           */
+          axis?: number;
+          /**
+           * Positive radial scale at the span origin.
+           */
+          startScale?: number;
+        } | null;
+        /**
+         * Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit — an unauthored Superellipsoid is a plain ellipsoid).
+         */
+        exponent?: number | null;
+        /**
+         * Whether this shape casts soft shadows and contributes ambient occlusion (null = true). False excludes it from ONLY the soft-shadow and ambient-occlusion field walks — it still carves the silhouette, the contact field, and the collider like any ordinary shape, unlike Detail (which excludes from every march). For a small part whose own penumbra/AO cost outweighs its visual contribution (an eyelid, a rivet, a groove) — see Secondary.
+         */
+        secondary?: boolean | null;
+        /**
+         * The shape's Gaussian domain-push bumps (null = none), at most MaxBumps — see ShapeBumpDocument. Applied to the shape's own local point after Shear, before the primitive's own scale. Render-only, like Twist/Bend/Flare.
+         */
+        bumps?:
+          | ({
+              /**
+               * The bump's local center, in creation units.
+               */
+              center: {
+                [k: string]: unknown;
+              };
+              /**
+               * The per-axis Gaussian falloff radii, in creation units — clamped away from zero at normalization (GaussianPushMinRadius) so the exponent's divisor is never zero. Refused by name if any authored component is negative or non-finite (a magnitude is what the field reads; a negative radius states nothing a positive one does not).
+               */
+              radii: {
+                [k: string]: unknown;
+              };
+              /**
+               * The peak displacement at the center, in creation units (zero = an exact identity, still admitted — it still charges the per-copy instance count).
+               */
+              push: {
+                [k: string]: unknown;
+              };
+            } | null)[]
+          | null;
+        /**
+         * A polynomial point shear with explicit target and driver axes.
+         */
+        shear?: {
+          linear: number;
+          quadratic?: number;
+          cubic?: number;
+          target?: number;
+          driver?: number;
+        } | null;
+        /**
+         * The shape's swept-curve geometry (null = none) — see ShapeCurveDocument. Admitted only, and required, on Sweep (refused elsewhere, by name; a Sweep with no curve is refused, by name); refused alongside Panel, Trims, Flare, Shear, Bumps, or Domain on the same shape.
+         */
+        curve?: {
+          /**
+           * The curve's first control point, in the shape's local (workbench) frame — creation units, or a state.<row>[.<key>] reference.
+           */
+          a: {
+            [k: string]: unknown;
+          };
+          /**
+           * The curve's middle control point.
+           */
+          b: {
+            [k: string]: unknown;
+          };
+          /**
+           * The curve's last control point.
+           */
+          c: {
+            [k: string]: unknown;
+          };
+          /**
+           * The sweep radius at t = 0; finite and strictly positive.
+           */
+          radiusStart: number;
+          /**
+           * The sweep radius at t = 1; finite and strictly positive.
+           */
+          radiusEnd: number;
+          /**
+           * The mid-span radius bulge amplitude (null = 0), added by bulge·sin(π·t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd).
+           */
+          bulge?: number | null;
+          /**
+           * The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only — refused for deterministic field contact by name, matching Sweep's own status.
+           */
+          strands?: number | null;
+          /**
+           * The strand orbit rate, in turns along the curve (null = 0); finite.
+           */
+          twist?: number | null;
+          /**
+           * The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd).
+           */
+          strandOffset?: number | null;
+        } | null;
+        /**
+         * The shape's per-instance lane-driven erosion (null = none) — see ShapeErodeDocument. Admitted on every primitive; its reach is this shape's own Reach, so it needs no separate authored magnitude.
+         */
+        erode?: {
+          /**
+           * Which dynamic-slot lane drives the erosion.
+           */
+          lane: number;
+          /**
+           * The lane value where erosion begins (t = 0).
+           */
+          from: number;
+          /**
+           * The lane value where the shape is fully eroded (t = 1); may be less than From to run the fold in reverse (the shape grows IN as the lane rises — the torn-fabric use). Must differ from From.
+           */
+          to: number;
+          /**
+           * The erosion front's noise lattice frequency, cells per world unit (null = 1).
+           */
+          noise?: number | null;
+        } | null;
+        /**
+         * Shape-local cellular relief, evaluated after geometry within its own field scope.
+         */
+        cells?: {
+          frequency: number;
+          amplitude: number;
+          seed: number;
+          mode: "F1" | "F2MinusF1";
+          randomness: number;
         } | null;
       } | null)[]
     | null;
+  /**
+   * The animation timeline frames (null = none).
+   */
   frames?:
     | ({
+        /**
+         * The frame's name (rest is the live pose).
+         */
         name: string;
+        /**
+         * The per-shape transform snapshots, keyed by shape id.
+         *
+         * Items: One shape's transform inside a timeline frame.
+         */
         transforms: ({
+          /**
+           * The shape id the snapshot belongs to.
+           */
           id: number;
-          position: unknown;
-          rotation: unknown;
-          scale: unknown;
+          /**
+           * The pose position.
+           */
+          position: {
+            [k: string]: unknown;
+          };
+          /**
+           * The pose orientation.
+           */
+          rotation: {
+            [k: string]: unknown;
+          };
+          /**
+           * The pose scale.
+           */
+          scale: {
+            [k: string]: unknown;
+          };
         } | null)[];
       } | null)[]
     | null;
+  /**
+   * The IK rig's chains (null = none). Shapes stay flat; a chain only references shape ids.
+   */
   chains?:
     | ({
+        /**
+         * The chain's stable id.
+         */
         id: number;
+        /**
+         * The player-given name (null = unnamed).
+         */
         name?: string | null;
+        /**
+         * The member shape ids, root→tip order.
+         */
         shapes: number[];
+        /**
+         * KindLimb or KindSpine (null = limb when exactly 3 shapes, else spine).
+         */
         kind?: string | null;
-        goal?: unknown;
-        pole?: unknown;
+        /**
+         * The live goal position (null = the rest tip — re-seeded at load).
+         */
+        goal?: {
+          [k: string]: unknown;
+        };
+        /**
+         * The bend-direction hint (null = above the root — re-seeded at load).
+         */
+        pole?: {
+          [k: string]: unknown;
+        };
       } | null)[]
     | null;
+  /**
+   * The creation's anchored camera eyes (null = none). Each rides a shape and produces a named feed — the lantern-fish's lure lens is one entry here.
+   */
   cameras?:
     | ({
+        /**
+         * The eye's stable id within the creation.
+         */
         id: number;
+        /**
+         * The anchored shape id (a Id). A camera naming a missing shape is dropped at load (its offset frame has no anchor).
+         */
         shapeId: number;
-        position: unknown;
+        /**
+         * The eye offset from the anchored shape's frame origin, in the creation's author frame (see CreationFrame).
+         */
+        position: {
+          [k: string]: unknown;
+        };
+        /**
+         * The eye heading offset, degrees (null = 0).
+         */
         yaw?: number | null;
+        /**
+         * The eye tilt offset, degrees (null = 0).
+         */
         pitch?: number | null;
+        /**
+         * The vertical field of view, degrees (null = the engine default).
+         */
         fov?: number | null;
+        /**
+         * The look-at target distance ahead (null = 1).
+         */
         focus?: number | null;
+        /**
+         * The named feed this eye publishes (null = the eye's id as a name). A screen face wired to this name shows this eye's live render — pure data, no creature-specific channel.
+         */
         feed?: string | null;
       } | null)[]
     | null;
-  behavior?: CreationBehaviorDocument;
+  /**
+   * The behavior manifest (null = the defaults: walks, no face). Records how the creation moves and any screen faces it declares, so consumers stop re-supplying those facts by hand.
+   */
+  behavior?: {
+    /**
+     * How the creation moves, as a free-text token a consuming world resolves as a kit name: a creation declaring swim inhabits the world's kit row named swim when a placement's inhabit facet omits an explicit kit (a world declaring no such kit rejects the placement loudly, naming every kit it declares). It is not a closed enum — the runtime answer to "how does it move" is the resolved WorldKit.Model, never this string parsed per frame. Null = walk.
+     */
+    locomotion?: string | null;
+    /**
+     * The declared screen faces (null = none). A creation with a face shows a feed on its body; the face's default source is pure data, wirable to any camera feed.
+     */
+    faces?:
+      | ({
+          /**
+           * The face's name (a wiring handle — face by default).
+           */
+          name: string;
+          /**
+           * The shape whose surface is the screen (a Id; -1/null = the whole creation's canonical face surface, resolved by the consumer).
+           */
+          shapeId?: number | null;
+          /**
+           * The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map — none (no signal), test (the test pattern), and camera:<name> / feed:<name> (a View of the named camera, resolved against the placement's derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) lights the no-signal card. Null = the no-signal card until a world's face override wires a feed.
+           */
+          defaultSource?: string | null;
+        } | null)[]
+      | null;
+    /**
+     * The declared sounds (null = none). Omitted from the wire when null, so a creation authored without this member serializes to unchanged bytes.
+     */
+    sounds?:
+      | ({
+          /**
+           * The sound's name (a wiring handle — sound by default; unique within the creation).
+           */
+          name: string;
+          /**
+           * The shape the voice emits from (a Id; null = the creation's root). A sound naming a missing shape is dropped at load (the post-edit-deletion self-heal, mirroring faces).
+           */
+          shapeId?: number | null;
+          /**
+           * The voice's puck.synthesizer-patch.v1 patch, inline (validated through the synth family's own canonicalizer as part of creation validation).
+           */
+          patch: {
+            schema?: string | null;
+            name?: string | null;
+            oscillator?: "Pulse" | "Saw" | "Triangle" | "Sine" | "Noise" | null;
+            dutyThousandths?: number | null;
+            polynomial?: number | null;
+            attackFrames?: number | null;
+            decayFrames?: number | null;
+            sustainThousandths?: number | null;
+            releaseFrames?: number | null;
+            pitchMillihertz: number;
+            sweepMillihertzPerFrame?: number | null;
+            vibratoDepthMillihertz?: number | null;
+            vibratoRateMillihertz?: number | null;
+            durationFrames?: number | null;
+          };
+          /**
+           * The emitter level (null = 1 — unity).
+           */
+          level?: number | null;
+          /**
+           * The audible support radius in world units (null = the consuming world's default speaker radius).
+           */
+          radius?: number | null;
+        } | null)[]
+      | null;
+  } | null;
+  /**
+   * The engraved/embossed text runs the creation carries (null/empty = none). Each is a string laid onto a surface, expanded at emission into Glyph shapes — see TextRunDocument. Omitted from the wire when null, so a creation authored without this member serializes to unchanged bytes.
+   */
   textRuns?:
     | ({
+        /**
+         * The run's text (whitespace / unmapped code points advance the pen without a glyph).
+         */
         text: string;
-        position: unknown;
-        rotation: unknown;
+        /**
+         * The run's anchor centre on the host surface (workbench space).
+         */
+        position: {
+          [k: string]: unknown;
+        };
+        /**
+         * The run plane's orientation (local +X advance, +Y ascent, +Z the relief normal).
+         */
+        rotation: {
+          [k: string]: unknown;
+        };
+        /**
+         * The world height of one em, in the creation's own (pre-placement) units.
+         */
         emHeight: number;
+        /**
+         * The glyph extrude half-depth — the relief the slab straddles the surface by (null = a thin default).
+         */
         depth?: number | null;
+        /**
+         * engrave (Subtraction — a carved recess) or emboss (Union — proud relief); null = emboss.
+         */
         mode?: string | null;
+        /**
+         * The palette slot the letters shade with (null = 0).
+         */
         material?: number | null;
+        /**
+         * The world text catalog font name; null selects that catalog's default font.
+         */
         font?: string | null;
+        /**
+         * The greedy glyph-level wrap width, in the creation's own units (null = only explicit line feeds break lines). Must be positive when present.
+         */
         maxWidth?: number | null;
+        /**
+         * left, center, or right — how lines position against the block's widest line (null = left).
+         */
         align?: string | null;
+        /**
+         * Extra advance after every glyph, in em units (null = 0; negative tightens).
+         */
         tracking?: number | null;
+        /**
+         * A multiplier on the font's line height for the baseline step between lines (null = 1).
+         */
         lineSpacing?: number | null;
+        /**
+         * The shape the run rides, or null for a run placed in creation space. A riding run's Position/Rotation are in that shape's unit-local frame: scaled by the shape's scale, then rotated and translated with it, so the run stays on the surface as the shape resizes.
+         */
         shapeId?: number | null;
       } | null)[]
     | null;
+  /**
+   * The authored part identities this creation publishes when used as an entity look (null = none). Each maps a stable identifier to one shape's dynamic transform.
+   */
   parts?:
     | ({
+        /**
+         * The ordinal, case-sensitive identifier an entity-part anchor names.
+         */
         id: string;
+        /**
+         * The stable Id whose dynamic pose the part publishes.
+         */
         shapeId: number;
       } | null)[]
     | null;
-  noise?: CreationNoiseDocument;
+  /**
+   * The creation-level noise-relief facet (null = none) — see CreationNoiseDocument. Omitted from the wire when null, so a creation authored without it serializes to unchanged bytes.
+   */
+  noise?: {
+    /**
+     * The base lattice frequency, cells per creation unit (clamped to (0, MaxFrequency]).
+     */
+    frequency: number;
+    /**
+     * The peak outward displacement, world units (clamped to (0, MaxAmplitude]; zero drops the facet).
+     */
+    amplitude: number;
+    /**
+     * The fBm octave count (null = 4; clamped to 1..MaxNoiseOctaves).
+     */
+    octaves?: number | null;
+    /**
+     * The per-octave amplitude factor (null = 0.5; clamped to [MinGain, MaxGain]).
+     */
+    gain?: number | null;
+    /**
+     * The per-octave frequency factor (null = 2; clamped to [MinLacunarity, MaxLacunarity]).
+     */
+    lacunarity?: number | null;
+    /**
+     * The hash seed folded into every lattice corner (null = 0).
+     */
+    seed?: number | null;
+  } | null;
+  /**
+   * The named animation drivers (null = none), at most MaxDrivers — see CreationDriverDocument. A shape's Swings/Slides name one of these. Presentation-only, like the facets that read them.
+   */
   drivers?:
     | ({
+        /**
+         * The driver's name, unique within the creation — the spelling a facet's driver member resolves against.
+         */
         name: string;
+        /**
+         * One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, or SignalTurnRate. The first three integrate: φ accumulates Cadence × the signal's per-frame delta while w > 0, and wraps modulo 2π so a wheel spins forever without losing precision. The last three are instantaneous: φ is set to Cadence × the current value, so a facet reading them tracks rather than cycles.
+         */
         signal: string;
-        cadence: unknown;
+        /**
+         * The signal-to-phase gain: radians per metre for the travel signals, radians per second for SignalTime, radians per metre-per-second for SignalSpeed/SignalVerticalSpeed, and radians per radian-per-second for SignalTurnRate. Magnitude at most MaxCadence.
+         */
+        cadence: {
+          [k: string]: unknown;
+        };
+        /**
+         * The gate: every token must hold for the driver's weight to ease toward 1 (it eases toward 0 otherwise, using the authored blend times or WeightSeconds by default, so a limb returns to rest instead of freezing mid-stride). Authored as one token or an array of them — a bare string reads as a one-token gate and canonicalizes to the array form. A token is a Puck.Physics.Motion.BodyFacts member name, WhenAlways, TokenMoving, or TokenStill; null is ungated. At most MaxGateTokens. A token no consumer can resolve gates the driver permanently off.
+         */
         when?: (string | null)[] | null;
+        /**
+         * Gate activation's exponential time constant in seconds; null uses WeightSeconds. Finite and non-negative; zero applies immediately on the next positive frame delta.
+         */
         blendInSeconds?: number | null;
+        /**
+         * Gate release's exponential time constant in seconds, on the same terms as BlendInSeconds. Independent release timing lets a mechanism settle after a quick body response.
+         */
         blendOutSeconds?: number | null;
       } | null)[]
     | null;
+  /**
+   * The inverse-kinematics effectors (null = none), at most MaxEffectors — see CreationEffectorDocument. Each corrects a chain of this creation's own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.
+   */
   effectors?:
     | ({
+        /**
+         * The effector's name, unique within the creation — what a read-back or a refusal spells.
+         */
         name: string;
+        /**
+         * The bones, root→tip, each the Name of a shape that DESCENDS from the one before it through Parent. A bone's joint is the pivot of its first Swings entry, or its authored Joint when it swings nothing. Two bones (MinChainBones) solve analytically; three or more — a tail, a tentacle, a spider leg with a coxa — solve by cyclic coordinate descent over Iterations sweeps. At most MaxChainBones.
+         */
         chain: (string | null)[];
+        /**
+         * The Name of the shape whose posed origin IS the end effector — the last bone itself, or a shape descending from it (a boot under a shin, a claw under a tarsus).
+         */
         tip: string;
+        /**
+         * Where the tip is asked to be.
+         */
         target: {
+          /**
+           * One of KindSurface, KindBody, or KindState.
+           */
           kind: string;
+          /**
+           * KindSurface: the probe direction in the creation's author frame (see CreationFrame), so it turns with the body — [0, -1, 0] is "below the body", which on a wall-held body points at the wall's own down. Normalized at canonicalization; zero names no direction and is refused.
+           */
           direction?: {
             [k: string]: unknown;
           };
+          /**
+           * KindSurface: how far along Direction the probe searches, world units. Beyond MaxReach, or at zero or less, is refused. A probe that finds nothing eases the correction out rather than reaching at nothing.
+           */
           reach?: {
             [k: string]: unknown;
           };
+          /**
+           * KindSurface: how far off the hit surface, along its normal, the tip is placed (null = 0 — the tip lands on the surface). The thickness of a boot's sole or the gap a claw keeps.
+           */
           standoff?: {
             [k: string]: unknown;
           };
+          /**
+           * KindBody: the population entity index whose root pose is the target.
+           */
           index?: number | null;
+          /**
+           * KindBody: the offset from that body's root, in the creation's author frame (null = its root exactly).
+           */
           offset?: {
             [k: string]: unknown;
           };
+          /**
+           * KindState: a state.<row>[.<key>] reference to a text cell spelling a world-space [x, y, z], read at the frame's tick — a target a rule, a console write, or another system publishes. The containing world refuses a row it does not declare.
+           */
           reference?: string | null;
         };
+        /**
+         * The gate, in the same vocabulary and with the same easing a driver's When uses: the correction blends in while every token holds and back out otherwise, so a released effector returns the limb to its driver-posed pose instead of dropping it.
+         */
         when?: (string | null)[] | null;
+        /**
+         * A constant ceiling on the correction, in [0, 1] (null = 1 — full correction). Multiplied by the gate's eased weight, so a half-weight effector suggests rather than commands.
+         */
         weight?: {
           [k: string]: unknown;
         };
+        /**
+         * The contact latch (null = none) — see CreationPlantDocument.
+         */
         plant?: {
+          /**
+           * The Name whose wrapped phase the window is read against.
+           */
           driver: string;
-          window: unknown;
+          /**
+           * The phase interval [from, to] in radians, each in [0, 2π). A window whose from exceeds its to wraps through 0 — the half-cycle straddling the phase origin is as authorable as any other.
+           */
+          window: {
+            [k: string]: unknown;
+          };
+          /**
+           * The target influence outside the plant window while the driver is active, in [0, 1]. Null means 1 (continue following the target); 0 releases the tip to its authored swing. As the driver eases to rest, target influence returns to 1 so an idle limb can settle onto its surface.
+           */
           swingWeight?: number | null;
         } | null;
       } | null)[]
     | null;
-} | null;
-export type CreationBehaviorDocument = {
-  locomotion?: string | null;
-  faces?:
+  /**
+   * The bounded participating volumes (null = none), at most MaxVolumes — see VolumeDocument. Each rides the creation root's or a named shape's dynamic slot; a static placement bakes its frame in. Presentation-only: no distance field, no collider.
+   */
+  volumes?:
     | ({
-        name: string;
-        shapeId?: number | null;
-        defaultSource?: string | null;
-      } | null)[]
-    | null;
-  sounds?:
-    | ({
-        name: string;
-        shapeId?: number | null;
-        patch: {
-          schema?: string | null;
-          name?: string | null;
-          oscillator?: "Pulse" | "Saw" | "Triangle" | "Sine" | "Noise" | null;
-          dutyThousandths?: number | null;
-          polynomial?: number | null;
-          attackFrames?: number | null;
-          decayFrames?: number | null;
-          sustainThousandths?: number | null;
-          releaseFrames?: number | null;
-          pitchMillihertz: number;
-          sweepMillihertzPerFrame?: number | null;
-          vibratoDepthMillihertz?: number | null;
-          vibratoRateMillihertz?: number | null;
-          durationFrames?: number | null;
+        kind: string;
+        position: {
+          [k: string]: unknown;
         };
-        level?: number | null;
-        radius?: number | null;
+        rotation: {
+          [k: string]: unknown;
+        };
+        halfExtent: {
+          [k: string]: unknown;
+        };
+        /**
+         * Items: One local-density emission ramp stop.
+         */
+        ramp: ({
+          density: number;
+          color: string;
+        } | null)[];
+        parent?: string | null;
+        axis?: number | null;
+        width?: number | null;
+        speed?: number | null;
+        seed?: number | null;
+        steps?: number | null;
+        intensity?: number | null;
+        extinction?: number | null;
+        pulseAmplitude?: number | null;
+        pulseFrequency?: number | null;
+        intensityLane?: number | null;
+        enabled?: boolean;
+        coverage?: number | null;
+        softness?: number | null;
+        /**
+         * Whether the family is supported.
+         */
+        isKnownKind?: boolean;
       } | null)[]
     | null;
-} | null;
-export type CreationNoiseDocument = {
-  frequency: number;
-  amplitude: number;
-  octaves?: number | null;
-  gain?: number | null;
-  lacunarity?: number | null;
-  seed?: number | null;
 } | null;
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -1591,11 +2616,6 @@ export type WorldMarkerSource = (WorldMarkerSourceSpeakers | null) | (WorldMarke
 export type WorldDecisionMode = "HighestScore" | "Weighted";
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldGroupOwnershipPolicy".
- */
-export type WorldGroupOwnershipPolicy = "None" | "LeaderDecides" | "RoundRobin" | "FreeForAll";
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldGroupLifetime".
  */
 export type WorldGroupLifetime = "Ephemeral" | "Persistent";
@@ -1604,6 +2624,11 @@ export type WorldGroupLifetime = "Ephemeral" | "Persistent";
  * via the `definition` "WorldGroupEvictionPolicy".
  */
 export type WorldGroupEvictionPolicy = "Remove" | "Disband";
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "MemberRefKind".
+ */
+export type MemberRefKind = "Local" | "Verified";
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "OwnershipSubjectKind".
@@ -1742,6 +2767,11 @@ export type WorldSearchShape =
  * via the `definition` "SearchMethod".
  */
 export type SearchMethod = "Negamax" | "Tree";
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldMachineMemoryDirection".
+ */
+export type WorldMachineMemoryDirection = "Read" | "Write";
 
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -1817,7 +2847,7 @@ export interface WorldRenderDefaults {
    */
   high?: WorldQualityPreset | null;
   /**
-   * The post-render extension chain, composed over the world's rendered output in list order — e.g. [{ "id": "sdf-film-grain", "config": { "intensity": 0.08 } }]. Optional; an absent or empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader set — a puck.shader.v1 manifest's file stem (checked at document load); each entry's own config is validated against that manifest's declared config schema at boot and by puck schema.
+   * The post-render extension chain, composed over the world's rendered output in list order — e.g. [{ "id": "sdf-film-grain", "config": { "intensity": 0.08 } }]. Optional; an absent or empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader set — a puck.shader.manifest.v1 manifest's file stem (checked at document load); each entry's own config is validated against that manifest's declared config schema at boot and by puck schema.
    */
   extensions?: (WorldRenderExtensionEntry | null)[] | null;
   /**
@@ -1832,6 +2862,14 @@ export interface WorldRenderDefaults {
    * Lighting and sky keyed over a state row's value (a day/night cycle when that row advances). Optional; absent leaves Lighting/Sky static.
    */
   cycle?: WorldRenderCycle | null;
+  /**
+   * The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.
+   */
+  environment?: WorldRenderEnvironment | null;
+  /**
+   * The tonemap applied to the frame's final color. Optional; absent is None — the stylized shaded color, unchanged.
+   */
+  tonemap?: WorldTonemap | null;
   /**
    * The far distance in world units: the depth at which every camera march ends — the far plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
    */
@@ -1857,7 +2895,7 @@ export interface WorldQualityPreset {
 }
 export interface WorldRenderExtensionEntry1 {
   /**
-   * The shader set id (its puck.shader.v1 manifest's file stem) — checked against the shipped vocabulary at document load (IsRegisteredPostRenderExtension), never interpreted here.
+   * The shader set id (its puck.shader.manifest.v1 manifest's file stem) — checked against the shipped vocabulary at document load (IsRegisteredPostRenderExtension), never interpreted here.
    */
   id: "sdf-film-grain";
   /**
@@ -1868,132 +2906,346 @@ export interface WorldRenderExtensionEntry1 {
   };
 }
 /**
- * The scene's directional sun and ambient term — threads unchanged into the engine's existing per-frame lighting fields (SdfFrame.SunDirection/SunWeight/SunColor/AmbientBase/ AmbientHemisphere/AmbientColor). Every field, at every level, is optional individually — an absent one resolves to SdfFrame's pinned default for that field, so an unauthored section, or a partially authored one, renders exactly as a world that declares neither.
+ * The lit path's lights and stylization as world data. Absent renders the pinned sun and hemisphere an unauthored world always had; present, the list IS the lights — an authored list without a hemisphere has no ambient. Every field of every light is optional individually and resolves to the engine's pinned default for its kind.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldRenderLighting".
  */
 export interface WorldRenderLighting {
   /**
-   * The directional sun.
+   * The lights, at most SdfEnvironment.MaxLights, in slot order (a render.cycle key moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit pixel.
    */
-  sun?: WorldRenderSun | null;
+  lights?: WorldRenderLightList | null;
   /**
-   * The ambient (hemisphere) term.
+   * The stylized curvature enrichment — cavity darkening, curvature rim light, and an ink outline. Optional; absent (and all-zero) shades exactly as a world that declares none.
    */
-  ambient?: WorldRenderAmbient | null;
+  curvature?: WorldRenderCurvature | null;
 }
 /**
- * One directional sun. Every field is optional individually — absent resolves to SdfFrame's pinned default for that field.
+ * A Lambert directional light.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldRenderSun".
+ * via the `definition` "WorldRenderLightDirectional".
  */
-export interface WorldRenderSun {
+export interface WorldRenderLightDirectional {
+  $type?: "directional";
   /**
-   * The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload).
+   * The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.
    */
   direction?: DocumentVector3;
   /**
-   * The sun's diffuse weight.
+   * The light's linear colour.
+   */
+  color?: BindableColor | null;
+  /**
+   * The diffuse weight. Absent is the pinned sun weight.
    */
   weight?: number | null;
   /**
-   * The sun's linear color — a #RRGGBB/#RRGGBBAA literal, or a state.<row>[.<key>] binding naming a Text cell that holds one (alpha is ignored; the render path is opaque).
+   * The light's angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.
    */
-  color?: BindableColor | null;
+  angularRadius?: number | null;
+  /**
+   * Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.
+   */
+  shadows?: boolean | null;
 }
 /**
- * The ambient (hemisphere) term. Every field is optional individually — absent resolves to SdfFrame's pinned default for that field.
+ * A hemisphere ambient: a floor plus a gradient on the surface normal's Y (sky above, darker below), scaled by ambient occlusion.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldRenderAmbient".
+ * via the `definition` "WorldRenderLightHemisphere".
  */
-export interface WorldRenderAmbient {
+export interface WorldRenderLightHemisphere {
+  $type?: "hemisphere";
   /**
-   * The ambient floor.
+   * The ambient's linear colour.
+   */
+  color?: BindableColor | null;
+  /**
+   * The floor. Absent is the pinned ambient floor.
    */
   base?: number | null;
   /**
-   * The hemisphere gradient, scaling surface normal Y.
+   * The hemisphere gradient. Absent is the pinned gradient.
    */
-  hemisphere?: number | null;
-  /**
-   * The ambient linear color — BindableColor's grammar, on the same terms as Color.
-   */
-  color?: BindableColor | null;
+  gradient?: number | null;
 }
 /**
- * The procedural sky — a three-stop gradient, sun disc, star field, and distance fog, authored as world data. Absent is a hard gate: every existing world renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed, until it authors one.
+ * A view-dependent silhouette brighten: weight · color · pow(1 − saturate(dot(normal, −rayDirection)), power), added after the material shade.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderLightRim".
+ */
+export interface WorldRenderLightRim {
+  $type?: "rim";
+  /**
+   * The rim's linear colour.
+   */
+  color?: BindableColor | null;
+  /**
+   * The strength. Absent is zero, which adds nothing.
+   */
+  weight?: number | null;
+  /**
+   * The falloff exponent — larger confines the highlight nearer the silhouette. Absent is the engine default.
+   */
+  power?: number | null;
+}
+/**
+ * A point light with inverse-square falloff and a soft core: intensity = weight / (1 + (distance / radius)^2). No shadow march in v1 — a point light never occludes and is never occluded.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderLightPoint".
+ */
+export interface WorldRenderLightPoint {
+  $type?: "point";
+  /**
+   * The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.
+   */
+  position?: DocumentVector3;
+  /**
+   * The falloff radius. Absent is the engine default.
+   */
+  radius?: number | null;
+  /**
+   * An entity, entity part, or placement frame. A missing live target disables the light.
+   */
+  anchor?: WorldAnchor | null;
+  /**
+   * The light's linear colour.
+   */
+  color?: BindableColor | null;
+  /**
+   * The strength. Absent is the engine default.
+   */
+  weight?: number | null;
+}
+/**
+ * Rides one population entity's ROOT pose — a walking avatar's whole-body position and orientation.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldAnchorEntity".
+ */
+export interface WorldAnchorEntity {
+  $type?: "entity";
+  /**
+   * The 0-based entity index, bounded by the world's authored population capacity.
+   */
+  index: number;
+}
+/**
+ * Rides one entity look's authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldAnchorEntityPart".
+ */
+export interface WorldAnchorEntityPart {
+  $type?: "entityPart";
+  /**
+   * The 0-based entity index.
+   */
+  index: number;
+  /**
+   * The ordinal, case-sensitive part identifier published by the entity's active look.
+   */
+  partId: string;
+}
+/**
+ * Rides a placement INSTANCE's stamped transform — a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp's root.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldAnchorPlacement".
+ */
+export interface WorldAnchorPlacement {
+  $type?: "placement";
+  /**
+   * The referenced Id (must resolve).
+   */
+  placementId: string;
+  /**
+   * The referenced creation's ShapeDocument.Id to ride, or null for the placement's own stamped root transform.
+   */
+  shapeId: number | null;
+}
+/**
+ * Rides the smoothed CENTROID of a set of population entities — the establishing-shot anchor. Also publishes the set's SPREAD (mean distance from the centroid), which a camera program's Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldAnchorGroup".
+ */
+export interface WorldAnchorGroup {
+  $type?: "group";
+  /**
+   * The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated against the authored population capacity.
+   */
+  indices: Int32List | null;
+  /**
+   * The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) — seeded un-smoothed on first resolve so a camera does not fly in from the origin.
+   */
+  smoothRate: number;
+}
+/**
+ * Rides a local seat's avatar — the body the seat perceives as its own, so possession follows — at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldAnchorSeat".
+ */
+export interface WorldAnchorSeat {
+  $type?: "seat";
+  number?: number | null;
+  partId?: string | null;
+}
+/**
+ * Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldAnchorRecentSpeaker".
+ */
+export interface WorldAnchorRecentSpeaker {
+  $type?: "recentSpeaker";
+  partId?: string | null;
+}
+/**
+ * A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderLightOccluder".
+ */
+export interface WorldRenderLightOccluder {
+  $type?: "occluder";
+  position?: DocumentVector3;
+  radius?: number | null;
+  anchor?: WorldAnchor | null;
+  weight?: number | null;
+}
+/**
+ * The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures at each hit. Every field is optional individually — absent resolves to the engine's pinned default. The three gains share one runtime gate: while all of them are zero the renderer skips the extra field tap the curvature normal needs, so an unauthored world pays nothing.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderCurvature".
+ */
+export interface WorldRenderCurvature {
+  /**
+   * How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.
+   */
+  cavity?: number | null;
+  /**
+   * How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.
+   */
+  rim?: number | null;
+  /**
+   * The ink outline's strength where the curvature magnitude spikes. Zero draws none.
+   */
+  ink?: number | null;
+  /**
+   * The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.
+   */
+  inkLow?: number | null;
+  /**
+   * The curvature magnitude at which the outline saturates.
+   */
+  inkHigh?: number | null;
+  /**
+   * BindableColor's grammar: the outline colour.
+   */
+  inkColor?: BindableColor | null;
+}
+/**
+ * The procedural sky as an ordered stack of layers. Absent is a hard gate: the world renders the pinned two-stop gradient and fog density, as before this section existed. The layers composite in a fixed order — gradient, stars, sun disc, clouds — whatever order they are authored in; fog is read every frame on its own. A layer kind appears at most once.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldRenderSky".
  */
 export interface WorldRenderSky {
   /**
-   * BindableColor's grammar: the straight-up sky color. Optional; absent takes the pinned zenith.
+   * The layers.
    */
-  zenith?: BindableColor | null;
-  /**
-   * BindableColor's grammar: the horizon-band color (the gradient's middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.
-   */
-  horizon?: BindableColor | null;
-  /**
-   * BindableColor's grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.
-   */
-  ground?: BindableColor | null;
-  /**
-   * The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 — the exact value the fog term used before this field existed.
-   */
-  fogDensity?: number | null;
-  /**
-   * The visible sun disc, drawn about the lighting sun's direction. Optional; absent draws no disc.
-   */
-  sun?: WorldRenderSkySun | null;
-  /**
-   * The procedural star field. Optional; absent draws no stars.
-   */
-  stars?: WorldRenderSkyStars | null;
-  /**
-   * The procedural cloud layer. Optional; absent draws no clouds.
-   */
-  clouds?: WorldRenderSkyClouds | null;
+  layers?: WorldRenderSkyLayerList | null;
 }
 /**
- * The visible sun disc — an additive highlight about the lighting sun's direction.
+ * The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldRenderSkySun".
+ * via the `definition` "WorldRenderSkyLayerGradient".
  */
-export interface WorldRenderSkySun {
+export interface WorldRenderSkyLayerGradient {
+  $type?: "gradient";
   /**
-   * The disc's angular half-radius in radians, in (0, π/2]. Controls the falloff sharpness: a smaller disc reads sharper.
+   * Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation. A render.cycle key moves a stop by its index and may not add or remove one.
    */
-  discRadians: number;
-  /**
-   * The disc's peak additive brightness.
-   */
-  intensity: number;
+  stops?: (WorldRenderSkyStop | null)[] | null;
 }
 /**
- * The procedural star field: a deterministic per-cell hash over an octahedral sky projection. No texture, no session state — the identical density/seed always draws the identical field.
+ * One gradient stop.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldRenderSkyStars".
+ * via the `definition` "WorldRenderSkyStop".
  */
-export interface WorldRenderSkyStars {
+export interface WorldRenderSkyStop {
   /**
-   * The star grid's cell count per octahedral axis. A higher value packs more, smaller stars.
+   * The direction's Y component this stop sits at, in [−1, 1].
    */
-  density: number;
+  elevation?: number | null;
   /**
-   * The peak per-star brightness.
+   * BindableColor's grammar: the colour at this elevation. Absent (in a cycle key) keeps the previous key's colour.
    */
-  brightness: number;
+  color?: BindableColor | null;
+}
+/**
+ * The exponential distance fog fading toward the sky gradient.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderSkyLayerFog".
+ */
+export interface WorldRenderSkyLayerFog {
+  $type?: "fog";
   /**
-   * The hash seed folded into every cell — a different seed reshuffles the field.
+   * The density per world unit. Absent is the pinned density.
    */
-  seed: number;
+  density?: number | null;
+}
+/**
+ * The visible sun disc — an additive highlight about one directional light's direction.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderSkyLayerSunDisc".
+ */
+export interface WorldRenderSkyLayerSunDisc {
+  $type?: "sunDisc";
+  /**
+   * The Lights slot of a directional light. Absent is the shadow light, or the first directional when none shadows.
+   */
+  light?: number | null;
+  /**
+   * The disc's angular half-radius in radians, in (0, π/2]. Absent is the engine default.
+   */
+  radius?: number | null;
+  /**
+   * The peak additive brightness. Absent is zero, which draws nothing.
+   */
+  intensity?: number | null;
+}
+/**
+ * The procedural star field: a deterministic per-cell hash over an octahedral sky projection.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderSkyLayerStars".
+ */
+export interface WorldRenderSkyLayerStars {
+  $type?: "stars";
+  /**
+   * The star grid's cell count per octahedral axis. Absent is the engine default.
+   */
+  density?: number | null;
+  /**
+   * The peak per-star brightness. Absent is zero, which draws nothing.
+   */
+  brightness?: number | null;
+  /**
+   * The hash seed folded into every cell.
+   */
+  seed?: number | null;
   /**
    * Scintillation for a share of the stars. Optional; absent twinkles none.
    */
@@ -2009,57 +3261,58 @@ export interface WorldRenderSkyTwinkle {
   /**
    * The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.
    */
-  share: number;
+  share?: number | null;
   /**
-   * How far a twinkling star dips below its steady brightness, in [0, 1]: 0 holds steady, 1 dips to black.
+   * How far a twinkling star dips below its steady brightness, in [0, 1].
    */
-  depth: number;
+  depth?: number | null;
   /**
-   * The fundamental scintillation rate in hertz; each star twinkles at a small harmonic of it.
+   * The fundamental scintillation rate in hertz.
    */
-  rate: number;
+  rate?: number | null;
 }
 /**
- * The procedural cloud layer: a deterministic hashed-lattice noise (warped, four octaves) on a plane above the camera, thresholded by coverage, drawn over the gradient, sun disc and stars and fading into the horizon. No texture, no session state — the identical settings and seed always draw the identical layer at the identical tick.
+ * The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldRenderSkyClouds".
+ * via the `definition` "WorldRenderSkyLayerClouds".
  */
-export interface WorldRenderSkyClouds {
+export interface WorldRenderSkyLayerClouds {
+  $type?: "clouds";
   /**
-   * The fraction of the sky the layer covers, in [0, 1]. Zero draws none.
+   * The fraction of the sky the layer covers, in [0, 1]. Absent is zero.
    */
-  coverage: number;
+  coverage?: number | null;
   /**
-   * The width of a cloud's edge, in (0, 1]: small is hard-edged cumulus, large is a diffuse haze.
+   * The width of a cloud's edge, in (0, 1]. Absent is the engine default.
    */
-  softness: number;
+  softness?: number | null;
   /**
-   * The size of one cloud cell in layer units (the layer sits at unit height, so a scale of 1 spans about 45° overhead). Larger is broader clouds.
+   * The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.
    */
-  scale: number;
+  scale?: number | null;
   /**
-   * The hash seed folded into the lattice — a different seed reshapes the layer.
+   * The hash seed folded into the lattice.
    */
-  seed: number;
+  seed?: number | null;
   /**
-   * BindableColor's grammar: the cloud colour. Optional; absent is white.
+   * BindableColor's grammar: the cloud colour. Absent is white.
    */
   color?: BindableColor | null;
   /**
-   * The layer's wind, in layer units per second along world X and Z, integrated on the tick clock. Optional; absent holds still.
+   * The layer's wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.
    */
   drift?: DocumentVector2;
   /**
-   * The layer's rotation about the zenith in radians per second — the planetary-scale turning a rotating frame gives a broad flow; positive is counter-clockwise seen from below. Optional; absent is none.
+   * The layer's rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.
    */
   spin?: number | null;
   /**
-   * The Coriolis twist: how far, in radians, the layer is wound about the zenith at 45° elevation, the winding falling off toward the horizon and the zenith so bands spiral in rather than shear apart. Positive winds counter-clockwise. Optional; absent is none.
+   * The Coriolis twist in radians at 45° elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.
    */
   curl?: number | null;
   /**
-   * The wind of the SHAPING field relative to the cloud field, in layer units per second: the two slide past each other, so clouds boil and re-form as they drift rather than glide as a fixed picture. Optional; absent holds their shapes.
+   * The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.
    */
   shear?: DocumentVector2;
 }
@@ -2096,6 +3349,60 @@ export interface WorldRenderCycleKey {
    * The sky fields this key moves, or null.
    */
   sky?: WorldRenderSky | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderEnvironment".
+ */
+export interface WorldRenderEnvironment {
+  /**
+   * The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.
+   */
+  softboxes?: (WorldRenderSoftbox | null)[] | null;
+  /**
+   * The reflection horizon gradient. Absent is black — contributes nothing.
+   */
+  horizon?: WorldRenderHorizon | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderSoftbox".
+ */
+export interface WorldRenderSoftbox {
+  /**
+   * From a reflecting surface toward the softbox, any nonzero length (normalized before upload).
+   */
+  direction: DocumentVector3;
+  /**
+   * The angular half-extent (width, height) the falloff widens by, both strictly positive.
+   */
+  size: DocumentVector2;
+  /**
+   * BindableColor's grammar: the softbox's linear colour. Absent is white.
+   */
+  color?: BindableColor | null;
+  /**
+   * The strength. Absent is 1.
+   */
+  weight?: number | null;
+  /**
+   * Additional falloff softening, in the same units as Size. Absent is 0.
+   */
+  blur?: number | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldRenderHorizon".
+ */
+export interface WorldRenderHorizon {
+  /**
+   * The ground-ward (direction.y = −1) colour. Absent is black.
+   */
+  low?: BindableColor | null;
+  /**
+   * The sky-ward (direction.y = 1) colour. Absent is black.
+   */
+  high?: BindableColor | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -2182,7 +3489,7 @@ export interface WorldScreenSourceTestPattern {
   height: number;
 }
 /**
- * An arbitrary deterministic machine's unresampled framebuffer — resolved against a registered IScreenMachineEngine by Engine id. The world never names a concrete machine: the engine owns its Options vocabulary (a GamingBrick reads a dmg/cgb/agb model + a dmgspeed pin).
+ * A named machine output. The source is a consumer reference only: the named machine is prepared, advanced, and retired by the world's machine host independently of every display that samples it.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldScreenSourceMachine".
@@ -2190,37 +3497,13 @@ export interface WorldScreenSourceTestPattern {
 export interface WorldScreenSourceMachine {
   $type?: "machine";
   /**
-   * The screen-machine engine id (e.g. gaming-brick).
+   * The declared Name instance.
    */
-  engine: string;
+  instance: string;
   /**
-   * The content the machine boots, resolved against the document's own directory: a ROM image, or — when the path ends in CartridgeDocumentSuffix — an authored puck.cartridge.v1 document the host compiles through the engine's own forge at bind (Puck.World.WorldScreenMachineEngines.CartridgeCompilers), booting the compiled bytes exactly as it boots a ROM file; the source's canonical hash and the compiled image's hash ride the slot beside the file's own content pin, and screen.state echoes them. A cartridge path on an engine that compiles none refuses at validation by name; a document the forge refuses faults the bind with the forge's own message. Empty when the screen is unconfigured — the binder faults the slot gracefully (no crash, no-signal card) rather than booting.
+   * The provider video output name exposed by that instance.
    */
-  contentPath: string;
-  /**
-   * The engine-specific options string, or null for the engine's defaults.
-   */
-  options: string | null;
-  /**
-   * This machine's cable port (see WorldMachineCable), or null for an unlinked machine. Legal only on a declared screens row's own source — a magazine entry or a placement face's source is refused one (validated), because a cable is a standing physical connection of the machine that owns the slot, not of whatever content happens to rotate through it. Omitted from the wire when null, so every machine source authored before cables existed round-trips unchanged.
-   */
-  cable?: WorldMachineCable | null;
-}
-/**
- * One machine's cable-port declaration — the machine-tier home of cable linking. A cable is the SET of declared machine sources naming the same cable name, derived by MachineCableGroups; no port ever points at another port, so reciprocity holds by construction and a one-port cable is a validation refusal rather than a dangling half-pair.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldMachineCable".
- */
-export interface WorldMachineCable {
-  /**
-   * The cable's stable kebab-case name, shared by every plugged port.
-   */
-  name: string;
-  /**
-   * This machine's 0-based place in cable order — contiguous across the cable's ports (validated), and what decides the linking engine's deterministic player order.
-   */
-  position: number;
+  output: string;
 }
 /**
  * The platform's default live camera feed. The platform may negotiate a nearby extent; every screen and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row requests.
@@ -2442,7 +3725,7 @@ export interface WorldScreenSourceQr {
   quietZoneModules?: number;
 }
 /**
- * A live rendered view of another world, resolved through a destinations row (docs/vision.md, "Observation and display"). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance's server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination's default projection). It never re-derives durability/scope/generation itself — those are the destination row's own facts.
+ * A live rendered view of another world, resolved through a destinations row (docs/architecture/worlds.md, "Observation and display"). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance's server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination's default projection). It never re-derives durability/scope/generation itself — those are the destination row's own facts.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldScreenSourceSession".
@@ -2621,10 +3904,6 @@ export interface WorldCamera {
    */
   name: string;
   /**
-   * What the camera rides, or null for the world reference frame (or for Anchors to decide).
-   */
-  anchor: WorldAnchor | null;
-  /**
    * The independent local motion, aim, and lens axes.
    */
   rig: WorldCameraProgram;
@@ -2637,94 +3916,13 @@ export interface WorldCamera {
    */
   renderHeight: number;
   /**
+   * What the camera rides, or null for the world reference frame (or for Anchors to decide).
+   */
+  anchor?: WorldAnchor | null;
+  /**
    * Ranked anchor candidates, first holding wins each frame — a portrait camera that rides the speaking character while they speak and the seat's own avatar otherwise. Refused beside Anchor; a single unconditional anchor is Anchor.
    */
   anchors?: (WorldCameraAnchorCandidate | null)[] | null;
-}
-/**
- * Rides one population entity's ROOT pose — a walking avatar's whole-body position and orientation.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldAnchorEntity".
- */
-export interface WorldAnchorEntity {
-  $type?: "entity";
-  /**
-   * The 0-based entity index, bounded by the world's authored population capacity.
-   */
-  index: number;
-}
-/**
- * Rides one entity look's authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldAnchorEntityPart".
- */
-export interface WorldAnchorEntityPart {
-  $type?: "entityPart";
-  /**
-   * The 0-based entity index.
-   */
-  index: number;
-  /**
-   * The ordinal, case-sensitive part identifier published by the entity's active look.
-   */
-  partId: string;
-}
-/**
- * Rides a placement INSTANCE's stamped transform — a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp's root.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldAnchorPlacement".
- */
-export interface WorldAnchorPlacement {
-  $type?: "placement";
-  /**
-   * The referenced Id (must resolve).
-   */
-  placementId: string;
-  /**
-   * The referenced creation's ShapeDocument.Id to ride, or null for the placement's own stamped root transform.
-   */
-  shapeId: number | null;
-}
-/**
- * Rides the smoothed CENTROID of a set of population entities — the establishing-shot anchor. Also publishes the set's SPREAD (mean distance from the centroid), which a camera program's Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldAnchorGroup".
- */
-export interface WorldAnchorGroup {
-  $type?: "group";
-  /**
-   * The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated against the authored population capacity.
-   */
-  indices: Int32List | null;
-  /**
-   * The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) — seeded un-smoothed on first resolve so a camera does not fly in from the origin.
-   */
-  smoothRate: number;
-}
-/**
- * Rides a local seat's avatar — the body the seat perceives as its own, so possession follows — at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldAnchorSeat".
- */
-export interface WorldAnchorSeat {
-  $type?: "seat";
-  number?: number | null;
-  partId?: string | null;
-}
-/**
- * Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldAnchorRecentSpeaker".
- */
-export interface WorldAnchorRecentSpeaker {
-  $type?: "recentSpeaker";
-  partId?: string | null;
 }
 /**
  * An authored camera program — the ordered op list a rig resolves through every frame.
@@ -2758,9 +3956,13 @@ export interface WorldCameraProgram {
    */
   clampPitchOp?: WorldCameraProgramOpClampPitchNullable | null;
   /**
-   * Gets the program's Fov op, or null.
+   * Gets the program's Dynamics op, or null.
    */
-  fovOp?: WorldCameraProgramOpFovNullable | null;
+  dynamicsOp?: WorldCameraProgramOpDynamicsNullable | null;
+  /**
+   * Gets the program's FieldOfView op, or null.
+   */
+  fovOp?: WorldCameraProgramOpFieldOfViewNullable | null;
   /**
    * Gets the program's LookAt op, or null.
    */
@@ -2778,13 +3980,9 @@ export interface WorldCameraProgram {
    */
   pathOp?: WorldCameraProgramOpPathNullable | null;
   /**
-   * Gets the program's Dynamics op, or null.
+   * Gets the program's SelectProgram op, or null.
    */
-  dynamicsOp?: WorldCameraProgramOpDynamicsNullable | null;
-  /**
-   * Gets the program's Select op, or null.
-   */
-  selectOp?: WorldCameraProgramOpSelectNullable | null;
+  selectOp?: WorldCameraProgramOpSelectProgramNullable | null;
 }
 /**
  * Establishes the CURRENT subject — the pose Offset/Orbit place the eye relative to, and LookAt aims along the facing of when it names no subject of its own. Also re-seeds the eye at the resolved subject's own position (the "first person" default before any Offset/Orbit runs). At most one per program, and it must be the first operation when present; a program that omits it starts from Reference implicitly.
@@ -2897,7 +4095,7 @@ export interface WorldCameraProgramOpLookAt {
   opcode?: string | null;
 }
 /**
- * Orbits the eye about its pivot. Yaw and Pitch are live-bindable like Fov's field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes — look behind is state.look.behind flipping between 0 and π — while the seat's facing (what steering and movement resolve against) is untouched, because the facing never includes the rig's offsets.
+ * Orbits the eye about its pivot. Yaw and Pitch are live-bindable like FieldOfView's field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes — look behind is state.look.behind flipping between 0 and π — while the seat's facing (what steering and movement resolve against) is untouched, because the facing never includes the rig's offsets.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldCameraProgramOpOrbit".
@@ -2926,7 +4124,7 @@ export interface WorldCameraProgramOpOrbit {
   opcode?: string | null;
 }
 /**
- * Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there — the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject's orientation faces the curve's own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent — it never reads the subject's orientation. A dollied eye is path + LookAt + Fov; a dollied pivot is path + Orbit with an authored yaw that already accounts for the curve's own heading. Composes with Dynamics's boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base + rate·ticks) rather than duplicating a rate spelling here.
+ * Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there — the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject's orientation faces the curve's own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent — it never reads the subject's orientation. A dollied eye is path + LookAt + FieldOfView; a dollied pivot is path + Orbit with an authored yaw that already accounts for the curve's own heading. Composes with Dynamics's boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base + rate·ticks) rather than duplicating a rate spelling here.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldCameraProgramOpPath".
@@ -2988,10 +4186,10 @@ export interface WorldCameraProgramOpClampPitch {
  * Sets the rendered vertical field of view, radians — a literal, or a state.<row>[.<key>] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldCameraProgramOpFov".
+ * via the `definition` "WorldCameraProgramOpFieldOfView".
  */
-export interface WorldCameraProgramOpFov {
-  $type?: "fov";
+export interface WorldCameraProgramOpFieldOfView {
+  $type?: "fieldOfView";
   /**
    * The field of view.
    */
@@ -3030,10 +4228,10 @@ export interface WorldCameraProgramOpBlend {
  * Evaluates exactly one of several other named programs, chosen by a live key — the state-driven counterpart of Blend's two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program's eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldCameraProgramOpSelect".
+ * via the `definition` "WorldCameraProgramOpSelectProgram".
  */
-export interface WorldCameraProgramOpSelect {
-  $type?: "select";
+export interface WorldCameraProgramOpSelectProgram {
+  $type?: "selectProgram";
   /**
    * The selecting value — a literal, or (the intended use) a state.<row>[.<key>] binding — rounded to the nearest whole number and matched against Cases.
    */
@@ -3052,7 +4250,7 @@ export interface WorldCameraProgramOpSelect {
   opcode?: string | null;
 }
 /**
- * One Select candidate: the program named by Program wins when the op's key rounds to Value.
+ * One SelectProgram candidate: the program named by Program wins when the op's key rounds to Value.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldCameraSelectCase".
@@ -3128,12 +4326,28 @@ export interface WorldCameraProgramOpClampPitchNullable {
   opcode?: string | null;
 }
 /**
+ * Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame — never affects the resolved pose itself. At most one per program.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldCameraProgramOpDynamicsNullable".
+ */
+export interface WorldCameraProgramOpDynamicsNullable {
+  /**
+   * The referenced dynamics row name; must resolve.
+   */
+  row: string;
+  /**
+   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
+   */
+  opcode?: string | null;
+}
+/**
  * Sets the rendered vertical field of view, radians — a literal, or a state.<row>[.<key>] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldCameraProgramOpFovNullable".
+ * via the `definition` "WorldCameraProgramOpFieldOfViewNullable".
  */
-export interface WorldCameraProgramOpFovNullable {
+export interface WorldCameraProgramOpFieldOfViewNullable {
   /**
    * The field of view.
    */
@@ -3196,7 +4410,7 @@ export interface WorldCameraProgramOpOffsetNullable {
   opcode?: string | null;
 }
 /**
- * Orbits the eye about its pivot. Yaw and Pitch are live-bindable like Fov's field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes — look behind is state.look.behind flipping between 0 and π — while the seat's facing (what steering and movement resolve against) is untouched, because the facing never includes the rig's offsets.
+ * Orbits the eye about its pivot. Yaw and Pitch are live-bindable like FieldOfView's field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes — look behind is state.look.behind flipping between 0 and π — while the seat's facing (what steering and movement resolve against) is untouched, because the facing never includes the rig's offsets.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldCameraProgramOpOrbitNullable".
@@ -3224,7 +4438,7 @@ export interface WorldCameraProgramOpOrbitNullable {
   opcode?: string | null;
 }
 /**
- * Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there — the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject's orientation faces the curve's own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent — it never reads the subject's orientation. A dollied eye is path + LookAt + Fov; a dollied pivot is path + Orbit with an authored yaw that already accounts for the curve's own heading. Composes with Dynamics's boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base + rate·ticks) rather than duplicating a rate spelling here.
+ * Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there — the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject's orientation faces the curve's own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent — it never reads the subject's orientation. A dollied eye is path + LookAt + FieldOfView; a dollied pivot is path + Orbit with an authored yaw that already accounts for the curve's own heading. Composes with Dynamics's boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base + rate·ticks) rather than duplicating a rate spelling here.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldCameraProgramOpPathNullable".
@@ -3244,28 +4458,12 @@ export interface WorldCameraProgramOpPathNullable {
   opcode?: string | null;
 }
 /**
- * Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame — never affects the resolved pose itself. At most one per program.
- *
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldCameraProgramOpDynamicsNullable".
- */
-export interface WorldCameraProgramOpDynamicsNullable {
-  /**
-   * The referenced dynamics row name; must resolve.
-   */
-  row: string;
-  /**
-   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
-   */
-  opcode?: string | null;
-}
-/**
  * Evaluates exactly one of several other named programs, chosen by a live key — the state-driven counterpart of Blend's two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program's eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldCameraProgramOpSelectNullable".
+ * via the `definition` "WorldCameraProgramOpSelectProgramNullable".
  */
-export interface WorldCameraProgramOpSelectNullable {
+export interface WorldCameraProgramOpSelectProgramNullable {
   /**
    * The selecting value — a literal, or (the intended use) a state.<row>[.<key>] binding — rounded to the nearest whole number and matched against Cases.
    */
@@ -3291,7 +4489,7 @@ export interface WorldCameraAnchorCandidate {
   /**
    * What the camera rides while this candidate wins.
    */
-  anchor: WorldAnchor;
+  anchor: WorldAnchorNonNullable;
   /**
    * The condition, evaluated for the seat the view is resolved for.
    */
@@ -6110,7 +7308,7 @@ export interface StateTransformObserve {
   row: string;
 }
 /**
- * Decrements a state countdown by the current simulation step's engine-tick width, saturating at zero. The destination must be a kind=Int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document's authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.
+ * Decrements a state countdown by the current simulation step's engine-tick width, saturating at zero. The destination must be a kind=Int min=0 row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document's authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ActionEffectCountdownState".
@@ -6193,6 +7391,27 @@ export interface ActionEffectTransaction {
    * The optional branch run after a main-branch refusal.
    */
   onFailure?: (ActionEffect | null)[] | null;
+}
+/**
+ * Branches on a predicate: fires Then when it holds, else Else when present. Both branches read the frame at the effect's own position, so an earlier effect's same-firing write is visible to the condition exactly as it is to a later effect's own operand. A condition that fails to evaluate (an arithmetic fault, a missing table key) runs neither branch and is reported the same way a failing top-level effect is; a false condition with no branch that fires is not a failure. An effect inside a branch that itself refuses is refused on the same terms as a top-level effect — a branch is not a transaction, though a Transaction may appear inside one when this if is not itself inside a transaction.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ActionEffectIf".
+ */
+export interface ActionEffectIf {
+  $type?: "if";
+  /**
+   * The gate.
+   */
+  condition: ActionPredicateNonNullable;
+  /**
+   * The branch fired when Condition holds.
+   */
+  then: (ActionEffect | null)[];
+  /**
+   * The branch fired when it does not, or null to fire nothing.
+   */
+  else?: (ActionEffect | null)[] | null;
 }
 /**
  * Writes the body's vertical-velocity channel (the jump launch / the surge).
@@ -7989,7 +9208,7 @@ export interface WorldSpeakerSourceNone {
   $type?: "none";
 }
 /**
- * A live screen-hosted machine's audio, identified by screen slot — screen index is machine identity for screen-hosted machines. The validator checks only that the screen row exists, never that its declared source is $type machine (runtime inserts overlay declared sources); no live machine at drain time is silence plus a state echo, never a reject.
+ * A named machine audio output. The source is a consumer reference only: the named machine host owns preparation, advancement, and the single drain shared by every speaker feed that names this output.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldSpeakerSourceMachine".
@@ -7997,9 +9216,13 @@ export interface WorldSpeakerSourceNone {
 export interface WorldSpeakerSourceMachine {
   $type?: "machine";
   /**
-   * The declared Index whose hosted machine feeds this source.
+   * The declared Name instance.
    */
-  screenIndex: number;
+  instance: string;
+  /**
+   * The provider audio output name exposed by that instance.
+   */
+  output: string;
 }
 /**
  * A tune asset (WorldTune) played through a headless machine host — acquired while any speaker references it, released when orphaned (a runtime derivation, never a data concept).
@@ -8052,7 +9275,7 @@ export interface WorldSpeakerAnchored {
   /**
    * What the speaker rides (see WorldAnchor).
    */
-  anchor: WorldAnchor;
+  anchor: WorldAnchorNonNullable;
   /**
    * The attachment point relative to the anchor's resolved pose, in anchor-local axes.
    */
@@ -8501,11 +9724,11 @@ export interface WorldHostDefaults {
   /**
    * The external-clock election policy, consumed at boot by the clock registry (which tolerates an unknown source id): null for the launcher's automatic election, or a non-whitespace source id / off. Shape-only validation (null or non-whitespace); the registry, not the validator, interprets the id.
    */
-  genlock: string | null;
+  genlock?: string | null;
   /**
    * The QUIC listen endpoint (host:port) the authoritative host binds for remote peer admission, or null to stay loopback-only (no socket ever opens). Durable configuration per the unification contract — the --listen CLI flag reflects it for a single run without editing the document. Shape-only validation (null or a non-whitespace host:port pair); Server.WorldPeerHost is what actually parses and binds it.
    */
-  listen: string | null;
+  listen?: string | null;
   /**
    * The QUIC endpoint at which this world's authority is reached when another world resolves it as a destination, or null when the authority is colocated with the resolver. Colocation short-circuits the authority transport; it does not select a separate transfer path.
    */
@@ -8522,6 +9745,14 @@ export interface WorldHostDefaults {
    * The undo horizon, in journal entries: world.undo can never reach past this many trailing entries. 0 is unbounded — every world authored before this field existed keeps growing its journal for the life of the process, exactly as before. A positive depth bounds it: once the journal holds more than this many entries, the oldest ones fold forward into the base the journal already keeps (the same document-level replay WorldServer.ApplyUndo performs, run forward), so a checkpoint restore and a replay from the new base plus the retained tail still reproduce the live definition bit-identically. world.status echoes the authored value; world.undo names it when a requested count reaches past what the horizon has kept.
    */
   journalDepth?: number;
+  /**
+   * The window title the OS shows in the caption bar, the taskbar, and Alt+Tab, or null for the engine's own. Shape-only validation (null or non-whitespace).
+   */
+  title?: string | null;
+  /**
+   * The window and taskbar icon: a .ico path resolved against the world document's own directory, or an absolute path taken as-is, so an author's icon travels beside their world file. null — and equally a path naming a file this OS cannot read as an icon — wears the host executable's own icon resource instead, which no world has to ship. Shape-only validation (null or non-whitespace); the platform window backend is what reads the file.
+   */
+  icon?: string | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -8541,11 +9772,19 @@ export interface WorldViewDefaults {
    */
   cameraRig?: WorldCameraProgram | null;
   /**
+   * The directory holding the pipeline compiler's glslang/spirv-cross/dxc tools, or null to resolve each by bare name through the ordinary executable search path — never an environment variable.
+   */
+  shaderToolchain?: string | null;
+  /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    *
    * Items: One named window composition — an ordered list of WorldViewSlots plus a transition envelope, selected for a given session shape by its SeatCount (0 = the catch-all for any joined-seat count). The data-side replacement for a compiled layout switch: an author can see it, change it, and add arrangements.
    */
   layouts: (WorldViewLayout | null)[];
+  /**
+   * Gets the authored views.pipelines rows. The absence-coalesce lives in the accessor for the same reason Elements's does.
+   */
+  pipelines?: (WorldViewPipeline | null)[] | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -8607,7 +9846,7 @@ export interface WorldViewLayout {
   /**
    * Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements's does.
    *
-   * Items: One slot of a WorldViewLayout — a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera is null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect.
+   * Items: One slot of a WorldViewLayout — a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Pipeline are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named pipeline (a WorldViewPipeline row) renders its selected image output into the rect — a slot names at most one of the two (the validator refuses both authored together).
    */
   slots: WorldViewSlot[];
 }
@@ -8633,9 +9872,35 @@ export interface WorldViewSlot {
    */
   height?: number;
   /**
-   * The authored camera name filling this slot, or null for the seat that owns it.
+   * The authored camera name filling this slot, or null for the seat that owns it (or the pipeline named by Pipeline).
    */
   camera?: string | null;
+  /**
+   * The authored views.pipelines row name filling this slot with a compiled shader pipeline, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.
+   */
+  pipeline?: string | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldViewPipeline".
+ */
+export interface WorldViewPipeline {
+  /**
+   * The pipeline's stable name (a SafeName, unique within the section) — what a Pipeline names and a pipeline.* console verb addresses.
+   */
+  name: string;
+  /**
+   * The pipeline document or shader source file, resolved relative to the document's own directory (an author's document may point this at any path relative to itself — never the Content-copied BaseDirectory convention WorldAssetRowLoader's asset rows use).
+   */
+  source: string;
+  /**
+   * The authored camera feeding the paired iCameraPos/iCameraTarget/iCameraUp/ iCameraFov push constants under PUCK_SHADERTOY, or null for the pipeline's own iMouse orbit (the Shadertoy-dialect default).
+   */
+  camera?: string | null;
+  /**
+   * The pipeline clock's rate multiplier — presentation only, never simulation state. Default 1; 0 freezes the clock.
+   */
+  timeScale?: number;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -8726,6 +9991,16 @@ export interface WorldLookMotion {
   partDynamics?: {
     [k: string]: string | null;
   } | null;
+  /**
+   * A creation frame name to state.<row>[.<key>] map ($body in the key is the wearing body's index): the frame holds while its cell's stored value is nonzero, and the first holding frame in declaration order overrides the cue and replay cursor — a blink, a wince, a mouth shape the simulation schedules. Legitimate only on a creation source.
+   */
+  poses?: {
+    [k: string]: string | null;
+  } | null;
+  /**
+   * Up to four optional expressions, in x/y/z/w order. Missing entries read zero. Expressions read eased state; each consumer defines its own numeric range.
+   */
+  lanes?: ValueExpression[] | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -8987,7 +10262,7 @@ export interface WorldStateRow1 {
    */
   name: string;
   /**
-   * The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int with NonNegative set.
+   * The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.
    */
   kind: "Int" | "Fixed" | "Bool" | "Text";
   value?: ShapeNonNullable;
@@ -8998,13 +10273,13 @@ export interface WorldStateRow1 {
     key: string;
     value: ShapeNonNullable;
     advance?: StateAdvance;
-    dynamics?: {
-      row: string;
-      y0: string;
-      v0: string;
-      epochTick?: number;
-    };
+    dynamics?: StateDynamics;
     cycle?: StateCycle;
+    /**
+     * Whether a cell's effective value-over-time behavior is its carrying row's own default, or an explicit opt-out — see Behavior and Resolve.
+     */
+    behavior?: "Inherit" | "None";
+    clock?: ShapeNonNullable2;
     visibility?: StateVisibility;
     /**
      * When a stored knowledge value was last seen and whether the latest observation still sees it.
@@ -9022,11 +10297,11 @@ export interface WorldStateRow1 {
     provenance?: string;
   }[];
   /**
-   * The row-wide declared lower bound every cell's Value must satisfy, raw-encoded per Kind (raw FixedQ4816 bits for Fixed), or null for none. Present only together with Max — a range is authored as a pair or not at all. Legitimate only for Int/Fixed. Omitted from the wire when null.
+   * The row-wide declared lower bound every cell's Value must satisfy, raw-encoded per Kind (raw FixedQ4816 bits for Fixed), or null for none. Independent of Max — a one-sided range (a floor with no ceiling, or the reverse) is legal; when both are present Min must be less than Max. Legitimate only for Int/Fixed. Omitted from the wire when null. A timer is represented as Int with this at zero.
    */
   min?: number | string;
   /**
-   * The row-wide declared upper bound, raw-encoded per Kind, or null for none. Present only together with Min. Omitted from the wire when null.
+   * The row-wide declared upper bound, raw-encoded per Kind, or null for none. Independent of Min; see its remarks. Omitted from the wire when null.
    */
   max?: number | string;
   /**
@@ -9034,9 +10309,9 @@ export interface WorldStateRow1 {
    */
   capacity?: number;
   /**
-   * Whether every cell's value must be non-negative, enforced regardless of any authored Min. Legitimate only for Int/Fixed. A timer is represented as Int with this set.
+   * What Overflow does with a write TryAdmitWrite finds outside the row's declared envelope, or that overflows raw 64-bit arithmetic.
    */
-  nonNegative?: boolean;
+  overflow?: "Refuse" | "Saturate";
   /**
    * Whether this row is a bounded, FIFO-evicting table. Ordinarily a Capacity is a hard ceiling and a write that would exceed it is refused by name; with this set, such a write instead succeeds and, if it added a new key past capacity, evicts the row's oldest surviving cell. Eviction runs as a pure function of the candidate cells inside the compose step, so replay reproduces the identical victim, and the dropped key is named on the mutation's apply echo. Eviction is by insertion position, not recency of touch: a new key is appended to the end of Cells and eviction always drops index 0. Re-writing an existing key updates it in place without moving it — true FIFO, never LRU. Legitimate only together with a declared Capacity. Default false.
    */
@@ -9111,7 +10386,7 @@ export interface WorldStateRow1 {
    */
   valuesFrom?: string;
   /**
-   * A StateRow's declared cell domain — the closed answer to "which keys does this row's storage admit" that IsKeyed/IsSlot/CellCeiling switch over, replacing the five hand-kept discriminators (a null Board, Tokens, Zone, KeysFrom, or History facet) inference used to read the same shape off of. Orthogonal traits — a row's Advance/Dynamics/Cycle/ Draw/Visibility/Knowledge/ Phase/PhaseOf/ Evicts/Min/Max/ NonNegative — are unaffected by which case a row declares; every combination the validator already refused (a lattice row carrying advance, a phase row carrying capacity) is refused the identical way with the case substituted for the old field.
+   * A StateRow's declared cell domain — the closed answer to "which keys does this row's storage admit" that IsKeyed/IsSlot/CellCeiling switch over, replacing the five hand-kept discriminators (a null Board, Tokens, Zone, KeysFrom, or History facet) inference used to read the same shape off of. Orthogonal traits — a row's Advance/Dynamics/Cycle/ Draw/Visibility/Knowledge/ Phase/PhaseOf/ Evicts/Min/Max/ Overflow — are unaffected by which case a row declares; every combination the validator already refused (a lattice row carrying advance, a phase row carrying capacity) is refused the identical way with the case substituted for the old field.
    */
   domain?:
     | (StateDomainSlot | null)
@@ -9132,11 +10407,9 @@ export interface WorldStateRow1 {
      */
     codes: CellName;
   };
-  /**
-   * The row's own (slot-cell) second-order easing trait, or null for an ordinary row whose slot value only changes through an explicit write. See StateDynamics. Legitimate only for Int/Fixed, only on a scalar (slot-eligible) row, and never together with Advance or Draw. A keyed row's own cells ease independently through Dynamics instead.
-   */
   dynamics?: StateDynamics;
   cycle?: StateCycle;
+  clock?: ShapeNonNullable2;
   /**
    * Whether this row is a drive-admission gate. When set, this must be a keyed row (IsKeyed) whose per-body cell — keyed by the body's 0-based entity index — is consulted before admitting a drive or action intent for that body: a nonzero cell refuses the body's intents until the cell reads zero again, checked fresh every tick. The engine does not interpret the row's name; several independently named gate rows may exist at once, any one of which can refuse. Legitimate only on a row declaring Capacity, and only for Int/Fixed/ Bool. Default false.
    */
@@ -9176,27 +10449,35 @@ export interface WorldStateRow1 {
   };
 }
 /**
- * A StateRow's continuous accumulation trait: the row's stored cell is a base value, and the read value advances with elapsed ticks at an exact per-tick rational rate from the tick it was last explicitly set (EpochTick). Used for regen, fractional accumulation, a day/night clock — anything that should move on its own between observations.
+ * A StateRow's continuous accumulation trait: the row's stored cell is a base value, and the read value advances with elapsed engine ticks at an exact per-second rational rate from the engine tick it was last explicitly set (EpochEngineTick). Used for regen, fractional accumulation, a day/night clock — anything that should move on its own between observations.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "StateAdvance".
  */
 export interface StateAdvance {
   /**
-   * The per-tick rate's signed numerator, in the row's own displayed unit (see this type's remarks). Negative accumulates downward (decay); zero is declared but inert.
+   * The per-second rate's signed numerator, in the row's own displayed unit (see this type's remarks). Negative accumulates downward (decay); zero is declared but inert.
    */
-  rateNumerator: number;
+  perSecondNumerator: number;
   /**
-   * The per-tick rate's denominator. Refused at zero or below.
+   * The per-second rate's denominator. Refused at zero or below.
    */
-  rateDenominator: number;
-  /**
-   * The server tick the rate starts accumulating from — the tick the row's base value was last explicitly set, or the loaded document's own authored value for a row never set since. A negative value is refused; in practice this can only be violated by an authored boot document, since every live write rebases to the applying tick before validation sees it.
-   */
-  epochTick?: number;
+  perSecondDenominator: number;
 }
 /**
- * A row's or cell's tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice's reflection group — Puck.Maths.SymmetryWord, the lattice's own thirty-step cycle when no Word is authored — raised to Power once per step. The generator's order is the loop's period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.
+ * A StateCell/StateRow's second-order easing trait: the STORED value stays the TRUTH (what rules, gates, and comparands read), while an eased read (StateReader) computes a second-order follower's current sample from the carrying cell's own Y0/ V0 at its EpochTick, chasing the stored value as its target — the closed-form counterpart to StateAdvance's linear accumulation, no per-tick work either. An explicit write REBASES: the cell's clock Y0/V0 become the eased value and velocity computed AT the write's own tick, and EpochTick becomes that tick — the same rebase discipline StateAdvance's own write rule follows, so a retune never jumps.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "StateDynamics".
+ */
+export interface StateDynamics {
+  /**
+   * The referenced dynamics row name; must resolve.
+   */
+  row: string;
+}
+/**
+ * A row's or cell's tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice's reflection group — Puck.Maths.SymmetryWord, the lattice's own thirty-step cycle when no Word is authored — raised to Power once per step. The generator's order is the loop's period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute for a fixed epoch/substep pair, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "StateCycle".
@@ -9218,13 +10499,16 @@ export interface StateCycle {
    * The server ticks one step lasts; refused at zero or below.
    */
   ticksPerStep?: number;
-  /**
-   * The server tick the step count is measured from; a tick before it reads as step zero. A negative value is refused.
-   */
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "ShapeNonNullable2".
+ */
+export interface ShapeNonNullable2 {
   epochTick?: number;
-  /**
-   * Elapsed ticks already accumulated toward the next step at EpochTick; must be non-negative and less than TicksPerStep.
-   */
+  epochEngineTick?: number;
+  y0?: string;
+  v0?: string;
   substepTicks?: number;
 }
 /**
@@ -9452,28 +10736,6 @@ export interface StateDomainRing {
    * The value read for an age older than the ring holds.
    */
   empty?: number;
-}
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "StateDynamics".
- */
-export interface StateDynamics {
-  /**
-   * The referenced dynamics row name; must resolve.
-   */
-  row: string;
-  /**
-   * The follower's position at EpochTick as raw FixedQ4816 bits, independent of the carrying row's stored-value kind. Keeping the continuous state fixed-native preserves sub-unit phase when an integer target is rebased.
-   */
-  y0: string;
-  /**
-   * The follower's velocity at EpochTick, per second, as raw FixedQ4816 bits. A sub-unit response kick therefore survives an integer-row rebase.
-   */
-  v0: string;
-  /**
-   * The server tick Y0/V0 were captured at.
-   */
-  epochTick?: number;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -10834,7 +12096,7 @@ export interface WorldGroupsSection {
   /**
    * The group roster — authored and runtime rows in one list (see WorldGroup).
    *
-   * Items: One group row — a roster of principals under a kind. One shape whether the row was boot-authored (present in the server's own base document — re-seeded on every world.reset/.load/.reload) or formed live by WorldMutation.FormGroup (never written back to the base, so a whole-document rebuild simply does not carry it forward — the party-vs-roster split falls out of the ordinary document-swap machinery, not a bespoke flag on this type).
+   * Items: One group row — a roster of typed members under a kind. One shape whether the row was boot-authored (present in the server's own base document — re-seeded on every world.reset/.load/.reload) or formed live by WorldMutation.FormGroup (never written back to the base, so a whole-document rebuild simply does not carry it forward — the party-vs-roster split falls out of the ordinary document-swap machinery, not a bespoke flag on this type).
    */
   groups: (WorldGroup | null)[];
   /**
@@ -10856,13 +12118,9 @@ export interface WorldGroupKind {
   /**
    * The role→capability map (see WorldGroupRole). May be empty — a kind with no roles reaches no capability at all through its group principal, so any grant naming it is refused as unreachable.
    *
-   * Items: One named role a WorldGroupKind declares — the role→capability half of the kind's policy bundle. A role names nothing about membership (this head keeps a membership row role-less; see Members); it exists so world.grant can refuse, at the door, a hold over a group principal that no role of its kind could ever exercise (the addon-reachability-honesty analog: an admitted-but- unreachable grant is a grant that lies).
+   * Items: One named role a WorldGroupKind declares — the role→capability half of the kind's policy bundle. Role assigns this name to an individual membership row. The catalog lets world.grant refuse a hold over a group principal that no declared role could exercise. During live permission expansion, only a current local member whose exact assigned role reaches the capability receives that group's row; a null or unknown role receives no capability. The catalog-wide admission check and this per-member projection are deliberately separate.
    */
   roles: (WorldGroupRole | null)[];
-  /**
-   * The loot/ownership-distribution policy slot (see WorldGroupOwnershipPolicy).
-   */
-  ownershipPolicy: WorldGroupOwnershipPolicy;
   /**
    * The lifetime/persistence policy (see WorldGroupLifetime) — runtime groups only.
    */
@@ -10875,10 +12133,6 @@ export interface WorldGroupKind {
    * The maximum concurrent members a group of this kind admits — one minor authored field within MaxMembersPerGroup, the population ceiling this substrate is bounded against.
    */
   capacity: number;
-  /**
-   * The name of a declared state row this kind's groups share, or null for none. Validated to reference an existing row (refused by name otherwise, the same cell-existence discipline the world-rules operand walk enforces) — the deeper "every member reads/writes this row together" semantic belongs to a later lane; this head only pins the reference honest.
-   */
-  sharedStateScope?: string | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -10908,13 +12162,81 @@ export interface WorldGroup {
    */
   kindName: string;
   /**
-   * The current membership — flat only: every entry is a principal, never a group (a Group entry is refused by name — a member holding another group's memberships by proxy is exactly what flat membership forbids), and never World/ Document (neither is a real actor a hold could ever reach). Bounded by the kind's own Capacity.
+   * The current flat membership rows. Each row is a local actor or verified external identity, with role, stable join ordinal, and optional tags. Group refs are refused; the roster is bounded by the kind's own Capacity.
+   *
+   * Items: One member of a group's roster, including its declared role, stable succession ordinal, and optional tags used by membership selectors.
    */
-  members: WorldPrincipal[];
+  members: (WorldGroupMember | null)[];
   /**
    * The row's own tags — what a Tagged destination selector matches against: a traveler resolving a tagged destination is expected to hold exactly one membership among rows carrying the selector's tag, never zero or several. Validated non-empty and distinct when present; null/absent means this row carries none, which is not the same as an authored empty list (refused — omit the member instead).
    */
   tags?: (string | null)[] | null;
+  /**
+   * The monotonic revision, incremented by each accepted membership mutation.
+   */
+  revision?: number;
+  /**
+   * The next never-reused join ordinal; it remains advanced after a member leaves and is not derived from Revision.
+   */
+  nextJoinOrdinal?: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldGroupMember".
+ */
+export interface WorldGroupMember {
+  /**
+   * The local or verified member identity.
+   */
+  ref: WorldMemberRef;
+  /**
+   * The declared role name, or null for no role-scoped capability; validators must not infer a role.
+   */
+  role: string | null;
+  /**
+   * The monotonic succession ordinal assigned when this member joined the group.
+   */
+  joinOrdinal: number;
+  /**
+   * Optional non-empty tags attached to this member.
+   */
+  tags?: (string | null)[] | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldMemberRef".
+ */
+export interface WorldMemberRef {
+  /**
+   * The populated payload arm.
+   */
+  kind?: MemberRefKind;
+  /**
+   * The local principal, only for Local.
+   */
+  principal?: WorldPrincipal | null;
+  /**
+   * The verified identity, only for Verified.
+   */
+  verified?: WorldMemberIdentity | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldMemberIdentity".
+ */
+export interface WorldMemberIdentity {
+  /**
+   * The identity issuer. It is non-empty and free of control characters.
+   */
+  issuer?: string;
+  /**
+   * The issuer's subject claim. It is non-empty and free of control characters.
+   */
+  subject?: string;
+  /**
+   * The optional validated world name for which the claim was attested.
+   */
+  world?: SafeName | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -11267,7 +12589,7 @@ export interface WorldAdmissionEntry {
    */
   algorithm: string;
   /**
-   * The pinned key's actual SubjectPublicKeyInfo bytes, base64-encoded — carried alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, "Signed attestation": consulting the issuer at verification time is a ruled-out design). Empty for OAuth and federated-authority rows.
+   * The pinned key's actual SubjectPublicKeyInfo bytes, base64-encoded — carried alongside the id because offline verification needs the real bytes, never a fetch (docs/architecture/worlds.md, "Signed attestation": consulting the issuer at verification time is a ruled-out design). Empty for OAuth and federated-authority rows.
    */
   publicKey: string;
   /**
@@ -11527,7 +12849,7 @@ export interface WorldProbe {
    */
   id: string;
   /**
-   * The registered probe kind id (a puck.probe.v1 manifest's file stem) — checked against the shipped vocabulary at document load (IsRegisteredProbeKind), never interpreted here. The document never states where the kind runs; the kind's own registration decides kernel-on-device versus out-of-process model.
+   * The registered probe kind id (a puck.probe.manifest.v1 manifest's file stem) — checked against the shipped vocabulary at document load (IsRegisteredProbeKind), never interpreted here. The document never states where the kind runs; the kind's own registration decides kernel-on-device versus out-of-process model.
    */
   kind: string;
   /**
@@ -11541,7 +12863,7 @@ export interface WorldProbe {
     [k: string]: WorldFrameSource | null;
   } | null;
   /**
-   * A recorded puck.probe-track.v1 document path, resolved against the world document's own directory, played back in place of every socket at once — probe.record's own output shape, the hardware-free leg every probe admits. Mutually exclusive with Inputs. Omitted from the wire when null.
+   * A recorded puck.probe.track.v1 document path, resolved against the world document's own directory, played back in place of every socket at once — probe.record's own output shape, the hardware-free leg every probe admits. Mutually exclusive with Inputs. Omitted from the wire when null.
    */
   track?: string | null;
   /**
@@ -12258,17 +13580,99 @@ export interface WorldSearchChance {
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "WorldImport".
+ * via the `definition` "WorldMachine".
  */
-export interface WorldImport {
+export interface WorldMachine {
   /**
-   * The fragment's file path, resolved against the importing document's own directory exactly like basis.
+   * The instance identity used by displays, controls, and hardware operations.
    */
-  document: string;
+  name: string;
   /**
-   * The alias, or null to compose the fragment's names unchanged. An alias is a bare identifier — a letter or underscore, then letters, digits, and underscores — so an aliased name still lexes as one bare name inside an infix expression and still parses as a CellName (TryValidateAlias).
+   * The registered provider identifier.
    */
-  as?: string | null;
+  engine: string;
+  /**
+   * The provider's versioned configuration, validated through its descriptor.
+   */
+  configuration: {
+    [k: string]: unknown;
+  };
+  /**
+   * Whether the host advances this instance. A stopped instance retains its hardware state.
+   */
+  running?: boolean;
+  /**
+   * Ordered hardware bindings, independent of any display.
+   */
+  memory?: (WorldMachineMemory | null)[] | null;
+  /**
+   * The optional standing cable endpoint owned by this machine instance.
+   */
+  cable?: WorldMachineCable | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldMachineMemory".
+ */
+export interface WorldMachineMemory {
+  /**
+   * The binding identity within its machine.
+   */
+  name: string;
+  /**
+   * Whether values enter or leave world state.
+   */
+  direction: WorldMachineMemoryDirection;
+  /**
+   * The provider's hardware address space.
+   */
+  space: string;
+  /**
+   * The signed or unsigned scalar format: i8/u8, i16/u16, i32/u32, or i64/u64.
+   */
+  format: string;
+  /**
+   * The world-state row.
+   */
+  row: string;
+  /**
+   * An unsigned raw address; mutually exclusive with Symbol.
+   */
+  address?: number | null;
+  /**
+   * An exported content symbol; mutually exclusive with Address.
+   */
+  symbol?: string | null;
+  /**
+   * The key of a table-shaped state row, or null for a slot.
+   */
+  key?: string | null;
+  /**
+   * inspect for reads; patch or bus for writes.
+   */
+  access?: string;
+  /**
+   * onChange or everyTick. Repeating a hardware-visible write requires explicit everyTick authoring.
+   */
+  update?: string;
+  /**
+   * checked by default; truncate explicitly admits narrowing and bit reinterpretation.
+   */
+  conversion?: string;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldMachineCable".
+ */
+export interface WorldMachineCable {
+  /**
+   * The cable's stable kebab-case name, shared by every plugged port.
+   */
+  name: string;
+  /**
+   * This machine's 0-based place in cable order — contiguous across the cable's ports (validated), and what decides the linking engine's deterministic player order.
+   */
+  position: number;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -12287,4 +13691,18 @@ export interface WorldExports {
    * The names a host's presentation may bind: HUD elements and templates, overlay predicates, camera program scalars, binding wheels and bars.
    */
   bindings?: (string | null)[] | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldImport".
+ */
+export interface WorldImport {
+  /**
+   * The fragment's file path, resolved against the importing document's own directory exactly like basis.
+   */
+  document: string;
+  /**
+   * The alias, or null to compose the fragment's names unchanged. An alias is a bare identifier — a letter or underscore, then letters, digits, and underscores — so an aliased name still lexes as one bare name inside an infix expression and still parses as a CellName (TryValidateAlias).
+   */
+  as?: string | null;
 }

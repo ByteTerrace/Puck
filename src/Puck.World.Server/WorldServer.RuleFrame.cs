@@ -219,6 +219,7 @@ public sealed partial class WorldServer {
             ),
             candidate: out candidate,
             current: baseline,
+            engineTick: CompletedEngineTicks,
             evictedKey: out _,
             instanceIdentity: InstanceIdentity,
             reason: out reason,
@@ -275,7 +276,8 @@ public sealed partial class WorldServer {
             correlationId: 0,
             mutation: mutation,
             preMetered: false,
-            tick: tick
+            tick: tick,
+            engineTick: CompletedEngineTicks
         )) {
             if (m_output.HasNarrationSink) {
                 m_output.Narrate(

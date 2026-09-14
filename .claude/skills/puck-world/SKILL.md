@@ -786,7 +786,8 @@ engaged screens; `rom-forge` for the SM83 framework and the Tune cart;
   left to crash the per-tick rule path. Every
   top-level `setState`/`addState`/etc. effect preflights and applies on its
   own; only the `transaction` effect groups effects atomically
-  (`WorldServer.Step`'s `FireWorldRuleTransaction`). A piece resolving to no
+  (`RuleEvaluator.Effects.FireTransaction`), and an `if` effect branches to one
+  of two effect lists, each firing on the same per-effect terms. A piece resolving to no
   cell of its own (captured, lifted off) never itself registers as the mover
   on either side of a settle. Chess's candidate source and destination
   (`trailingZeroCount` of a mask) clamp an empty mask to `-1` rather

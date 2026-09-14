@@ -966,7 +966,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             throw;
         }
     }
-    private async Task AppendJournalEntryAsync(WorldAuthorityIdentity identity, string worldId, ulong tick, byte[] encoded, RowBookkeeping bookkeeping) {
+    private async Task AppendJournalEntryAsync(WorldAuthorityIdentity identity, string worldId, ulong tick, ulong engineTick, byte[] encoded, RowBookkeeping bookkeeping) {
         try {
             var outcome = (bookkeeping.PersistenceBlocked
                 ? WorldAuthorityStoreOutcome.RecoveryRequired(detail: "This activation must recover before publishing again.")
@@ -974,7 +974,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     cancellationToken: CancellationToken.None,
                     entry: new WorldMutationJournalEntry(
                         Encoded: encoded,
-                        Tick: tick
+                        Tick: tick,
+                        EngineTick: engineTick
                     ),
                     identity: identity,
                     fence: bookkeeping.Fence
@@ -1029,7 +1030,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         }
     }
     // Called from WorldServer.MutationJournalTap, always on the tick thread — the one writer of JournalTail.
-    private void ScheduleJournalAppend(string worldId, WorldAuthorityIdentity identity, ulong tick, WorldMutation mutation, WorldServer source) {
+    private void ScheduleJournalAppend(string worldId, WorldAuthorityIdentity identity, ulong tick, ulong engineTick, WorldMutation mutation, WorldServer source) {
         if (!m_rows.TryGetValue(
             key: worldId,
             value: out var bookkeeping
@@ -1070,6 +1071,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 encoded: encoded,
                 identity: identity,
                 tick: tick,
+                engineTick: engineTick,
                 worldId: worldId
             ),
             scheduler: TaskScheduler.Default
@@ -1559,7 +1561,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
                     if (!server.TryApplyJournalTailMutation(
                         mutation: mutation,
-                        tick: entry.Tick
+                        tick: entry.Tick,
+                        engineTick: entry.EngineTick
                     )) {
                         Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (journal replay rejected a recorded mutation)]");
                         machines.Dispose();
@@ -1572,10 +1575,11 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             // Wired AFTER the tail replay above: a replayed entry is already durable (it came FROM the store), so
             // re-journaling it here would append a duplicate. Every mutation applied from here on — this row's live
             // operation — is new and gets appended.
-            server.MutationJournalTap = (tick, mutation) => ScheduleJournalAppend(
+            server.MutationJournalTap = (tick, engineTick, mutation) => ScheduleJournalAppend(
                 identity: identity,
                 mutation: mutation,
                 tick: tick,
+                engineTick: engineTick,
                 worldId: identity.World.Value,
                 source: server
             );

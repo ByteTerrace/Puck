@@ -402,7 +402,8 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                 return OverlayStateComparison.Holds(
                     definition: m_client.Definition,
                     state: state,
-                    tick: m_client.Tick
+                    tick: m_client.Tick,
+                    engineTick: m_client.EngineTick
                 );
             default:
                 return true;
@@ -521,7 +522,8 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                 return (OverlayStateComparison.Holds(
                     definition: m_client.Definition,
                     state: state,
-                    tick: m_client.Tick
+                    tick: m_client.Tick,
+                    engineTick: m_client.EngineTick
                 )
                     ? 1f
                     : 0f

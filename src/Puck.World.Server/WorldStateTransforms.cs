@@ -606,6 +606,18 @@ public static partial class WorldStateTransforms {
                 reason: out reason
             );
         }
+        if (!row.TryAdmitWrite(
+            current: 0L,
+            operand: ray.Value,
+            write: StateWriteKind.Set,
+            stored: out var admittedValue,
+            reason: out _
+        )) {
+            return Refuse(
+                message: "setRay writes a value the board row does not admit",
+                reason: out reason
+            );
+        }
         var cells = (row.Cells ?? []).ToList();
         var cellIndices = new Dictionary<CellName, int>(capacity: cells.Count);
 
@@ -623,7 +635,7 @@ public static partial class WorldStateTransforms {
                 key: key,
                 value: out var existing
             )) {
-                cells[existing] = cells[existing] with { Value = ray.Value };
+                cells[existing] = cells[existing] with { Value = admittedValue };
             } else {
                 cellIndices.Add(
                     key: key,
@@ -631,7 +643,7 @@ public static partial class WorldStateTransforms {
                 );
                 cells.Add(item: new(
                     key,
-                    ray.Value
+                    admittedValue
                 ));
             }
         }

@@ -54,10 +54,12 @@ public static partial class ShadertoyShaderAdapter {
             )) + "."));
         }
         if (channelBindings is not null) {
-            foreach (var pair in channelBindings) { names.TryAdd(
+            foreach (var pair in channelBindings) {
+                names.TryAdd(
                 key: pair.Key,
                 value: pair.Value
-            ); }
+            );
+            }
         }
         var configBlock = ConfigDeclarations(config: config);
         var prelude = string.Join(

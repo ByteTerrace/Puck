@@ -320,7 +320,8 @@ public sealed partial class SearchRuntime {
 
             _ = host.Judge(
                 rules: m_judge,
-                tick: tick
+                tick: tick,
+                engineTick: m_engineTick
             );
 
             var mover = CursorBaseTurn(
@@ -1104,6 +1105,7 @@ public sealed partial class SearchRuntime {
             program: plan.Score!,
             kind: CellKind.Int,
             tick: tick,
+            engineTick: m_engineTick,
             value: out var value
         )
             ? value

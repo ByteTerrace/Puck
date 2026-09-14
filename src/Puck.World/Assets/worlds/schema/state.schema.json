@@ -20,7 +20,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int with NonNegative set.",
+            "description": "The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.",
             "enum": [
               "Int",
               "Fixed",
@@ -47,30 +47,20 @@
                   "$ref": "./common.schema.json#/$defs/StateAdvance"
                 },
                 "dynamics": {
-                  "type": "object",
-                  "properties": {
-                    "row": {
-                      "type": "string"
-                    },
-                    "y0": {
-                      "type": "string"
-                    },
-                    "v0": {
-                      "type": "string"
-                    },
-                    "epochTick": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "row",
-                    "y0",
-                    "v0"
-                  ],
-                  "additionalProperties": false
+                  "$ref": "./common.schema.json#/$defs/StateDynamics"
                 },
                 "cycle": {
                   "$ref": "./common.schema.json#/$defs/StateCycle"
+                },
+                "behavior": {
+                  "description": "Whether a cell\u0027s effective value-over-time behavior is its carrying row\u0027s own default, or an explicit opt-out \u2014 see Behavior and Resolve.",
+                  "enum": [
+                    "Inherit",
+                    "None"
+                  ]
+                },
+                "clock": {
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable2"
                 },
                 "visibility": {
                   "$ref": "./common.schema.json#/$defs/StateVisibility"
@@ -102,11 +92,46 @@
                 "key",
                 "value"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "allOf": [
+                {
+                  "if": {
+                    "required": [
+                      "behavior"
+                    ],
+                    "properties": {
+                      "behavior": {
+                        "const": "None"
+                      }
+                    }
+                  },
+                  "then": {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "advance"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "dynamics"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "cycle"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
             }
           },
           "min": {
-            "description": "The row-wide declared lower bound every cell\u0027s Value must satisfy, raw-encoded per Kind (raw FixedQ4816 bits for Fixed), or null for none. Present only together with Max \u2014 a range is authored as a pair or not at all. Legitimate only for Int/Fixed. Omitted from the wire when null.",
+            "description": "The row-wide declared lower bound every cell\u0027s Value must satisfy, raw-encoded per Kind (raw FixedQ4816 bits for Fixed), or null for none. Independent of Max \u2014 a one-sided range (a floor with no ceiling, or the reverse) is legal; when both are present Min must be less than Max. Legitimate only for Int/Fixed. Omitted from the wire when null. A timer is represented as Int with this at zero.",
             "anyOf": [
               {
                 "type": "integer"
@@ -117,7 +142,7 @@
             ]
           },
           "max": {
-            "description": "The row-wide declared upper bound, raw-encoded per Kind, or null for none. Present only together with Min. Omitted from the wire when null.",
+            "description": "The row-wide declared upper bound, raw-encoded per Kind, or null for none. Independent of Min; see its remarks. Omitted from the wire when null.",
             "anyOf": [
               {
                 "type": "integer"
@@ -131,9 +156,12 @@
             "description": "The row\u0027s own cell-count ceiling (1..MaxCellsPerRow), or null to fall back to the implicit ceiling. A row declaring Capacity can never be a slot (IsSlot), even if it happens to carry exactly one cell \u2014 declaring a capacity is declaring table intent. Omitted from the wire when null.",
             "type": "integer"
           },
-          "nonNegative": {
-            "description": "Whether every cell\u0027s value must be non-negative, enforced regardless of any authored Min. Legitimate only for Int/Fixed. A timer is represented as Int with this set.",
-            "type": "boolean"
+          "overflow": {
+            "description": "What Overflow does with a write TryAdmitWrite finds outside the row\u0027s declared envelope, or that overflows raw 64-bit arithmetic.",
+            "enum": [
+              "Refuse",
+              "Saturate"
+            ]
           },
           "evicts": {
             "description": "Whether this row is a bounded, FIFO-evicting table. Ordinarily a Capacity is a hard ceiling and a write that would exceed it is refused by name; with this set, such a write instead succeeds and, if it added a new key past capacity, evicts the row\u0027s oldest surviving cell. Eviction runs as a pure function of the candidate cells inside the compose step, so replay reproduces the identical victim, and the dropped key is named on the mutation\u0027s apply echo. Eviction is by insertion position, not recency of touch: a new key is appended to the end of Cells and eviction always drops index 0. Re-writing an existing key updates it in place without moving it \u2014 true FIFO, never LRU. Legitimate only together with a declared Capacity. Default false.",
@@ -242,7 +270,7 @@
             "type": "string"
           },
           "domain": {
-            "description": "A StateRow\u0027s declared cell domain \u2014 the closed answer to \u0022which keys does this row\u0027s storage admit\u0022 that IsKeyed/IsSlot/CellCeiling switch over, replacing the five hand-kept discriminators (a null Board, Tokens, Zone, KeysFrom, or History facet) inference used to read the same shape off of. Orthogonal traits \u2014 a row\u0027s Advance/Dynamics/Cycle/ Draw/Visibility/Knowledge/ Phase/PhaseOf/ Evicts/Min/Max/ NonNegative \u2014 are unaffected by which case a row declares; every combination the validator already refused (a lattice row carrying advance, a phase row carrying capacity) is refused the identical way with the case substituted for the old field.",
+            "description": "A StateRow\u0027s declared cell domain \u2014 the closed answer to \u0022which keys does this row\u0027s storage admit\u0022 that IsKeyed/IsSlot/CellCeiling switch over, replacing the five hand-kept discriminators (a null Board, Tokens, Zone, KeysFrom, or History facet) inference used to read the same shape off of. Orthogonal traits \u2014 a row\u0027s Advance/Dynamics/Cycle/ Draw/Visibility/Knowledge/ Phase/PhaseOf/ Evicts/Min/Max/ Overflow \u2014 are unaffected by which case a row declares; every combination the validator already refused (a lattice row carrying advance, a phase row carrying capacity) is refused the identical way with the case substituted for the old field.",
             "type": "object",
             "required": [
               "$type"
@@ -359,36 +387,13 @@
             "additionalProperties": false
           },
           "dynamics": {
-            "description": "The row\u0027s own (slot-cell) second-order easing trait, or null for an ordinary row whose slot value only changes through an explicit write. See StateDynamics. Legitimate only for Int/Fixed, only on a scalar (slot-eligible) row, and never together with Advance or Draw. A keyed row\u0027s own cells ease independently through Dynamics instead.",
-            "type": "object",
-            "properties": {
-              "row": {
-                "description": "The referenced dynamics row name; must resolve.",
-                "type": "string"
-              },
-              "y0": {
-                "description": "The follower\u0027s position at EpochTick as raw FixedQ4816 bits, independent of the carrying row\u0027s stored-value kind. Keeping the continuous state fixed-native preserves sub-unit phase when an integer target is rebased.",
-                "type": "string"
-              },
-              "v0": {
-                "description": "The follower\u0027s velocity at EpochTick, per second, as raw FixedQ4816 bits. A sub-unit response kick therefore survives an integer-row rebase.",
-                "type": "string"
-              },
-              "epochTick": {
-                "description": "The server tick Y0/V0 were captured at.",
-                "type": "integer"
-              }
-            },
-            "required": [
-              "row",
-              "y0",
-              "v0"
-            ],
-            "additionalProperties": false,
-            "title": "StateDynamics"
+            "$ref": "./common.schema.json#/$defs/StateDynamics"
           },
           "cycle": {
             "$ref": "./common.schema.json#/$defs/StateCycle"
+          },
+          "clock": {
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable2"
           },
           "gatesDrive": {
             "description": "Whether this row is a drive-admission gate. When set, this must be a keyed row (IsKeyed) whose per-body cell \u2014 keyed by the body\u0027s 0-based entity index \u2014 is consulted before admitting a drive or action intent for that body: a nonzero cell refuses the body\u0027s intents until the cell reads zero again, checked fresh every tick. The engine does not interpret the row\u0027s name; several independently named gate rows may exist at once, any one of which can refuse. Legitimate only on a row declaring Capacity, and only for Int/Fixed/ Bool. Default false.",
@@ -803,22 +808,6 @@
               "allOf": [
                 {
                   "required": [
-                    "advance"
-                  ]
-                },
-                {
-                  "required": [
-                    "capacity"
-                  ]
-                }
-              ]
-            }
-          },
-          {
-            "not": {
-              "allOf": [
-                {
-                  "required": [
                     "dynamics"
                   ]
                 },
@@ -841,22 +830,6 @@
                 {
                   "required": [
                     "advance"
-                  ]
-                }
-              ]
-            }
-          },
-          {
-            "not": {
-              "allOf": [
-                {
-                  "required": [
-                    "dynamics"
-                  ]
-                },
-                {
-                  "required": [
-                    "capacity"
                   ]
                 }
               ]
@@ -905,22 +878,6 @@
                 {
                   "required": [
                     "dynamics"
-                  ]
-                }
-              ]
-            }
-          },
-          {
-            "not": {
-              "allOf": [
-                {
-                  "required": [
-                    "cycle"
-                  ]
-                },
-                {
-                  "required": [
-                    "capacity"
                   ]
                 }
               ]
@@ -974,6 +931,18 @@
                   }
                 ]
               }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "clock"
+              ]
+            },
+            "then": {
+              "required": [
+                "value"
+              ]
             }
           }
         ]

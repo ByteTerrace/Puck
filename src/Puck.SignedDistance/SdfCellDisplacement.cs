@@ -39,10 +39,12 @@ public readonly record struct SdfCellDisplacement(float Frequency, float Amplitu
             (Randomness < 0f) ||
             (Randomness > maximum)
         ) { throw new ArgumentOutOfRangeException(paramName: nameof(Randomness)); }
-        if (!float.IsFinite(f: StepFactor)) { throw new ArgumentOutOfRangeException(
+        if (!float.IsFinite(f: StepFactor)) {
+            throw new ArgumentOutOfRangeException(
             nameof(Amplitude),
             "The cellular derivative bound must be finite."
-        ); }
+        );
+        }
     }
 
     /// <summary>The greatest outward relief: both distance functions are nonnegative.</summary>

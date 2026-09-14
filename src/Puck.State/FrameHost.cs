@@ -67,6 +67,8 @@ public sealed class FrameHost : IRuleHost {
     public bool TableKeyMissing { get; set; }
     /// <inheritdoc/>
     public ulong Tick => Evaluator.Tick;
+    /// <inheritdoc/>
+    public ulong EngineTick => Evaluator.EngineTick;
     /// <summary>Gets how many writes the frame accepted since construction.</summary>
     public int Writes => m_writes;
 
@@ -175,14 +177,18 @@ public sealed class FrameHost : IRuleHost {
     /// <summary>Evaluates rules over the frame in array order with every edge closed, as one tick.</summary>
     /// <param name="rules">The rules, already restricted to what a frame can evaluate.</param>
     /// <param name="tick">The tick the reads answer as of.</param>
+    /// <param name="engineTick">The engine tick a <see cref="StateAdvance"/> read answers as of — a frame judge has
+    /// no live simulation rate of its own, so a caller with no independent engine clock passes <paramref name="tick"/>
+    /// itself.</param>
     /// <returns><see langword="true"/> when any effect wrote the frame.</returns>
-    public bool Judge(CompiledRule[] rules, ulong tick) {
+    public bool Judge(CompiledRule[] rules, ulong tick, ulong engineTick) {
         Latch.Clear();
 
         return Evaluator.Evaluate(
             rules: rules,
             latch: Latch,
             tick: tick,
+            engineTick: engineTick,
             stepTicks: 1UL
         );
     }

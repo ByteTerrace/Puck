@@ -24,7 +24,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument());
         var fired = 0;
 
-        fixture.Server.MutationJournalTap = (_, _) => fired++;
+        fixture.Server.MutationJournalTap = (_, _, _) => fired++;
 
         // A cell write against an undeclared row is refused by the compose-time gate before the mutation ever
         // reaches the journal — the tap must not fire for it.
@@ -51,9 +51,9 @@ public sealed class WorldServerMutationJournalTapLawTests {
         );
         var document = Fixtures.BuildDocument().WithWorldState(rows: [row]);
         using var fixture = Fixtures.FreshServer(definition: document);
-        (ulong Tick, byte[] Encoded)? captured = null;
+        (ulong Tick, ulong EngineTick, byte[] Encoded)? captured = null;
 
-        fixture.Server.MutationJournalTap = (tick, mutation) => {
+        fixture.Server.MutationJournalTap = (tick, engineTick, mutation) => {
             Assert.Null(@object: captured);
             Assert.True(
                 condition: WorldSubmissionCodec.TryEncodeCommittedMutation(
@@ -63,7 +63,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
                 ),
                 userMessage: failure.ToString()
             );
-            captured = (tick, encoded);
+            captured = (tick, engineTick, encoded);
         };
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
@@ -111,7 +111,8 @@ public sealed class WorldServerMutationJournalTapLawTests {
         );
         Assert.True(condition: restoredServer.TryApplyJournalTailMutation(
             mutation: decoded!,
-            tick: captured.Value.Tick
+            tick: captured.Value.Tick,
+            engineTick: captured.Value.EngineTick
         ));
 
         var restoredRow = WorldDefinitionRows.FindStateRow(

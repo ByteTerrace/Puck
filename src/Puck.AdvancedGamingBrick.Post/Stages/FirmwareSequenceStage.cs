@@ -15,38 +15,38 @@ internal sealed class FirmwareSequenceStage : IPostStage<PostContext> {
             retail: retail,
             ticks: vector.Points.Length,
             assertion: (fixture, tick) => {
-            var point = vector.Points[tick];
+                var point = vector.Points[tick];
 
-            Equal(
-                actual: fixture.Byte(address: (FirmwareSequenceFixture.Track + 0x12)),
-                expected: point.Volume,
-                detail: $"tick{tick} volume"
-            );
-            Equal(
-                actual: fixture.Byte(address: (FirmwareSequenceFixture.Track + 1)),
-                expected: point.Wait,
-                detail: $"tick{tick} wait"
-            );
-            Equal(
-                actual: fixture.Byte(address: (FirmwareSequenceFixture.Track + 2)),
-                expected: point.Depth,
-                detail: $"tick{tick} pattern depth"
-            );
-            Equal(
-                actual: fixture.Byte(address: (FirmwareSequenceFixture.Track + 3)),
-                expected: point.Repeat,
-                detail: $"tick{tick} repeat counter"
-            );
-            Equal(
-                actual: fixture.Word(address: (FirmwareSequenceFixture.Track + 0x40)),
-                expected: (FirmwareSequenceFixture.Program + ((uint)point.Offset)),
-                detail: $"tick{tick} command cursor"
-            );
-            Require(
-                condition: (((fixture.Byte(address: FirmwareSequenceFixture.Track) & 0x80) != 0) == point.Active),
-                detail: $"tick{tick} track active flag"
-            );
-        }
+                Equal(
+                    actual: fixture.Byte(address: (FirmwareSequenceFixture.Track + 0x12)),
+                    expected: point.Volume,
+                    detail: $"tick{tick} volume"
+                );
+                Equal(
+                    actual: fixture.Byte(address: (FirmwareSequenceFixture.Track + 1)),
+                    expected: point.Wait,
+                    detail: $"tick{tick} wait"
+                );
+                Equal(
+                    actual: fixture.Byte(address: (FirmwareSequenceFixture.Track + 2)),
+                    expected: point.Depth,
+                    detail: $"tick{tick} pattern depth"
+                );
+                Equal(
+                    actual: fixture.Byte(address: (FirmwareSequenceFixture.Track + 3)),
+                    expected: point.Repeat,
+                    detail: $"tick{tick} repeat counter"
+                );
+                Equal(
+                    actual: fixture.Word(address: (FirmwareSequenceFixture.Track + 0x40)),
+                    expected: (FirmwareSequenceFixture.Program + ((uint)point.Offset)),
+                    detail: $"tick{tick} command cursor"
+                );
+                Require(
+                    condition: (((fixture.Byte(address: FirmwareSequenceFixture.Track) & 0x80) != 0) == point.Active),
+                    detail: $"tick{tick} track active flag"
+                );
+            }
         );
     }
     private static void Equal(uint actual, uint expected, string detail) => Require(

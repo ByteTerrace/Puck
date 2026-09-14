@@ -2,7 +2,7 @@ namespace Puck.World.Client;
 
 /// <summary>Evaluates a render lane expression against a body's live state — the client-side,
 /// presentation half of the shared <c>ExpressionSpelling</c>/<see cref="ValueExpression"/> grammar. Reads EASED
-/// state (<see cref="WorldGaitDrivers.TryReadStateNumber(WorldDefinition, string, ulong, out float, int)"/>, the
+/// state (<see cref="WorldGaitDrivers.TryReadStateNumber(WorldDefinition, string, ulong, out float, int, ulong)"/>, the
 /// same smoothing every other look/driver binding takes), not the raw authoritative tick a server rule reads — a
 /// lane expression drives presentation without modifying simulation values.
 /// Supports a restricted arithmetic subset of <see cref="ValueToken"/> (constants, state reads, and the basic

@@ -504,13 +504,15 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                     label: hide
                 );
                 Load(expression: sprite.Tile);
-                if (document.Tiles.Length < 256) { emitter.ArithmeticImmediate(
+                if (document.Tiles.Length < 256) {
+                    emitter.ArithmeticImmediate(
                     op: AluOp.Compare,
                     value: ((byte)document.Tiles.Length)
                 ); emitter.JumpAbsolute(
                     condition: Condition.NoCarry,
                     label: hide
-                ); }
+                );
+                }
                 emitter.StoreAToAddress(address: ((ushort)(0xC102 + (i * 4))));
                 EmitAttributes(
                     index: i,
@@ -550,10 +552,12 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 case null:
                     return;
                 case ActionPredicate.All all:
-                    foreach (var inner in all.Predicates) { Gate(
+                    foreach (var inner in all.Predicates) {
+                        Gate(
                         fail: fail,
                         predicate: inner
-                    ); }
+                    );
+                    }
 
                     return;
                 case ActionPredicate.Any any: {
@@ -722,11 +726,11 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             );
             emitter.JumpAbsolute(
                 condition: compare.Comparison switch {
-                ActionStateComparison.Equal => Condition.NotZero,
-                ActionStateComparison.NotEqual => Condition.Zero,
-                ActionStateComparison.Less or ActionStateComparison.Greater => Condition.NoCarry,
-                _ => Condition.Carry,
-            },
+                    ActionStateComparison.Equal => Condition.NotZero,
+                    ActionStateComparison.NotEqual => Condition.Zero,
+                    ActionStateComparison.Less or ActionStateComparison.Greater => Condition.NoCarry,
+                    _ => Condition.Carry,
+                },
                 label: fail
             );
         }
@@ -1223,7 +1227,8 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             switch (action.Operation) {
                 case ExpressionOp.Multiply: arithmetic.EmitMultiply(); break;
                 case ExpressionOp.Divide: arithmetic.EmitDivide(); break;
-                case ExpressionOp.Modulo: arithmetic.EmitDivide(); emitter.Load(
+                case ExpressionOp.Modulo:
+                    arithmetic.EmitDivide(); emitter.Load(
                     destination: Reg8.A,
                     source: Reg8.C
                 ); break;
@@ -1232,12 +1237,12 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 default:
                     emitter.Arithmetic(
                         op: action.Operation switch {
-                        ExpressionOp.Add => AluOp.Add,
-                        ExpressionOp.Subtract => AluOp.Subtract,
-                        ExpressionOp.BitAnd => AluOp.And,
-                        ExpressionOp.BitOr => AluOp.Or,
-                        _ => AluOp.Xor,
-                    },
+                            ExpressionOp.Add => AluOp.Add,
+                            ExpressionOp.Subtract => AluOp.Subtract,
+                            ExpressionOp.BitAnd => AluOp.And,
+                            ExpressionOp.BitOr => AluOp.Or,
+                            _ => AluOp.Xor,
+                        },
                         source: Reg8.B
                     );
                     break;
@@ -1761,29 +1766,35 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             switch (operation) {
                 case ExpressionOp.Multiply: arithmetic.EmitMultiply(); return;
                 case ExpressionOp.Divide: arithmetic.EmitDivide(); return;
-                case ExpressionOp.Modulo: arithmetic.EmitDivide(); emitter.Load(
+                case ExpressionOp.Modulo:
+                    arithmetic.EmitDivide(); emitter.Load(
                     destination: Reg8.A,
                     source: Reg8.C
                 ); return;
                 case ExpressionOp.ShiftLeft: arithmetic.EmitShiftLeft(); return;
                 case ExpressionOp.ShiftRight: arithmetic.EmitShiftRight(); return;
-                case ExpressionOp.Add: emitter.Arithmetic(
+                case ExpressionOp.Add:
+                    emitter.Arithmetic(
                     op: AluOp.Add,
                     source: Reg8.B
                 ); return;
-                case ExpressionOp.Subtract: emitter.Arithmetic(
+                case ExpressionOp.Subtract:
+                    emitter.Arithmetic(
                     op: AluOp.Subtract,
                     source: Reg8.B
                 ); return;
-                case ExpressionOp.BitAnd: emitter.Arithmetic(
+                case ExpressionOp.BitAnd:
+                    emitter.Arithmetic(
                     op: AluOp.And,
                     source: Reg8.B
                 ); return;
-                case ExpressionOp.BitOr: emitter.Arithmetic(
+                case ExpressionOp.BitOr:
+                    emitter.Arithmetic(
                     op: AluOp.Or,
                     source: Reg8.B
                 ); return;
-                case ExpressionOp.BitXor: emitter.Arithmetic(
+                case ExpressionOp.BitXor:
+                    emitter.Arithmetic(
                     op: AluOp.Xor,
                     source: Reg8.B
                 ); return;
@@ -1819,11 +1830,11 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                         );
                         emitter.JumpRelative(
                             condition: operation switch {
-                            ExpressionOp.Equal => Condition.Zero,
-                            ExpressionOp.NotEqual => Condition.NotZero,
-                            ExpressionOp.Less or ExpressionOp.Greater => Condition.Carry,
-                            _ => Condition.NoCarry,
-                        },
+                                ExpressionOp.Equal => Condition.Zero,
+                                ExpressionOp.NotEqual => Condition.NotZero,
+                                ExpressionOp.Less or ExpressionOp.Greater => Condition.Carry,
+                                _ => Condition.NoCarry,
+                            },
                             label: set
                         );
                         emitter.XorA();

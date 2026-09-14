@@ -60,8 +60,9 @@ public static class OverlayStateComparison {
     /// undeclared row, or an absent cell reads false.</summary>
     /// <param name="definition">The live definition.</param>
     /// <param name="state">The predicate.</param>
-    /// <param name="tick">The tick an advancing row's value is computed at.</param>
-    public static bool Holds(WorldDefinition definition, OverlayPredicate.State state, ulong tick) {
+    /// <param name="tick">The tick a Cycle row's value is computed at.</param>
+    /// <param name="engineTick">The engine tick a StateAdvance row's value is computed at.</param>
+    public static bool Holds(WorldDefinition definition, OverlayPredicate.State state, ulong tick, ulong engineTick) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: state);
 
@@ -78,7 +79,8 @@ public static class OverlayStateComparison {
             row: out var row,
             rowName: rowName,
             text: out var text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         )
         ) {
             return false;

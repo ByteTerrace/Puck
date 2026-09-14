@@ -386,13 +386,11 @@ public sealed class DynamicsAuthoringValidationLawTests {
                         Value: 0
                     )],
                 Advance: new StateAdvance(
-                    RateNumerator: 1,
-                    RateDenominator: 1
+                    PerSecondNumerator: 1,
+                    PerSecondDenominator: 1
                 ),
                 Dynamics: new StateDynamics(
-                    Row: "chase",
-                    Y0: 0,
-                    V0: 0
+                    Row: "chase"
                 )
             ),
             ]),
@@ -407,9 +405,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
                         Value: 0
                     )],
                 Dynamics: new StateDynamics(
-                    Row: "chase",
-                    Y0: 0,
-                    V0: 0
+                    Row: "chase"
                 )
             ),
             ]),
@@ -447,9 +443,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
                         Value: 0
                     )],
                 Dynamics: new StateDynamics(
-                    Row: "missing",
-                    Y0: 0,
-                    V0: 0
+                    Row: "missing"
                 )
             ),
             ]),
@@ -464,9 +458,7 @@ public sealed class DynamicsAuthoringValidationLawTests {
                         Value: 0
                     )],
                 Dynamics: new StateDynamics(
-                    Row: "chase",
-                    Y0: 0,
-                    V0: 0
+                    Row: "chase"
                 )
             ),
             ]),

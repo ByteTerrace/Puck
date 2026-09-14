@@ -181,7 +181,7 @@ public sealed class WorldIdentity {
         WriteState(row: new WorldStateRow(
             Name: seqRowName,
             Kind: CellKind.Int,
-            NonNegative: true,
+            Min: 0L,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
                     Value: next

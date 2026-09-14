@@ -3356,6 +3356,31 @@
                 "additionalProperties": false,
                 "title": "WorldCameraProgramOpClampPitch"
               },
+              "dynamicsOp": {
+                "description": "Gets the program\u0027s Dynamics op, or null.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "row": {
+                    "description": "The referenced dynamics row name; must resolve.",
+                    "type": "string"
+                  },
+                  "opcode": {
+                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "row"
+                ],
+                "additionalProperties": false,
+                "title": "WorldCameraProgramOpDynamics"
+              },
               "fovOp": {
                 "description": "Gets the program\u0027s FieldOfView op, or null.",
                 "type": [
@@ -3585,31 +3610,6 @@
                 ],
                 "additionalProperties": false,
                 "title": "WorldCameraProgramOpPath"
-              },
-              "dynamicsOp": {
-                "description": "Gets the program\u0027s Dynamics op, or null.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "row": {
-                    "description": "The referenced dynamics row name; must resolve.",
-                    "type": "string"
-                  },
-                  "opcode": {
-                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "row"
-                ],
-                "additionalProperties": false,
-                "title": "WorldCameraProgramOpDynamics"
               },
               "selectOp": {
                 "description": "Gets the program\u0027s SelectProgram op, or null.",
@@ -14112,6 +14112,9 @@
             "clampPitchOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/clampPitchOp"
             },
+            "dynamicsOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/dynamicsOp"
+            },
             "fovOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/fovOp"
             },
@@ -14126,9 +14129,6 @@
             },
             "pathOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/pathOp"
-            },
-            "dynamicsOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/dynamicsOp"
             },
             "selectOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/selectOp"
@@ -14222,6 +14222,9 @@
             "clampPitchOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/clampPitchOp"
             },
+            "dynamicsOp": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/dynamicsOp"
+            },
             "fovOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/fovOp"
             },
@@ -14236,9 +14239,6 @@
             },
             "pathOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/pathOp"
-            },
-            "dynamicsOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/dynamicsOp"
             },
             "selectOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/selectOp"
@@ -17498,7 +17498,7 @@
                       "title": "ActionEffectTransformState"
                     },
                     {
-                      "description": "Decrements a state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. The destination must be a kind=Int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
+                      "description": "Decrements a state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. The destination must be a kind=Int min=0 row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
                       "properties": {
                         "$type": {
                           "const": "countdownState"
@@ -17624,6 +17624,323 @@
                       ],
                       "additionalProperties": false,
                       "title": "ActionEffectTransaction"
+                    },
+                    {
+                      "description": "Branches on a predicate: fires Then when it holds, else Else when present. Both branches read the frame at the effect\u0027s own position, so an earlier effect\u0027s same-firing write is visible to the condition exactly as it is to a later effect\u0027s own operand. A condition that fails to evaluate (an arithmetic fault, a missing table key) runs neither branch and is reported the same way a failing top-level effect is; a false condition with no branch that fires is not a failure. An effect inside a branch that itself refuses is refused on the same terms as a top-level effect \u2014 a branch is not a transaction, though a Transaction may appear inside one when this if is not itself inside a transaction.",
+                      "properties": {
+                        "$type": {
+                          "const": "if"
+                        },
+                        "condition": {
+                          "description": "The gate.",
+                          "type": "object",
+                          "required": [
+                            "$type"
+                          ],
+                          "anyOf": [
+                            {
+                              "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
+                              "properties": {
+                                "$type": {
+                                  "const": "compareState"
+                                },
+                                "state": {
+                                  "description": "A declared state-section row name, or one of the reserved channels the compiler\u0027s vocabulary answers (RuleFacts and whatever a document project registers). Inside a host\u0027s per-participant action program, a named counter slot the program declares.",
+                                  "type": "string"
+                                },
+                                "comparison": {
+                                  "description": "The comparison to apply.",
+                                  "enum": [
+                                    "Equal",
+                                    "NotEqual",
+                                    "Less",
+                                    "LessOrEqual",
+                                    "Greater",
+                                    "GreaterOrEqual"
+                                  ],
+                                  "title": "ActionStateComparison"
+                                },
+                                "value": {
+                                  "description": "The authored constant comparand, or null when ComparandState spells the comparand instead.",
+                                  "type": [
+                                    "number",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "key": {
+                                  "description": "The cell inside State to read \u2014 null reads the row\u0027s slot cell, which a keyed row does not have (refused by name rather than silently reading cells[0]).",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "comparandState": {
+                                  "description": "Another declared state-section row name, or a reserved channel, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "comparandKey": {
+                                  "description": "The cell inside ComparandState, on the same (row, key) terms as Key. Refused when ComparandState names a reserved channel or is absent.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                }
+                              },
+                              "required": [
+                                "state",
+                                "comparison"
+                              ],
+                              "additionalProperties": false,
+                              "title": "ActionPredicateCompareState"
+                            },
+                            {
+                              "description": "Comparison of two bounded numeric expressions. Arithmetic failure makes this comparison false.",
+                              "properties": {
+                                "$type": {
+                                  "const": "compareValue"
+                                },
+                                "left": {
+                                  "description": "Left numeric expression.",
+                                  "title": "ValueExpression",
+                                  "anyOf": [
+                                    {
+                                      "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, replicationMask(width), repeatBits(pattern, width), rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 4096
+                                    },
+                                    {
+                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/1/properties/left/anyOf/1"
+                                    }
+                                  ]
+                                },
+                                "comparison": {
+                                  "description": "The comparison operation.",
+                                  "enum": [
+                                    "Equal",
+                                    "NotEqual",
+                                    "Less",
+                                    "LessOrEqual",
+                                    "Greater",
+                                    "GreaterOrEqual"
+                                  ],
+                                  "title": "ActionStateComparison"
+                                },
+                                "right": {
+                                  "description": "Right numeric expression.",
+                                  "title": "ValueExpression",
+                                  "anyOf": [
+                                    {
+                                      "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, replicationMask(width), repeatBits(pattern, width), rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 4096
+                                    },
+                                    {
+                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/1/properties/left/anyOf/1"
+                                    }
+                                  ]
+                                },
+                                "kind": {
+                                  "description": "The common Int or Fixed domain; no implicit conversion is performed.",
+                                  "enum": [
+                                    "Int",
+                                    "Fixed",
+                                    "Bool",
+                                    "Text"
+                                  ],
+                                  "default": "Fixed",
+                                  "title": "CellKind"
+                                }
+                              },
+                              "required": [
+                                "left",
+                                "comparison",
+                                "right"
+                              ],
+                              "additionalProperties": false,
+                              "title": "ActionPredicateCompareValue"
+                            },
+                            {
+                              "description": "Every inner predicate holds (conjunction).",
+                              "properties": {
+                                "$type": {
+                                  "const": "all"
+                                },
+                                "predicates": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/2/properties/predicates"
+                                }
+                              },
+                              "required": [
+                                "predicates"
+                              ],
+                              "additionalProperties": false,
+                              "title": "ActionPredicateAll"
+                            },
+                            {
+                              "description": "At least one inner predicate holds (disjunction). The list must be non-empty.",
+                              "properties": {
+                                "$type": {
+                                  "const": "any"
+                                },
+                                "predicates": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                                }
+                              },
+                              "required": [
+                                "predicates"
+                              ],
+                              "additionalProperties": false,
+                              "title": "ActionPredicateAny"
+                            },
+                            {
+                              "description": "Inverts one predicate.",
+                              "properties": {
+                                "$type": {
+                                  "const": "not"
+                                },
+                                "predicate": {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                                }
+                              },
+                              "required": [
+                                "predicate"
+                              ],
+                              "additionalProperties": false,
+                              "title": "ActionPredicateNot"
+                            },
+                            {
+                              "description": "The fact holds this tick.",
+                              "properties": {
+                                "$type": {
+                                  "const": "now"
+                                },
+                                "fact": {
+                                  "description": "The body fact.",
+                                  "enum": [
+                                    "Grounded",
+                                    "Airborne",
+                                    "Rising",
+                                    "Falling",
+                                    "AffectedBy",
+                                    "InMedium",
+                                    "AtMediumBand",
+                                    "HoldingUnwalkable",
+                                    "Unsupported",
+                                    "Resting"
+                                  ],
+                                  "title": "ActionFact"
+                                }
+                              },
+                              "required": [
+                                "fact"
+                              ],
+                              "additionalProperties": false,
+                              "title": "WorldPredicateNow"
+                            },
+                            {
+                              "description": "The fact held within the last WindowSeconds \u2014 a per-instance recency clock, refreshed while the fact holds and decaying otherwise (coyote time is Recently(Grounded, w)).",
+                              "properties": {
+                                "$type": {
+                                  "const": "recently"
+                                },
+                                "fact": {
+                                  "description": "The body fact.",
+                                  "enum": [
+                                    "Grounded",
+                                    "Airborne",
+                                    "Rising",
+                                    "Falling",
+                                    "AffectedBy",
+                                    "InMedium",
+                                    "AtMediumBand",
+                                    "HoldingUnwalkable",
+                                    "Unsupported",
+                                    "Resting"
+                                  ],
+                                  "title": "ActionFact"
+                                },
+                                "windowSeconds": {
+                                  "description": "The recency window.",
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "fact",
+                                "windowSeconds"
+                              ],
+                              "additionalProperties": false,
+                              "title": "WorldPredicateRecently"
+                            },
+                            {
+                              "description": "Whether a named timer slot has drained.",
+                              "properties": {
+                                "$type": {
+                                  "const": "timerElapsed"
+                                },
+                                "state": {
+                                  "description": "The timer slot.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "state"
+                              ],
+                              "additionalProperties": false,
+                              "title": "WorldPredicateTimerElapsed"
+                            },
+                            {
+                              "description": "The named composition channel\u0027s own live read is at or above its declared threshold. Legitimate only inside a kit\u0027s shaping-row gate, where the world\u0027s channel table resolves Channel to an ordinal at kit-compile time.",
+                              "properties": {
+                                "$type": {
+                                  "const": "held"
+                                },
+                                "channel": {
+                                  "description": "The declared composition channel name.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "channel"
+                              ],
+                              "additionalProperties": false,
+                              "title": "WorldPredicateHeld"
+                            }
+                          ],
+                          "title": "ActionPredicate"
+                        },
+                        "then": {
+                          "description": "The branch fired when Condition holds.",
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items"
+                          }
+                        },
+                        "else": {
+                          "description": "The branch fired when it does not, or null to fire nothing.",
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items"
+                          },
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "condition",
+                        "then"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ActionEffectIf"
                     },
                     {
                       "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge).",

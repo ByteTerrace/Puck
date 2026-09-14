@@ -38,6 +38,7 @@ public sealed class ReductionRangeLawTests {
             row,
             "31",
             3,
+            3,
             out var value,
             out _
         );
@@ -135,7 +136,8 @@ public sealed class ReductionRangeLawTests {
                 range: null,
                 row: values,
                 store: store,
-                tick: 0
+                tick: 0,
+                engineTick: 0
             )
         );
         // Allow hash collisions, but rule out the former two full key scans per source cell (over 260,000 reads).
@@ -161,7 +163,8 @@ public sealed class ReductionRangeLawTests {
                 range: null,
                 row: values,
                 store: store,
-                tick: 0
+                tick: 0,
+                engineTick: 0
             )
         );
         Assert.Equal(
@@ -172,7 +175,8 @@ public sealed class ReductionRangeLawTests {
                 range: null,
                 row: values,
                 store: store,
-                tick: 1
+                tick: 1,
+                engineTick: 1
             )
         );
         Assert.Equal(
@@ -181,7 +185,8 @@ public sealed class ReductionRangeLawTests {
                 op: StateReduceOp.Count,
                 row: values,
                 store: store,
-                tick: 1
+                tick: 1,
+                engineTick: 1
             )
         );
     }
@@ -343,6 +348,7 @@ public sealed class ReductionRangeLawTests {
         public StateStore Store { get; set; }
         public bool TableKeyMissing { get; set; }
         public ulong Tick { get; set; }
+        public ulong EngineTick { get; set; }
 
         public long BindingValue(int ordinal) => 0;
         public Span<long> BoardScratch(int cells) => new long[cells];

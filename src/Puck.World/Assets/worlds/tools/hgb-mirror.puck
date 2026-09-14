@@ -576,8 +576,8 @@ state {
         { name: "wp", kind: "Int", min: 0, max: fallPhases - 1, value: 0 }
         { name: "lp", kind: "Int", min: 0, max: ripplePhases - 1, value: 0 }
         { name: "wtEcho", kind: "Int", min: 0, max: 255, value: 0 }
-        { name: "wclock", kind: "Int", nonNegative: true, value: 0, advance { rateNumerator: 1, rateDenominator: 6 } }
-        { name: "lclock", kind: "Int", nonNegative: true, value: 0, advance { rateNumerator: 1, rateDenominator: 12 } }
+        { name: "wclock", kind: "Int", min: 0, value: 0, advance { perSecondNumerator: 10, perSecondDenominator: 1 } }
+        { name: "lclock", kind: "Int", min: 0, value: 0, advance { perSecondNumerator: 5, perSecondDenominator: 1 } }
     ]
 }
 

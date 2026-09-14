@@ -226,6 +226,10 @@
         "expectedRelease": {
           "description": "The exact immutable release identity this process may publish.",
           "type": "string"
+        },
+        "closedGroupRewind": {
+          "description": "Enforces a closed authoritative inventory for intentional rewind. Remote federation and outbound authority claims are refused; ordinary authenticated player connections remain available.",
+          "type": "boolean"
         }
       },
       "required": [

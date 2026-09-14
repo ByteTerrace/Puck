@@ -99,13 +99,13 @@ public sealed class Publishing(
             cancellationToken: cancellationToken,
             copySource: sourceBlobClient.Uri,
             options: new BlobSyncUploadFromUriOptions {
-                    // Carry the source blob's content type and system properties to the copy.
-                    CopySourceBlobProperties = true,
-                    SourceAuthentication = new(
+                // Carry the source blob's content type and system properties to the copy.
+                CopySourceBlobProperties = true,
+                SourceAuthentication = new(
                 scheme: "Bearer",
                 parameter: sourceToken.Token
             ),
-                }
+            }
         );
         await sourceBlobClient.DeleteAsync(cancellationToken: cancellationToken);
     }

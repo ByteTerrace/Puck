@@ -58,9 +58,11 @@ public static partial class RemoteMcpServer {
 
             context.Request.Body = body;
             await next(context).ConfigureAwait(continueOnCapturedContext: false);
-        } finally { context.Request.Body = original; ArrayPool<byte>.Shared.Return(
+        } finally {
+            context.Request.Body = original; ArrayPool<byte>.Shared.Return(
             buffer,
             clearArray: true
-        ); }
+        );
+        }
     }
 }

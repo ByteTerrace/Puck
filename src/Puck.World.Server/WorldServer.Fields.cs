@@ -63,7 +63,8 @@ public sealed partial class WorldServer : IFieldLatticeHost {
         rawValue: out var raw,
         row: out _,
         text: out _,
-        tick: tick
+        tick: tick,
+        engineTick: CompletedEngineTicks
     ) && (raw is { } value))
         ? FixedQ4816.FromRawBits(value: value)
         : FixedQ4816.Zero
@@ -84,7 +85,8 @@ public sealed partial class WorldServer : IFieldLatticeHost {
             rawValue: out var raw,
             row: out var declared,
             text: out _,
-            tick: tick
+            tick: tick,
+            engineTick: CompletedEngineTicks
         )) {
             return;
         }
@@ -106,6 +108,7 @@ public sealed partial class WorldServer : IFieldLatticeHost {
                 Kind: WorldDocumentWriteKind.Set
             ),
             tick: tick,
+            engineTick: CompletedEngineTicks,
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
             preMetered: false
@@ -137,6 +140,7 @@ public sealed partial class WorldServer : IFieldLatticeHost {
         handle: row,
         key: body.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
         tick: tick,
+        engineTick: CompletedEngineTicks,
         row: out _,
         rawValue: out var raw,
         text: out _
@@ -163,6 +167,7 @@ public sealed partial class WorldServer : IFieldLatticeHost {
                 Kind: WorldDocumentWriteKind.Set
             ),
             tick: tick,
+            engineTick: CompletedEngineTicks,
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
             preMetered: false

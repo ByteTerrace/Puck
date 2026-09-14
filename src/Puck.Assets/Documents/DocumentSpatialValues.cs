@@ -189,10 +189,10 @@ internal static class DocumentSpatialValueJson {
         ["anyOf"] = new JsonArray(
         literal,
         new JsonObject {
-                ["type"] = "string",
-                ["minLength"] = 1,
-                ["description"] = "A state.<row>[.<key>] reference the containing document resolves from a cell.",
-            }
+            ["type"] = "string",
+            ["minLength"] = 1,
+            ["description"] = "A state.<row>[.<key>] reference the containing document resolves from a cell.",
+        }
     ),
     };
     public static string ReadReference(ref Utf8JsonReader reader, string kind) {

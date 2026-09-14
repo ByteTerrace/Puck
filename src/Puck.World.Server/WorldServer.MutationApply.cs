@@ -877,7 +877,8 @@ public sealed partial class WorldServer {
             ),
             Authority: AuthorityIdentity,
             FieldCells: fieldCells,
-            FieldsFull: fieldsFull
+            FieldsFull: fieldsFull,
+            EngineTick: CompletedEngineTicks
         );
     }
     // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo (Rejected,
@@ -1214,7 +1215,7 @@ public sealed partial class WorldServer {
     // (with-expression) → revalidate the WHOLE document → capacity-check scene/screen edits against the probed render
     // envelope → on any failure reject loudly (definition unchanged) → on success swap the live definition, rebuild the
     // changed section's derived state, and journal it.
-    private bool TryApplyMutation(WorldMutation mutation, ulong tick, int connectionId, long correlationId, bool preMetered) {
+    private bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered) {
         m_lastMutationFailureDetail = null;
         // THE ONE ADMISSION PREDICATE decides the whole authority question — section hold, the Mutate/section kind
         // mask, the row-scoped Edit hold and ITS mask, and the untrusted per-tick dispatch budget. Every ordered-domain
@@ -1246,6 +1247,7 @@ public sealed partial class WorldServer {
             current: m_definition,
             mutation: mutation,
             tick: tick,
+            engineTick: engineTick,
             instanceIdentity: InstanceIdentity,
             candidate: out var candidate,
             reason: out var composeReason,
@@ -1266,7 +1268,8 @@ public sealed partial class WorldServer {
             candidate: candidate,
             mutation: mutation,
             original: m_definition,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
 
         if (
@@ -1547,9 +1550,10 @@ public sealed partial class WorldServer {
 
         m_journal.Add(item: new JournalEntry(
             Mutation: mutation,
-            Tick: tick
+            Tick: tick,
+            EngineTick: engineTick
         ));
-        MutationJournalTap?.Invoke(tick, mutation);
+        MutationJournalTap?.Invoke(tick, engineTick, mutation);
 
         if (addonPlanCommitted) {
             m_addons!.Finish(plan: addonPlan!);

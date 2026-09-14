@@ -30,7 +30,7 @@ These are expression or channel fragments, not complete document fields.
 | Read | Meaning | Useful for |
 |---|---|---|
 | `coins` | The slot value of a declared row | One counter. |
-| `pieceCell[rook]` | A named cell's value | One piece's location. |
+| `pieceCell[rook]` or `pieceCell.rook` | A named cell's value | One piece's location. |
 | `$tick` | The evaluation tick | Compare against a deadline. |
 | `$bind:cost` | A value computed earlier in this rule evaluation | Reuse an expression across gate and effects. |
 | `$reduce:sum:coinsByPlayer` | Sum the row's numeric values | A total. |
@@ -39,6 +39,12 @@ These are expression or channel fragments, not complete document fields.
 The last entry is a **dynamic key**, not a numeric card value. Use it where
 an operation expects a key. [Live zones and absent endpoints](rules.md#the-facts)
 explain what happens when the pile is empty.
+
+`row.key` and `row[key]` parse to the same read for a literal key: the dot
+form takes exactly one dot on an unreserved, unquoted name (more than one is
+a parse error naming the fix). A dynamic key, `$each`, a binding, or any other
+expression still needs bracket form. A reserved (`$`-prefixed) or backquoted
+name never splits at a dot — its dotted segments stay part of the name.
 
 ## Expressions
 

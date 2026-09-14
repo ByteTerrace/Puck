@@ -692,6 +692,94 @@ public sealed class PushStateEffect : EffectFact, IValueSourcedEffect {
             handle: write.Handle
         );
 }
+/// <summary>Branches on a compiled gate: fires <see cref="Then"/> or <see cref="Else"/>, never both. Both branches
+/// contribute to the read and write sets, since either may run.</summary>
+public sealed class IfEffect : EffectFact {
+    /// <param name="condition">The compiled gate.</param>
+    /// <param name="then">The branch fired when <paramref name="condition"/> holds.</param>
+    /// <param name="elseEffects">The branch fired when it does not; empty for none.</param>
+    /// <param name="describe">The authored spelling, for the rules read-back.</param>
+    public IfEffect(GateToken[] condition, EffectFact[] then, EffectFact[] elseEffects, string describe) : base(describe) {
+        Condition = condition;
+        Then = then;
+        Else = elseEffects;
+    }
+
+    /// <inheritdoc/>
+    public override bool ClosesTransaction {
+        get {
+            foreach (var effect in Then) { if (effect.ClosesTransaction) { return true; } }
+            foreach (var effect in Else) { if (effect.ClosesTransaction) { return true; } }
+
+            return false;
+        }
+    }
+    /// <summary>Gets the compiled gate.</summary>
+    public GateToken[] Condition { get; }
+    /// <summary>Gets the branch fired when <see cref="Condition"/> does not hold; empty for none.</summary>
+    public EffectFact[] Else { get; }
+    /// <inheritdoc/>
+    public override bool ReadsHost {
+        get {
+            foreach (var token in Condition) {
+                if (
+                    (token.Left is { HostOnly: true }) ||
+                    (token.Comparand is { HostOnly: true }) ||
+                    RuleDataflow.ExpressionReadsHost(tokens: token.LeftExpression) ||
+                    RuleDataflow.ExpressionReadsHost(tokens: token.RightExpression)
+                ) {
+                    return true;
+                }
+            }
+            foreach (var effect in Then) { if (effect.ReadsHost) { return true; } }
+            foreach (var effect in Else) { if (effect.ReadsHost) { return true; } }
+
+            return false;
+        }
+    }
+    /// <summary>Gets the branch fired when <see cref="Condition"/> holds.</summary>
+    public EffectFact[] Then { get; }
+
+    /// <inheritdoc/>
+    public override void CollectReads(List<RuleAccess> into) {
+        RuleDataflow.CollectGate(
+            gate: Condition,
+            into: into
+        );
+        foreach (var effect in Then) { effect.CollectReads(into: into); }
+        foreach (var effect in Else) { effect.CollectReads(into: into); }
+    }
+    /// <inheritdoc/>
+    public override void CollectWrites(List<RuleAccess> into) {
+        foreach (var effect in Then) { effect.CollectWrites(into: into); }
+        foreach (var effect in Else) { effect.CollectWrites(into: into); }
+    }
+    /// <inheritdoc/>
+    public override long Cost(RuleCompileContext context) {
+        var conditionCost = RuleWorkBudget.SaturatingAdd(
+            left: 1L,
+            right: RuleWorkBudget.GateCost(
+                tokens: Condition,
+                context: context
+            )
+        );
+        var branchCost = Math.Max(
+            val1: RuleWorkBudget.EffectsCost(
+                effects: Then,
+                context: context
+            ),
+            val2: RuleWorkBudget.EffectsCost(
+                effects: Else,
+                context: context
+            )
+        );
+
+        return RuleWorkBudget.SaturatingAdd(
+            left: conditionCost,
+            right: branchCost
+        );
+    }
+}
 /// <summary>The shared pricing of a live value source; the saturating arithmetic every cost sheet sums with is
 /// <see cref="RuleWorkBudget.SaturatingAdd"/>/<see cref="RuleWorkBudget.SaturatingMultiply"/>.</summary>
 public static class EffectCosts {

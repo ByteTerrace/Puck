@@ -72,12 +72,14 @@ public sealed class LocalControlClient : IControlSession {
             comparand: 0,
             location1: ref m_busy,
             value: 1
-        ) != 0) { return new(
+        ) != 0) {
+            return new(
             0,
             "refused",
             "Attachment busy; await the active operation.",
             true
-        ); }
+        );
+        }
         try {
             var request = new ControlRequest(
                 Command: command,
@@ -92,12 +94,14 @@ public sealed class LocalControlClient : IControlSession {
                 ControlJson.Default.ControlRequest
             );
 
-            if (payload.Length > ControlLimits.RequestBytes) { return new(
+            if (payload.Length > ControlLimits.RequestBytes) {
+                return new(
                 0,
                 "refused",
                 "Encoded request exceeds 16384 bytes.",
                 true
-            ); }
+            );
+            }
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
 
             deadline.CancelAfter(millisecondsDelay: timeoutMilliseconds);
@@ -124,9 +128,11 @@ public sealed class LocalControlClient : IControlSession {
                 if (!response.IsValidFor(request)) { throw new InvalidDataException(message: "Invalid or mismatched control response."); }
                 return response;
             } catch { Dispose(); throw; }
-        } finally { Volatile.Write(
+        } finally {
+            Volatile.Write(
             location: ref m_busy,
             value: 0
-        ); }
+        );
+        }
     }
 }

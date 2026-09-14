@@ -129,7 +129,7 @@ public static partial class WorldDefinitionValidator {
             (row.Name.Value == knowledge.Mask) ||
             (row.Min != source.Min) ||
             (row.Max != source.Max) ||
-            (row.NonNegative != source.NonNegative)
+            (row.Overflow != source.Overflow)
         ) {
             errors.Add(item: $"state row '{row.Name}': knowledge requires an explicit audience and distinct compatible source/mask boards with the same value envelope.");
         }

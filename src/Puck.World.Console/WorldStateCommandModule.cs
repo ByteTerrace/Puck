@@ -30,24 +30,34 @@ namespace Puck.World;
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
 public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority authority, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
-    private static string DescribeCell(WorldServer server, WorldStateRow row, string key, long raw, string? text, StateAdvance? advance, StateDynamics? dynamics, StateCycle? cycle) =>
+    private static string DescribeCell(WorldServer server, WorldStateRow row, string key, long raw, string? text, StateAdvance? advance, StateDynamics? dynamics, StateCycle? cycle, StateCellClock? clock) =>
         $"[world.state.cell '{row.Name}'.'{key}' value={DescribeValue(
             raw: raw,
             row: row,
             text: text
-        )}{DescribeCellAdvance(advance: advance)}{DescribeDynamics(
+        )}{DescribeCellAdvance(
+            advance: advance,
+            clock: clock
+        )}{DescribeDynamics(
+            clock: clock,
             dynamics: dynamics,
             key: key,
             row: row,
             server: server
-        )}{DescribeCycle(cycle: cycle)}]";
+        )}{DescribeCycle(
+            clock: clock,
+            cycle: cycle
+        )}]";
     // A cycle trait — what it is (generator, power and output), how fast it turns (ticks per step), where its clock
-    // sits (epoch) and the period the generator derives; the value on the same line is the live rotation the stored
-    // phase has been carried to.
-    private static string DescribeCycle(StateCycle? cycle) =>
+    // sits (epoch, and any carried substep) and the period the generator derives; the value on the same line is the
+    // live rotation the stored phase has been carried to. `clock` is the carrying cell's own timing state — absent
+    // for a row-level default line, where no single cell's epoch applies.
+    private static string DescribeCycle(StateCycle? cycle, StateCellClock? clock) =>
         ((cycle is { } c)
-            ? $" cycle={DescribeWord(word: c.Word)}^{c.Power}:{c.Output}/{c.TicksPerStep}@epoch{c.EpochTick}{((c.SubstepTicks != 0L)
-                ? $"+{c.SubstepTicks}"
+            ? $" cycle={DescribeWord(word: c.Word)}^{c.Power}:{c.Output}/{c.TicksPerStep}{((clock is { } ck)
+                ? $"@epoch{ck.EpochTick}{((ck.SubstepTicks != 0L)
+                    ? $"+{ck.SubstepTicks}"
+                    : string.Empty)}"
                 : string.Empty)} order={c.Order}"
             : string.Empty
         );
@@ -60,17 +70,21 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             )}]"
         );
     // Formats an Advance trait — shared by DescribeRow's row line (against row.Advance) and DescribeCell's cell
-    // line (against a keyed cell's own Advance): what the trait IS (rate) and where its clock sits (epoch), the
-    // same "what it is, then where it is" precedent DescribeRow already follows for a generator's cursor.
-    private static string DescribeCellAdvance(StateAdvance? advance) =>
+    // line (against a keyed cell's own or inherited Advance): what the trait IS (rate) and where its carrying
+    // cell's clock sits (epoch), the same "what it is, then where it is" precedent DescribeRow already follows for
+    // a generator's cursor. `clock` is absent for a row-level default line.
+    private static string DescribeCellAdvance(StateAdvance? advance, StateCellClock? clock) =>
         ((advance is { } a)
-            ? $" advance={a.RateNumerator}/{a.RateDenominator}@epoch{a.EpochTick}"
+            ? $" advance={a.PerSecondNumerator}/{a.PerSecondDenominator}/s{((clock is { } ck)
+                ? $"@engineEpoch{ck.EpochEngineTick}"
+                : string.Empty)}"
             : string.Empty
         );
-    // A cell's own second-order easing trait — y0/v0 are the follower's continuous state, raw FixedQ4816 bits on
-    // every row kind, so they print in the fixed spelling — plus the LIVE eased value in the row's own encoding, read
-    // through the same WorldStateReader.TryReadEased the HUD's state.<row>[.<key>] binding resolves.
-    private static string DescribeDynamics(WorldServer server, WorldStateRow row, string key, StateDynamics? dynamics) {
+    // A cell's own (or inherited) second-order easing trait — y0/v0 are the follower's continuous state, raw
+    // FixedQ4816 bits on every row kind, so they print in the fixed spelling — plus the LIVE eased value in the
+    // row's own encoding, read through the same WorldStateReader.TryReadEased the HUD's state.<row>[.<key>]
+    // binding resolves. `clock` is the carrying cell's own timing state, absent for a row-level default line.
+    private static string DescribeDynamics(WorldServer server, WorldStateRow row, string key, StateDynamics? dynamics, StateCellClock? clock) {
         if (dynamics is not { } d) {
             return string.Empty;
         }
@@ -85,7 +99,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             row: out _,
             rowName: row.Name,
             text: out var easedText,
-            tick: CompletedTick(server: server)
+            tick: CompletedTick(server: server),
+            engineTick: CompletedEngineTick(server: server)
         ) &&
             (easedRaw is { } raw)
         ) {
@@ -96,7 +111,11 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             )}";
         }
 
-        return $" dynamics={d.Row} y0={FixedQ4816.FromRawBits(value: d.Y0)} v0={FixedQ4816.FromRawBits(value: d.V0)}@epoch{d.EpochTick}{eased}";
+        var y0 = FixedQ4816.FromRawBits(value: (clock?.Y0 ?? 0L));
+        var v0 = FixedQ4816.FromRawBits(value: (clock?.V0 ?? 0L));
+        var epoch = (clock?.EpochTick ?? 0L);
+
+        return $" dynamics={d.Row} y0={y0} v0={v0}@epoch{epoch}{eased}";
     }
     // The site's per-context drawn masks, by the source's context declaration ordinal.
     private static string DescribeMasks(WorldStateRow row) {
@@ -192,8 +211,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         : string.Empty
     );
     private static string DescribeKind(CellKind kind) => StateSpelling.Kind(kind: kind);
-    private static string DescribeNonNegative(WorldStateRow row) => (row.NonNegative
-        ? " nonNegative=true"
+    private static string DescribeOverflow(WorldStateRow row) => ((row.Overflow != StateOverflow.Refuse)
+        ? $" overflow={row.Overflow}"
         : string.Empty
     );
     // The one-cell grain, resolved through WorldStateReader — the SAME (row, key) read the rule gates and the HUD
@@ -204,6 +223,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             rowName: rowName,
             key: key,
             tick: CompletedTick(server: server),
+            engineTick: CompletedEngineTick(server: server),
             row: out var row,
             rawValue: out var rawValue,
             text: out var text
@@ -219,6 +239,10 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             cells: row.Cells,
             key: CellName.Parse(candidate: key)
         );
+        var behavior = EffectiveBehavior.Resolve(
+            cell: cell,
+            row: row
+        );
 
         return new CommandResult(Output: DescribeCell(
             server: server,
@@ -226,9 +250,10 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             key: key,
             raw: raw,
             text: text,
-            advance: cell?.Advance,
-            dynamics: cell?.Dynamics,
-            cycle: cell?.Cycle
+            advance: behavior.Advance,
+            dynamics: behavior.Dynamics,
+            cycle: behavior.Cycle,
+            clock: cell?.Clock
         ));
     }
     // One row's own line PLUS every cell it holds — the verb's one-argument form, because there is one substrate and
@@ -258,19 +283,26 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 rowName: row.Name,
                 key: cell.Key.Value,
                 tick: CompletedTick(server: server),
+                engineTick: CompletedEngineTick(server: server),
                 row: out _,
                 rawValue: out var raw,
                 text: out var text
             );
+            var behavior = EffectiveBehavior.Resolve(
+                cell: cell,
+                row: row
+            );
+
             lines.Add(item: DescribeCell(
                 server: server,
                 row: row,
                 key: cell.Key.Value,
                 raw: (raw ?? 0L),
                 text: text,
-                advance: cell.Advance,
-                dynamics: cell.Dynamics,
-                cycle: cell.Cycle
+                advance: behavior.Advance,
+                dynamics: behavior.Dynamics,
+                cycle: behavior.Cycle,
+                clock: cell.Clock
             ));
         }
 
@@ -279,18 +311,19 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             values: lines
         ));
     }
+    // Min and Max are independently optional — a one-sided range echoes its one bound.
     private static string DescribeRange(CellKind kind, long? min, long? max) {
-        if (
-            (min is not { } lo) ||
-            (max is not { } hi)
-        ) {
-            return string.Empty;
-        }
-
-        return ((kind == CellKind.Fixed)
-            ? $" range={FixedQ4816.FromRawBits(value: lo)}..{FixedQ4816.FromRawBits(value: hi)}"
-            : $" range={lo}..{hi}"
+        string Describe(long raw) => ((kind == CellKind.Fixed)
+            ? FixedQ4816.FromRawBits(value: raw).ToString()
+            : raw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
         );
+
+        return (min, max) switch {
+            ({ } lo, { } hi) => $" range={Describe(raw: lo)}..{Describe(raw: hi)}",
+            ({ } lo, null) => $" min={Describe(raw: lo)}",
+            (null, { } hi) => $" max={Describe(raw: hi)}",
+            _ => string.Empty,
+        };
     }
     // A one-value row (WorldStateRow.IsSlot) shows its value inline — resolved through WorldStateReader on the row's
     // own slot key, the SAME read the HUD's state.<row> binding runs, so the console line and the panel cannot show
@@ -298,17 +331,30 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     // on the one-argument form. ONE line format either way — the shape is a field of the line, never a different
     // verb.
     private static string DescribeRow(WorldServer server, WorldStateRow row) {
-        var head = $"[world.state.row '{row.Name}' kind={DescribeKind(kind: row.Kind)}{DescribeNonNegative(row: row)}{DescribeGatesDrive(row: row)}{DescribeEvicts(row: row)}";
+        // A row-level default's epoch is a per-cell fact, not the row's — a slot row has exactly one cell to read it
+        // off; a keyed row's own cells each show their own epoch on their own cell lines instead.
+        var slotClock = ((row.IsSlot && (row.Cells is { Count: 1 } slotCells))
+            ? slotCells[0].Clock
+            : null
+        );
+        var head = $"[world.state.row '{row.Name}' kind={DescribeKind(kind: row.Kind)}{DescribeGatesDrive(row: row)}{DescribeEvicts(row: row)}";
         var tail = $"{DescribeRange(
             kind: row.Kind,
             min: row.Min,
             max: row.Max
-        )}{DescribeCellAdvance(advance: row.Advance)}{DescribeDynamics(
+        )}{DescribeOverflow(row: row)}{DescribeCellAdvance(
+            advance: row.Advance,
+            clock: slotClock
+        )}{DescribeDynamics(
+            clock: slotClock,
             dynamics: row.Dynamics,
             key: WorldStateRow.SlotKey.Value,
             row: row,
             server: server
-        )}{DescribeCycle(cycle: row.Cycle)}{DescribeDraw(
+        )}{DescribeCycle(
+            clock: slotClock,
+            cycle: row.Cycle
+        )}{DescribeDraw(
             row: row,
             generators: server.Definition.Generators
         )}{DescribeDiscrete(
@@ -333,6 +379,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             rowName: row.Name,
             key: null,
             tick: CompletedTick(server: server),
+            engineTick: CompletedEngineTick(server: server),
             row: out _,
             rawValue: out var slot,
             text: out var slotText
@@ -1026,7 +1073,10 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
     // The tick this module's reads answer AS OF: the server's most recently COMPLETED tick, derived the same way
     // WorldInstance.CompletedTicks derives it (NextInputTick is m_lastCompletedTick + 1, and its one writer is Step).
-    // This is the tick an advancing row's value is computed at, and it is the completed one rather than the next one
+    // This is the tick a Cycle row's value is computed at, and it is the completed one rather than the next one
     // because a console read-back must answer for the same instant the simulation last settled on.
     private static ulong CompletedTick(WorldServer server) => (server.NextInputTick - 1UL);
+    // The engine-tick coordinate this module's reads answer AS OF — what a StateAdvance row's value is computed at,
+    // paired with CompletedTick the same way every live read pairs the two clocks.
+    private static ulong CompletedEngineTick(WorldServer server) => server.CompletedEngineTicks;
 }

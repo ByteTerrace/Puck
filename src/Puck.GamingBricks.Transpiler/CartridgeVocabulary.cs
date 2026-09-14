@@ -61,11 +61,13 @@ public sealed class CartridgeVocabulary : IDocumentVocabulary {
             reason: out var reason,
             scope: scope
         );
-        if (reason is not null) { scope.Diagnostics.ReportError(
+        if (reason is not null) {
+            scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.SemanticValidation,
             message: reason,
             span: expression.Span
-        ); }
+        );
+        }
         return true;
     }
 }

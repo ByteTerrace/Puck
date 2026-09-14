@@ -412,7 +412,11 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             row: out _,
             rowName: rowName,
             text: out var text,
-            tick: tick
+            tick: tick,
+            // GetRoutedState carries no per-seat engine-tick coordinate (each seat may route to a different
+            // authority); the routed tick doubles as the engine-tick coordinate here, and a hub label is
+            // presentation only, never authoritative simulation state.
+            engineTick: tick
         ))
             ? text
             : null
@@ -442,7 +446,10 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             row: out _,
             rowName: rowName,
             text: out var text,
-            tick: tick
+            tick: tick,
+            // See HubLabel: GetRoutedState carries no per-seat engine-tick coordinate, and a sector label is
+            // presentation only.
+            engineTick: tick
         ))
             ? text
             : null

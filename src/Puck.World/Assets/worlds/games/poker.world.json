@@ -2402,8 +2402,8 @@
           }
         ],
         "kind": "Int",
+        "min": 0,
         "name": "stack",
-        "nonNegative": true,
         "visibility": {}
       },
       {
@@ -2419,8 +2419,8 @@
           }
         ],
         "kind": "Int",
+        "min": 0,
         "name": "streetBet",
-        "nonNegative": true,
         "visibility": {}
       },
       {

@@ -107,7 +107,8 @@ public static partial class WorldRuntimeStateHash {
                     rawValue: out var rawValue,
                     row: out _,
                     text: out var text,
-                    tick: tick
+                    tick: tick,
+                    engineTick: server.CompletedEngineTicks
                 )) {
                     continue;
                 }
@@ -136,9 +137,8 @@ public static partial class WorldRuntimeStateHash {
             : 1)));
 
         if (advance is not null) {
-            hash.Add(value: advance.RateNumerator);
-            hash.Add(value: advance.RateDenominator);
-            hash.Add(value: advance.EpochTick);
+            hash.Add(value: advance.PerSecondNumerator);
+            hash.Add(value: advance.PerSecondDenominator);
         }
     }
     private static void AppendCycle(ref Fnv1aHash hash, StateCycle? cycle) {
@@ -158,8 +158,6 @@ public static partial class WorldRuntimeStateHash {
             hash.Add(value: cycle.Power);
             hash.Add(value: ((byte)cycle.Output));
             hash.Add(value: cycle.TicksPerStep);
-            hash.Add(value: cycle.EpochTick);
-            hash.Add(value: cycle.SubstepTicks);
         }
     }
     private static void AppendDynamics(ref Fnv1aHash hash, StateDynamics? dynamics) {
@@ -172,9 +170,19 @@ public static partial class WorldRuntimeStateHash {
                 hash: ref hash,
                 value: dynamics.Row
             );
-            hash.Add(value: dynamics.Y0);
-            hash.Add(value: dynamics.V0);
-            hash.Add(value: dynamics.EpochTick);
+        }
+    }
+    private static void AppendClock(ref Fnv1aHash hash, StateCellClock? clock) {
+        hash.Add(value: ((byte)((clock is null)
+            ? 0
+            : 1)));
+
+        if (clock is not null) {
+            hash.Add(value: clock.EpochTick);
+            hash.Add(value: clock.EpochEngineTick);
+            hash.Add(value: clock.Y0);
+            hash.Add(value: clock.V0);
+            hash.Add(value: clock.SubstepTicks);
         }
     }
     private static void AppendDraw(ref Fnv1aHash hash, Draw? draw) {
@@ -385,9 +393,7 @@ public static partial class WorldRuntimeStateHash {
                 ? 0
                 : 1)));
             hash.Add(value: ((uint)(row.Capacity ?? 0)));
-            hash.Add(value: ((byte)(row.NonNegative
-                ? 1
-                : 0)));
+            hash.Add(value: ((byte)row.Overflow));
             hash.Add(value: ((byte)(row.GatesDrive
                 ? 1
                 : 0)));
@@ -459,6 +465,11 @@ public static partial class WorldRuntimeStateHash {
                     hash: ref hash,
                     cycle: cell.Cycle
                 );
+                hash.Add(value: ((byte)cell.Behavior));
+                AppendClock(
+                    clock: cell.Clock,
+                    hash: ref hash
+                );
 
                 if (
                     hasHandle &&
@@ -470,7 +481,8 @@ public static partial class WorldRuntimeStateHash {
                     rawValue: out var resolved,
                     row: out _,
                     text: out var resolvedText,
-                    tick: tick
+                    tick: tick,
+                    engineTick: server.CompletedEngineTicks
                 )
                 ) {
                     hash.Add(value: ((byte)1));

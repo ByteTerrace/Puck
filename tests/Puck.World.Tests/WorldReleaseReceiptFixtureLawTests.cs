@@ -438,6 +438,7 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
             Assert.NotEmpty(collection: edited!.Server.Journal);
             scenario.Entry = new(
                 edited.Server.LastCompletedTick,
+                edited.Server.LastCompletedEngineTicks,
                 encoded
             );
             Assert.True(condition: (await scenario.Source.AppendJournalAsync(

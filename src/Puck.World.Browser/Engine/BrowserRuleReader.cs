@@ -23,7 +23,7 @@ public readonly record struct BrowserHostFact(string Rule, string Operand, strin
 /// <see cref="HostFacts"/> so a judged tick's own trace can show an author which rules leaned on a fact this engine
 /// cannot supply, without throwing the <see cref="InvalidCastException"/> a bare <see cref="FrameHost"/> draws the
 /// moment such a rule evaluates.</summary>
-/// <remarks><see cref="RuleEvaluator.Read(Puck.State.OperandFact, ulong)"/> hands every operand's own
+/// <remarks><see cref="RuleEvaluator.Read(Puck.State.OperandFact, ulong, ulong)"/> hands every operand's own
 /// <c>OperandFact.Read</c> call the SAME object the evaluator was constructed over as the reader — so the object
 /// judging a tick must itself cast to <see cref="IWorldRuleReader"/>, which a bare <see cref="FrameHost"/> never
 /// does. This type owns its own <see cref="RuleEvaluator"/>/<see cref="RuleLatch"/> rather than reusing the wrapped
@@ -69,6 +69,7 @@ public sealed class BrowserRuleReader : IRuleHost, IWorldRuleReader {
     // OUR OWN Evaluator's, never the wrapped frame host's dormant one; everything else about the section being read
     // (the store, the catalog, the patterns, board scratch, row versions) rides the wrapped host unchanged.
     ulong IRuleReader.Tick => Evaluator.Tick;
+    ulong IRuleReader.EngineTick => Evaluator.EngineTick;
 
     /// <summary>Gets the evaluator a judged tick runs through — bound to this reader, never the wrapped frame
     /// host's own dormant evaluator.</summary>
@@ -273,8 +274,9 @@ public sealed class BrowserRuleReader : IRuleHost, IWorldRuleReader {
     /// this tick made.</summary>
     /// <param name="rules">The rules, already restricted to what a frame can evaluate.</param>
     /// <param name="tick">The tick the reads answer as of.</param>
+    /// <param name="engineTick">The engine-tick coordinate <paramref name="tick"/> completes at.</param>
     /// <returns><see langword="true"/> when any effect wrote the frame.</returns>
-    public bool Judge(CompiledRule[] rules, ulong tick) {
+    public bool Judge(CompiledRule[] rules, ulong tick, ulong engineTick) {
         m_hostFacts.Clear();
         Latch.Clear();
 
@@ -282,6 +284,7 @@ public sealed class BrowserRuleReader : IRuleHost, IWorldRuleReader {
             rules: rules,
             latch: Latch,
             tick: tick,
+            engineTick: engineTick,
             stepTicks: 1UL
         );
     }

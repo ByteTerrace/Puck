@@ -9,13 +9,15 @@ namespace Puck.World;
 /// <see cref="StateReader"/> for the pair rule, the computed value, and the allocation contract.</summary>
 public static class WorldStateReader {
     /// <summary>Finds the winning cell's key over a keyed row (see
-    /// <see cref="StateReader.ArgExtremum(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,Func{int,bool}?)"/>).</summary>
+    /// <see cref="StateReader.ArgExtremum(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,ulong,Func{int,bool}?)"/>).</summary>
     /// <param name="definition">The document to read.</param>
     /// <param name="rowName">The state row's name.</param>
     /// <param name="op">The extremum to find.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by each candidate's
+    /// <see cref="StateAdvance"/> trait.</param>
     /// <param name="isCandidateIndex">An optional filter over a cell key's parsed index.</param>
-    public static string? ArgExtremum(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, Func<int, bool>? isCandidateIndex = null) {
+    public static string? ArgExtremum(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick, Func<int, bool>? isCandidateIndex = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return StateReader.ArgExtremum(
@@ -23,19 +25,22 @@ public static class WorldStateReader {
             rowName: rowName,
             op: op,
             tick: tick,
+            engineTick: engineTick,
             isCandidateIndex: isCandidateIndex
         );
     }
     /// <summary>Finds the winning cell's key over a keyed row with caller state (see
-    /// <see cref="StateReader.ArgExtremum{TState}(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,TState,Func{int,TState,bool})"/>).</summary>
+    /// <see cref="StateReader.ArgExtremum{TState}(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,ulong,TState,Func{int,TState,bool})"/>).</summary>
     /// <typeparam name="TState">The caller's filter-state carrier.</typeparam>
     /// <param name="definition">The document to read.</param>
     /// <param name="rowName">The state row's name.</param>
     /// <param name="op">The extremum to find.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by each candidate's
+    /// <see cref="StateAdvance"/> trait.</param>
     /// <param name="state">State passed to <paramref name="isCandidateIndex"/>.</param>
     /// <param name="isCandidateIndex">The allocation-free candidate predicate.</param>
-    public static string? ArgExtremum<TState>(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, TState state, Func<int, TState, bool> isCandidateIndex) {
+    public static string? ArgExtremum<TState>(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick, TState state, Func<int, TState, bool> isCandidateIndex) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return StateReader.ArgExtremum(
@@ -43,21 +48,24 @@ public static class WorldStateReader {
             rowName: rowName,
             op: op,
             tick: tick,
+            engineTick: engineTick,
             state: state,
             isCandidateIndex: isCandidateIndex
         );
     }
     /// <summary>Finds the winning cell's key through a compiled handle (see
-    /// <see cref="StateReader.ArgExtremum{TState}(IReadOnlyList{StateRow},StateCatalog,StateHandle,StateReduceOp,ulong,TState,Func{int,TState,bool})"/>).</summary>
+    /// <see cref="StateReader.ArgExtremum{TState}(IReadOnlyList{StateRow},StateCatalog,StateHandle,StateReduceOp,ulong,ulong,TState,Func{int,TState,bool})"/>).</summary>
     /// <typeparam name="TState">The caller's filter-state carrier.</typeparam>
     /// <param name="definition">The document to read.</param>
     /// <param name="catalog">The document's current state catalog.</param>
     /// <param name="handle">The compiled handle for the row to search.</param>
     /// <param name="op">The extremum to find.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by each candidate's
+    /// <see cref="StateAdvance"/> trait.</param>
     /// <param name="state">State passed to <paramref name="isCandidateIndex"/>.</param>
     /// <param name="isCandidateIndex">The allocation-free candidate predicate.</param>
-    public static string? ArgExtremum<TState>(WorldDefinition definition, StateCatalog catalog, StateHandle handle, StateReduceOp op, ulong tick, TState state, Func<int, TState, bool> isCandidateIndex) {
+    public static string? ArgExtremum<TState>(WorldDefinition definition, StateCatalog catalog, StateHandle handle, StateReduceOp op, ulong tick, ulong engineTick, TState state, Func<int, TState, bool> isCandidateIndex) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return StateReader.ArgExtremum(
@@ -66,6 +74,7 @@ public static class WorldStateReader {
             handle: handle,
             op: op,
             tick: tick,
+            engineTick: engineTick,
             state: state,
             isCandidateIndex: isCandidateIndex
         );
@@ -75,14 +84,17 @@ public static class WorldStateReader {
     /// <param name="rowName">The state row's name.</param>
     /// <param name="op">The reduction to apply.</param>
     /// <param name="tick">The tick this read answers as of.</param>
-    public static FixedQ4816 Reduce(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick) {
+    /// <param name="engineTick">The engine tick this read answers as of; used by each cell's
+    /// <see cref="StateAdvance"/> trait.</param>
+    public static FixedQ4816 Reduce(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return StateReader.Reduce(
             rows: definition.State,
             rowName: rowName,
             op: op,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
     }
     /// <summary>Evaluates a cell's easing trait against the document's dynamics rows and rate (see
@@ -108,11 +120,13 @@ public static class WorldStateReader {
         );
     }
     /// <summary>Resolves one (row, key) pair against the document's live <c>state</c> section (see
-    /// <see cref="StateReader.TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>).</summary>
+    /// <see cref="StateReader.TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>).</summary>
     /// <param name="definition">The document to read.</param>
     /// <param name="rowName">The state row's name.</param>
     /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
-    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="tick">The simulation tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of — what a <see cref="StateAdvance"/> row's
+    /// value is computed at.</param>
     /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
     /// <param name="rawValue">The addressed cell's live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed cell's text payload, or <see langword="null"/>.</param>
@@ -122,6 +136,7 @@ public static class WorldStateReader {
         string rowName,
         string? key,
         ulong tick,
+        ulong engineTick,
         [NotNullWhen(true)] out WorldStateRow? row,
         out long? rawValue,
         out string? text
@@ -133,6 +148,7 @@ public static class WorldStateReader {
             rowName: rowName,
             key: key,
             tick: tick,
+            engineTick: engineTick,
             row: out var found,
             rawValue: out rawValue,
             text: out text
@@ -148,6 +164,8 @@ public static class WorldStateReader {
     /// <param name="rowName">The state row's name.</param>
     /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used only by the fallback truth read
+    /// (the dynamics evaluation itself stays on <paramref name="tick"/> alone).</param>
     /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
     /// <param name="rawValue">The addressed cell's live eased raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed cell's text payload, or <see langword="null"/>.</param>
@@ -157,6 +175,7 @@ public static class WorldStateReader {
         string rowName,
         string? key,
         ulong tick,
+        ulong engineTick,
         [NotNullWhen(true)] out WorldStateRow? row,
         out long? rawValue,
         out string? text
@@ -170,6 +189,7 @@ public static class WorldStateReader {
             rowName: rowName,
             key: key,
             tick: tick,
+            engineTick: engineTick,
             row: out var found,
             rawValue: out rawValue,
             text: out text
@@ -180,12 +200,14 @@ public static class WorldStateReader {
         return resolved;
     }
     /// <summary>Resolves one world-owned row by its compiled typed handle (see
-    /// <see cref="StateReader.TryReadHandle(IReadOnlyList{StateRow}, StateCatalog, StateHandle, string?, ulong, out StateRow?, out long?, out string?)"/>).</summary>
+    /// <see cref="StateReader.TryReadHandle(IReadOnlyList{StateRow}, StateCatalog, StateHandle, string?, ulong, ulong, out StateRow?, out long?, out string?)"/>).</summary>
     /// <param name="definition">The document to read.</param>
     /// <param name="catalog">The document's current state catalog.</param>
     /// <param name="handle">A world-lane handle minted by <paramref name="catalog"/>.</param>
     /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
     /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="engineTick">The engine tick this read answers as of; used by the cell's <see cref="StateAdvance"/>
+    /// trait.</param>
     /// <param name="row">The resolved row.</param>
     /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
@@ -199,6 +221,7 @@ public static class WorldStateReader {
         StateHandle handle,
         string? key,
         ulong tick,
+        ulong engineTick,
         [NotNullWhen(true)] out WorldStateRow? row,
         out long? rawValue,
         out string? text
@@ -222,6 +245,7 @@ public static class WorldStateReader {
             handle: handle,
             key: key,
             tick: tick,
+            engineTick: engineTick,
             row: out var resolved,
             rawValue: out rawValue,
             text: out text

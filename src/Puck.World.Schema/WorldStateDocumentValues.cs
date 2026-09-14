@@ -233,7 +233,8 @@ public static class WorldStateDocumentValues {
                 row: out var stateRow,
                 rowName: row,
                 text: out var text,
-                tick: 0UL
+                tick: 0UL,
+                engineTick: 0UL
             )) {
                 reason = $"{path} reference '{reference}' must name a declared state cell";
                 return false;

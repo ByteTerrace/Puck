@@ -83,11 +83,15 @@ public sealed partial class SdfEngineNode {
             var changed = m_engine!.ReloadKernels(kernels: kernels);
 
             m_kernels = kernels; // Device-loss recovery must reconstruct the last successful set too.
-            result = request with { Generation = (request.Generation + ((changed > 0)
+            result = request with {
+                Generation = (request.Generation + ((changed > 0)
                 ? 1
-                : 0)), State = ((changed > 0)
+                : 0)),
+                State = ((changed > 0)
                 ? "applied"
-                : "unchanged"), ChangedPipelines = changed };
+                : "unchanged"),
+                ChangedPipelines = changed,
+            };
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Runtime.InteropServices.ExternalException)) {
             result = request with { State = "failed", Error = exception.Message };
         }

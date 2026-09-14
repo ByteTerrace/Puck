@@ -59,10 +59,12 @@ public sealed partial class NavigationRuntime {
 
         private void InitializeSharing() {
             m_sharedTrees = new SharedTree[(Sharing?.GoalCapacity ?? 0)];
-            for (var index = 0; (index < m_sharedTrees.Length); index++) { m_sharedTrees[index] = new SharedTree(
+            for (var index = 0; (index < m_sharedTrees.Length); index++) {
+                m_sharedTrees[index] = new SharedTree(
                 cells: CellCount,
                 maxConcurrentRequesters: m_capacity.MaxConcurrentRequesters
-            ); }
+            );
+            }
             m_sharedFieldRevision = MediumRevision;
         }
         private void SynchronizeSharedGraph() {
@@ -397,10 +399,12 @@ public sealed partial class NavigationRuntime {
             hash.Add(value: (stale
                 ? 0
                 : m_sharedCursor));
-            foreach (var tree in m_sharedTrees) { tree.AppendHash(
+            foreach (var tree in m_sharedTrees) {
+                tree.AppendHash(
                 empty: stale,
                 hash: ref hash
-            ); }
+            );
+            }
         }
 
         private sealed class SharedTree {
@@ -458,10 +462,12 @@ public sealed partial class NavigationRuntime {
                         node: node,
                         order: order
                     );
-                } else { m_open.Decrease(
+                } else {
+                    m_open.Decrease(
                     node: node,
                     order: order
-                ); }
+                );
+                }
             }
             private void Queue(int node) {
                 if (m_pending[node]) { return; }
@@ -540,12 +546,14 @@ public sealed partial class NavigationRuntime {
 
                 if (Goal >= 0) {
                     for (var node = 0; (node < m_stamp.Length); node++) {
-                        if (m_stamp[node] == m_generation) { nodes.Add(item: new(
+                        if (m_stamp[node] == m_generation) {
+                            nodes.Add(item: new(
                             node,
                             m_cost[node],
                             m_next[node],
                             Settled(node: node)
-                        )); }
+                        ));
+                        }
                         if (m_pending[node]) { pending.Add(item: node); }
                     }
                 }
@@ -616,11 +624,13 @@ public sealed partial class NavigationRuntime {
                 );
                 Array.Clear(array: m_dirtyBlocks);
                 m_nodesDirty = true;
-                if (goal >= 0) { Open(
+                if (goal >= 0) {
+                    Open(
                     cost: 0,
                     next: -1,
                     node: goal
-                ); }
+                );
+                }
             }
             public void Restore(NavigationTreeCheckpoint state) {
                 Reset(goal: -1);
@@ -630,11 +640,13 @@ public sealed partial class NavigationRuntime {
                         m_stamp[node.Node] = m_generation; m_open.Forget(node: node.Node);
                         m_cost[node.Node] = node.Cost; m_next[node.Node] = node.Next;
                         InvalidateNodeHash(node: node.Node);
-                    } else { Open(
+                    } else {
+                        Open(
                         node.Node,
                         node.Cost,
                         node.Next
-                    ); }
+                    );
+                    }
                 }
                 foreach (var node in state.Pending) { Queue(node: node); }
             }

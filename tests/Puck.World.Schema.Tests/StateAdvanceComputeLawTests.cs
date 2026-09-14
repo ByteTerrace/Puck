@@ -11,9 +11,9 @@ namespace Puck.World.Schema.Tests;
 /// that shares no line with the subject, over rates the bounded form holds and rates it must decline.
 /// </summary>
 public sealed class StateAdvanceComputeLawTests {
-    private static long Oracle(WorldStateRow row, StateAdvance advance, long baseValue, ulong tick) {
+    private static long Oracle(WorldStateRow row, StateAdvance advance, long baseValue, ulong tick, long epochEngineTick) {
         var epoch = ((ulong)Math.Max(
-            val1: advance.EpochTick,
+            val1: epochEngineTick,
             val2: 0L
         ));
         var elapsed = ((tick <= epoch)
@@ -25,10 +25,10 @@ public sealed class StateAdvanceComputeLawTests {
             : BigInteger.One
         );
         var magnitude = BigInteger.Divide(
-            dividend: ((elapsed * BigInteger.Abs(value: advance.RateNumerator)) * scale),
-            divisor: advance.RateDenominator
+            dividend: ((elapsed * BigInteger.Abs(value: advance.PerSecondNumerator)) * scale),
+            divisor: advance.PerSecondDenominator
         );
-        var raw = (baseValue + ((advance.RateNumerator < 0)
+        var raw = (baseValue + ((advance.PerSecondNumerator < 0)
             ? -magnitude
             : magnitude));
         var saturated = ((raw > long.MaxValue)
@@ -54,9 +54,8 @@ public sealed class StateAdvanceComputeLawTests {
     [Fact]
     public void ComputeCurrentValue_ClampsIntoTheEnvelope_AfterTheExactSum() {
         var advance = new StateAdvance(
-            EpochTick: 0,
-            RateDenominator: 1,
-            RateNumerator: 3
+            PerSecondDenominator: 1,
+            PerSecondNumerator: 3
         );
         var row = Row(
             kind: CellKind.Int,
@@ -68,7 +67,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: 30L,
             actual: advance.ComputeCurrentValue(
                 baseValue: 0L,
-                currentTick: 10UL,
+                currentEngineTick: 10UL,
                 row: row
             )
         );
@@ -76,7 +75,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: 100L,
             actual: advance.ComputeCurrentValue(
                 baseValue: 0L,
-                currentTick: 1000UL,
+                currentEngineTick: 1000UL,
                 row: row
             )
         );
@@ -84,22 +83,21 @@ public sealed class StateAdvanceComputeLawTests {
             expected: 100L,
             actual: advance.ComputeCurrentValue(
                 baseValue: long.MaxValue,
-                currentTick: 1000UL,
+                currentEngineTick: 1000UL,
                 row: row
             )
         );
 
         var drain = new StateAdvance(
-            EpochTick: 0,
-            RateDenominator: 1,
-            RateNumerator: -3
+            PerSecondDenominator: 1,
+            PerSecondNumerator: -3
         );
 
         Assert.Equal(
             expected: -5L,
             actual: drain.ComputeCurrentValue(
                 baseValue: 0L,
-                currentTick: 1000UL,
+                currentEngineTick: 1000UL,
                 row: row
             )
         );
@@ -107,7 +105,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: -5L,
             actual: drain.ComputeCurrentValue(
                 baseValue: long.MinValue,
-                currentTick: 1000UL,
+                currentEngineTick: 1000UL,
                 row: row
             )
         );
@@ -116,14 +114,12 @@ public sealed class StateAdvanceComputeLawTests {
     public void ComputeCurrentValue_DoesNotChangeRecordEqualityOrHashCode() {
         var row = Row(kind: CellKind.Fixed);
         var left = new StateAdvance(
-            EpochTick: 7,
-            RateDenominator: 3,
-            RateNumerator: -5
+            PerSecondDenominator: 3,
+            PerSecondNumerator: -5
         );
         var right = new StateAdvance(
-            EpochTick: 7,
-            RateDenominator: 3,
-            RateNumerator: -5
+            PerSecondDenominator: 3,
+            PerSecondNumerator: -5
         );
         var hashBefore = left.GetHashCode();
 
@@ -138,7 +134,8 @@ public sealed class StateAdvanceComputeLawTests {
 
         _ = left.ComputeCurrentValue(
             baseValue: 100L,
-            currentTick: 17UL,
+            currentEngineTick: 17UL,
+            epochEngineTick: 7L,
             row: row
         );
 
@@ -159,21 +156,21 @@ public sealed class StateAdvanceComputeLawTests {
     public void ComputeCurrentValue_IsStableAcrossAWithCopyThatChangesTheRate() {
         var row = Row(kind: CellKind.Fixed);
         var slow = new StateAdvance(
-            EpochTick: 0,
-            RateDenominator: 57600,
-            RateNumerator: 1
+            PerSecondDenominator: 57600,
+            PerSecondNumerator: 1
         );
         var slowValue = slow.ComputeCurrentValue(
             baseValue: 0L,
-            currentTick: 100_000UL,
+            currentEngineTick: 100_000UL,
             row: row
         );
-        var fast = (slow with { RateNumerator = 1000 });
+        var fast = (slow with { PerSecondNumerator = 1000 });
 
         Assert.Equal(
             expected: Oracle(
                 advance: slow,
                 baseValue: 0L,
+                epochEngineTick: 0L,
                 row: row,
                 tick: 100_000UL
             ),
@@ -183,12 +180,13 @@ public sealed class StateAdvanceComputeLawTests {
             expected: Oracle(
                 advance: fast,
                 baseValue: 0L,
+                epochEngineTick: 0L,
                 row: row,
                 tick: 100_000UL
             ),
             actual: fast.ComputeCurrentValue(
                 baseValue: 0L,
-                currentTick: 100_000UL,
+                currentEngineTick: 100_000UL,
                 row: row
             )
         );
@@ -196,7 +194,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: slowValue,
             actual: slow.ComputeCurrentValue(
                 baseValue: 0L,
-                currentTick: 100_000UL,
+                currentEngineTick: 100_000UL,
                 row: row
             )
         );
@@ -207,9 +205,8 @@ public sealed class StateAdvanceComputeLawTests {
         foreach (var kind in new[] { CellKind.Int, CellKind.Fixed }) {
             foreach (var epoch in new long[] { 0L, 17L, 1000L }) {
                 var advance = new StateAdvance(
-                    EpochTick: epoch,
-                    RateDenominator: denominator,
-                    RateNumerator: numerator
+                    PerSecondDenominator: denominator,
+                    PerSecondNumerator: numerator
                 );
                 var row = Row(kind: kind);
 
@@ -219,12 +216,14 @@ public sealed class StateAdvanceComputeLawTests {
                             expected: Oracle(
                                 advance: advance,
                                 baseValue: baseValue,
+                                epochEngineTick: epoch,
                                 row: row,
                                 tick: tick
                             ),
                             actual: advance.ComputeCurrentValue(
                                 baseValue: baseValue,
-                                currentTick: tick,
+                                currentEngineTick: tick,
+                                epochEngineTick: epoch,
                                 row: row
                             )
                         );

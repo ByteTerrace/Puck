@@ -428,9 +428,10 @@ public sealed class WorldRenderCycleTrack {
     /// <param name="definition">The live definition.</param>
     /// <param name="revision">The definition revision (statics and keys are resolved once per revision).</param>
     /// <param name="tick">The tick to read the state row as of.</param>
+    /// <param name="engineTick">The engine-tick coordinate <paramref name="tick"/> completed at.</param>
     /// <param name="resolveLightAnchor">Resolves a positional light anchor to its current pose.
     /// Missing targets return null and disable the light for this frame.</param>
-    public SdfEnvironment Resolve(WorldDefinition definition, int revision, ulong tick, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
+    public SdfEnvironment Resolve(WorldDefinition definition, int revision, ulong tick, ulong engineTick, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var cycle = definition.Render.Cycle;
@@ -482,7 +483,8 @@ public sealed class WorldRenderCycleTrack {
             row: out var row,
             rowName: m_stateRow!,
             text: out _,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         ) ||
             (rawValue is not { } raw)
         ) {

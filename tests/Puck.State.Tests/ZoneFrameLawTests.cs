@@ -236,6 +236,7 @@ public sealed class ZoneFrameLawTests {
                 rows[0],
                 StateReduceOp.Count,
                 0,
+                0,
                 rows[1],
                 null
             )
@@ -254,6 +255,7 @@ public sealed class ZoneFrameLawTests {
                 rows[0],
                 StateReduceOp.Count,
                 0,
+                0,
                 rows[1],
                 null
             )
@@ -264,6 +266,7 @@ public sealed class ZoneFrameLawTests {
                 frame,
                 rows[0],
                 StateReduceOp.Count,
+                0,
                 0,
                 rows[2],
                 null
@@ -317,7 +320,8 @@ public sealed class ZoneFrameLawTests {
                 op: StateReduceOp.Count,
                 row: deck,
                 store: frame,
-                tick: 1UL
+                tick: 1UL,
+                engineTick: 1UL
             )
         );
         Assert.Equal(
@@ -326,7 +330,8 @@ public sealed class ZoneFrameLawTests {
                 op: StateReduceOp.Count,
                 row: hand,
                 store: frame,
-                tick: 1UL
+                tick: 1UL,
+                engineTick: 1UL
             )
         );
         // c before a is the one inversion of two tokens: rank 1 of 2!, read through the frame, not the section.

@@ -501,13 +501,13 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// screen-op verb surface's runtime target. Always present (never null): machines are booted and stepped in
     /// every boot shape.</summary>
     public IWorldMachineHost Machines => m_machines;
-    /// <summary>Gets or sets an optional durable-journal tap fired with a mutation's own tick right after it is
-    /// applied and folded into the in-memory undo journal — the same call site, so an entry this tap sees is exactly
-    /// the entry a restart's journal-tail replay reapplies. Fires synchronously on the tick thread; the
-    /// composition-owned callee is expected to hand the entry off to its own store write without blocking here (the
-    /// checkpoint upload's own fire-and-forget shape). <see langword="null"/> (the default) journals nothing — a
-    /// desktop row has no durable store to append to.</summary>
-    public Action<ulong, WorldMutation>? MutationJournalTap { get; set; }
+    /// <summary>Gets or sets an optional durable-journal tap fired with a mutation's own tick and engine tick right
+    /// after it is applied and folded into the in-memory undo journal — the same call site, so an entry this tap
+    /// sees is exactly the entry a restart's journal-tail replay reapplies. Fires synchronously on the tick thread;
+    /// the composition-owned callee is expected to hand the entry off to its own store write without blocking here
+    /// (the checkpoint upload's own fire-and-forget shape). <see langword="null"/> (the default) journals nothing —
+    /// a desktop row has no durable store to append to.</summary>
+    public Action<ulong, ulong, WorldMutation>? MutationJournalTap { get; set; }
     /// <summary>Observes every SUBMITTED document mutation as <see cref="ApplyEnvelope"/> dispatches it, carrying the
     /// mutation and the envelope's own acting principal. The one ingress every submission kind shares — a local
     /// console/client write over the loopback, an admitted socket peer's, and a traveller's submission forwarded by
@@ -721,6 +721,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_searchApply = writes => TryApplyMutation(
             mutation: ComposeSearchMutation(writes: writes),
             tick: m_searchTick,
+            engineTick: CompletedEngineTicks,
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
             preMetered: false

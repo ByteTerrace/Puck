@@ -78,6 +78,7 @@ public sealed partial class WorldServer {
                 present: present,
                 responses: responses,
                 tick: tick,
+                engineTick: CompletedEngineTicks,
                 values: values
             );
 
@@ -131,7 +132,8 @@ public sealed partial class WorldServer {
                     Principal: WorldPrincipal.World
                 ),
                 preMetered: false,
-                tick: tick
+                tick: tick,
+                engineTick: CompletedEngineTicks
             )) {
                 continue;
             }
@@ -178,7 +180,8 @@ public sealed partial class WorldServer {
             )),
                 WorldPlacementResponseCondition.StateCondition state => state.Holds(
                 definition: m_definition,
-                tick: tick
+                tick: tick,
+                engineTick: CompletedEngineTicks
             ),
                 _ => false,
             });
@@ -217,7 +220,7 @@ public sealed partial class WorldServer {
     // Reads every State entry's primary (and, when authored, comparand) cell straight off the installed document —
     // the snapshot the skip below compares tick to tick. Returns false (never skippable) the moment any entry is a
     // Field condition, so a mixed respond list is always swept in full.
-    private static bool TryReadResponseSnapshot(WorldDefinition definition, IReadOnlyList<WorldPlacementResponse> responses, ulong tick, Span<long> values, Span<bool> present, out int count) {
+    private static bool TryReadResponseSnapshot(WorldDefinition definition, IReadOnlyList<WorldPlacementResponse> responses, ulong tick, ulong engineTick, Span<long> values, Span<bool> present, out int count) {
         count = 0;
 
         for (var responseIndex = 0; (responseIndex < responses.Count); responseIndex++) {
@@ -230,6 +233,7 @@ public sealed partial class WorldServer {
                 row: state.State,
                 key: state.Key,
                 tick: tick,
+                engineTick: engineTick,
                 values: values,
                 present: present,
                 index: count
@@ -242,6 +246,7 @@ public sealed partial class WorldServer {
                     row: comparandRow,
                     key: state.ComparandKey,
                     tick: tick,
+                    engineTick: engineTick,
                     values: values,
                     present: present,
                     index: count
@@ -252,7 +257,7 @@ public sealed partial class WorldServer {
 
         return true;
     }
-    private static void ReadResponseSnapshotCell(WorldDefinition definition, string row, string? key, ulong tick, Span<long> values, Span<bool> present, int index) {
+    private static void ReadResponseSnapshotCell(WorldDefinition definition, string row, string? key, ulong tick, ulong engineTick, Span<long> values, Span<bool> present, int index) {
         var found = (WorldStateReader.TryRead(
             definition: definition,
             key: key,
@@ -260,7 +265,8 @@ public sealed partial class WorldServer {
             row: out _,
             rowName: row,
             text: out _,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         ) && (raw is not null));
 
         present[index] = found;

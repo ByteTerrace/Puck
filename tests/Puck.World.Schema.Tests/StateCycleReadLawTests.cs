@@ -23,20 +23,22 @@ public sealed class StateCycleReadLawTests {
             row: out _,
             rowName: row,
             text: out _,
-            tick: tick
+            tick: tick,
+            engineTick: tick
         ));
         Assert.NotNull(@object: raw);
 
         return raw!.Value;
     }
-    private static WorldStateRow SlotRow(string name, CellKind kind, long value, StateCycle cycle, long? min = null, long? max = null) => new(
+    private static WorldStateRow SlotRow(string name, CellKind kind, long value, StateCycle cycle, long? min = null, long? max = null, StateCellClock? clock = null) => new(
         Name: CellName.Parse(candidate: name),
         Kind: kind,
         Min: min,
         Max: max,
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
-                Value: value
+                Value: value,
+                Clock: clock
             )],
         Cycle: cycle
     );
@@ -355,7 +357,7 @@ public sealed class StateCycleReadLawTests {
                     name: "x",
                     kind: CellKind.Fixed,
                     value: settledRaw,
-                    cycle: (cycle with { EpochTick = 0 })
+                    cycle: cycle
                 )),
                 row: "x",
                 tick: 0UL
@@ -366,7 +368,6 @@ public sealed class StateCycleReadLawTests {
     public void SettledPhase_PreservesTheCurrentValueAndNextTransition() {
         foreach (var output in new[] { CycleOutput.Step, CycleOutput.Node }) {
             var cycle = new StateCycle(
-                EpochTick: 3,
                 Output: output,
                 Power: 11,
                 TicksPerStep: 4
@@ -375,12 +376,14 @@ public sealed class StateCycleReadLawTests {
                 name: "r",
                 kind: CellKind.Int,
                 value: 9L,
+                clock: new StateCellClock(EpochTick: 3),
                 cycle: cycle
             ));
             var liveRow = SlotRow(
                 name: "r",
                 kind: CellKind.Int,
                 value: 9L,
+                clock: new StateCellClock(EpochTick: 3),
                 cycle: cycle
             );
             var settledAt = 205UL;
@@ -390,9 +393,14 @@ public sealed class StateCycleReadLawTests {
                 value: cycle.SettledPhase(
                     baseValue: 9L,
                     currentTick: settledAt,
+                    epochTick: 3L,
                     row: liveRow
                 ),
-                cycle: (cycle with { EpochTick = 0, SubstepTicks = cycle.SettledSubstep(currentTick: settledAt) })
+                clock: new StateCellClock(SubstepTicks: cycle.SettledSubstep(
+                    currentTick: settledAt,
+                    epochTick: 3L
+                )),
+                cycle: cycle
             ));
 
             for (var elapsed = 0UL; (elapsed < 12UL); elapsed++) {
@@ -446,8 +454,8 @@ public sealed class StateCycleReadLawTests {
             name: "spin",
             kind: CellKind.Int,
             value: 0L,
+            clock: new StateCellClock(EpochTick: 100),
             cycle: new StateCycle(
-                EpochTick: 100,
                 Power: 1,
                 TicksPerStep: 20
             )
@@ -561,24 +569,23 @@ public sealed class StateCycleReadLawTests {
             ))
         );
         Assert.Contains(
-            expectedSubstring: ".cycle.substepTicks",
+            expectedSubstring: ".cells[0].substepTicks",
             actualString: Refusal(row: SlotRow(
                 name: "r",
                 kind: CellKind.Int,
                 value: 0L,
-                cycle: new StateCycle(
-                    TicksPerStep: 4,
-                    SubstepTicks: 4
-                )
+                clock: new StateCellClock(SubstepTicks: 4),
+                cycle: new StateCycle(TicksPerStep: 4)
             ))
         );
         Assert.Contains(
-            expectedSubstring: ".cycle.epochTick",
+            expectedSubstring: ".cells[0].epochTick",
             actualString: Refusal(row: SlotRow(
                 name: "r",
                 kind: CellKind.Int,
                 value: 0L,
-                cycle: new StateCycle(EpochTick: -1)
+                clock: new StateCellClock(EpochTick: -1),
+                cycle: new StateCycle()
             ))
         );
         Assert.Contains(
@@ -607,13 +614,15 @@ public sealed class StateCycleReadLawTests {
                 value: 0L,
                 cycle: new StateCycle()
             ) with { Advance = new StateAdvance(
-                RateDenominator: 1,
-                RateNumerator: 1
+                PerSecondDenominator: 1,
+                PerSecondNumerator: 1
             ) })
         );
-        Assert.Contains(
-            expectedSubstring: "declares cycle on a keyed row",
-            actualString: Refusal(row: new WorldStateRow(
+        // A row's cycle default is now legal on a keyed row too — every cell that inherits it (declares no
+        // override of its own) reads it as its effective behavior.
+        Assert.Equal(
+            expected: string.Empty,
+            actual: Refusal(row: new WorldStateRow(
                 Name: CellName.Parse(candidate: "r"),
                 Kind: CellKind.Int,
                 Capacity: 4,
@@ -633,8 +642,8 @@ public sealed class StateCycleReadLawTests {
                         Key: CellName.Parse(candidate: "k"),
                         Value: 0L,
                         Advance: new StateAdvance(
-                            RateDenominator: 1,
-                            RateNumerator: 1
+                            PerSecondDenominator: 1,
+                            PerSecondNumerator: 1
                         ),
                         Cycle: new StateCycle()
                     )]

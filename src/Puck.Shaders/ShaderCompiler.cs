@@ -90,12 +90,14 @@ public sealed partial class ShaderCompiler {
         );
 
         await gate.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-        try { return await CompileCoreLockedAsync(
+        try {
+            return await CompileCoreLockedAsync(
             cacheKey: cacheKey,
             cancellationToken: cancellationToken,
             collected: collected,
             descriptor: descriptor
-        ).ConfigureAwait(continueOnCapturedContext: false); } finally { gate.Release(); }
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        } finally { gate.Release(); }
     }
     private async Task<CompiledShader> CompileCoreLockedAsync(
         ShaderCompilationRequest descriptor,
@@ -175,10 +177,12 @@ public sealed partial class ShaderCompiler {
                 cancellationToken.ThrowIfCancellationRequested();
                 ShadertoyShaderAdapter.AdaptedSource adapted;
 
-                try { adapted = Prepare(
+                try {
+                    adapted = Prepare(
                     descriptor: descriptor,
                     stage: stage
-                ); } catch (InvalidDataException exception) {
+                );
+                } catch (InvalidDataException exception) {
                     diagnostics.Add(item: new ShaderDiagnostic(
                         0,
                         0,
@@ -268,12 +272,14 @@ public sealed partial class ShaderCompiler {
                     if (
                         (spv.ExitCode == 0) &&
                         File.Exists(path: spvPath)
-                    ) { spirv[stage.Stage] = File.ReadAllBytes(path: spvPath); } else { AddToolFailure(
+                    ) { spirv[stage.Stage] = File.ReadAllBytes(path: spvPath); } else {
+                        AddToolFailure(
                         stageDiagnostics,
                         "dxc (SPIR-V)",
                         spv.ExitCode,
                         ((spv.Stdout + "\n") + spv.Stderr)
-                    ); }
+                    );
+                    }
 
                     var dx = await RunDxcAsync(
                         snapshotPath,
@@ -294,12 +300,14 @@ public sealed partial class ShaderCompiler {
                     if (
                         (dx.ExitCode == 0) &&
                         File.Exists(path: dxilPath)
-                    ) { dxil[stage.Stage] = File.ReadAllBytes(path: dxilPath); } else { AddToolFailure(
+                    ) { dxil[stage.Stage] = File.ReadAllBytes(path: dxilPath); } else {
+                        AddToolFailure(
                         stageDiagnostics,
                         "dxc (DXIL)",
                         dx.ExitCode,
                         ((dx.Stdout + "\n") + dx.Stderr)
-                    ); }
+                    );
+                    }
                 } else {
                     var glsl = await RunGlslAsync(
                         cancellationToken: cancellationToken,
@@ -318,12 +326,14 @@ public sealed partial class ShaderCompiler {
                     if (
                         (glsl.ExitCode == 0) &&
                         File.Exists(path: spvPath)
-                    ) { spirv[stage.Stage] = File.ReadAllBytes(path: spvPath); } else { AddToolFailure(
+                    ) { spirv[stage.Stage] = File.ReadAllBytes(path: spvPath); } else {
+                        AddToolFailure(
                         stageDiagnostics,
                         "glslang",
                         glsl.ExitCode,
                         ((glsl.Stdout + "\n") + glsl.Stderr)
-                    ); }
+                    );
+                    }
 
                     if (spirv.ContainsKey(key: stage.Stage)) {
                         var hlslPath = $"{stageStem}.translated.hlsl";
@@ -387,12 +397,14 @@ public sealed partial class ShaderCompiler {
                             if (
                                 (dx.ExitCode == 0) &&
                                 File.Exists(path: dxilPath)
-                            ) { dxil[stage.Stage] = File.ReadAllBytes(path: dxilPath); } else { AddToolFailure(
+                            ) { dxil[stage.Stage] = File.ReadAllBytes(path: dxilPath); } else {
+                                AddToolFailure(
                                 stageDiagnostics,
                                 "dxc (DXIL)",
                                 dx.ExitCode,
                                 ((dx.Stdout + "\n") + dx.Stderr)
-                            ); }
+                            );
+                            }
                         }
                     }
                 }
@@ -458,10 +470,12 @@ public sealed partial class ShaderCompiler {
                 collected.Dependencies
             );
         } finally {
-            try { Directory.Delete(
+            try {
+                Directory.Delete(
                 path: buildRoot,
                 recursive: true
-            ); } catch (IOException) { }
+            );
+            } catch (IOException) { }
         }
     }
     private async Task<ShaderProcessResult> RunDxcAsync(string source, string output, string profile, string entry,
@@ -501,23 +515,31 @@ public sealed partial class ShaderCompiler {
             )
         );
 
-        try { return await m_processRunner.RunAsync(
+        try {
+            return await m_processRunner.RunAsync(
             arguments: args,
             cancellationToken: cancellationToken,
             fileName: executable
-        ).ConfigureAwait(continueOnCapturedContext: false); } catch (System.ComponentModel.Win32Exception) when (((m_toolchain.Directory is null) && (fallback is not null))) {
-            try { return await m_processRunner.RunAsync(
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (System.ComponentModel.Win32Exception) when (((m_toolchain.Directory is null) && (fallback is not null))) {
+            try {
+                return await m_processRunner.RunAsync(
                 arguments: args,
                 cancellationToken: cancellationToken,
                 fileName: fallback
-            ).ConfigureAwait(continueOnCapturedContext: false); } catch (System.ComponentModel.Win32Exception) { throw new ShaderToolMissingException(
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            } catch (System.ComponentModel.Win32Exception) {
+                throw new ShaderToolMissingException(
                 directory: null,
                 tool: $"{name} (or {fallback})"
-            ); }
-        } catch (System.ComponentModel.Win32Exception) { throw new ShaderToolMissingException(
+            );
+            }
+        } catch (System.ComponentModel.Win32Exception) {
+            throw new ShaderToolMissingException(
             name,
             m_toolchain.Directory
-        ); }
+        );
+        }
     }
 
     internal static string RemapTranslatedHlslRegisters(string translated, IReadOnlyDictionary<string, uint> channels) {
@@ -579,29 +601,29 @@ public sealed partial class ShaderCompiler {
         return HlslRegisterPattern().Replace(
             translated,
             match => {
-            var kind = match.Groups[1].Value;
+                var kind = match.Groups[1].Value;
 
-            if (!uint.TryParse(
-                match.Groups[2].Value,
-                System.Globalization.NumberStyles.None,
-                System.Globalization.CultureInfo.InvariantCulture,
-                out var logical
-            )) {
-                return match.Value;
+                if (!uint.TryParse(
+                    match.Groups[2].Value,
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var logical
+                )) {
+                    return match.Value;
+                }
+                var map = ((kind is "t" or "s")
+                    ? logicalToDenseSrv
+                    : logicalToDenseUav
+                );
+
+                return (map.TryGetValue(
+                    key: logical,
+                    value: out var dense
+                )
+                    ? $"register({kind}{dense}, space0)"
+                    : match.Value
+                );
             }
-            var map = ((kind is "t" or "s")
-                ? logicalToDenseSrv
-                : logicalToDenseUav
-            );
-
-            return (map.TryGetValue(
-                key: logical,
-                value: out var dense
-            )
-                ? $"register({kind}{dense}, space0)"
-                : match.Value
-            );
-        }
         );
     }
 

@@ -41,7 +41,7 @@ public sealed class KeyedImpressionDedupLawTests {
             Name: CellName.Parse(candidate: "mark"),
             Kind: CellKind.Int,
             Capacity: 4,
-            NonNegative: true,
+            Min: 0L,
             Cells: [new StateCell(
                     Key: CellName.Parse(candidate: "0"),
                     Value: 0
@@ -124,7 +124,7 @@ public sealed class KeyedImpressionDedupLawTests {
     private static WorldStateRow Slot(string name, long initial = 0, bool nonNegative = false) => new(
         Name: CellName.Parse(candidate: name),
         Kind: CellKind.Int,
-        NonNegative: nonNegative,
+        Min: (nonNegative ? 0L : null),
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
                 Value: initial

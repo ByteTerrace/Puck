@@ -1,0 +1,214 @@
+// shader-compare — generic side-by-side pipeline shader vs SDF shader comparison tool.
+//
+// Like hgb-compare for Game Boy cartridges, shader-compare provides a side-by-side
+// comparison tool for shader authoring and verification. The left viewport slot
+// renders the procedural GLSL pipeline shader, while the right viewport slot renders
+// the native Puck SDF model/scene.
+//
+// Paired cameras keep angles, framing and field of view aligned across both views.
+// Moth is the initial comparison, but this tool is generic: the pipeline shader
+// can be live-reloaded or pointed to any shader source, and the basis or
+// prototypes can point to any SDF model.
+//
+// In-game controls:
+//   1 - Three-quarter comparison
+//   2 - Front comparison
+//   3 - Rear comparison
+//   4 - Wide flight-stage comparison
+//   5 - Face close-up comparison
+//
+// Interactive console commands:
+//   pipeline.watch compare-pipeline on    - Watch and recompile shader edits automatically
+//   pipeline.reload compare-pipeline      - Recompile the pipeline on demand
+//   pipeline.load compare-pipeline <src>  - Dynamically load another pipeline shader
+
+schema: "puck.world.definition.v1"
+basis: "../avatars/moth.puck"
+documentId: "puck-shader-compare-v1"
+
+let pipelineSource = "../../pipelines/moth.glsl"
+let pipelineName = "compare-pipeline"
+
+views {
+  layouts [
+    {
+      $replace: true
+    }
+    {
+      name: "compare"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: pipelineName
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "three-quarter"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "compare-front"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-front"
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "front"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "compare-rear"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-rear"
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "rear"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "compare-flight"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-flight"
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "flight-stage"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "compare-face"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-face"
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "face"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "pipeline-only"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: pipelineName
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "sdf-only"
+      seatCount: 0
+      slots [
+        {
+          camera: "three-quarter"
+          height: 1
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+  ]
+
+  pipeline "compare-pipeline" {
+    camera: "three-quarter"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "moth-pipeline" {
+    camera: "three-quarter"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "compare-pipeline-front" {
+    camera: "front"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "compare-pipeline-rear" {
+    camera: "rear"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "compare-pipeline-flight" {
+    camera: "flight-stage"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "compare-pipeline-face" {
+    camera: "face"
+    source: pipelineSource
+    timeScale: 1
+  }
+}

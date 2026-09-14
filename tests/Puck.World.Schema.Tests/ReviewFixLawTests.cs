@@ -224,14 +224,14 @@ public sealed class ReviewFixLawTests {
             Kind: CellKind.Int,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
-                    Value: 300
+                    Value: 300,
+                    Clock: new StateCellClock(
+                        EpochTick: 7,
+                        V0: (5L << FixedQ4816.FractionBitCount),
+                        Y0: (300L << FixedQ4816.FractionBitCount)
+                    )
                 )],
-            Dynamics: new StateDynamics(
-                EpochTick: 7,
-                Row: "critical",
-                V0: (5L << FixedQ4816.FractionBitCount),
-                Y0: (300L << FixedQ4816.FractionBitCount)
-            )
+            Dynamics: new StateDynamics(Row: "critical")
         );
         var definition = new WorldDefinition(
             DynamicsRaw: [new DynamicsRow(
@@ -256,13 +256,18 @@ public sealed class ReviewFixLawTests {
         );
 
         var restored = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
+        var restoredRow = WorldDefinitionRows.FindStateRow(
+            rows: restored.State,
+            name: "gauge"
+        )!;
 
         Assert.Equal(
             expected: row.Dynamics,
-            actual: WorldDefinitionRows.FindStateRow(
-                rows: restored.State,
-                name: "gauge"
-            )!.Dynamics
+            actual: restoredRow.Dynamics
+        );
+        Assert.Equal(
+            expected: row.Cells![0].Clock,
+            actual: restoredRow.Cells![0].Clock
         );
     }
     [Fact]
@@ -419,8 +424,8 @@ public sealed class ReviewFixLawTests {
                         Value: 5
                     )],
                 Advance: new StateAdvance(
-                    RateDenominator: 1,
-                    RateNumerator: 1
+                    PerSecondDenominator: 1,
+                    PerSecondNumerator: 1
                 )
             ),
         ]);

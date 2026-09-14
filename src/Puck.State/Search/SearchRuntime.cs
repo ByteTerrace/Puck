@@ -419,12 +419,19 @@ public sealed partial class SearchRuntime {
 
         m_jobs = jobs;
     }
+    // The engine-tick coordinate of the Step in progress; every position a job judges is read as of it.
+    private ulong m_engineTick;
+
     /// <summary>Advances every job by its node quota, landing a finished job's outputs through <paramref name="apply"/>.</summary>
     /// <param name="tick">The simulation tick.</param>
+    /// <param name="engineTick">The engine-tick coordinate <paramref name="tick"/> completes at, which an advancing
+    /// row's value is read against.</param>
     /// <param name="apply">Installs one job's writes through the ordinary door.</param>
     /// <returns><see langword="true"/> when an output installed.</returns>
-    public bool Step(ulong tick, Func<IReadOnlyList<SearchWrite>, bool> apply) {
+    public bool Step(ulong tick, ulong engineTick, Func<IReadOnlyList<SearchWrite>, bool> apply) {
         ArgumentNullException.ThrowIfNull(argument: apply);
+
+        m_engineTick = engineTick;
 
         if (
             (m_jobs.Length == 0) ||

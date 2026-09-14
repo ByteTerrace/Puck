@@ -43,18 +43,18 @@ public static partial class RemoteMcpServer {
                 )),
                 listen.Port,
                 endpoint => {
-                if (listen.Scheme == "https") {
-                    var password = ((options.CertificatePasswordEnvironmentVariable is { } name)
-                        ? (Environment.GetEnvironmentVariable(variable: name) ?? throw new InvalidOperationException(message: "The configured certificate-password environment variable is unset."))
-                        : null
-                    );
+                    if (listen.Scheme == "https") {
+                        var password = ((options.CertificatePasswordEnvironmentVariable is { } name)
+                            ? (Environment.GetEnvironmentVariable(variable: name) ?? throw new InvalidOperationException(message: "The configured certificate-password environment variable is unset."))
+                            : null
+                        );
 
-                    endpoint.UseHttps(
-                        fileName: options.CertificatePath!,
-                        password: password
-                    );
+                        endpoint.UseHttps(
+                            fileName: options.CertificatePath!,
+                            password: password
+                        );
+                    }
                 }
-            }
             );
         });
         AddServices(
@@ -115,37 +115,39 @@ public static partial class RemoteMcpServer {
         services.AddAuthentication().AddJwtBearer(
             authenticationScheme: AuthenticationScheme,
             configureOptions: jwt => {
-            jwt.Authority = options.Issuer;
-            jwt.RequireHttpsMetadata = true;
-            jwt.MapInboundClaims = false;
-            jwt.SaveToken = true;
-            jwt.IncludeErrorDetails = false;
-            jwt.TokenValidationParameters = TokenValidation(
-                options.Issuer,
-                options.Audience
-            );
-            jwt.Events = new() {
-                OnForbidden = context => {
-                    if (!HasScope(
-                        principal: context.HttpContext.User,
-                        scope: options.Scope
-                    )) {
-                        context.Response.Headers.WWWAuthenticate = $"Bearer error=\"insufficient_scope\", scope=\"{authorizationScope}\", resource_metadata=\"{metadataUri}\"";
-                    }
-                    return Task.CompletedTask;
-                },
-            };
-        }
+                jwt.Authority = options.Issuer;
+                jwt.RequireHttpsMetadata = true;
+                jwt.MapInboundClaims = false;
+                jwt.SaveToken = true;
+                jwt.IncludeErrorDetails = false;
+                jwt.TokenValidationParameters = TokenValidation(
+                    options.Issuer,
+                    options.Audience
+                );
+                jwt.Events = new() {
+                    OnForbidden = context => {
+                        if (!HasScope(
+                            principal: context.HttpContext.User,
+                            scope: options.Scope
+                        )) {
+                            context.Response.Headers.WWWAuthenticate = $"Bearer error=\"insufficient_scope\", scope=\"{authorizationScope}\", resource_metadata=\"{metadataUri}\"";
+                        }
+                        return Task.CompletedTask;
+                    },
+                };
+            }
         ).AddMcp(configureOptions: mcp => {
             mcp.ForwardAuthenticate = AuthenticationScheme;
             mcp.ForwardForbid = AuthenticationScheme;
             mcp.ResourceMetadataUri = metadataUri;
             mcp.ResourceMetadata = new() { AuthorizationServers = [options.Issuer], Resource = resource.AbsoluteUri, ScopesSupported = [authorizationScope] };
         });
-        if (options.TrustedProxy is { } proxy) { AddProxy(
+        if (options.TrustedProxy is { } proxy) {
+            AddProxy(
             proxy: proxy,
             services: services
-        ); }
+        );
+        }
         ConfigureTools(
             access: access,
             options: options,
@@ -213,9 +215,12 @@ public static partial class RemoteMcpServer {
                     caller
                 );
 
-                server.ServerInfo = new() { Name = (remoteHost.SupportsAttachments
+                server.ServerInfo = new() {
+                    Name = (remoteHost.SupportsAttachments
                     ? "puck-remote"
-                    : "puck-services"), Version = "1.0.0" };
+                    : "puck-services"),
+                    Version = "1.0.0",
+                };
                 server.ProtocolVersion = "2026-07-28";
                 server.ServerInstructions = (remoteHost.SupportsAttachments
                     ? "Delegated World access: the configured World admits your validated issuer and subject and grants its own capabilities. Call puck_attach first, keep attachmentId private, and call serially per attachment. The host restricts commands to its explicitly authorized surface; local administrative commands are unavailable. Attachments preserve world.wait across HTTP requests. Idle expiry, revocation, disconnect and cancellation can invalidate them. Never automatically replay unknown outcomes. Route each attachment to the same host. OAuth is checked on every request. Headless hosts have no framebuffer. Additional services use the current authenticated caller and their own explicit grants."
@@ -223,10 +228,12 @@ public static partial class RemoteMcpServer {
                 );
                 server.Handlers.ListToolsHandler = (_, token) => tools.ListAsync(token: token);
                 server.Handlers.CallToolHandler = async (request, token) => {
-                    try { return await tools.CallAsync(
+                    try {
+                        return await tools.CallAsync(
                         parameters: request.Params,
                         token: token
-                    ).ConfigureAwait(continueOnCapturedContext: false); } catch (RemoteMcpAuthorizationException challenge) {
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    } catch (RemoteMcpAuthorizationException challenge) {
                         // Latest-protocol SDK transport defers headers until the first result. These services send no progress before authorization.
                         if (context.Response.HasStarted) { context.Abort(); throw; }
                         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -318,10 +325,12 @@ public static partial class RemoteMcpServer {
             await next(context).ConfigureAwait(continueOnCapturedContext: false);
         });
         app.UseRouting();
-        if (options.TrustedProxy is { } proxy) { UseProxy(
+        if (options.TrustedProxy is { } proxy) {
+            UseProxy(
             app: app,
             proxy: proxy
-        ); }
+        );
+        }
         app.UseCors(policyName: "PuckMcp");
         app.UseAuthentication();
         app.UseAuthorization();
@@ -374,10 +383,12 @@ public static partial class RemoteMcpServer {
                 options.SubjectClaim
             );
 
-            void Revoke() { if (
+            void Revoke() {
+                if (
                 (subject is not null) &&
                 !access.Allows(subject: subject)
-            ) { _ = deadline.CancelAsync(); } }
+            ) { _ = deadline.CancelAsync(); }
+            }
             access.Changed += Revoke;
             try {
                 Revoke();
@@ -393,12 +404,12 @@ public static partial class RemoteMcpServer {
             endpoints.MapGet(
                 pattern: "/healthz",
                 requestDelegate: (HttpContext context) => {
-                context.Response.StatusCode = (context.RequestServices.GetRequiredService<RemoteMcpHost>().IsReady
-                    ? 200
-                    : 503
-                );
-                return Task.CompletedTask;
-            }
+                    context.Response.StatusCode = (context.RequestServices.GetRequiredService<RemoteMcpHost>().IsReady
+                        ? 200
+                        : 503
+                    );
+                    return Task.CompletedTask;
+                }
             );
         });
     }

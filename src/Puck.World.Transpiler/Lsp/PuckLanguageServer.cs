@@ -99,6 +99,80 @@ public sealed class PuckLanguageServer {
         ruleSymbol["children"] = children;
         return ruleSymbol;
     }
+    private static JsonObject CreateStateWorldSymbol(BlockNode world) {
+        var symbol = CreateSymbol(
+            "world",
+            5,
+            (world.Line - 1),
+            (world.Column - 1),
+            world.Length
+        );
+        var children = new JsonArray();
+
+        foreach (var stmt in world.Statements) {
+            switch (stmt) {
+                case StateTableDeclarationNode table:
+                    AddNode(
+                        array: children,
+                        node: CreateStateTableSymbol(table: table)
+                    );
+                    break;
+                case StateSlotDeclarationNode slot:
+                    AddNode(
+                        array: children,
+                        node: CreateSymbol(
+                            $"slot {slot.Name} : {slot.Kind}",
+                            8,
+                            (slot.Line - 1),
+                            (slot.Column - 1),
+                            slot.Length
+                        )
+                    );
+                    break;
+                case BlockNode { Identifier: "row" } rowBlock:
+                    AddNode(
+                        array: children,
+                        node: CreateSymbol(
+                            "row",
+                            8,
+                            (rowBlock.Line - 1),
+                            (rowBlock.Column - 1),
+                            rowBlock.Length
+                        )
+                    );
+                    break;
+            }
+        }
+
+        symbol["children"] = children;
+        return symbol;
+    }
+    private static JsonObject CreateStateTableSymbol(StateTableDeclarationNode table) {
+        var symbol = CreateSymbol(
+            $"table {table.Name} : {table.Kind}",
+            8,
+            (table.Line - 1),
+            (table.Column - 1),
+            table.Length
+        );
+        var children = new JsonArray();
+
+        foreach (var cell in table.Cells) {
+            AddNode(
+                array: children,
+                node: CreateSymbol(
+                    cell.Key,
+                    7,
+                    (cell.Line - 1),
+                    (cell.Column - 1),
+                    cell.Length
+                )
+            );
+        }
+
+        symbol["children"] = children;
+        return symbol;
+    }
     private static JsonObject CreateSymbol(string name, int kind, int line, int character, int length) {
         return new JsonObject {
             ["name"] = name,
@@ -135,6 +209,14 @@ public sealed class PuckLanguageServer {
         "solids" => "**`solids` Section**\n\nCollection of Signed Distance Field (SDF) Constructive Solid Geometry (CSG) primitives evaluated by the raymarching engine.",
         "materials" => "**`materials` Section**\n\nSurface material properties including albedo color, roughness, metallic, and reflectance.",
         "state" => "**`state` Section**\n\nWorld state definitions including discrete values, lattices, and cell arrays.",
+        "table" => "**`table name : Kind [capacity(n)] [bounds(...)] [advance(perSecond:)] { key = value ... }`**\n\nDeclares a keyed `state.world` row — sugar for the explicit `cells` array. Legal only directly inside `state.world`.",
+        "slot" => "**`slot name : Kind [= value] [bounds(...)] [advance(perSecond:)]`**\n\nDeclares a scalar `state.world` row — sugar for the explicit `value` field. Legal only directly inside `state.world`.",
+        "bounds" => "**`bounds(minimum:, maximum:, overflow:)`**\n\nDeclares a table/slot row's range and overflow policy (`Refuse`, the default, or `Saturate`). Every argument is optional; only legal on an `Int`/`Fixed` row.",
+        "capacity" => "**`capacity(n)`**\n\nDeclares a `table` row's cell-count ceiling. Refused smaller than the table's own authored cells.",
+        "behavior" => "**`behavior(none)`**\n\nOpts a table cell out of its row's default `advance` behavior. The only admitted argument is `none`.",
+        "advance" => "**`advance(perSecond:)`**\n\nDeclares a table/slot row's (or table cell's) per-second continuous accumulation rate, evaluated on engine ticks. Only legal on an `Int`/`Fixed` row.",
+        "Bool" => "**CellKind: `Bool`**\n\nA 0/1 boolean cell.",
+        "Text" => "**CellKind: `Text`**\n\nA UTF-16 string cell.",
         "rules" => "**`rules` Section**\n\nDeclarative reactive rules evaluated on each engine tick (`effects`, `gate`, `mode`).",
         "addons" => "**`addons` Section**\n\nConfigures WebAssembly (WASM) game extensions with capability requests and memory watches.",
         "boardShift" => "**`boardShift(mask, lattice, direction)`**\n\nPerforms a directional bitwise shift across a multi-dimensional state lattice.",
@@ -693,6 +775,55 @@ public sealed class PuckLanguageServer {
             kind: 14,
             label: "placement"
         );
+        AddCompletion(
+            detail: "Declaration: keyed state.world row",
+            insertText: "table ${1:name} : ${2|Int,Fixed,Bool,Text|} {\n    ${3:key} = $0\n}",
+            items: items,
+            kind: 14,
+            label: "table"
+        );
+        AddCompletion(
+            detail: "Declaration: scalar state.world row",
+            insertText: "slot ${1:name} : ${2|Int,Fixed,Bool,Text|} = $0",
+            items: items,
+            kind: 14,
+            label: "slot"
+        );
+        AddCompletion(
+            detail: "Escape hatch: the explicit state.world row form",
+            insertText: "row {\n    $0\n}",
+            items: items,
+            kind: 14,
+            label: "row"
+        );
+        AddCompletion(
+            detail: "Modifier: range and overflow policy",
+            insertText: "bounds(minimum: ${1:0}, maximum: ${2:100})",
+            items: items,
+            kind: 3,
+            label: "bounds"
+        );
+        AddCompletion(
+            detail: "Modifier: per-second accumulation",
+            insertText: "advance(perSecond: ${1:1})",
+            items: items,
+            kind: 3,
+            label: "advance"
+        );
+        AddCompletion(
+            detail: "Modifier: table cell-count ceiling",
+            insertText: "capacity(${1:1})",
+            items: items,
+            kind: 3,
+            label: "capacity"
+        );
+        AddCompletion(
+            detail: "Modifier: opt a cell out of its row's behavior",
+            insertText: "behavior(none)",
+            items: items,
+            kind: 3,
+            label: "behavior"
+        );
 
         // 7. Effect/predicate/kind discriminators (the `name(k: v, ...)` call-form escape hatch)
         AddCompletion(
@@ -765,6 +896,20 @@ public sealed class PuckLanguageServer {
             kind: 13,
             label: "Fixed"
         );
+        AddCompletion(
+            detail: "CellKind: boolean domain",
+            insertText: "Bool",
+            items: items,
+            kind: 13,
+            label: "Bool"
+        );
+        AddCompletion(
+            detail: "CellKind: string domain",
+            insertText: "Text",
+            items: items,
+            kind: 13,
+            label: "Text"
+        );
 
         await SendResponseAsync(
             id: id,
@@ -817,7 +962,19 @@ public sealed class PuckLanguageServer {
                 var children = new JsonArray();
 
                 foreach (var child in block.Statements) {
-                    if (child is BlockNode childBlock) {
+                    if (
+                        (child is BlockNode { Identifier: "world", Name: null, Target: null } worldBlock) &&
+                        string.Equals(
+                        a: block.Identifier,
+                        b: "state",
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    )
+                    ) {
+                        AddNode(
+                            array: children,
+                            node: CreateStateWorldSymbol(world: worldBlock)
+                        );
+                    } else if (child is BlockNode childBlock) {
                         var cName = ((childBlock.Name is not null)
                             ? $"{childBlock.Identifier} \"{childBlock.Name}\""
                             : childBlock.Identifier

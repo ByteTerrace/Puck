@@ -53,27 +53,27 @@ public static partial class PostReportFiles {
                     Cases = ((result.Outcome.Cases is null)
             ? null
             : new CaseCountsDto {
-                            Error = Count(
+                Error = Count(
                 cases: result.Outcome.Cases,
                 verdict: PostCaseVerdict.Error
             ),
-                            ExpectedFail = Count(
+                ExpectedFail = Count(
                 cases: result.Outcome.Cases,
                 verdict: PostCaseVerdict.ExpectedFail
             ),
-                            Mismatch = Count(
+                Mismatch = Count(
                 cases: result.Outcome.Cases,
                 verdict: PostCaseVerdict.Mismatch
             ),
-                            Pass = Count(
+                Pass = Count(
                 cases: result.Outcome.Cases,
                 verdict: PostCaseVerdict.Pass
             ),
-                            Skip = Count(
+                Skip = Count(
                 cases: result.Outcome.Cases,
                 verdict: PostCaseVerdict.Skip
             ),
-                        }),
+            }),
                     Detail = result.Outcome.Detail,
                     DurationSeconds = Math.Round(
             digits: 3,

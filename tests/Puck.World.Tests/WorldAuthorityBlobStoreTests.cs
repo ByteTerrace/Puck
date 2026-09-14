@@ -28,6 +28,7 @@ public sealed class WorldAuthorityBlobStoreTests {
             cancellationToken: TestContext.Current.CancellationToken,
             entry: new WorldMutationJournalEntry(
                 Tick: 1UL,
+                EngineTick: 1UL,
                 Encoded: "a"u8.ToArray()
             ),
             identity: Identity()
@@ -61,7 +62,8 @@ public sealed class WorldAuthorityBlobStoreTests {
                 cancellationToken: cancellationToken,
                 entry: new WorldMutationJournalEntry(
                     Encoded: new byte[] { ((byte)index) },
-                    Tick: ((ulong)(200 + index))
+                    Tick: ((ulong)(200 + index)),
+                    EngineTick: ((ulong)(200 + index))
                 ),
                 identity: identity
             );
@@ -152,6 +154,7 @@ public sealed class WorldAuthorityBlobStoreTests {
             identity,
             new WorldMutationJournalEntry(
                 2,
+                2,
                 "tail"u8.ToArray()
             ),
             TestContext.Current.CancellationToken,
@@ -217,6 +220,7 @@ public sealed class WorldAuthorityBlobStoreTests {
             checkpoint
         );
         var legacyTail = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: [new WorldMutationJournalEntry(
+                11,
                 11,
                 "legacy-tail"u8.ToArray()
             )]);
@@ -377,6 +381,7 @@ public sealed class WorldAuthorityBlobStoreTests {
             identity,
             new WorldMutationJournalEntry(
                 2,
+                2,
                 "old"u8.ToArray()
             ),
             TestContext.Current.CancellationToken,
@@ -502,6 +507,7 @@ public sealed class WorldAuthorityBlobStoreTests {
                 identity,
                 new WorldMutationJournalEntry(
                     5,
+                    5,
                     "not-applied"u8.ToArray()
                 ),
                 TestContext.Current.CancellationToken,
@@ -547,6 +553,7 @@ public sealed class WorldAuthorityBlobStoreTests {
             identity,
             new WorldMutationJournalEntry(
                 2,
+                2,
                 "entry"u8.ToArray()
             ),
             cancellationToken,
@@ -562,6 +569,7 @@ public sealed class WorldAuthorityBlobStoreTests {
         var retry = await store.AppendJournalAsync(
             identity,
             new WorldMutationJournalEntry(
+                2,
                 2,
                 "entry"u8.ToArray()
             ),

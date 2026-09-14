@@ -117,13 +117,17 @@ public static class CartridgeDocuments {
     /// <param name="utf8">The authored UTF-8 JSON.</param>
     /// <returns>Source-path refusals, or an empty list for valid source.</returns>
     public static IReadOnlyList<DocumentValidationError> Validate(ReadOnlySpan<byte> utf8) {
-        try { return Validate(document: Read(utf8: utf8)); } catch (JsonException error) { return [new DocumentValidationError(
+        try { return Validate(document: Read(utf8: utf8)); } catch (JsonException error) {
+            return [new DocumentValidationError(
                 (error.Path ?? ""),
                 error.Message
-            )]; } catch (ArgumentException error) { return [new DocumentValidationError(
+            )];
+        } catch (ArgumentException error) {
+            return [new DocumentValidationError(
                 "",
                 error.Message
-            )]; }
+            )];
+        }
     }
     /// <summary>Collects source-path diagnostics without compiling or running a cartridge.</summary>
     /// <param name="document">The authored source.</param>

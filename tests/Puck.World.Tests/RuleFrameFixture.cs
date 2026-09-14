@@ -64,7 +64,8 @@ internal sealed class RuleFrameFixture {
         m_host.Frame.Load(source: new RowStore(rows: rows));
         m_host.Judge(
             rules: m_rules,
-            tick: 1
+            tick: 1,
+            engineTick: 1
         );
         Assert.Equal(
             0,

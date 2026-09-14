@@ -39,10 +39,10 @@ public sealed class ShaderPipelineParameterLayout {
         schema.ToDictionary(
             static pair => pair.Key,
             static pair => pair.Value with {
-            Default = ((pair.Value.Default is { } value)
+                Default = ((pair.Value.Default is { } value)
             ? value.Clone()
             : null),
-        },
+            },
             StringComparer.Ordinal
         );
 

@@ -521,6 +521,7 @@ public static class WorldRuleVocabulary {
                 )
             ),
             new WorldEffectArm(
+                allowsInsideBranch: false,
                 allowsTransaction: false,
                 compile: static (effect, ruleName, context) => SaveEffect.Instance,
                 discriminator: "save",
@@ -582,13 +583,15 @@ public static class WorldRuleVocabulary {
     private sealed class WorldEffectArm : EffectFamily {
         private readonly Func<ActionEffect, string, WorldRuleCompileContext, EffectFact> m_compile;
 
-        public WorldEffectArm(Type effectType, string discriminator, bool allowsTransaction, Func<ActionEffect, string, WorldRuleCompileContext, EffectFact> compile) {
+        public WorldEffectArm(Type effectType, string discriminator, bool allowsTransaction, Func<ActionEffect, string, WorldRuleCompileContext, EffectFact> compile, bool allowsInsideBranch = true) {
             EffectType = effectType;
             Discriminator = discriminator;
             AllowsTransaction = allowsTransaction;
+            AllowsInsideBranch = allowsInsideBranch;
             m_compile = compile;
         }
 
+        public override bool AllowsInsideBranch { get; }
         public override bool AllowsTransaction { get; }
         public override string Discriminator { get; }
         public override Type EffectType { get; }

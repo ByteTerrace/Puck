@@ -23,6 +23,20 @@ literal, not what the value turns out to be; a call's named argument keeps its
 colon too (`worldPoint(point: [0, 1, 0])`), being call syntax rather than a
 statement.
 
+## Row declarations: `table`/`slot`
+
+```
+table name : Kind [modifier(...)]* { key = value [modifier(...)]* ... }
+slot name : Kind [= value] [modifier(...)]*
+```
+
+A schema-agnostic grammar shape (`Ast/StateDeclarationNodes.cs`, `Parsing/PuckParser.StateDeclarations.cs`): a name,
+a bare-identifier kind, zero or more `name(args)` modifier calls, and — for `table` — a `{ }` body of cell entries.
+The core parses the shape only; which kind names, modifier names, and locations are legal is the owning
+vocabulary's answer. `puck.world.definition.v1`'s `state.world` is the one vocabulary use today — grammar,
+lowering, defaults, and PUCK049–PUCK058 refusals are in
+[`Puck.World.Transpiler/README.md`](../../../../src/Puck.World.Transpiler/README.md#state-declarations).
+
 ## `let`, `template`, `import`/`export`
 
 ```

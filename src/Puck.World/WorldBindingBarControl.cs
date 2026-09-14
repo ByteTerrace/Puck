@@ -138,7 +138,8 @@ internal sealed class WorldBindingBarControl {
             row: out _,
             rowName: layoutRow,
             text: out var layoutName,
-            tick: m_client.Tick
+            tick: m_client.Tick,
+            engineTick: m_client.EngineTick
         ))
             ? layoutName
             : null));
@@ -153,7 +154,8 @@ internal sealed class WorldBindingBarControl {
             row: out _,
             rowName: modelRow,
             text: out var modelName,
-            tick: m_client.Tick
+            tick: m_client.Tick,
+            engineTick: m_client.EngineTick
         ) && string.Equals(
             a: modelName,
             b: WorldBindingBarAuthoring.SingleModel,

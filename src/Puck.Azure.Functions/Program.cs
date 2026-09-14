@@ -30,24 +30,24 @@ services.AddAzureClients(configureClients: clientFactoryBuilder => {
     clientFactoryBuilder.UseCredential(tokenCredential: tokenCredential);
     clientFactoryBuilder
         .AddClient<BlobServiceClient, BlobClientOptions>(factory: (blobClientOptions, tokenCredential, serviceProvider) => {
-                var endpoint = serviceProvider
-                    .GetRequiredService<IOptionsMonitor<PublicStorageOptions>>()
-                    .CurrentValue
-                    .Endpoint;
+            var endpoint = serviceProvider
+                .GetRequiredService<IOptionsMonitor<PublicStorageOptions>>()
+                .CurrentValue
+                .Endpoint;
 
-                return (!Uri.TryCreate(
-                    result: out var endpointUri,
-                    uriKind: UriKind.Absolute,
-                    uriString: endpoint
+            return (!Uri.TryCreate(
+                result: out var endpointUri,
+                uriKind: UriKind.Absolute,
+                uriString: endpoint
+            )
+                ? throw new ArgumentException(message: $"Current public storage endpoint \"{endpoint}\" is not a valid absolute URI.")
+                : new BlobServiceClient(
+                    credential: tokenCredential,
+                    options: blobClientOptions,
+                    serviceUri: endpointUri
                 )
-                    ? throw new ArgumentException(message: $"Current public storage endpoint \"{endpoint}\" is not a valid absolute URI.")
-                    : new BlobServiceClient(
-                        credential: tokenCredential,
-                        options: blobClientOptions,
-                        serviceUri: endpointUri
-                    )
-                );
-            })
+            );
+        })
         .WithName(name: "PublicStorage");
     clientFactoryBuilder
         .AddClient<GraphServiceClient, GraphClientOptions>(factory: (_, tokenCredential) =>

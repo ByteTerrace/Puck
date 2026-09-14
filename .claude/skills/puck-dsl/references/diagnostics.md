@@ -23,6 +23,7 @@ restated catalog drifts the moment a code is added or reworded.
 | PUCK047 | Error | Compilation work, source size, collection size, or nesting depth exceeded a ceiling. | Split the generated data or source into smaller pieces. |
 | PUCK_LINT_005 | Information | A `state`/`comparandState`/`fromState` name, or a `State` token in a `compareValue`/`expression`/`score` operand, resolves to no declared state row. | Check spelling against the declared `state.*[].name` rows (including any basis/import). |
 | PUCK034 | Warning | A shape's `parent` resolves to no sibling `name` in the same `shapes` array. | Fix the referenced name; this check is local and always runs, even inside a module. |
+| PUCK049–058 | Error | A `table`/`slot` declaration refusal — outside `state.world`, a mixed array/block section, a duplicate name, an invalid default, a modifier the kind or shape doesn't admit, or an inexact `advance` rate. | See `Puck.World.Transpiler/README.md`'s [State declarations](../../../../src/Puck.World.Transpiler/README.md#state-declarations) table for the exact code-by-code list. |
 
 Only PUCK034 is Warning severity; every other `PUCK_LINT_*` check is
 Information, so `lint --strict` (which promotes warnings to failures) does not

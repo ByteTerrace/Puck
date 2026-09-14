@@ -136,39 +136,39 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
             number: 5,
             thumb: thumb,
             setup: static machine => {
-            // A native caller-owned IRQ callback acknowledges VBlank and ORs the BIOS wait flag, as required by
-            // IntrWait. The BIOS must preserve the interrupted context and return through its real IRQ vector.
-            uint[] handler = [0xE59F0018, 0xE3A01001, 0xE1C010B0, 0xE59F0010, 0xE1D010B0,
+                // A native caller-owned IRQ callback acknowledges VBlank and ORs the BIOS wait flag, as required by
+                // IntrWait. The BIOS must preserve the interrupted context and return through its real IRQ vector.
+                uint[] handler = [0xE59F0018, 0xE3A01001, 0xE1C010B0, 0xE59F0010, 0xE1D010B0,
                 0xE3811001, 0xE1C010B0, 0xE12FFF1E, 0x04000202, 0x03007FF8];
 
-            for (var index = 0; (index < handler.Length); ++index) {
+                for (var index = 0; (index < handler.Length); ++index) {
+                    machine.Bus.Write32(
+                        address: (0x03007000 + ((uint)(index * 4))),
+                        value: handler[index],
+                        access: BusAccessType.NonSequential
+                    );
+                }
                 machine.Bus.Write32(
-                    address: (0x03007000 + ((uint)(index * 4))),
-                    value: handler[index],
-                    access: BusAccessType.NonSequential
+                    access: BusAccessType.NonSequential,
+                    address: 0x03007FFC,
+                    value: 0x03007000
+                );
+                machine.Bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000004,
+                    value: 8
+                );
+                machine.Bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000200,
+                    value: 1
+                );
+                machine.Bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000208,
+                    value: 1
                 );
             }
-            machine.Bus.Write32(
-                access: BusAccessType.NonSequential,
-                address: 0x03007FFC,
-                value: 0x03007000
-            );
-            machine.Bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000004,
-                value: 8
-            );
-            machine.Bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000200,
-                value: 1
-            );
-            machine.Bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000208,
-                value: 1
-            );
-        }
         );
 
         FirmwareSwiProbe.Require(
@@ -328,19 +328,19 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
                 r1: FirmwareSwiProbe.Destination,
                 r2: control,
                 setup: static machine => {
-                for (var index = 0; (index < 36); ++index) {
-                    machine.Bus.Write8(
-                        access: BusAccessType.NonSequential,
-                        address: (FirmwareSwiProbe.Source + ((uint)index)),
-                        value: ((byte)(index + 1))
-                    );
-                    machine.Bus.Write8(
-                        access: BusAccessType.NonSequential,
-                        address: (FirmwareSwiProbe.Destination + ((uint)index)),
-                        value: 0xCC
-                    );
+                    for (var index = 0; (index < 36); ++index) {
+                        machine.Bus.Write8(
+                            access: BusAccessType.NonSequential,
+                            address: (FirmwareSwiProbe.Source + ((uint)index)),
+                            value: ((byte)(index + 1))
+                        );
+                        machine.Bus.Write8(
+                            access: BusAccessType.NonSequential,
+                            address: (FirmwareSwiProbe.Destination + ((uint)index)),
+                            value: 0xCC
+                        );
+                    }
                 }
-            }
             );
             var expected = new byte[(length + 1)];
 
@@ -366,17 +366,17 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
             r1: FirmwareSwiProbe.Destination,
             r2: FirmwareSwiProbe.Info,
             setup: static machine => {
-            FirmwareSwiProbe.WriteBytes(
-                bus: machine.Bus,
-                address: FirmwareSwiProbe.Source,
-                bytes: [0xE4]
-            );
-            FirmwareSwiProbe.WriteBytes(
-                bus: machine.Bus,
-                address: FirmwareSwiProbe.Info,
-                bytes: [1, 0, 2, 8, 0x10, 0, 0, 0]
-            );
-        }
+                FirmwareSwiProbe.WriteBytes(
+                    bus: machine.Bus,
+                    address: FirmwareSwiProbe.Source,
+                    bytes: [0xE4]
+                );
+                FirmwareSwiProbe.WriteBytes(
+                    bus: machine.Bus,
+                    address: FirmwareSwiProbe.Info,
+                    bytes: [1, 0, 2, 8, 0x10, 0, 0, 0]
+                );
+            }
         );
 
         FirmwareSwiProbe.ExpectBytes(

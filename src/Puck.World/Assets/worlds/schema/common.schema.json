@@ -2027,6 +2027,31 @@
       "additionalProperties": false,
       "title": "WorldCameraProgramOpClampPitchBare"
     },
+    "WorldCameraProgramOpDynamicsNullable": {
+      "description": "Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "row": {
+          "description": "The referenced dynamics row name; must resolve.",
+          "type": "string"
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpDynamicsBare"
+    },
     "WorldCameraProgramOpFieldOfViewNullable": {
       "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
       "type": [
@@ -2213,31 +2238,6 @@
       "additionalProperties": false,
       "title": "WorldCameraProgramOpPathBare"
     },
-    "WorldCameraProgramOpDynamicsNullable": {
-      "description": "Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "row": {
-          "description": "The referenced dynamics row name; must resolve.",
-          "type": "string"
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "row"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpDynamicsBare"
-    },
     "WorldCameraProgramOpSelectProgramNullable": {
       "description": "Evaluates exactly one of several other named programs, chosen by a live key \u2014 the state-driven counterpart of Blend\u0027s two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program\u0027s eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.",
       "type": [
@@ -2305,6 +2305,10 @@
           "$ref": "#/$defs/WorldCameraProgramOpClampPitchNullable",
           "description": "Gets the program\u0027s ClampPitch op, or null."
         },
+        "dynamicsOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpDynamicsNullable",
+          "description": "Gets the program\u0027s Dynamics op, or null."
+        },
         "fovOp": {
           "$ref": "#/$defs/WorldCameraProgramOpFieldOfViewNullable",
           "description": "Gets the program\u0027s FieldOfView op, or null."
@@ -2324,10 +2328,6 @@
         "pathOp": {
           "$ref": "#/$defs/WorldCameraProgramOpPathNullable",
           "description": "Gets the program\u0027s Path op, or null."
-        },
-        "dynamicsOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpDynamicsNullable",
-          "description": "Gets the program\u0027s Dynamics op, or null."
         },
         "selectOp": {
           "$ref": "#/$defs/WorldCameraProgramOpSelectProgramNullable",
@@ -5772,7 +5772,7 @@
       "title": "ActionEffectTransformState"
     },
     "ActionEffectCountdownState": {
-      "description": "Decrements a state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. The destination must be a kind=Int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
+      "description": "Decrements a state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. The destination must be a kind=Int min=0 row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
       "properties": {
         "$type": {
           "const": "countdownState"
@@ -5898,6 +5898,79 @@
       ],
       "additionalProperties": false,
       "title": "ActionEffectTransaction"
+    },
+    "ActionPredicateNonNullable": {
+      "description": "A data-composable gate over named state. A rule fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the ones this library owns, and a document project appends its own derived arms through a RuleVocabulary (see ExtendJson) rather than by editing this list.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ActionPredicateCompareState"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateCompareValue"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateAll"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateAny"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateNot"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateTimerElapsed"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateHeld"
+        }
+      ],
+      "title": "ActionPredicate"
+    },
+    "ActionEffectIf": {
+      "description": "Branches on a predicate: fires Then when it holds, else Else when present. Both branches read the frame at the effect\u0027s own position, so an earlier effect\u0027s same-firing write is visible to the condition exactly as it is to a later effect\u0027s own operand. A condition that fails to evaluate (an arithmetic fault, a missing table key) runs neither branch and is reported the same way a failing top-level effect is; a false condition with no branch that fires is not a failure. An effect inside a branch that itself refuses is refused on the same terms as a top-level effect \u2014 a branch is not a transaction, though a Transaction may appear inside one when this if is not itself inside a transaction.",
+      "properties": {
+        "$type": {
+          "const": "if"
+        },
+        "condition": {
+          "$ref": "#/$defs/ActionPredicateNonNullable",
+          "description": "The gate."
+        },
+        "then": {
+          "description": "The branch fired when Condition holds.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActionEffect"
+          }
+        },
+        "else": {
+          "description": "The branch fired when it does not, or null to fire nothing.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ActionEffect"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "condition",
+        "then"
+      ],
+      "additionalProperties": false,
+      "title": "ActionEffectIf"
     },
     "WorldEffectSetVerticalVelocity": {
       "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge).",
@@ -7577,6 +7650,9 @@
           "$ref": "#/$defs/ActionEffectTransaction"
         },
         {
+          "$ref": "#/$defs/ActionEffectIf"
+        },
+        {
           "$ref": "#/$defs/WorldEffectSetVerticalVelocity"
         },
         {
@@ -8072,26 +8148,35 @@
       ]
     },
     "StateAdvance": {
-      "description": "A StateRow\u0027s continuous accumulation trait: the row\u0027s stored cell is a base value, and the read value advances with elapsed ticks at an exact per-tick rational rate from the tick it was last explicitly set (EpochTick). Used for regen, fractional accumulation, a day/night clock \u2014 anything that should move on its own between observations.",
+      "description": "A StateRow\u0027s continuous accumulation trait: the row\u0027s stored cell is a base value, and the read value advances with elapsed engine ticks at an exact per-second rational rate from the engine tick it was last explicitly set (EpochEngineTick). Used for regen, fractional accumulation, a day/night clock \u2014 anything that should move on its own between observations.",
       "type": "object",
       "properties": {
-        "rateNumerator": {
-          "description": "The per-tick rate\u0027s signed numerator, in the row\u0027s own displayed unit (see this type\u0027s remarks). Negative accumulates downward (decay); zero is declared but inert.",
+        "perSecondNumerator": {
+          "description": "The per-second rate\u0027s signed numerator, in the row\u0027s own displayed unit (see this type\u0027s remarks). Negative accumulates downward (decay); zero is declared but inert.",
           "type": "integer"
         },
-        "rateDenominator": {
-          "description": "The per-tick rate\u0027s denominator. Refused at zero or below.",
+        "perSecondDenominator": {
+          "description": "The per-second rate\u0027s denominator. Refused at zero or below.",
           "type": "integer"
-        },
-        "epochTick": {
-          "description": "The server tick the rate starts accumulating from \u2014 the tick the row\u0027s base value was last explicitly set, or the loaded document\u0027s own authored value for a row never set since. A negative value is refused; in practice this can only be violated by an authored boot document, since every live write rebases to the applying tick before validation sees it.",
-          "type": "integer",
-          "default": 0
         }
       },
       "required": [
-        "rateNumerator",
-        "rateDenominator"
+        "perSecondNumerator",
+        "perSecondDenominator"
+      ],
+      "additionalProperties": false
+    },
+    "StateDynamics": {
+      "description": "A StateCell/StateRow\u0027s second-order easing trait: the STORED value stays the TRUTH (what rules, gates, and comparands read), while an eased read (StateReader) computes a second-order follower\u0027s current sample from the carrying cell\u0027s own Y0/ V0 at its EpochTick, chasing the stored value as its target \u2014 the closed-form counterpart to StateAdvance\u0027s linear accumulation, no per-tick work either. An explicit write REBASES: the cell\u0027s clock Y0/V0 become the eased value and velocity computed AT the write\u0027s own tick, and EpochTick becomes that tick \u2014 the same rebase discipline StateAdvance\u0027s own write rule follows, so a retune never jumps.",
+      "type": "object",
+      "properties": {
+        "row": {
+          "description": "The referenced dynamics row name; must resolve.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "row"
       ],
       "additionalProperties": false
     },
@@ -8110,7 +8195,7 @@
       "title": "CycleOutput"
     },
     "StateCycle": {
-      "description": "A row\u0027s or cell\u0027s tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice\u0027s reflection group \u2014 Puck.Maths.SymmetryWord, the lattice\u0027s own thirty-step cycle when no Word is authored \u2014 raised to Power once per step. The generator\u0027s order is the loop\u0027s period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.",
+      "description": "A row\u0027s or cell\u0027s tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice\u0027s reflection group \u2014 Puck.Maths.SymmetryWord, the lattice\u0027s own thirty-step cycle when no Word is authored \u2014 raised to Power once per step. The generator\u0027s order is the loop\u0027s period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute for a fixed epoch/substep pair, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.",
       "type": "object",
       "properties": {
         "word": {
@@ -8138,16 +8223,27 @@
           "description": "The server ticks one step lasts; refused at zero or below.",
           "type": "integer",
           "default": 1
-        },
+        }
+      },
+      "additionalProperties": false
+    },
+    "ShapeNonNullable2": {
+      "type": "object",
+      "properties": {
         "epochTick": {
-          "description": "The server tick the step count is measured from; a tick before it reads as step zero. A negative value is refused.",
-          "type": "integer",
-          "default": 0
+          "type": "integer"
+        },
+        "epochEngineTick": {
+          "type": "integer"
+        },
+        "y0": {
+          "type": "string"
+        },
+        "v0": {
+          "type": "string"
         },
         "substepTicks": {
-          "description": "Elapsed ticks already accumulated toward the next step at EpochTick; must be non-negative and less than TicksPerStep.",
-          "type": "integer",
-          "default": 0
+          "type": "integer"
         }
       },
       "additionalProperties": false

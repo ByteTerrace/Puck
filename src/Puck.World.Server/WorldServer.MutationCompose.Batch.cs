@@ -23,7 +23,7 @@ public sealed partial class WorldServer {
     // rehydration a hit triggers does. A member that can add or drop a reference — a whole-row write, or an edit to
     // any other section — drops the set, so the next state member collects it again from the document that member
     // produced.
-    private static bool TryComposeBatch(WorldDefinition current, WorldMutation.Batch batch, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns) {
+    private static bool TryComposeBatch(WorldDefinition current, WorldMutation.Batch batch, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns) {
         var working = current;
         List<WorldStateRow>? workspace = null;
         var workspaceDirty = false;
@@ -74,6 +74,7 @@ public sealed partial class WorldServer {
                 cell.Row,
                 cell.Key,
                 tick,
+                engineTick,
                 out var row,
                 out var raw,
                 out _
@@ -108,7 +109,8 @@ public sealed partial class WorldServer {
                             mutation: upsert,
                             reason: out reason,
                             rows: workspace,
-                            tick: tick
+                            tick: tick,
+                            engineTick: engineTick
                         )) {
                             candidate = current;
 
@@ -121,6 +123,7 @@ public sealed partial class WorldServer {
                             row: composed,
                             rebaseCellKey: upsert.Key,
                             tick: tick,
+                            engineTick: engineTick,
                             derivesBoards: workspaceDerivesBoards
                         );
                         workspaceDirty = true;
@@ -150,6 +153,7 @@ public sealed partial class WorldServer {
                             rebaseCellKey: null,
                             row: composed,
                             tick: tick,
+                            engineTick: engineTick,
                             working: working,
                             workspace: workspace
                         );
@@ -171,6 +175,7 @@ public sealed partial class WorldServer {
                         if (!TryComposeCore(
                             candidate: out var next,
                             current: working,
+                            engineTick: engineTick,
                             evictedKey: out evictedKey,
                             instanceIdentity: instanceIdentity,
                             mutation: member,
@@ -215,7 +220,8 @@ public sealed partial class WorldServer {
                             candidate: working,
                             mutation: member,
                             original: previous,
-                            tick: tick
+                            tick: tick,
+                            engineTick: engineTick
                         );
 
                         break;
@@ -267,6 +273,7 @@ public sealed partial class WorldServer {
                 cell.Row,
                 cell.Key,
                 tick,
+                engineTick,
                 out var beforeRow,
                 out var before,
                 out _
@@ -276,6 +283,7 @@ public sealed partial class WorldServer {
                 cell.Row,
                 cell.Key,
                 tick,
+                engineTick,
                 out var afterRow,
                 out var after,
                 out _
@@ -322,7 +330,7 @@ public sealed partial class WorldServer {
     // not reflect this call's own or an earlier placement's row values: RebaseCellTraits and
     // RecomposeDerivedBoardsFedBy read the row being replaced from the workspace itself, and every other section
     // they touch (dynamics, topology) is unchanged by a cell write.
-    private static void PlaceRow(WorldDefinition working, List<WorldStateRow> workspace, WorldStateRow row, string? rebaseCellKey, ulong tick, bool derivesBoards) {
+    private static void PlaceRow(WorldDefinition working, List<WorldStateRow> workspace, WorldStateRow row, string? rebaseCellKey, ulong tick, ulong engineTick, bool derivesBoards) {
         var index = IndexOfStateRow(
             rows: workspace,
             name: row.Name
@@ -336,7 +344,8 @@ public sealed partial class WorldServer {
                 original: working,
                 originalRow: originalRow,
                 row: row,
-                tick: tick
+                tick: tick,
+                engineTick: engineTick
             )
         );
 

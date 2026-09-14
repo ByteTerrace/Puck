@@ -163,9 +163,8 @@ public sealed partial class PlacementDealLawTests {
             StateRaw = document.StateRaw! with {
                 World = [document.State[0], document.State[1] with {
             Advance = new StateAdvance(
-                EpochTick: 0,
-                RateDenominator: 1,
-                RateNumerator: 1
+                PerSecondDenominator: 1,
+                PerSecondNumerator: 1
             ),
         }],
             },
@@ -192,6 +191,7 @@ public sealed partial class PlacementDealLawTests {
             "credits",
             null,
             commitTick,
+            fixture.Server.CompletedEngineTicks,
             out _,
             out var before,
             out _
@@ -203,6 +203,7 @@ public sealed partial class PlacementDealLawTests {
             "credits",
             null,
             commitTick,
+            fixture.Server.CompletedEngineTicks,
             out _,
             out var after,
             out _

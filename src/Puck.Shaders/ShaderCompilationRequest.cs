@@ -14,10 +14,12 @@ public sealed record ShaderCompilationRequest {
         IReadOnlyList<ShaderDescriptorBinding>? descriptorBindings = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(stages);
-        if (stages.Count == 0) { throw new ArgumentException(
+        if (stages.Count == 0) {
+            throw new ArgumentException(
             message: "At least one stage is required.",
             paramName: nameof(stages)
-        ); }
+        );
+        }
         var uniqueStages = new HashSet<ShaderStage>();
 
         foreach (var stage in stages) {

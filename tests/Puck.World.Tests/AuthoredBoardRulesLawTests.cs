@@ -406,7 +406,8 @@ public sealed class AuthoredBoardRulesLawTests {
                         );
                         host.Judge(
                             rules: rules,
-                            tick: 1
+                            tick: 1,
+                            engineTick: 1
                         );
                         Assert.True(condition: host.Frame.TryStored(
                             check,

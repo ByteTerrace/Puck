@@ -9,9 +9,9 @@ decision/derivation prose the schema cannot state.
 world-scoped rule section — the SAME `ActionPredicate`/`ActionEffect`/
 `ActionTriggerMode` primitive a kit's per-body actions use, one level up.
 Optional deliberately: a new REQUIRED section would refuse every existing
-document at boot for declaring nothing. Only `all`/`compareState` predicates and
-`setState`/`addState`/`countdownState`/`generate`/`pose`/`save` effects are
-admissible at world scope — plus,
+document at boot for declaring nothing. Only `all`/`any`/`not`/`compareState`
+predicates and `setState`/`addState`/`countdownState`/`generate`/`pose`/`save`/`if`
+effects are admissible at world scope — plus,
 each admitting an EXISTING `WorldMutation` kind into the rule effect set (riding
 the exact seam `generate` proved, never a new door), `upsertHudPanel`/
 `removeHudPanel` (a world-scoped HUD row) and `upsertPlacement`/`removePlacement`
@@ -56,7 +56,9 @@ A placement's `parent` composes its frame over another's, and a
 enclosing rule's `bindings` list computed for this evaluation (feed-forward,
 declared order, never stored). Any `expression`/`left`/`right`/`score`/affinity
 member accepts an infix string (`"min(damage, hp[$each]) * 2"`, C precedence,
-named forms as calls, `row[key]` reads, `$table:t:col[key]` and nested
+named forms as calls, `row[key]`/`row.key` reads (the dot form takes exactly one
+dot on an unreserved, unquoted name — a reserved or backquoted name never
+splits at a dot), `$table:t:col[key]` and nested
 `buffs[minion[$each]]` (the `$cell:` indirection), backquoted names, `0x`
 literals) as
 well as the postfix `{ "tokens": [...] }` object; the string parses to the same
@@ -81,7 +83,7 @@ permutation of 0..n−1 packed as nibbles (position i in bits 4i..4i+3, n ≤ 16
 turn order or a shuffled short deck is one cell, read back with `bitField(packed, 4 * i, 4)`;
 the layer family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
 `(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `sqrt` (both kinds),
-a keyed read is `row[key]` (a bare name or number is the literal key), `row[other[k]]` (a `$cell:` indirection), or
+a keyed read is `row[key]` or `row.key` (a bare name or number is the literal key), `row[other[k]]` (a `$cell:` indirection), or
 `row[from + 1]` / `row[(from)]` (any other expression as the key — an implicit int binding evaluated before the
 gate, traced as `$key<n>`, one of the rule's bindings; identical expression-key spellings share a binding within
 the same binding scope, never across rules or pattern-local scopes; parenthesize a bare name to read its row's value);
@@ -105,6 +107,17 @@ state effect is its own boundary; only a `transaction` groups effects
 atomically, and it journals once (a `Batch` mutation whose replay composes its
 members in order), so three `boardCombine`s in one transaction are one entry. Branches use ordinary `ActionEffect`
 records; `EffectFamily.AllowsTransaction` opts registered arms in, while the compiler rejects nesting and `save`.
+`if` (`{"$type":"if","condition":<predicate>,"then":[...],"else":[...]}`) branches a rule's own effects on the SAME
+predicate grammar a gate compiles: `then` fires when it holds, `else` (optional) when it does not — a false
+condition is not a failure. A condition that fails to evaluate (an arithmetic fault, a missing table key) runs
+NEITHER branch and reports through `world.rule.failures` on the same terms a failing top-level effect does. Each
+branch effect is its own boundary, exactly like a top-level effect (or, inside a `transaction`, any other step) — a
+branch is not itself a transaction. `if` may sit inside a `transaction`; a `transaction` may sit inside an `if` only
+when that `if` is not itself inside one, since transactions never nest either way; `save` is refused inside any `if`
+branch at any depth (`EffectFamily.AllowsInsideBranch`). `world.rule.trace` narrates the taken branch (`then`/`else`/
+`neither`/`condition failed`) beside the `if`'s own applied/refused/skipped verdict. `if` is refused by name in a
+kit's per-body actions (`ActionSpec`/`WorldBodyMotionProgram`) — a per-body action compiles to a flat instruction
+stream with no branch of its own, the same terms `transaction` and the other world-only effects are refused there.
 `BoardCombination` owns the compiler/frame/live board operation contract; `copy` preserves all source values,
 including its empty value when the target's differs. `$symmetry:<function>[:<argument>]:<row>`
 reads a cell holding a symmetry-lattice node (0..239) through `ring`, `antipode`,
@@ -155,7 +168,7 @@ resolved through the SAME operand walk (reserved channels included) — never bo
 never neither, and the two sides must resolve to the same cell kind. That one
 widening is the periodicity/cooldown/round-boundary vocabulary (gate `$tick`
 against a schedule row your effects advance for "every N ticks"; a request-gated
-cooldown is a `NonNegative` countdown row decremented while `>0`, gated `<=0`,
+cooldown is a `min: 0` countdown row decremented while `>0`, gated `<=0`,
 NOT a `$tick` threshold — see `WorldRules.cs` remarks). `mode` is `Level` (fires
 every tick the gate holds) or `Edge` (fires once per crossing, re-arming when the
 gate closes) — a rule that writes a row almost always wants `Edge`. A rule's `name`
@@ -193,16 +206,22 @@ act as `WorldPrincipal.World` (see [authority.md](authority.md)).
 A `setState`/`addState` effect is submitted only when it could MOVE the
 destination (`WorldServer.FireWorldRuleEffect`): the resolved value already
 matching the cell has always skipped, and so does a value the destination row's
-declared envelope (`nonNegative`/`min`/`max`) pins where the cell already sits —
-`WorldStateRow.ClampToEnvelope` answers both. That is what keeps a `Level` rule
-pointed at a floored row from composing a candidate the whole-document validator
-refuses once per TICK for the life of the session (a `nonNegative` row draining
-by `-5` reached its floor and then emitted 2679 `[world.mutation rejected: …]`
-lines over the remaining 2679 ticks of a 12-second boot). It never changes what
-is submitted: a write that genuinely tries to CROSS a bound (a cell at 3 taking
-`-5`) is still submitted and still refused BY NAME, so the envelope duality is
-unchanged — this removes the inert case from the write side, it does not add
-saturate-on-write (ruled out).
+declared envelope (`min`/`max`) pins where the cell already sits, under its
+authored `overflow` policy (`Refuse`, the default, or `Saturate`) —
+`WorldStateRow.TryAdmitWrite` is the one door every write path decides
+through, and answers both the admission and the no-op test. That is what keeps
+a `Level` rule pointed at a floored row from composing a candidate the
+whole-document validator refuses once per TICK for the life of the session (a
+`min: 0` row draining by `-5` reached its floor and then emitted 2679
+`[world.mutation rejected: …]` lines over the remaining 2679 ticks of a
+12-second boot). Under `Refuse` it never changes what is submitted: a write
+that genuinely tries to CROSS a bound (a cell at 3 taking `-5`) is still
+submitted and still refused BY NAME. Under `Saturate` the same write is
+submitted and still admitted — the row stores the clamped result while the
+mutation still carries the rule's own unclamped operand, so replay reproduces
+it, and a saturating write never triggers a transaction's `onFailure`. Bounds
+and overflow are legitimate only on `Int`/`Fixed` rows; a row with no declared
+bounds still refuses a genuine 64-bit arithmetic overflow rather than wrapping.
 
 `setState`/`addState` carry the SAME value/comparand duality on the WRITE side:
 EITHER a literal `value` OR a live copy `(fromState, fromKey)` — another row or

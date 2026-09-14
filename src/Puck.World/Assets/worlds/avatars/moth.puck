@@ -4763,10 +4763,7 @@ state {
       cells [
         {
           dynamics {
-            epochTick: 0
             row: "flight-pose"
-            v0: "0"
-            y0: "0"
           }
           key: "0"
           value: "0"
@@ -4779,10 +4776,7 @@ state {
       cells [
         {
           dynamics {
-            epochTick: 0
             row: "wing-deploy"
-            v0: "0"
-            y0: "0"
           }
           key: "0"
           value: "0"

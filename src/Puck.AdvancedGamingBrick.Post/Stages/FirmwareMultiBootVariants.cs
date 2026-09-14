@@ -289,10 +289,12 @@ internal static class FirmwareMultiBootVariants {
                 ? encoded
                 : (ushort)encoded)
             );
-            if (!normal) { Address(
+            if (!normal) {
+                Address(
                 address: ((ushort)(offset + 0xC2)),
                 sent: ((ushort)(encoded >> 16))
-            ); }
+            );
+            }
         }
         Address(
             sent: 0x65,

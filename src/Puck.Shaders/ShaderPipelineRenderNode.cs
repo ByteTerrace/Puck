@@ -164,13 +164,15 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         frameWidth: m_width
     )).ToArray();
     /// <summary>Gets or sets whether a step is pending.</summary>
-    public bool StepRequested { get => (m_steps != 0); set => m_steps = (value
+    public bool StepRequested {
+        get => (m_steps != 0); set => m_steps = (value
         ? Math.Max(
             val1: 1,
             val2: m_steps
         )
         : 0
-    ); }
+    );
+    }
 
     private void BarrierTarget(RuntimePass pass, int slot, nint command, bool before, List<nint> commands) {
         var recorder = m_gpu.ComputeRecorder;
@@ -409,42 +411,42 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
         m_capture.Serve(
             failureLabel: "[capture] failed",
             writer: path => {
-            m_capturePng.ThrowIfUnavailable(path: path);
-            if (
-                m_lastSurface.IsEmpty ||
-                !m_lastSurface.IsSameDeviceImage
-            ) {
-                throw new InvalidOperationException(message: "A completed same-device output is required for capture.");
-            }
-            var format = m_lastSurface.Format switch {
-                SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
-                SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
-                _ => throw new NotSupportedException(message: $"Capture does not support surface format {m_lastSurface.Format}.")
-            };
+                m_capturePng.ThrowIfUnavailable(path: path);
+                if (
+                    m_lastSurface.IsEmpty ||
+                    !m_lastSurface.IsSameDeviceImage
+                ) {
+                    throw new InvalidOperationException(message: "A completed same-device output is required for capture.");
+                }
+                var format = m_lastSurface.Format switch {
+                    SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
+                    SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
+                    _ => throw new NotSupportedException(message: $"Capture does not support surface format {m_lastSurface.Format}.")
+                };
 
-            m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback(deviceContext: m_device);
-            var selectedName = (m_selectedOutput ?? m_pipeline!.Plan.OutputResourceName);
-            var selectedResource = m_resourceLookup[selectedName];
-            var sourceLayout = m_outputLayout;
-            var pixels = m_readback.Read(
-                m_device,
-                m_lastSurface.ImageHandle,
-                format,
-                m_lastSurface.Width,
-                m_lastSurface.Height,
-                4,
-                sourceLayout
-            );
+                m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback(deviceContext: m_device);
+                var selectedName = (m_selectedOutput ?? m_pipeline!.Plan.OutputResourceName);
+                var selectedResource = m_resourceLookup[selectedName];
+                var sourceLayout = m_outputLayout;
+                var pixels = m_readback.Read(
+                    m_device,
+                    m_lastSurface.ImageHandle,
+                    format,
+                    m_lastSurface.Width,
+                    m_lastSurface.Height,
+                    4,
+                    sourceLayout
+                );
 
-            if (!m_capturePng.TryWrite(
-                height: ((int)m_lastSurface.Height),
-                path: path,
-                rgba: pixels,
-                width: ((int)m_lastSurface.Width)
-            )) {
-                throw new NotSupportedException(message: "PNG capture is unavailable.");
+                if (!m_capturePng.TryWrite(
+                    height: ((int)m_lastSurface.Height),
+                    path: path,
+                    rgba: pixels,
+                    width: ((int)m_lastSurface.Width)
+                )) {
+                    throw new NotSupportedException(message: "PNG capture is unavailable.");
+                }
             }
-        }
         );
     }
     private bool CompatibleHistory(ShaderPipelineResource old, ShaderPipelineResource current) {
@@ -529,10 +531,12 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             )));
         }
         var largestPreviewBytes = plan.Resources.Where(predicate: static resource => ((resource.Declaration.Kind == ShaderPipelineResourceKind.Image) && (resource.Declaration.IsExternal || IsFloatFormat(format: ParseFormat(format: resource.Declaration.Format)))))
-            .Select(selector: resource => { var extent = (resource.Declaration.Dimensions?.Resolve(
+            .Select(selector: resource => {
+                var extent = (resource.Declaration.Dimensions?.Resolve(
                 frameHeight: m_height,
                 frameWidth: m_width
-            ) ?? (m_width, m_height)); return checked((((((ulong)extent.Width) * extent.Height) * 4) * m_inFlight)); }).DefaultIfEmpty().Max();
+            ) ?? (m_width, m_height)); return checked((((((ulong)extent.Width) * extent.Height) * 4) * m_inFlight));
+            }).DefaultIfEmpty().Max();
 
         if (checked((allocationBytes + largestPreviewBytes)) > m_allocationBudgetBytes) {
             throw new InvalidDataException(message: $"Shader pipeline allocation exceeds the {m_allocationBudgetBytes} byte budget.");
@@ -1398,11 +1402,13 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             command,
             pass.Graphics![slot].Handle
         );
-        if (pass.VertexBuffer is not null) { recorderGraphics.BindVertexBuffer(
+        if (pass.VertexBuffer is not null) {
+            recorderGraphics.BindVertexBuffer(
             m_device.DeviceHandle,
             command,
             pass.VertexBuffer.BufferHandle
-        ); }
+        );
+        }
         PushFrameConstants(
             pass,
             context,
@@ -1808,10 +1814,12 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             if (
                 resource.Spec.IsExternal &&
                 (resource.Spec.Kind == ShaderPipelineResourceKind.Image)
-            ) { Array.Fill(
+            ) {
+                Array.Fill(
                 array: resource.Layouts!,
                 value: m_externalImages[resource.Spec.Name].Layout
-            ); }
+            );
+            }
         }
         var commands = m_commands;
 
@@ -2128,14 +2136,22 @@ public sealed class ShaderPipelineRenderNode : IRenderNode, ICaptureRequestTarge
             foreach (var target in m_targets) { target?.Dispose(); }
             foreach (var pool in m_pre) { pool?.Dispose(); }
             foreach (var pool in m_post) { pool?.Dispose(); }
-            foreach (var sampler in m_samplers) { if (sampler != 0) { m_gpu.DescriptorAllocator.DestroySampler(
+            foreach (var sampler in m_samplers) {
+                if (sampler != 0) {
+                    m_gpu.DescriptorAllocator.DestroySampler(
                 deviceHandle: m_device.DeviceHandle,
                 samplerHandle: sampler
-            ); } }
-            foreach (var pool in m_descriptorPools) { if (pool != 0) { m_gpu.DescriptorAllocator.DestroyPool(
+            );
+                }
+            }
+            foreach (var pool in m_descriptorPools) {
+                if (pool != 0) {
+                    m_gpu.DescriptorAllocator.DestroyPool(
                 deviceHandle: m_device.DeviceHandle,
                 poolHandle: pool
-            ); } }
+            );
+                }
+            }
         }
         public IGpuRenderTarget GetTarget(int slot) => m_targets[slot];
         public void Record(RuntimeResource source, ShaderPipelineExternalImage image, int slot, List<nint> commands) {

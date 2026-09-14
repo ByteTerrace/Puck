@@ -63,24 +63,59 @@ maintaining both would give the same position two possible answers.
 
 | Need | Trait or mechanism | Consequence for the host |
 |---|---|---|
-| Bound a value or table | `Min`/`Max`, `NonNegative`, `Capacity` | Validate writes against the row's envelope and capacity. |
+| Bound a value or table | `Min`/`Max`, `Overflow`, `Capacity` | Admit writes against the row's envelope, capacity, and overflow policy. |
 | Keep the newest inserted entries | `Evicts` with `Capacity` | Evict by insertion order; updating an existing key does not make it newer. |
-| Accumulate between writes | `StateAdvance` | Read from a base, epoch tick, and rational rate; explicit writes rebase. |
+| Accumulate between writes | `StateAdvance` | Read from a base and an exact per-second rate, evaluated over elapsed engine ticks; explicit writes rebase the carrying cell's clock. |
 | Follow a target smoothly | `StateDynamics` | Preserve the follower's state and its declared dynamics. |
 | Cycle through a spatial symmetry | `StateCycle` | Derive the phase or lattice value from the requested tick. |
 | Draw a value | `Draw` | Preserve the site's cursor and exhaustion state; see [Generators](generators.md). |
 | Control what observers learn | `StateVisibility`, `StateKnowledge` | Apply observation policy when producing a recipient's view. |
 | Reject a stale submission | `StatePhase`, `PhaseGuard` | Admit against the current generation and advance it on success. |
 
-Time traits describe computed reads. If an accumulating cell stores 10 at
-tick 100 and advances by 1/2 per tick, its Int read at tick 104 is 12.
-The stored base can still be 10. Adding three at tick 104 must start from the
-current 12, then establish a new base of 15 at that tick. This is why readers
-and writers use the shared state helpers.
+`Min` and `Max` are each independently optional — a one-sided range (a floor
+with no ceiling, or the reverse) is legal, and both are legitimate only on an
+`Int`/`Fixed` row. `Overflow` names what happens when a write's exact result
+(computed without wrapping) would leave that range, or overflows 64-bit
+storage: `Refuse` (the default, including on a row that declares no envelope
+at all) refuses the write by name; `Saturate` clamps it to the crossed bound,
+or to the storage limit on a side with no declared bound. `StateRow.TryAdmitWrite`
+is the one method every write path — the rule frame, mutation compose, ring
+push, board combine, write sets — decides through, so every path agrees. A
+saturating write still submits the rule's own operand as the mutation, so
+replay reproduces the same clamped result.
 
-These traits have compatibility rules; they are not arbitrary mix-ins.
-For example, a slot cannot both accumulate and draw, and a row's slot trait
-belongs on the row while a keyed cell's time trait belongs on that cell.
+Time traits describe computed reads. `StateAdvance` is authored per second
+and evaluated over elapsed engine ticks (`FixedTickConversion.TicksPerSecond`,
+50,400 per second) rather than simulation ticks, so a live change to the
+world's own `simulation.rateHz` moves no epoch and skews no accumulation.
+If an accumulating cell stores 10 at engine tick 0 and advances by 60 per
+second, its Int read one full second later (engine tick 50,400) is 70. The
+stored base can still be 10. Adding three at that engine tick must start from
+the current 70, then establish a new base of 73 at that engine tick. This is
+why readers and writers use the shared state helpers. `StateDynamics` and
+`StateCycle` stay on simulation ticks — only `StateAdvance` reads the engine
+clock.
+
+A row's `Advance`/`Dynamics`/`Cycle` is the default behavior of every cell it
+carries, including a key a later write mints — `EffectiveBehavior.Resolve`
+is the one place every consumer (readers, the validator, rebase, JSON
+conversion, save capture) decides which trait governs a cell. A cell replaces
+that default wholesale with its own `Advance`/`Dynamics`/`Cycle` (never two of
+the three at once), or opts out entirely with `StateCell.Behavior =
+StateCellBehavior.None`; neither is legitimate on the reserved slot key, since
+a slot's one cell has no separate default to override. Timing state — the
+epoch, a dynamics follower's sampled position and velocity, a cycle's carried
+substep — lives on the cell itself (`StateCellClock`), not on the trait: a key
+minted later starts its own clock from the tick (and engine tick) it was
+created. `StateCellClock` carries two independent epochs: `EpochTick` (a
+simulation tick, for `Dynamics`/`Cycle`) and `EpochEngineTick` (an engine
+tick, for `Advance`) — the two clocks never share a coordinate. Re-authoring a
+row's default or a cell's own behavior settles every affected cell at the
+change tick, per the transition each behavior pair follows (a parameter
+change keeps the live value and moves the epoch; switching behaviors, or to
+none, freezes the old behavior's current value and zeroes velocity/substep).
+These traits have other compatibility rules too — a slot cannot both
+accumulate and draw, for one.
 
 Visibility also differs from gameplay permission. An observation policy says
 what a reader learns; it does not authorize that reader to mutate the state.
@@ -130,13 +165,16 @@ The `StateDomain` union chooses how a row is addressed: `slot`, `keys`,
 
 ## Traits
 
-Rows can carry behavior and observation traits: `StateAdvance` (exact rational accumulation), `StateDynamics`
+Rows can carry behavior and observation traits: `StateAdvance` (exact per-second
+rational accumulation over engine ticks — `PerSecondNumerator`/
+`PerSecondDenominator`, JSON `perSecondNumerator`/`perSecondDenominator`), `StateDynamics`
 (a second-order follower over a `DynamicsRow`), `StateCycle`/`CycleOutput`
 (a tick-indexed rotation through a symmetry-lattice word), `StateVisibility`/
 `HiddenCells`/`StateKnowledge`/`StateObservation` (observation policy),
 `StatePhase`/`PhaseGuard` (a guarded submission generation), `StateInverse`
 (a `cellsOf` row declaring itself the inverse of a keyed token row—see
-`DerivedBoards`).
+`DerivedBoards`). A cell's own `StateCellBehavior` and `StateCellClock` carry
+its opt-out and its timing state; see `EffectiveBehavior.Resolve`.
 
 ## Topologies
 

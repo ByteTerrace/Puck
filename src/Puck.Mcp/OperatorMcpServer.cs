@@ -19,10 +19,12 @@ public static class OperatorMcpServer {
         if (
             (parameters is null) ||
             (parameters.Name is not ("puck_exec" or "puck_capture_frame"))
-        ) { throw new McpProtocolException(
+        ) {
+            throw new McpProtocolException(
             errorCode: McpErrorCode.InvalidParams,
             message: "Unknown tool."
-        ); }
+        );
+        }
         var exec = (parameters.Name == "puck_exec");
         var timeout = 30_000;
         string? command = null;
@@ -38,10 +40,12 @@ public static class OperatorMcpServer {
                     (key == "command") &&
                     exec &&
                     (value.ValueKind == JsonValueKind.String)
-                ) { command = value.GetString(); } else { return Error(
+                ) { command = value.GetString(); } else {
+                    return Error(
                     $"Invalid argument: {key}.",
                     unknown: false
-                ); }
+                );
+                }
             }
         }
         if (LocalControlServer.Validate(request: new(
@@ -51,10 +55,12 @@ public static class OperatorMcpServer {
             ? "exec"
             : "capture"),
             TimeoutMilliseconds: timeout
-        )) is { } refusal) { return Error(
+        )) is { } refusal) {
+            return Error(
             refusal.Output,
             unknown: false
-        ); }
+        );
+        }
         try {
             var request = new ControlRequest(
                 Command: command,
@@ -145,10 +151,12 @@ public static class OperatorMcpServer {
         if (
             !isError &&
             (png is { Length: > 0 })
-        ) { content.Add(item: ImageContentBlock.FromBytes(
+        ) {
+            content.Add(item: ImageContentBlock.FromBytes(
             bytes: png,
             mimeType: "image/png"
-        )); }
+        ));
+        }
         return new() { Content = content, IsError = isError, StructuredContent = metadata };
     }
 
@@ -177,12 +185,12 @@ public static class OperatorMcpServer {
         await using var server = McpServer.Create(
             transport,
             new McpServerOptions {
-            ProtocolVersion = "2026-07-28",
-            ServerInfo = new() { Name = "puck-operator", Version = "1.0.0" },
-            ServerInstructions = "Trusted local Operator: full Puck Console authority. Call tools serially. Exec evaluates one Puck console line. A submitted result is not an authoritative mutation receipt. Capture returns the next completed composed PNG, including overlays. Cancellation or timeout closes the attachment; restart the adapter and inspect state before any retry. World continues running. Participant and remote access are not provided.",
-            Filters = new() {
-                Message = new() {
-                    IncomingFilters = [next => (context, token) => {
+                ProtocolVersion = "2026-07-28",
+                ServerInfo = new() { Name = "puck-operator", Version = "1.0.0" },
+                ServerInstructions = "Trusted local Operator: full Puck Console authority. Call tools serially. Exec evaluates one Puck console line. A submitted result is not an authoritative mutation receipt. Capture returns the next completed composed PNG, including overlays. Cancellation or timeout closes the attachment; restart the adapter and inspect state before any retry. World continues running. Participant and remote access are not provided.",
+                Filters = new() {
+                    Message = new() {
+                        IncomingFilters = [next => (context, token) => {
                     bounded.MessageConsumed();
                     OperatorMcpJson.ValidateParameters(message: context.JsonRpcMessage);
                     return next(
@@ -190,17 +198,17 @@ public static class OperatorMcpServer {
                         token
                     );
                 }],
+                    },
                 },
-            },
-            Handlers = new() {
-                ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [ExecTool(), CaptureTool()] }),
-                CallToolHandler = (context, token) => CallAsync(
-                client,
-                context.Params,
-                token
-            ),
-            },
-        }
+                Handlers = new() {
+                    ListToolsHandler = (_, _) => ValueTask.FromResult(result: new ListToolsResult { Tools = [ExecTool(), CaptureTool()] }),
+                    CallToolHandler = (context, token) => CallAsync(
+                    client,
+                    context.Params,
+                    token
+                ),
+                },
+            }
         );
 
         try { await server.RunAsync(cancellationToken: lifetime.Token).ConfigureAwait(continueOnCapturedContext: false); } catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }

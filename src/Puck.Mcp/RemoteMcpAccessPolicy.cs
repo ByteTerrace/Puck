@@ -20,10 +20,12 @@ public sealed class RemoteMcpAccessPolicy {
         if (
             (subjects.Count > 64) ||
             subjects.Any(predicate: string.IsNullOrWhiteSpace)
-        ) { throw new ArgumentException(
+        ) {
+            throw new ArgumentException(
             message: "At most 64 nonempty subjects are permitted.",
             paramName: nameof(subjects)
-        ); }
+        );
+        }
         var replacement = subjects.ToFrozenSet(comparer: StringComparer.Ordinal);
 
         lock (m_gate) {

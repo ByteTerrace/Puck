@@ -65,9 +65,9 @@ public readonly struct TokenDiscriminator {
             )
                 ? throw new InvalidOperationException(message: "Access token does not have a valid object id.")
                 : new() {
-                ObjectId = objectIdGuid.ToString(format: "D").ToLowerInvariant(),
-                TimeToLive = timeToLive,
-                Value = SHA256.HashData(source: Encoding.UTF8.GetBytes(s: string.Join(
+                    ObjectId = objectIdGuid.ToString(format: "D").ToLowerInvariant(),
+                    TimeToLive = timeToLive,
+                    Value = SHA256.HashData(source: Encoding.UTF8.GetBytes(s: string.Join(
                     separator: UnitSeparator,
                     values: [
                         audiences,
@@ -76,7 +76,7 @@ public readonly struct TokenDiscriminator {
                         scopes
                     ]
                 ))),
-            }
+                }
         ));
     }
     public string ToBase64String() => Convert.ToBase64String(inArray: Value);

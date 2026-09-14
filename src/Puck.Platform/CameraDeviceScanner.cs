@@ -41,10 +41,12 @@ public sealed class CameraDeviceScanner : IDisposable {
 
     private static CameraDeviceScanResult Scan(ICameraCaptureService service) {
         try {
-            if (!service.IsSupported) { return new(
+            if (!service.IsSupported) {
+                return new(
                 Devices: [],
                 Failure: null
-            ); }
+            );
+            }
             var devices = service.EnumerateDevices();
             var snapshot = new CameraDeviceInfo[devices.Count];
 

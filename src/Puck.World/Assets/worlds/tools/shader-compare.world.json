@@ -1,0 +1,190 @@
+{
+  "basis": "../avatars/moth.puck",
+  "documentId": "puck-shader-compare-v1",
+  "schema": "puck.world.definition.v1",
+  "views": {
+    "layouts": [
+      {
+        "$replace": true
+      },
+      {
+        "name": "compare",
+        "seatCount": 0,
+        "slots": [
+          {
+            "height": 1,
+            "pipeline": "compare-pipeline",
+            "width": 0.5,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "camera": "three-quarter",
+            "height": 1,
+            "width": 0.5,
+            "x": 0.5,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
+      },
+      {
+        "name": "compare-front",
+        "seatCount": 0,
+        "slots": [
+          {
+            "height": 1,
+            "pipeline": "compare-pipeline-front",
+            "width": 0.5,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "camera": "front",
+            "height": 1,
+            "width": 0.5,
+            "x": 0.5,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
+      },
+      {
+        "name": "compare-rear",
+        "seatCount": 0,
+        "slots": [
+          {
+            "height": 1,
+            "pipeline": "compare-pipeline-rear",
+            "width": 0.5,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "camera": "rear",
+            "height": 1,
+            "width": 0.5,
+            "x": 0.5,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
+      },
+      {
+        "name": "compare-flight",
+        "seatCount": 0,
+        "slots": [
+          {
+            "height": 1,
+            "pipeline": "compare-pipeline-flight",
+            "width": 0.5,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "camera": "flight-stage",
+            "height": 1,
+            "width": 0.5,
+            "x": 0.5,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
+      },
+      {
+        "name": "compare-face",
+        "seatCount": 0,
+        "slots": [
+          {
+            "height": 1,
+            "pipeline": "compare-pipeline-face",
+            "width": 0.5,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "camera": "face",
+            "height": 1,
+            "width": 0.5,
+            "x": 0.5,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
+      },
+      {
+        "name": "pipeline-only",
+        "seatCount": 0,
+        "slots": [
+          {
+            "height": 1,
+            "pipeline": "compare-pipeline",
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
+      },
+      {
+        "name": "sdf-only",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "three-quarter",
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
+      }
+    ],
+    "pipelines": [
+      {
+        "camera": "three-quarter",
+        "name": "compare-pipeline",
+        "source": "../../pipelines/moth.glsl",
+        "timeScale": 1
+      },
+      {
+        "camera": "three-quarter",
+        "name": "moth-pipeline",
+        "source": "../../pipelines/moth.glsl",
+        "timeScale": 1
+      },
+      {
+        "camera": "front",
+        "name": "compare-pipeline-front",
+        "source": "../../pipelines/moth.glsl",
+        "timeScale": 1
+      },
+      {
+        "camera": "rear",
+        "name": "compare-pipeline-rear",
+        "source": "../../pipelines/moth.glsl",
+        "timeScale": 1
+      },
+      {
+        "camera": "flight-stage",
+        "name": "compare-pipeline-flight",
+        "source": "../../pipelines/moth.glsl",
+        "timeScale": 1
+      },
+      {
+        "camera": "face",
+        "name": "compare-pipeline-face",
+        "source": "../../pipelines/moth.glsl",
+        "timeScale": 1
+      }
+    ]
+  }
+}

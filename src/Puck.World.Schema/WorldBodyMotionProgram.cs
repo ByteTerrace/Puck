@@ -221,6 +221,9 @@ public static class BodyActionSpecFactory {
             // (legitimate only inside a WorldRule; see WorldRuleCompiler.CompileEffect).
             ActionEffect.CountdownState or WorldEffect.UpsertHudPanel or WorldEffect.RemoveHudPanel or WorldEffect.UpsertPlacement or WorldEffect.RemovePlacement =>
                 throw new InvalidOperationException(message: $"Action '{actionName}' uses effect '{effect.GetType().Name}', which has no body-scope meaning — it authors a WORLD document row and is admissible only inside a world rule's own effects."),
+            // A per-body action compiles to a flat CompiledBodyInstruction stream with no branch of its own.
+            ActionEffect.If =>
+                throw new InvalidOperationException(message: $"Action '{actionName}' uses effect 'if', which has no body-scope meaning — it is admissible only inside a world rule's own effects."),
             // save writes the WORLD's own file — a per-body action has no world file of its own to save, so this is
             // refused BY NAME here too (legitimate only inside a WorldRule; see WorldRuleCompiler.CompileEffect and
             // WorldEffect.Save's own remarks).

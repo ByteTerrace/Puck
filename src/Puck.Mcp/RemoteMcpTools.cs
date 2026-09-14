@@ -51,13 +51,15 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
                 )) { requestId = id.GetString(); }
             }
             return result;
-        } catch (OperationCanceledException) { outcome = "cancelled"; throw; } finally { diagnostics.Completed(
+        } catch (OperationCanceledException) { outcome = "cancelled"; throw; } finally {
+            diagnostics.Completed(
             outcome: outcome,
             requestId: requestId,
             start: start,
             subject: owner,
             tool: tool
-        ); }
+        );
+        }
     }
     internal async ValueTask<ListToolsResult> ListAsync(CancellationToken token) {
         var tools = new List<Tool>();
@@ -78,10 +80,12 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
                 exec.Description = ("Execute one delegated command using your attachmentId. Live World grants still authorize each operation; discovery grants no permission. No automatic replay of uncertain results. Available command syntax:\n" + capabilities.CommandHelp);
                 tools.Add(item: exec);
             }
-            if (capabilities.SupportsCapture) { tools.Add(item: WithAttachment(
+            if (capabilities.SupportsCapture) {
+                tools.Add(item: WithAttachment(
                 OperatorMcpServer.CaptureTool(),
                 CaptureInput
-            )); }
+            ));
+            }
         }
         tools.AddRange(collection: host.GetServiceTools(caller: caller));
         return new() { Tools = tools };
@@ -124,14 +128,18 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
         Annotations = new() { DestructiveHint = detach, IdempotentHint = false, OpenWorldHint = false, ReadOnlyHint = false },
     };
     private async ValueTask<CallToolResult> DispatchAsync(CallToolRequestParams? parameters, CancellationToken token) {
-        if (!host.SupportsAttachments) { throw new McpProtocolException(
+        if (!host.SupportsAttachments) {
+            throw new McpProtocolException(
             errorCode: McpErrorCode.InvalidParams,
             message: "Unknown tool."
-        ); }
-        if (parameters?.Name is not ("puck_attach" or "puck_detach" or "puck_exec" or "puck_capture_frame")) { throw new McpProtocolException(
+        );
+        }
+        if (parameters?.Name is not ("puck_attach" or "puck_detach" or "puck_exec" or "puck_capture_frame")) {
+            throw new McpProtocolException(
             errorCode: McpErrorCode.InvalidParams,
             message: "Unknown tool."
-        ); }
+        );
+        }
         if (
             (parameters.Name == "puck_capture_frame") &&
             !(await host.DescribeControlAsync(
@@ -145,11 +153,13 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
             );
         }
         if (parameters.Name == "puck_attach") {
-            if (parameters.Arguments is { Count: > 0 }) { return AttachmentResult(
+            if (parameters.Arguments is { Count: > 0 }) {
+                return AttachmentResult(
                 error: true,
                 id: null,
                 output: "Attach takes no arguments."
-            ); }
+            );
+            }
             try {
                 var id = await attachments.AttachAsync(
                     caller: caller,
@@ -206,11 +216,13 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
         var idText = idValue.ToString(format: "N");
 
         if (parameters.Name == "puck_detach") {
-            if (arguments.Count != 0) { return AttachmentResult(
+            if (arguments.Count != 0) {
+                return AttachmentResult(
                 error: true,
                 id: null,
                 output: "Detach accepts only attachmentId."
-            ); }
+            );
+            }
             var removed = attachments.Detach(
                 id: idText,
                 owner: owner

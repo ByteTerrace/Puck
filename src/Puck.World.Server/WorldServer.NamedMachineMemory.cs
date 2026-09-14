@@ -141,6 +141,7 @@ public sealed partial class WorldServer {
             binding.Row,
             binding.Key,
             tick,
+            CompletedEngineTicks,
             out _,
             out var raw,
             out _
@@ -217,6 +218,7 @@ public sealed partial class WorldServer {
                 Kind: WorldDocumentWriteKind.Set
             ),
             tick,
+            CompletedEngineTicks,
             SubmissionEnvelope.LocalConnectionId,
             0,
             preMetered: false

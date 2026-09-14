@@ -67,8 +67,8 @@ when (Gate)                                                // one opaque child; 
 ```
 
 `and`/`or`/`not`/`as`/`when` are reserved only inside a gate. An `Operand` is opaque text handed whole to
-`Puck.State.ExpressionSpelling`—the DSL never re-implements that grammar; `row`/`row[key]` reads, `$name:segment`
-reserved channels, and a `$zones[...]`-folded selector all pass through untouched. A bare comparison between two
+`Puck.State.ExpressionSpelling`—the DSL never re-implements that grammar; `row`/`row[key]`/`row.key` reads,
+`$name:segment` reserved channels, and a `$zones[...]`-folded selector all pass through untouched. A bare comparison between two
 single state reads lowers to `compareState`; anything else, or an explicit `: Int`/`: Fixed`/`as Int`/`as Fixed`
 suffix (which always forces it, even for two simple reads), lowers to `compareValue`. The suffix binds to the one
 comparison it follows, never to an enclosing `and`/`or` chain—but printed bare at the end of a chain it reads as
@@ -111,7 +111,9 @@ name(k: v, ...)             // generate(...), or any Puck.World.Schema extension
 ```
 
 `row[key]` (a *row reference*) is read as one span—a name plus zero or more adjacent `[...]` groups—and
-resolved through `ExpressionSpelling` to exactly one state-read token; `row[key] = rhs` only means a cell
+resolved through `ExpressionSpelling` to exactly one state-read token; a literal key may equally be spelled
+`row.key` (one dot on an unreserved, unquoted name—more than one is a parse error), which parses to the identical
+token. `row[key] = rhs`/`row.key = rhs` only means a cell
 assignment inside a rule/transaction/option/onFailure/onNoChoice body—the same `identifier[...]` outside such a
 body still means the existing inline-array-property sugar. An `rhs` is a string literal (`Text`), a number carrying
 the `s` unit (`ValueSeconds`), or opaque operand text the lowering stage classifies into `Value` /
@@ -164,6 +166,93 @@ the two apart—`CreationCanonicalizer` normalizes an absent `group` and an expl
 round-trip fidelity is the constraint here, not engine semantics.) It passes through both directions
 unconditionally, like `material` or `parent`.
 
+### State declarations
+
+`state.world` is authored either as today's array (`world [ {...}, {...} ]`) or as a declaration block
+(`world { ... }`), never both authoring the same section twice — the second authoring of `world` (either form)
+is PUCK050. Only `state.world` accepts declarations; `state.body`/`state.identity` are unrelated per-participant
+slot lanes, and `table`/`slot` anywhere else in the document (including `state.body`/`state.identity`) is PUCK049.
+Inside the block, three statements are admitted, each emitting exactly one `StateRow`:
+
+```puck
+state {
+    world {
+        table name : Kind [capacity(n)] [bounds(minimum: v, maximum: v, overflow: Refuse|Saturate)] [advance(perSecond: rate)] {
+            key = value [advance(perSecond: rate)] [behavior(none)]
+            ...
+        }
+
+        slot name : Kind [= value] [bounds(minimum: v, maximum: v, overflow: Refuse|Saturate)] [advance(perSecond: rate)]
+
+        row { <explicit row fields, exactly as the array form authors one> }
+    }
+}
+```
+
+`Kind` is `Int`, `Fixed`, `Bool`, or `Text`; an unrecognized kind is PUCK005. `table`/`slot` are core grammar
+(`Ast/StateDeclarationNodes.cs`, `Parsing/PuckParser.StateDeclarations.cs`) — the parser knows only the shape (a
+name, a kind, zero or more `name(args)` modifier calls, and, for `table`, a `{ key = value modifiers* }*` body); it
+assigns no meaning to a modifier or kind name, so a second document vocabulary could reuse the same grammar for its
+own row-shaped declarations without touching the core. `Lowering/WorldDocumentEmitter.State.cs` is the one place
+that interprets `table`/`slot` for `puck.world.definition.v1`, and refuses every case below by name.
+
+**Lowering, one declaration to one row.** A `table` always emits `"domain": {"$type": "keys"}`, so an empty or
+single-cell table is never inferred to be a slot (`StateRow.InferDomain`) — this is unconditional, not only when
+needed to avoid the wrong inference. A `table`'s cells populate `"cells"` (omitted when the table has none); a
+`slot`'s `= value` populates the row-level `"value"` sugar (omitted when the slot has none, leaving the row to gain
+its cell from a later write, exactly as an authored `value`-less explicit row does). `capacity(n)` (table only —
+PUCK055 on a `slot`, since a slot is always exactly one cell) emits `"capacity"`. `bounds(minimum:, maximum:,
+overflow:)` — every argument optional — emits `"min"`/`"max"`/`"overflow"` (the last only when `Saturate`; `Refuse`
+is the wire default and, matching how an explicit row would spell it, is never written). `advance(perSecond: rate)`
+emits `"advance": {"perSecondNumerator": n, "perSecondDenominator": d}`, the exact reduced fraction — see the rate
+rule below. `bounds`/`advance` are refused (PUCK055) on a `Bool`/`Text` row or cell, matching `StateRow`'s own
+Int/Fixed-only envelope and behavior. `behavior(none)` (cell-only) emits `"behavior": "none"`; combined with the
+same cell's own `advance`, or repeated, it is PUCK056. A value/bound literal is converted per the row's kind exactly
+as the explicit form spells it: a plain number for `Int`, `true`/`false` for `Bool`, a plain string for `Text`, and
+— `Fixed`'s convention throughout the engine — a decimal-text JSON STRING, never raw Q48.16 bits (parsed through
+`FixedQ4816.TryParse`, reprinted through `FixedQ4816.ToString()`, so `10.0` and `10` both emit `"10"`). A literal
+that does not fit the row's kind (a fraction on `Int`, a non-boolean on `Bool`, an unparseable decimal on `Fixed`)
+is PUCK053.
+
+**Rates reduce exactly.** An integer `perSecond` rate is numerator `n`, denominator `1`. A decimal rate reduces
+through `decimal` (never a `double`'s raw bits, which cannot be trusted to carry the author's own digits): the
+literal's shortest round-trip text is parsed as a `decimal`, its unscaled value and power-of-ten scale reduced by
+their GCD, and the result kept only when both the reduced numerator and denominator fit in 64 bits — otherwise
+PUCK058. Because a finite decimal's denominator is always a power of 2 and 5, this succeeds for every rate an author
+would plausibly type; it can only fail for a magnitude whose scale pushes the denominator past `long.MaxValue`
+(roughly beyond 18 decimal digits of scale).
+
+**Refusals**, each a source-spanned diagnostic in `PuckDiagnosticCodes` (declared in `Puck.Transpiler`, since the
+shape is core, though every one of these particular messages is raised by the world vocabulary):
+
+| Code | Refuses |
+|---|---|
+| PUCK005 | An unrecognized `Kind` (`UnknownKindAnnotation`, shared with the rest of the language). |
+| PUCK049 | `table`/`slot` outside `state.world`. |
+| PUCK050 | `state.world` authored more than once (array + block, block + block, or array + array). |
+| PUCK051 | A duplicate row name in one `state.world`, or a duplicate cell key in one table. |
+| PUCK052 | A row name or cell key carrying the reserved `$` prefix. |
+| PUCK053 | A default/bound literal that does not fit the row's kind. |
+| PUCK054 | `capacity(n)` smaller than the table's own authored cell count. |
+| PUCK055 | A modifier the declaration's shape or kind refuses — `bounds`/`advance` on `Bool`/`Text`, `capacity` on a `slot`. |
+| PUCK056 | More than one behavior — a repeated `bounds`/`advance`/`capacity`, or a cell combining `advance` with `behavior(none)`. |
+| PUCK057 | An unrecognized modifier name, or an argument shape the modifier itself refuses. |
+| PUCK058 | An `advance(perSecond: ...)` rate that does not reduce to an exact 64-bit fraction. |
+
+**Composition.** `let`, `template`, and compile-time `for` compose exactly as they do everywhere else in the
+language, because a declaration's name, kind, and every modifier argument are ordinary expressions the core
+evaluates before `WorldDocumentEmitter.State.cs` ever sees them: `let cap = 8` then `capacity(cap)`, a `template`
+whose body is a `table`/`slot`/`row` statement expanded once per call, or `for (item, index) in rows { slot
+$"meter-{index}" : Int = item }` to mint one slot per element — the emitted rows are indistinguishable from ones
+written by hand. A `let` or `template` parameter referenced only inside a modifier argument or a cell's value is
+recognized as used by the linter's reference scan, not reported as dead (`Validation/PuckLinter.cs`).
+
+**`row { }`** is the escape hatch: an ordinary nested block, lowered exactly like any other (`LowerBlockToObject`),
+so every explicit `StateRow` field — `dynamics`, `cycle`, `draw`, `visibility`, `knowledge`, `phase`, `phaseOf`,
+`valuesFrom`, `inverse`, `evicts`, `gatesDrive`, `field`, or any combination `table`/`slot` do not sugar — is
+authored the same way it always has been, nested one level deeper inside `world { }` instead of as one element of
+the `world [ ]` array.
+
 ## Decompiling
 
 `WorldDecompiler.Decompile` opens every file with a one-time-import header comment (`let`/`template` cannot be
@@ -176,6 +265,13 @@ document, any object carrying a `$type` key—every
 `ActionPredicate`/`ActionEffect`/`StateTransform` shape the dedicated sugar does not cover, and any
 `Puck.World.Schema` extension arm—prints as `type(k: v, ...)` call-form rather than a brace object with a literal
 `$type` key.
+
+`state.world` always decompiles as the declaration block, printing each row as `table`/`slot` sugar when the WHOLE
+row is representable without loss (`Decompiler/WorldDecompiler.State.cs`'s `CanSugarStateRow`: only the members
+`table`/`slot` can spell, an `advance` rate that reduces to one literal, and — for a table's cells — only `key`,
+`value`, `advance`, `behavior`) and falling back to `row { }` (the explicit form, printed through the same
+`DecompileNamedBlock` any other nested block uses) otherwise — a partial sugar is never printed, matching the
+"whole row or the escape hatch" rule every other sugar in this file follows.
 
 A `when`/`gate:` predicate or a `row[key]`-shaped effect target that would not parse back to the same tree falls
 back to the safer spelling instead of guessing: a rule's `gate` (an ordinary rule-body property) prints as
@@ -213,7 +309,8 @@ missing its name), PUCK012 (a second `when` in one rule/option), PUCK013 (`optio
 name or a missing `score`), PUCK014 (`onFailure` used more than once on one `transaction`), PUCK019 (nested
 `transaction`), PUCK026 (a rule with no effect statements), PUCK028 (a placement authoring both the bare `solid`
 flag and an explicit `solid { }`), PUCK029 (`decision` missing `periodSeconds`), PUCK035 (basis/import composition
-refused), PUCK036 (a statement inside `prototypes`/`placements` that the section's grammar cannot carry).
+refused), PUCK036 (a statement inside `prototypes`/`placements` that the section's grammar cannot carry). The
+`table`/`slot` declaration refusals (PUCK049–PUCK058) are listed in [State declarations](#state-declarations) above.
 
 `PUCK008`/`PUCK013`/`PUCK014` also cover a rule-body-only keyword found where an ordinary statement belongs
 (`option "x" { }` outside a `decision`, `push x = 1` outside a rule), named at the keyword's own span.
@@ -260,10 +357,12 @@ always runs and always reports. Every other check is Information severity; the s
 
 The [VS Code extension](../../editors/vscode/README.md) starts this server through `puck lsp` when a Puck document opens. Its setup guide covers CLI paths, packaging, and restarting the server.
 
-`Lsp/PuckLanguageServer.cs` offers completion for the gate/effect/rule keywords and the `Puck.State`
-predicate/effect/`CellKind` discriminators, hover on a declared `state` row name (its `kind`, and `capacity`/`domain`
-when present, via a best-effort lower of the open document), and `documentSymbol` entries for `rule` blocks (with
-`when`/`bind`/`decision` children).
+`Lsp/PuckLanguageServer.cs` offers completion for the gate/effect/rule keywords, `table`/`slot`/`row` and their
+`bounds`/`advance`/`capacity`/`behavior` modifiers, and the `Puck.State` predicate/effect/`CellKind` discriminators;
+hover on a declared `state` row name (its `kind`, and `capacity`/`domain` when present, via a best-effort lower of
+the open document) and on the `table`/`slot`/`bounds`/`advance`/`capacity`/`behavior` keywords themselves; and
+`documentSymbol` entries for `rule` blocks (with `when`/`bind`/`decision` children) and for a `state.world`
+declaration block (with `table`/`slot`/`row` children, and a table's own cell keys as its children in turn).
 
 Hover also shows declarations for document-level `let` constants, templates (including parameter defaults),
 import aliases, template and lambda parameters, loop variables, and rule bindings. Local parameters and bindings

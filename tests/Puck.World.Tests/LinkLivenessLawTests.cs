@@ -33,7 +33,7 @@ public sealed class LinkLivenessLawTests {
                 new WorldStateRow(
                 Name: alarm,
                 Kind: CellKind.Int,
-                NonNegative: true,
+                Min: 0L,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
                         Value: 0L

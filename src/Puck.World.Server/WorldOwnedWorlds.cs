@@ -377,16 +377,15 @@ public sealed class WorldOwnedWorlds {
             );
         }
 
-        // THE ROW'S OWN DECLARED ENVELOPE, never this door's guess at one. WorldIdentity.WriteState below swaps the
-        // row in with no revalidation, so whatever this admits is what the persisted document carries — and the
-        // document's own validator (WorldDefinitionValidator's state walk) re-checks Min/Max AND WorldStateRow
-        // .NonNegative at the owned world's next boot. A value this door admits that the validator would refuse is a
-        // document that stops loading, so the two must read the SAME traits off the SAME row: the non-negative floor
-        // is the row's declared NonNegative, on BOTH numeric arms, never an Int-only constant. (An Int + NonNegative
-        // row is what "timer" meant before the kind vocabularies reconciled — see WorldStateRow's own remarks — so
-        // reading the trait is what makes the timer floor a timer floor rather than a coincidence of the arm.)
-        // The two admitted numeric pairings are decided HERE and the envelope is applied ONCE below, so a Fixed
-        // counter and an Int timer cannot grow different floors, envelopes, or overflow behavior by drifting apart.
+        // THE ROW'S OWN DECLARED ENVELOPE, decided through TryAdmitWrite — never this door's guess at one.
+        // WorldIdentity.WriteState below swaps the row in with no revalidation, so whatever this admits is what the
+        // persisted document carries, and the document's own validator (WorldDefinitionValidator's state walk)
+        // re-checks the SAME Min/Max/Overflow at the owned world's next boot. A value this door admits that the
+        // validator would refuse is a document that stops loading, so the two must read the SAME traits off the SAME
+        // row. (An Int row with Min 0 is what "timer" meant before the kind vocabularies reconciled — see
+        // WorldStateRow's own remarks.) The two admitted numeric pairings are decided HERE and the envelope is
+        // applied ONCE below, so a Fixed counter and an Int timer cannot grow different floors, envelopes, or
+        // overflow behavior by drifting apart.
         var storageMatches = (row, submission.StorageKind) switch {
             ( { Kind: CellKind.Fixed, IsSlot: true }, ActionStateKind.Counter) => true,
             ( { Kind: CellKind.Int, IsSlot: true }, ActionStateKind.Timer) => true,
@@ -400,45 +399,43 @@ public sealed class WorldOwnedWorlds {
             );
         }
 
-        try {
-            var current = row.Cells![0].Value;
-            var value = ((submission.Kind == WorldDocumentWriteKind.Add)
-                ? checked((current + submission.Value))
-                : submission.Value
-            );
+        var slotCell = row.Cells![0];
 
-            if (
-                row.NonNegative &&
-                (value < 0)
-            ) {
-                return Refuse(
-                    submission: submission,
-                    reason: $"value {value} is negative — {subject.Describe()}'s floor is non-negative"
-                );
-            }
-
-            if (
-                ((row.Min is { } minimum) && (value < minimum)) ||
-                ((row.Max is { } maximum) && (value > maximum))
-            ) {
-                return Refuse(
-                    submission: submission,
-                    reason: $"value {value} is outside {subject.Describe()}'s authored envelope"
-                );
-            }
-
-            owner.WriteState(row: row with {
-                Cells = [new StateCell(
-                    Key: WorldStateRow.SlotKey,
-                    Value: value
-                )],
-            });
-        } catch (OverflowException) {
+        // This door runs outside the simulation tick, so it has no clock to settle a value-over-time cell against:
+        // storing a fresh cell would silently discard the cell's epoch and accumulate from a stale one.
+        if (!EffectiveBehavior.Resolve(
+            cell: slotCell,
+            row: row
+        ).IsNone) {
             return Refuse(
                 submission: submission,
-                reason: $"{subject.Describe()} overflowed"
+                reason: $"{subject.Describe()} changes over time (advance, dynamics, or cycle), and a cross-document write has no simulation clock to settle it against"
             );
         }
+
+        var current = slotCell.Value;
+
+        if (!row.TryAdmitWrite(
+            current: current,
+            operand: submission.Value,
+            write: ((submission.Kind == WorldDocumentWriteKind.Add)
+            ? StateWriteKind.Add
+            : StateWriteKind.Set),
+            stored: out var value,
+            reason: out var admitReason
+        )) {
+            return Refuse(
+                submission: submission,
+                reason: $"{subject.Describe()} {admitReason}"
+            );
+        }
+
+        owner.WriteState(row: row with {
+            Cells = [new StateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: value
+            )],
+        });
 
         Save(identity: owner);
         return new WorldDocumentSubmissionReceipt(
@@ -985,12 +982,11 @@ public sealed class WorldOwnedWorlds {
                 return true;
             // A tick count crosses as an unsigned quantity, so a negative cell cannot be read as one. That is a
             // DIFFERENT refusal from a kind mismatch and says so: the row a caller named is the right kind and holds a
-            // value this lane cannot represent. It is reachable only on a row that does NOT declare
-            // WorldStateRow.NonNegative — declaring it is what makes an Int row a timer, and the write door and the
-            // document validator both hold that floor.
+            // value this lane cannot represent. It is reachable only on a row that does NOT declare Min 0 — declaring
+            // it is what makes an Int row a timer, and the write door and the document validator both hold that floor.
             case ( { Kind: CellKind.Int, IsSlot: true } intRow, ActionStateKind.Timer):
                 if (intRow.Cells![0].Value < 0) {
-                    reason = $"{subject.Describe()} holds {intRow.Cells![0].Value}, which no tick count can carry — an int row read as a timer must declare a non-negative floor";
+                    reason = $"{subject.Describe()} holds {intRow.Cells![0].Value}, which no tick count can carry — an int row read as a timer must declare a minimum of 0";
                     return false;
                 }
                 value = new DurableStateValue(

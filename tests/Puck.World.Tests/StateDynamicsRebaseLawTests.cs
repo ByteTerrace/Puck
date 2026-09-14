@@ -39,12 +39,7 @@ public sealed class StateDynamicsRebaseLawTests {
                 new StateCell(
                     Key: CellName.Parse(candidate: "0"),
                     Value: 0,
-                    Dynamics: new StateDynamics(
-                        EpochTick: 0,
-                        Row: dynamicsRow,
-                        V0: 0,
-                        Y0: 0
-                    )
+                    Dynamics: new StateDynamics(Row: dynamicsRow)
                 ),
             ]
         );
@@ -53,7 +48,9 @@ public sealed class StateDynamicsRebaseLawTests {
             DynamicsRaw = [.. Fixtures.StandardDynamics, KickPositive, KickZero, KickNegative],
         });
     }
-    private static StateDynamics ReadTrait(WorldDefinition definition) {
+    // The cell's own clock — its timing state (epoch, sampled position/velocity) — is where a settle now writes,
+    // since StateDynamics itself carries only its trait's authored parameters (see StateCellClock).
+    private static StateCellClock ReadClock(WorldDefinition definition) {
         var row = WorldDefinitionRows.FindStateRow(
             rows: definition.State,
             name: "gauge"
@@ -65,7 +62,7 @@ public sealed class StateDynamicsRebaseLawTests {
                 b: "0",
                 comparisonType: System.StringComparison.Ordinal
             )) {
-                return cell.Dynamics!;
+                return (cell.Clock ?? new StateCellClock());
             }
         }
 
@@ -100,7 +97,8 @@ public sealed class StateDynamicsRebaseLawTests {
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: beforeRewriteTick
+            tick: beforeRewriteTick,
+            engineTick: fixture.Server.CompletedEngineTicks
         ));
         Assert.InRange(
             actual: midFlight!.Value,
@@ -118,12 +116,12 @@ public sealed class StateDynamicsRebaseLawTests {
         fixture.Step();
 
         var rewriteTick = (fixture.Server.NextInputTick - 2UL);
-        var trait = ReadTrait(definition: fixture.Server.Definition);
+        var clock = ReadClock(definition: fixture.Server.Definition);
 
         // The rebased Y0 is the SAME live eased value just sampled above (bit-exact, since no tick elapsed between
         // the sample and the write applying) — a genuine capture of where the follower actually was, never the old
         // truth (300) nor the new one (600).
-        var rebasedRowValue = (FixedQ4816.Round(value: FixedQ4816.FromRawBits(value: trait.Y0)).Value >> FixedQ4816.FractionBitCount);
+        var rebasedRowValue = (FixedQ4816.Round(value: FixedQ4816.FromRawBits(value: clock.Y0)).Value >> FixedQ4816.FractionBitCount);
 
         Assert.Equal(
             actual: rebasedRowValue,
@@ -131,10 +129,10 @@ public sealed class StateDynamicsRebaseLawTests {
         );
         Assert.NotEqual(
             expected: 0L,
-            actual: trait.Y0 & (FixedQ4816.One.Value - 1L)
+            actual: clock.Y0 & (FixedQ4816.One.Value - 1L)
         );
         Assert.Equal(
-            actual: trait.EpochTick,
+            actual: clock.EpochTick,
             expected: unchecked((long)rewriteTick)
         );
 
@@ -146,7 +144,8 @@ public sealed class StateDynamicsRebaseLawTests {
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: rewriteTick
+            tick: rewriteTick,
+            engineTick: fixture.Server.CompletedEngineTicks
         ));
         Assert.Equal(
             actual: atRebase,
@@ -162,7 +161,8 @@ public sealed class StateDynamicsRebaseLawTests {
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: (rewriteTick + 10_000UL)
+            tick: (rewriteTick + 10_000UL),
+            engineTick: fixture.Server.CompletedEngineTicks
         ));
         Assert.Equal(
             actual: settled,
@@ -181,12 +181,7 @@ public sealed class StateDynamicsRebaseLawTests {
                 new StateCell(
                     Key: CellName.Parse(candidate: "0"),
                     Value: 0,
-                    Dynamics: new StateDynamics(
-                        EpochTick: 0,
-                        Row: "kickPos",
-                        V0: 0,
-                        Y0: 0
-                    )
+                    Dynamics: new StateDynamics(Row: "kickPos")
                 ),
             ]
         );
@@ -228,18 +223,18 @@ public sealed class StateDynamicsRebaseLawTests {
         fixture.Step();
 
         var appliedTick = (fixture.Server.NextInputTick - 1UL);
-        var trait = ReadTrait(definition: fixture.Server.Definition);
+        var clock = ReadClock(definition: fixture.Server.Definition);
 
         Assert.Equal(
-            actual: trait.Y0,
+            actual: clock.Y0,
             expected: 0L
         );
         Assert.Equal(
-            actual: trait.EpochTick,
+            actual: clock.EpochTick,
             expected: unchecked((long)appliedTick)
         );
         Assert.Equal(
-            actual: System.Math.Sign(value: trait.V0),
+            actual: System.Math.Sign(value: clock.V0),
             expected: 1
         );
         Assert.True(condition: WorldStateReader.TryRead(
@@ -249,7 +244,8 @@ public sealed class StateDynamicsRebaseLawTests {
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: appliedTick
+            tick: appliedTick,
+            engineTick: fixture.Server.CompletedEngineTicks
         ));
         Assert.Equal(
             actual: truth,
@@ -269,7 +265,7 @@ public sealed class StateDynamicsRebaseLawTests {
         ));
         fixture.Step();
 
-        var afterFirstWrite = ReadTrait(definition: fixture.Server.Definition);
+        var afterFirstWrite = ReadClock(definition: fixture.Server.Definition);
 
         for (var index = 0; (index < 3); index++) {
             fixture.Step();
@@ -284,7 +280,7 @@ public sealed class StateDynamicsRebaseLawTests {
         ));
         fixture.Step();
 
-        var afterSecondWrite = ReadTrait(definition: fixture.Server.Definition);
+        var afterSecondWrite = ReadClock(definition: fixture.Server.Definition);
 
         Assert.NotEqual(
             actual: afterSecondWrite,
@@ -297,7 +293,7 @@ public sealed class StateDynamicsRebaseLawTests {
         );
         fixture.Step();
 
-        var afterUndo = ReadTrait(definition: fixture.Server.Definition);
+        var afterUndo = ReadClock(definition: fixture.Server.Definition);
 
         Assert.Equal(
             actual: afterUndo,
@@ -324,20 +320,20 @@ public sealed class StateDynamicsRebaseLawTests {
         // call, then the call completes and advances it — so the tick a just-applied write rebased at trails
         // NextInputTick by two, not one (one Step call: composes at 0, NextInputTick reads 2 afterward).
         var appliedTick = (fixture.Server.NextInputTick - 2UL);
-        var trait = ReadTrait(definition: fixture.Server.Definition);
+        var clock = ReadClock(definition: fixture.Server.Definition);
 
         // The cell was already at rest at its OLD target (0), so the eased sample the rebase captures is exactly
         // (0, 0) before the kick — the whole velocity is the retarget impulse.
         Assert.Equal(
-            actual: trait.Y0,
+            actual: clock.Y0,
             expected: 0L
         );
         Assert.Equal(
-            actual: trait.EpochTick,
+            actual: clock.EpochTick,
             expected: unchecked((long)appliedTick)
         );
         Assert.Equal(
-            actual: System.Math.Sign(value: trait.V0),
+            actual: System.Math.Sign(value: clock.V0),
             expected: expectedSign
         );
 
@@ -349,7 +345,8 @@ public sealed class StateDynamicsRebaseLawTests {
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: appliedTick
+            tick: appliedTick,
+            engineTick: fixture.Server.CompletedEngineTicks
         ));
         Assert.Equal(
             actual: truth,

@@ -38,12 +38,7 @@ public sealed class StateDynamicsReadLawTests {
                 Key: WorldStateRow.SlotKey,
                 Value: 300
             )],
-        Dynamics: new StateDynamics(
-            EpochTick: 0,
-            Row: dynamicsRow,
-            V0: 0,
-            Y0: 0
-        )
+        Dynamics: new StateDynamics(Row: dynamicsRow)
     );
     private static WorldStateRow PlainRow() => new(
         Name: CellName.Parse(candidate: "gauge"),
@@ -69,7 +64,8 @@ public sealed class StateDynamicsReadLawTests {
                 row: out _,
                 rowName: "gauge",
                 text: out _,
-                tick: tick
+                tick: tick,
+                engineTick: tick
             ));
             Assert.True(
                 condition: (raw >= previous),
@@ -98,7 +94,8 @@ public sealed class StateDynamicsReadLawTests {
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ));
         Assert.Equal(
             actual: raw,
@@ -121,7 +118,8 @@ public sealed class StateDynamicsReadLawTests {
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ));
         Assert.Equal(
             actual: trough,
@@ -135,7 +133,8 @@ public sealed class StateDynamicsReadLawTests {
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: 120UL
+            tick: 120UL,
+            engineTick: 120UL
         ));
         Assert.InRange(
             actual: peak!.Value,
@@ -150,7 +149,8 @@ public sealed class StateDynamicsReadLawTests {
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: 240UL
+            tick: 240UL,
+            engineTick: 240UL
         ));
         Assert.InRange(
             actual: fullPeriod!.Value,
@@ -170,7 +170,8 @@ public sealed class StateDynamicsReadLawTests {
             row: out _,
             rowName: "gauge",
             text: out _,
-            tick: 1000UL
+            tick: 1000UL,
+            engineTick: 1000UL
         ));
         Assert.Equal(
             actual: raw,
@@ -189,7 +190,8 @@ public sealed class StateDynamicsReadLawTests {
                 row: out _,
                 rowName: "gauge",
                 text: out _,
-                tick: tick
+                tick: tick,
+                engineTick: tick
             ));
             Assert.True(condition: WorldStateReader.TryReadEased(
                 definition: definition,
@@ -198,7 +200,8 @@ public sealed class StateDynamicsReadLawTests {
                 row: out _,
                 rowName: "gauge",
                 text: out _,
-                tick: tick
+                tick: tick,
+                engineTick: tick
             ));
             Assert.Equal(
                 actual: eased,
@@ -218,7 +221,8 @@ public sealed class StateDynamicsReadLawTests {
                 row: out _,
                 rowName: "gauge",
                 text: out _,
-                tick: tick
+                tick: tick,
+                engineTick: tick
             ));
             Assert.Equal(
                 actual: raw,

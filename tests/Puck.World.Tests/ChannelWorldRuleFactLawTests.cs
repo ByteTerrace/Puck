@@ -34,7 +34,7 @@ public sealed class ChannelWorldRuleFactLawTests {
                 new WorldStateRow(
                 Name: beacon,
                 Kind: CellKind.Int,
-                NonNegative: true,
+                Min: 0L,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
                         Value: 0L

@@ -100,7 +100,8 @@ public abstract record WorldPlacementResponseCondition {
         /// condition currently holds.</summary>
         /// <param name="definition">The document to read.</param>
         /// <param name="tick">The tick to read the referenced cell(s) as of.</param>
-        public bool Holds(WorldDefinition definition, ulong tick) {
+        /// <param name="engineTick">The engine tick to read the referenced cell(s) as of.</param>
+        public bool Holds(WorldDefinition definition, ulong tick, ulong engineTick) {
             ArgumentNullException.ThrowIfNull(argument: definition);
 
             if (
@@ -109,6 +110,7 @@ public abstract record WorldPlacementResponseCondition {
                 rowName: State,
                 key: Key,
                 tick: tick,
+                engineTick: engineTick,
                 row: out var row,
                 rawValue: out var raw,
                 text: out _
@@ -127,6 +129,7 @@ public abstract record WorldPlacementResponseCondition {
                     rowName: comparandRow,
                     key: ComparandKey,
                     tick: tick,
+                    engineTick: engineTick,
                     row: out _,
                     rawValue: out var comparand,
                     text: out _

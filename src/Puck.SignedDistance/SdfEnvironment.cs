@@ -745,28 +745,34 @@ public sealed class SdfEnvironment {
     }
 
     /// <summary>Gets or sets the cloud color.</summary>
-    public Vector3 CloudColor { get => GetVector(row: CloudsRow); set => SetVector(
+    public Vector3 CloudColor {
+        get => GetVector(row: CloudsRow); set => SetVector(
         row: CloudsRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the cloud coverage in [0, 1].</summary>
-    public float CloudCoverage { get => GetLane(
+    public float CloudCoverage {
+        get => GetLane(
         lane: 3,
         row: CloudsRow
     ); set => SetLane(
         lane: 3,
         row: CloudsRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the Coriolis curl in radians at 45° elevation.</summary>
-    public float CloudCurl { get => GetLane(
+    public float CloudCurl {
+        get => GetLane(
         lane: 1,
         row: (CloudsRow + 3)
     ); set => SetLane(
         lane: 1,
         row: (CloudsRow + 3),
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the cloud drift in layer units per second.</summary>
     public Vector2 CloudDrift {
         get => new(
@@ -779,7 +785,8 @@ public sealed class SdfEnvironment {
                 row: (CloudsRow + 2)
             )
         );
-        set { SetLane(
+        set {
+            SetLane(
             lane: 0,
             row: (CloudsRow + 2),
             value: value.X
@@ -787,26 +794,31 @@ public sealed class SdfEnvironment {
             lane: 1,
             row: (CloudsRow + 2),
             value: value.Y
-        ); }
+        );
+        }
     }
     /// <summary>Gets or sets the cloud cell scale in layer units.</summary>
-    public float CloudScale { get => GetLane(
+    public float CloudScale {
+        get => GetLane(
         lane: 1,
         row: (CloudsRow + 1)
     ); set => SetLane(
         lane: 1,
         row: (CloudsRow + 1),
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the cloud hash seed.</summary>
-    public uint CloudSeed { get => ((uint)GetLane(
+    public uint CloudSeed {
+        get => ((uint)GetLane(
         lane: 2,
         row: (CloudsRow + 1)
     )); set => SetLane(
         lane: 2,
         row: (CloudsRow + 1),
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the shaping field's wind relative to the clouds, in layer units per second.</summary>
     public Vector2 CloudShear {
         get => new(
@@ -819,7 +831,8 @@ public sealed class SdfEnvironment {
                 row: (CloudsRow + 2)
             )
         );
-        set { SetLane(
+        set {
+            SetLane(
             lane: 2,
             row: (CloudsRow + 2),
             value: value.X
@@ -827,76 +840,93 @@ public sealed class SdfEnvironment {
             lane: 3,
             row: (CloudsRow + 2),
             value: value.Y
-        ); }
+        );
+        }
     }
     /// <summary>Gets or sets the cloud edge softness in (0, 1].</summary>
-    public float CloudSoftness { get => GetLane(
+    public float CloudSoftness {
+        get => GetLane(
         lane: 0,
         row: (CloudsRow + 1)
     ); set => SetLane(
         lane: 0,
         row: (CloudsRow + 1),
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the cloud spin in radians per second.</summary>
-    public float CloudSpin { get => GetLane(
+    public float CloudSpin {
+        get => GetLane(
         lane: 0,
         row: (CloudsRow + 3)
     ); set => SetLane(
         lane: 0,
         row: (CloudsRow + 3),
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the cavity-darkening gain.</summary>
-    public float CurvatureCavity { get => GetLane(
+    public float CurvatureCavity {
+        get => GetLane(
         lane: 0,
         row: CurvatureRow
     ); set => SetLane(
         lane: 0,
         row: CurvatureRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the ink outline gain.</summary>
-    public float CurvatureInk { get => GetLane(
+    public float CurvatureInk {
+        get => GetLane(
         lane: 2,
         row: CurvatureRow
     ); set => SetLane(
         lane: 2,
         row: CurvatureRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the ink outline color.</summary>
-    public Vector3 CurvatureInkColor { get => GetVector(row: (CurvatureRow + 1)); set => SetVector(
+    public Vector3 CurvatureInkColor {
+        get => GetVector(row: (CurvatureRow + 1)); set => SetVector(
         row: (CurvatureRow + 1),
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the curvature magnitude at which the ink outline saturates.</summary>
-    public float CurvatureInkHigh { get => GetLane(
+    public float CurvatureInkHigh {
+        get => GetLane(
         lane: 3,
         row: (CurvatureRow + 1)
     ); set => SetLane(
         lane: 3,
         row: (CurvatureRow + 1),
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the curvature magnitude at which the ink outline starts.</summary>
-    public float CurvatureInkLow { get => GetLane(
+    public float CurvatureInkLow {
+        get => GetLane(
         lane: 3,
         row: CurvatureRow
     ); set => SetLane(
         lane: 3,
         row: CurvatureRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the curvature rim gain.</summary>
-    public float CurvatureRim { get => GetLane(
+    public float CurvatureRim {
+        get => GetLane(
         lane: 1,
         row: CurvatureRow
     ); set => SetLane(
         lane: 1,
         row: CurvatureRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the exponential distance-fog density.</summary>
     public float FogDensity {
         get => GetLane(
@@ -910,15 +940,19 @@ public sealed class SdfEnvironment {
         );
     }
     /// <summary>Gets or sets the studio-reflection horizon's high (sky-ward) color.</summary>
-    public Vector3 HorizonHigh { get => GetVector(row: HorizonHighRow); set => SetVector(
+    public Vector3 HorizonHigh {
+        get => GetVector(row: HorizonHighRow); set => SetVector(
         row: HorizonHighRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the studio-reflection horizon's low (ground-ward) color.</summary>
-    public Vector3 HorizonLow { get => GetVector(row: HorizonLowRow); set => SetVector(
+    public Vector3 HorizonLow {
+        get => GetVector(row: HorizonLowRow); set => SetVector(
         row: HorizonLowRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets the shadow light's direction, or the pinned sun's when no light shadows.</summary>
     public Vector3 KeyLightDirection => ((ShadowLightIndex >= 0)
         ? GetLight(index: ShadowLightIndex).Direction
@@ -994,59 +1028,71 @@ public sealed class SdfEnvironment {
         );
     }
     /// <summary>Gets or sets the peak star brightness.</summary>
-    public float StarBrightness { get => GetLane(
+    public float StarBrightness {
+        get => GetLane(
         lane: 1,
         row: StarsRow
     ); set => SetLane(
         lane: 1,
         row: StarsRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the star cell density.</summary>
-    public float StarDensity { get => GetLane(
+    public float StarDensity {
+        get => GetLane(
         lane: 0,
         row: StarsRow
     ); set => SetLane(
         lane: 0,
         row: StarsRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the star hash seed.</summary>
-    public uint StarSeed { get => ((uint)GetLane(
+    public uint StarSeed {
+        get => ((uint)GetLane(
         lane: 2,
         row: StarsRow
     )); set => SetLane(
         lane: 2,
         row: StarsRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the sun disc's peak additive brightness.</summary>
-    public float SunDiscIntensity { get => GetLane(
+    public float SunDiscIntensity {
+        get => GetLane(
         lane: 3,
         row: SkyControlRow
     ); set => SetLane(
         lane: 3,
         row: SkyControlRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the light the sun disc is drawn about, or −1 for none.</summary>
-    public int SunDiscLightIndex { get => ((int)GetLane(
+    public int SunDiscLightIndex {
+        get => ((int)GetLane(
         lane: 1,
         row: SkyControlRow
     )); set => SetLane(
         lane: 1,
         row: SkyControlRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the sun disc's angular radius in radians.</summary>
-    public float SunDiscRadians { get => GetLane(
+    public float SunDiscRadians {
+        get => GetLane(
         lane: 2,
         row: SkyControlRow
     ); set => SetLane(
         lane: 2,
         row: SkyControlRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the tonemap applied to the frame's final color.</summary>
     public SdfTonemapMode Tonemap {
         get => ((SdfTonemapMode)((byte)GetLane(
@@ -1060,30 +1106,36 @@ public sealed class SdfEnvironment {
         );
     }
     /// <summary>Gets or sets the twinkle depth.</summary>
-    public float TwinkleDepth { get => GetLane(
+    public float TwinkleDepth {
+        get => GetLane(
         lane: 1,
         row: TwinkleRow
     ); set => SetLane(
         lane: 1,
         row: TwinkleRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the scintillation rate in hertz.</summary>
-    public float TwinkleRate { get => GetLane(
+    public float TwinkleRate {
+        get => GetLane(
         lane: 2,
         row: TwinkleRow
     ); set => SetLane(
         lane: 2,
         row: TwinkleRow,
         value: value
-    ); }
+    );
+    }
     /// <summary>Gets or sets the twinkling share of the stars.</summary>
-    public float TwinkleShare { get => GetLane(
+    public float TwinkleShare {
+        get => GetLane(
         lane: 0,
         row: TwinkleRow
     ); set => SetLane(
         lane: 0,
         row: TwinkleRow,
         value: value
-    ); }
+    );
+    }
 }

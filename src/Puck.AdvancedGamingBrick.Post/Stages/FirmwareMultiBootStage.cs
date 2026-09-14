@@ -80,10 +80,12 @@ internal sealed class FirmwareMultiBootStage : IPostStage<PostContext> {
             : FirmwarePresentationCartridge.Create()
         );
 
-        if (erasedCartridge) { Array.Fill(
+        if (erasedCartridge) {
+            Array.Fill(
             array: rom,
             value: ((byte)0xFF)
-        ); }
+        );
+        }
         var core = new AdvancedGamingBrickCore(cartridgeRom: rom);
 
         try {

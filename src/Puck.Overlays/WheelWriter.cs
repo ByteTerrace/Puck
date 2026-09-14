@@ -267,12 +267,12 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             gap: 0f,
             glow: (!hasOutcomeSector
             ? (seat.Outcome switch {
-                    OverlayWheelOutcome.Dispatched => OverlayColorRole.Positive,
-                    OverlayWheelOutcome.Cancelled or OverlayWheelOutcome.Errored => OverlayColorRole.Danger,
-                    _ => (!hasHoveredSector
-                ? OverlayColorRole.Accent
-                : null),
-                })
+                OverlayWheelOutcome.Dispatched => OverlayColorRole.Positive,
+                OverlayWheelOutcome.Cancelled or OverlayWheelOutcome.Errored => OverlayColorRole.Danger,
+                _ => (!hasHoveredSector
+            ? OverlayColorRole.Accent
+            : null),
+            })
             : null),
             innerRadius: 0f,
             outerRadius: hubRadius,

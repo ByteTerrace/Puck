@@ -522,7 +522,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Name: CellName.Parse(candidate: name),
         Kind: CellKind.Int,
         Capacity: 4,
-        NonNegative: nonNegative,
+        Min: (nonNegative ? 0L : null),
         Cells: [.. balances.Select(selector: static (value, index) => new StateCell(
                 Key: CellName.Parse(candidate: index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
                 Value: value
@@ -577,7 +577,7 @@ public sealed class EscrowedTransferRuleLawTests {
     private static WorldStateRow Slot(string name, long initial, bool nonNegative = false) => new(
         Name: CellName.Parse(candidate: name),
         Kind: CellKind.Int,
-        NonNegative: nonNegative,
+        Min: (nonNegative ? 0L : null),
         Cells: [new StateCell(
                 Key: WorldStateRow.SlotKey,
                 Value: initial

@@ -36,6 +36,7 @@ public sealed class WorldRenderLightingSkyLawTests {
         definition: (Fixtures.BuildDocument().WithWorldState(rows: (state ?? [])) with { RenderRaw = defaults }),
         revision: revision,
         tick: 0UL,
+        engineTick: 0UL,
         resolveLightAnchor: resolveLightAnchor
     );
     private static WorldRenderSoftbox Softbox(float x = 1f, float y = 1f, float z = 1f, float width = 0.3f, float height = 0.4f) => new(

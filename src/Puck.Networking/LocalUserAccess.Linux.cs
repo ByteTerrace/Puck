@@ -29,10 +29,12 @@ public static partial class LocalUserAccess {
             path: path
         );
 
-        if (fd < 0) { throw new IOException(
+        if (fd < 0) {
+            throw new IOException(
             "Cannot open private capability file.",
             new System.ComponentModel.Win32Exception(error: Marshal.GetLastPInvokeError())
-        ); }
+        );
+        }
         var handle = new SafeFileHandle(
             fd,
             ownsHandle: true

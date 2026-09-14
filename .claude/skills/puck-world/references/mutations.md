@@ -310,21 +310,40 @@ already names — never a shape unique to rules:
 | `transform local = call(...)` | `transformState` | `Apply(Transform)` | `TransformState` (75) |
 | `generate(row: "...")` | `generate` | `Generate` | `Generate` (51) |
 | `transaction { } [onFailure { }]` | groups the statements above atomically (`RuleEvaluator.Effects.FireTransaction`) | — | each grouped effect folds as its own row above |
+| (JSON only — see below) | `if` | branches to `Then`/`Else`; each fired effect folds as its own row above | — |
 
 Every one of these still lands on the rule frame first and installs once per
 tick — the cross-cutting "rule writes land on a frame" contract in
 `SKILL.md` — so the table names the kind a write eventually composes as,
 never a second apply path.
 
-**World rule bodies are straight-line.** The core `.puck` language parses
-`if`/`repeat`/`break`, call-form gates, and compound assignment
-(`+= -= *= /= %= &= |= ^= <<= >>=`) for every vocabulary, but the WORLD
-vocabulary's rule shape refuses all three by name: control flow is PUCK037, a
-call-form gate where only comparisons are legal is PUCK038, and a compound
-assignment none of the effects above carries an operator for is PUCK039
+**World rule bodies are straight-line — in `.puck`, not in the JSON `ActionEffect`
+union it lowers to.** The core `.puck` language parses `if`/`repeat`/`break`,
+call-form gates, and compound assignment (`+= -= *= /= %= &= |= ^= <<= >>=`)
+for every vocabulary, but the WORLD vocabulary's rule shape still refuses all
+three by name: control flow is PUCK037, a call-form gate where only
+comparisons are legal is PUCK038, and a compound assignment none of the
+effects above carries an operator for is PUCK039
 (`src/Puck.Transpiler/Diagnostics/PuckDiagnosticCodes.cs`). A cartridge rule
 (`puck.cartridge.v1`, see `rom-forge`) is a DIFFERENT vocabulary that admits
 `if`/`repeat`/`break` — the refusal is per-vocabulary, not language-wide.
+Underneath that surface refusal, `ActionEffect.If` (`$type: "if"`) is a real
+world-rule effect: a JSON-authored rule may branch on a `condition`
+(the same predicate grammar a gate compiles), firing `then` or the optional
+`else`. Both branches read the frame at the effect's own position, so an
+earlier same-firing write is visible to the condition exactly as a later
+effect's own operand would see it; a condition that fails to evaluate (an
+arithmetic fault, a missing table key) runs neither branch and is reported
+through `world.rule.failures` the same way a failing top-level effect is — a
+false condition with no fault is not a failure. Each branch effect is its own
+boundary, on the same terms as a top-level effect (or, inside a transaction,
+any other step) — a branch is not itself a transaction. An `if` may sit
+inside a `transaction`; a `transaction` may sit inside an `if` only when that
+`if` is not itself inside one, since transactions never nest either way.
+`save` is refused by name inside any `if` branch, at any nesting depth.
+Kit actions and body-scope effects refuse `if` by name — a per-body action
+compiles to a flat instruction stream with no branch of its own.
+`world.rule.trace` shows which branch a captured evaluation took.
 
 ## Adding a mutation kind, end to end
 

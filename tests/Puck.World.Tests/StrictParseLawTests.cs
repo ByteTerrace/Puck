@@ -155,14 +155,14 @@ public sealed class StrictParseLawTests {
                 Kind: CellKind.Fixed,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: 0
+                        Value: 0,
+                        Clock: new StateCellClock(
+                            EpochTick: 42,
+                            V0: v0,
+                            Y0: y0
+                        )
                     )],
-                Dynamics: new StateDynamics(
-                    EpochTick: 42,
-                    Row: "gauge",
-                    V0: v0,
-                    Y0: y0
-                )
+                Dynamics: new StateDynamics(Row: "gauge")
             ),
             ]),
         };
@@ -177,15 +177,15 @@ public sealed class StrictParseLawTests {
         );
         Assert.Equal(
             expected: y0,
-            actual: reparsed.State[0].Dynamics!.Y0
+            actual: reparsed.State[0].Cells![0].Clock!.Y0
         );
         Assert.Equal(
             expected: v0,
-            actual: reparsed.State[0].Dynamics!.V0
+            actual: reparsed.State[0].Cells![0].Clock!.V0
         );
         Assert.Equal(
             expected: 42,
-            actual: reparsed.State[0].Dynamics!.EpochTick
+            actual: reparsed.State[0].Cells![0].Clock!.EpochTick
         );
     }
     [Fact]

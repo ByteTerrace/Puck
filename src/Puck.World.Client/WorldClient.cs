@@ -54,6 +54,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     private SdfFieldEvaluator? m_staticField;
     private WorldTargetRegisterTable m_targets;
     private ulong m_tick;
+    private ulong m_engineTick;
 
     /// <summary>The number of active non-seat entities in the latest snapshot — the client's view of the simulated
     /// census (drives the fleet-tier auto quality levers).</summary>
@@ -75,6 +76,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     public SdfFieldEvaluator? StaticField => m_staticField;
     /// <summary>The latest snapshot's tick.</summary>
     public ulong Tick => m_tick;
+    /// <summary>The latest snapshot's engine tick — what a <c>StateAdvance</c> row's live value is computed at;
+    /// never derived from <see cref="Tick"/> at a simulation rate.</summary>
+    public ulong EngineTick => m_engineTick;
 
     // The shared per-seat live orbit. Camera-relative movement reads only its already-integrated yaw while composing
     // a world-frame intent; the deterministic simulation still receives ordinary fixed-point role channels and has
@@ -870,6 +874,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         // well as up. That is why WriteRevision reports it as its own component instead of adding it to anything.
         m_serverRevision = snapshot.Revision;
         m_tick = snapshot.Tick;
+        m_engineTick = snapshot.EngineTick;
         m_authority = snapshot.Authority;
     }
     /// <inheritdoc/>

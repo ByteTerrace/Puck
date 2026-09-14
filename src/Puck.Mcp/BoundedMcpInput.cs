@@ -34,10 +34,12 @@ internal sealed class BoundedMcpInput(Stream input, Action ended) : Stream {
     }
     internal void MessageConsumed() => Interlocked.Decrement(location: ref m_pendingLines);
 
-    private void End() { if (Interlocked.Exchange(
+    private void End() {
+        if (Interlocked.Exchange(
         location1: ref m_ended,
         value: 1
-    ) == 0) { ended(); } }
+    ) == 0) { ended(); }
+    }
     private void Inspect(ReadOnlySpan<byte> bytes) {
         try {
             // Decoder state carries a split UTF-8 scalar across reads; EOF flush rejects an unfinished scalar.
@@ -103,10 +105,12 @@ internal sealed class BoundedMcpInput(Stream input, Action ended) : Stream {
                 offset: offset
             );
 
-            if (count != 0) { Inspect(bytes: buffer.AsSpan(
+            if (count != 0) {
+                Inspect(bytes: buffer.AsSpan(
                 length: read,
                 start: offset
-            )); }
+            ));
+            }
             return read;
         } catch (IOException error) { if (Volatile.Read(location: ref m_disposed) == 0) { Fail(error: error); } throw; }
     }

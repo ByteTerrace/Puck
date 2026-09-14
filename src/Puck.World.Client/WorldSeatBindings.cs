@@ -86,6 +86,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // the reveal's carrier: a gated overlay's chords/pages appear only once the fact it names is set. Absence always
     // composes (today's behavior). Unfilled trailing slots stay null, which WorldBindingComposer.Compose already
     // skips (profile/session are routinely null too), so no second pass to re-size the array is needed.
+    // `tick` doubles as the engine-tick coordinate here: a routed seat's authority endpoint does not carry a
+    // federated engine-tick clock today (WorldAuthorityEndpoint/WorldRemoteAuthority track only the simulation-tick
+    // route), so an overlay gate that names an authored StateAdvance row reads it against this presentation-only
+    // approximation rather than a real engine time. Reported plainly rather than left silent: this affects only
+    // which overlay chords/pages the HUD shows, never authoritative simulation state.
     private BindingProfileDocument?[] BaseLayers(IReadOnlyList<WorldBindingOverlay> overlays, WorldDefinition definition, ulong tick, BindingProfileDocument? profile, BindingProfileDocument? session) {
         var layers = new BindingProfileDocument?[(overlays.Count + 2)];
         var index = 0;
@@ -95,7 +100,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 (overlay.When is { } when) &&
                 !when.Holds(
                 definition: definition,
-                tick: tick
+                tick: tick,
+                engineTick: tick
             )
             ) {
                 continue;
@@ -257,7 +263,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 (overlays[index].When is { } when) &&
                 when.Holds(
                 definition: definition,
-                tick: tick
+                tick: tick,
+                engineTick: tick
             )
             ) {
                 signature |= (1UL << (index & 63));

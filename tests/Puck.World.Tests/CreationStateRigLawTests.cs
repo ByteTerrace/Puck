@@ -29,11 +29,7 @@ public sealed class CreationStateRigLawTests {
             new StateCell(
                 Key: CellName.Parse(candidate: "0"),
                 Value: FixedQ4816.One.Value,
-                Dynamics: new StateDynamics(
-                    Row: EaseRow,
-                    Y0: 0L,
-                    V0: 0L
-                )
+                Dynamics: new StateDynamics(Row: EaseRow)
             ),
             new StateCell(
                 Key: CellName.Parse(candidate: "1"),

@@ -178,19 +178,23 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             switch (slot.Kind) {
                 case ShaderPushConstantSourceKind.Config: m_config[slot.ConfigField!].Bytes.Span.CopyTo(destination: destination); break;
                 case ShaderPushConstantSourceKind.Resolution:
-                    if (slot.Type == ShaderValueType.Float2) { BinaryPrimitives.WriteSingleLittleEndian(
+                    if (slot.Type == ShaderValueType.Float2) {
+                        BinaryPrimitives.WriteSingleLittleEndian(
                         destination: destination,
                         value: m_width
                     ); BinaryPrimitives.WriteSingleLittleEndian(
                         destination: destination[4..],
                         value: m_height
-                    ); } else { BinaryPrimitives.WriteUInt32LittleEndian(
+                    );
+                    } else {
+                        BinaryPrimitives.WriteUInt32LittleEndian(
                         destination: destination,
                         value: m_width
                     ); BinaryPrimitives.WriteUInt32LittleEndian(
                         destination: destination[4..],
                         value: m_height
-                    ); }
+                    );
+                    }
                     break;
             }
         }
@@ -357,7 +361,8 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
                         }
 
                         break;
-                    case ShaderPushConstantSourceKind.Frame: BinaryPrimitives.WriteUInt32LittleEndian(
+                    case ShaderPushConstantSourceKind.Frame:
+                        BinaryPrimitives.WriteUInt32LittleEndian(
                         destination: target,
                         value: ((uint)frameCounter)
                     ); break;

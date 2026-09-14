@@ -140,14 +140,16 @@ public static class Combinatorics {
             index,
             k
         );
-        if (n <= 128) { return DecodeSmallCombination(
+        if (n <= 128) {
+            return DecodeSmallCombination(
             n,
             k,
             rank,
             count,
             index,
             Span<int>.Empty
-        ); }
+        );
+        }
         var upper = (n - 1);
 
         for (; (k > index); --k) {
@@ -188,10 +190,12 @@ public static class Combinatorics {
             if (
                 (element <= previous) ||
                 (element >= n)
-            ) { throw new ArgumentException(
+            ) {
+                throw new ArgumentException(
                 message: "Elements must be strictly increasing ordinals in [0, n).",
                 paramName: nameof(combination)
-            ); }
+            );
+            }
             rank += Choose(
                 k: (i + 1),
                 n: element

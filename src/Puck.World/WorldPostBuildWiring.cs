@@ -364,7 +364,8 @@ internal static class WorldPostBuildWiring {
                     audio: audioDirector,
                     bindingBar: bindingBarVisibility,
                     pacing: pacing,
-                    tick: tick
+                    tick: tick,
+                    engineTick: worldServer.CompletedEngineTicks
                 );
                 var bytes = WorldDefinitionSerialization.SavePreservingBasis(
                     basisPath: out var basisPath,

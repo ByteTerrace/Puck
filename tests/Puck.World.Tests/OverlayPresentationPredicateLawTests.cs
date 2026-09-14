@@ -367,7 +367,8 @@ public sealed class OverlayPresentationPredicateLawTests {
                 Binding: "state.phase",
                 Text: "lobby"
             ),
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ));
         Assert.False(condition: OverlayStateComparison.Holds(
             definition: definition,
@@ -375,7 +376,8 @@ public sealed class OverlayPresentationPredicateLawTests {
                 Binding: "state.phase",
                 Text: "Lobby"
             ),
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ));
         Assert.True(condition: OverlayStateComparison.Holds(
             definition: definition,
@@ -384,7 +386,8 @@ public sealed class OverlayPresentationPredicateLawTests {
                 Comparison: ActionStateComparison.NotEqual,
                 Text: "arena"
             ),
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ));
         Assert.True(condition: OverlayStateComparison.Holds(
             definition: definition,
@@ -393,7 +396,8 @@ public sealed class OverlayPresentationPredicateLawTests {
                 Comparison: ActionStateComparison.Greater,
                 Value: 2.5f
             ),
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ));
         Assert.False(condition: OverlayStateComparison.Holds(
             definition: definition,
@@ -402,7 +406,8 @@ public sealed class OverlayPresentationPredicateLawTests {
                 Comparison: ActionStateComparison.Less,
                 Value: 3f
             ),
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ));
         Assert.True(condition: OverlayStateComparison.Holds(
             definition: definition,
@@ -410,7 +415,8 @@ public sealed class OverlayPresentationPredicateLawTests {
                 Binding: "state.score",
                 Value: 3f
             ),
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ));
         Assert.False(condition: OverlayStateComparison.Holds(
             definition: definition,
@@ -418,7 +424,8 @@ public sealed class OverlayPresentationPredicateLawTests {
                 Binding: "state.missing",
                 Value: 3f
             ),
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ));
     }
     [Fact]

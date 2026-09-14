@@ -55,7 +55,7 @@ public sealed partial class WorldServer {
 
     // A zone's cells in pile order read through its attribute row, a history ring oldest push first, or a keyed
     // row's own cells in cell order.
-    private static int ReadWord(WorldStateRow row, WorldStateRow source, ulong tick, Span<long> word, string? start) {
+    private static int ReadWord(WorldStateRow row, WorldStateRow source, ulong tick, ulong engineTick, Span<long> word, string? start) {
         var length = 0;
 
         if (row.EffectiveDomain is StateDomain.Ring history) {
@@ -86,6 +86,7 @@ public sealed partial class WorldServer {
                 row: source,
                 key: cells[index].Key.Value,
                 tick: tick,
+                engineTick: engineTick,
                 rawValue: out var raw,
                 text: out _
             );
@@ -171,6 +172,7 @@ public sealed partial class WorldServer {
             }
 
             var tick = m_lastCompletedTick;
+            var engineTick = CompletedEngineTicks;
             var word = new long[PatternCapacity.MaxWord];
             var lines = new List<string>();
 
@@ -274,6 +276,7 @@ public sealed partial class WorldServer {
                         source: source,
                         start: key,
                         tick: tick,
+                        engineTick: engineTick,
                         word: word
                     );
                 }

@@ -752,36 +752,48 @@ public sealed class FieldLattice {
                     Int128 rawSum = 0;
                     var count = 0;
 
-                    if (x > 0) { rawSum += m_scratch[CellIndex(
+                    if (x > 0) {
+                        rawSum += m_scratch[CellIndex(
                         x: (x - 1),
                         y: y,
                         z: z
-                    )].Value; count++; }
-                    if (x < (m_width - 1)) { rawSum += m_scratch[CellIndex(
+                    )].Value; count++;
+                    }
+                    if (x < (m_width - 1)) {
+                        rawSum += m_scratch[CellIndex(
                         x: (x + 1),
                         y: y,
                         z: z
-                    )].Value; count++; }
-                    if (z > 0) { rawSum += m_scratch[CellIndex(
+                    )].Value; count++;
+                    }
+                    if (z > 0) {
+                        rawSum += m_scratch[CellIndex(
                         x: x,
                         y: y,
                         z: (z - 1)
-                    )].Value; count++; }
-                    if (z < (m_depth - 1)) { rawSum += m_scratch[CellIndex(
+                    )].Value; count++;
+                    }
+                    if (z < (m_depth - 1)) {
+                        rawSum += m_scratch[CellIndex(
                         x: x,
                         y: y,
                         z: (z + 1)
-                    )].Value; count++; }
-                    if (y > 0) { rawSum += m_scratch[CellIndex(
+                    )].Value; count++;
+                    }
+                    if (y > 0) {
+                        rawSum += m_scratch[CellIndex(
                         x: x,
                         y: (y - 1),
                         z: z
-                    )].Value; count++; }
-                    if (y < (m_layers - 1)) { rawSum += m_scratch[CellIndex(
+                    )].Value; count++;
+                    }
+                    if (y < (m_layers - 1)) {
+                        rawSum += m_scratch[CellIndex(
                         x: x,
                         y: (y + 1),
                         z: z
-                    )].Value; count++; }
+                    )].Value; count++;
+                    }
 
                     if (count == 0) {
                         continue;

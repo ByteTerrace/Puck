@@ -44,18 +44,10 @@ public static partial class WorldDefinitionValidator {
             ? FixedQ4816.FromRawBits(value: raw).ToString()
             : raw.ToString(provider: CultureInfo.InvariantCulture)
         );
-    // Trait placement and trait fields are separate: scalar and keyed forms share the field laws below.
-    private static bool TraitSlotEligible(StateRow row) => ((row.Capacity is null) &&
-        ((row.Cells is null or { Count: 0 }) || ((row.Cells is { Count: 1 } cells) && (cells[0].Key == StateRow.SlotKey))));
     private static void ValidateAdvanceFields(StateAdvance advance, string path, List<string> errors) {
-        if (advance.RateDenominator <= 0) {
-            errors.Add(item: $"{path}.advance.rateDenominator {advance.RateDenominator} must be positive.");
+        if (advance.PerSecondDenominator <= 0) {
+            errors.Add(item: $"{path}.advance.perSecondDenominator {advance.PerSecondDenominator} must be positive.");
         }
-        RequireNonNegativeEpoch(
-            advance.EpochTick,
-            $"{path}.advance.epochTick",
-            errors
-        );
     }
     private static void ValidateDynamicsFields(StateDynamics dynamics, ISet<string> names, string path, List<string> errors) {
         RequireDeclared(
@@ -66,11 +58,31 @@ public static partial class WorldDefinitionValidator {
             rowNoun: "dynamics",
             errors: errors
         );
+    }
+    // The timing state every effective behavior reads off the cell it governs (see StateCellClock) — an epoch never
+    // negative, and (for a cycling cell alone) a substep remainder inside its cycle's own step length.
+    private static void ValidateClock(StateCellClock? clock, StateCycle? effectiveCycle, string path, List<string> errors) {
+        if (clock is not { } c) {
+            return;
+        }
+
         RequireNonNegativeEpoch(
-            dynamics.EpochTick,
-            $"{path}.dynamics.epochTick",
+            c.EpochTick,
+            $"{path}.epochTick",
             errors
         );
+        RequireNonNegativeEpoch(
+            c.EpochEngineTick,
+            $"{path}.epochEngineTick",
+            errors
+        );
+
+        if (
+            (effectiveCycle is { } cycle) &&
+            ((c.SubstepTicks < 0) || (c.SubstepTicks >= cycle.TicksPerStep))
+        ) {
+            errors.Add(item: $"{path}.substepTicks {c.SubstepTicks} must be in 0..ticksPerStep-1.");
+        }
     }
     /// <summary>Validates a row's authored <see cref="StateAdvance"/> continuous-accumulation trait. Whether
     /// reaching a declared envelope bound clamps the computed value (it never rewrites the stored base/epoch) is the
@@ -94,16 +106,6 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             path: path
         );
-
-        // Advance is a SCALAR (slot) trait: legitimate only on a row declaring no capacity and holding at most its
-        // one slot cell — empty (declared, never yet set) or exactly one cell keyed WorldStateRow.SlotKey. A row that
-        // has grown past that (a keyed table, or a slot that later gained a second author-keyed cell) is refused
-        // here rather than silently accumulating a value nothing addresses as "the" row value.
-        var slotEligible = TraitSlotEligible(row: row);
-
-        if (!slotEligible) {
-            errors.Add(item: $"{path} ('{row.Name}') declares advance on a keyed row — advance is legitimate only on a scalar (slot) row, authored with 'value' or left empty until the first explicit set.");
-        }
     }
     /// <summary>Validates one cell's own <see cref="StateAdvance"/> — the keyed counterpart of
     /// <see cref="ValidateAdvance"/>, stated separately because it governs the opposite shape: a cell inside a
@@ -147,6 +149,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} ('{row.Name}') declares both dynamics and cycle — a row is a second-order easing cell or a tick-indexed rotation, never both.");
         }
 
+        if (row.GatesDrive) {
+            errors.Add(item: $"{path} ('{row.Name}') declares cycle on a gatesDrive row — a drive gate is resolved once per install, so a cell that turns with the tick would gate on a stale value; drive the gate through an explicit write instead.");
+        }
+
         ValidateCycleShape(
             cycle: cycle,
             errors: errors,
@@ -156,26 +162,30 @@ public static partial class WorldDefinitionValidator {
             subject: $"{path} ('{row.Name}')"
         );
 
-        var slotEligible = TraitSlotEligible(row: row);
+        // Every cell that INHERITS this default (declares no override of its own) reads it as its effective
+        // behavior, so a lattice output's node-range check runs over each one — the row-level counterpart of
+        // ValidateCellCycle's identical check for a cell's own cycle.
+        if (StateCycle.IsLatticeOutput(output: cycle.Output)) {
+            foreach (var cell in (row.Cells ?? [])) {
+                if (
+                    (cell.Advance is not null) ||
+                    (cell.Dynamics is not null) ||
+                    (cell.Cycle is not null) ||
+                    (cell.Behavior == StateCellBehavior.None)
+                ) {
+                    continue;
+                }
 
-        if (!slotEligible) {
-            errors.Add(item: $"{path} ('{row.Name}') declares cycle on a keyed row — cycle is legitimate only on a scalar (slot) row, authored with 'value' or left empty; a keyed row's cells each declare their own 'cycle'.");
-        }
-
-        var cells = (row.Cells ?? []);
-
-        if (
-            StateCycle.IsLatticeOutput(output: cycle.Output) &&
-            (cells.Count == 1) &&
-            (StateCycle.Phase(
-            baseValue: cells[0].Value,
-            kind: row.Kind
-        ) is < 0 or >= SymmetryLattice.NodeCount)
-        ) {
-            errors.Add(item: $"{path} ('{row.Name}') value {DescribeValue(
-                kind: row.Kind,
-                raw: cells[0].Value
-            )} is not a symmetry-lattice node — a {StateSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{(SymmetryLattice.NodeCount - 1)}.");
+                if (StateCycle.Phase(
+                    baseValue: cell.Value,
+                    kind: row.Kind
+                ) is < 0 or >= SymmetryLattice.NodeCount) {
+                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
+                        kind: row.Kind,
+                        raw: cell.Value
+                    )} is not a symmetry-lattice node — a {StateSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{(SymmetryLattice.NodeCount - 1)}.");
+                }
+            }
         }
     }
     /// <summary>Validates one cell's own <see cref="StateCycle"/> — the keyed counterpart of
@@ -250,19 +260,6 @@ public static partial class WorldDefinitionValidator {
         if (cycle.TicksPerStep <= 0) {
             errors.Add(item: $"{path}.ticksPerStep {cycle.TicksPerStep} must be positive.");
         }
-
-        if (
-            (cycle.SubstepTicks < 0) ||
-            (cycle.SubstepTicks >= cycle.TicksPerStep)
-        ) {
-            errors.Add(item: $"{path}.substepTicks {cycle.SubstepTicks} must be in 0..ticksPerStep-1.");
-        }
-
-        RequireNonNegativeEpoch(
-            value: cycle.EpochTick,
-            name: $"{path}.epochTick",
-            errors: errors
-        );
     }
     /// <summary>Validates a row's authored <see cref="StateDynamics"/> easing trait — the closed-form
     /// counterpart to <see cref="ValidateAdvance"/>, so shares its scalar-row/exclusivity shape.</summary>
@@ -289,13 +286,6 @@ public static partial class WorldDefinitionValidator {
             names: dynamicsNames,
             path: path
         );
-
-        // Dynamics is a SCALAR (slot) trait, exactly like Advance — the same slot-eligibility test.
-        var slotEligible = TraitSlotEligible(row: row);
-
-        if (!slotEligible) {
-            errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a keyed row — dynamics is legitimate only on a scalar (slot) row; a keyed row's own cells ease independently.");
-        }
     }
     /// <summary>Validates one cell's own <see cref="StateDynamics"/> — the keyed counterpart of
     /// <see cref="ValidateDynamicsTrait"/>, governing the opposite shape: a cell inside a table rather than a row's
@@ -371,15 +361,7 @@ public static partial class WorldDefinitionValidator {
             _ => (long.MinValue, long.MaxValue),
         });
 
-        // The site's admissible domain is the row's OWN — the declared envelope and the non-negative floor included,
-        // never just the kind's representable band.
-        if (row.NonNegative) {
-            domainLow = Math.Max(
-                val1: domainLow,
-                val2: 0L
-            );
-        }
-
+        // The site's admissible domain is the row's OWN declared envelope, never just the kind's representable band.
         if (row.Min is { } declaredMinimum) {
             domainLow = Math.Max(
                 val1: domainLow,
@@ -1168,15 +1150,14 @@ public static partial class WorldDefinitionValidator {
 
         var numeric = ((row.Kind == CellKind.Int) || (row.Kind == CellKind.Fixed));
 
-        // Min/Max/NonNegative are envelope traits over a NUMBER — legitimate only for Int/Fixed, the same rule a
-        // scalar row's range always followed, now stated once instead of per case.
+        // Min/Max/Overflow are envelope traits over a NUMBER — legitimate only for Int/Fixed, the same rule a
+        // scalar row's range always followed, now stated once instead of per case. Min and Max are each
+        // independently optional — a one-sided range (a floor with no ceiling, or the reverse) is legal.
         if (
             !numeric &&
             ((row.Min is not null) || (row.Max is not null))
         ) {
             errors.Add(item: $"{path} ('{row.Name}') declares min/max on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a range.");
-        } else if ((row.Min is null) != (row.Max is null)) {
-            errors.Add(item: $"{path} declares only one of min/max — a range is authored as a pair or not at all.");
         } else if (
             (row.Min is { } lo) &&
             (row.Max is { } hi) &&
@@ -1193,9 +1174,9 @@ public static partial class WorldDefinitionValidator {
 
         if (
             !numeric &&
-            row.NonNegative
+            (row.Overflow != StateOverflow.Refuse)
         ) {
-            errors.Add(item: $"{path} ('{row.Name}') declares nonNegative on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a floor.");
+            errors.Add(item: $"{path} ('{row.Name}') declares overflow on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry an overflow policy.");
         }
 
         // GatesDrive is the composition-lane's drive-admission gate (WorldGrants.TryGetDriveGate) — a nonzero
@@ -1282,7 +1263,8 @@ public static partial class WorldDefinitionValidator {
         var reservesSlotKey = ((row.Capacity is not null) || (cells.Count != 1));
 
         var keys = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var rangeDeclared = (numeric && (row.Min is { } rangeLo) && (row.Max is { } rangeHi) && (rangeLo < rangeHi));
+        var minDeclared = (numeric ? row.Min : null);
+        var maxDeclared = (numeric ? row.Max : null);
 
         for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
             var cell = cells[cellIndex];
@@ -1328,6 +1310,34 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares cycle beside advance or dynamics — a cell is a linear accumulator, a second-order easing cell or a tick-indexed rotation, never two of them.");
             }
+
+            if (
+                (cell.Behavior == StateCellBehavior.None) &&
+                ((cell.Advance is not null) || (cell.Dynamics is not null) || (cell.Cycle is not null))
+            ) {
+                errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares behavior 'none' beside its own advance/dynamics/cycle — a cell that opts out declares no trait of its own either.");
+            }
+
+            if (
+                (cell.Behavior == StateCellBehavior.None) &&
+                (cell.Key == WorldStateRow.SlotKey)
+            ) {
+                errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares behavior 'none' on the reserved slot key — a slot's one cell has no separate default of its own to opt out of.");
+            }
+
+            // The effective behavior's own trait shape (declared parameters, an unresolvable dynamics reference,
+            // a lattice node past the cycle's range) is validated wherever it is authored — its own cell or its
+            // row's default; only the CLOCK is validated here, uniformly, since it lives on the cell regardless of
+            // which side declared the trait.
+            ValidateClock(
+                clock: cell.Clock,
+                effectiveCycle: EffectiveBehavior.Resolve(
+                cell: cell,
+                row: row
+            ).Cycle,
+                errors: errors,
+                path: cellPath
+            );
 
             if (cell.Cycle is { } cellCycle) {
                 ValidateCellCycle(
@@ -1388,37 +1398,35 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            // Int/Fixed: the row's DECLARED non-negative floor (enforced regardless of any authored Min — this is
-            // what "timer" meant before the kind vocabularies reconciled), then the declared range. This walk is
-            // the floor's authority; the cross-document write-back channel (Server.WorldOwnedWorlds.Decide) reads
-            // the SAME row trait at its own door precisely so it can never admit a value this walk would refuse
-            // at the owned world's next boot.
+            // Int/Fixed: the row's declared Min/Max, each independently. This walk is the envelope's authority; the
+            // cross-document write-back channel (Server.WorldOwnedWorlds.Decide) reads the SAME row trait at its
+            // own door precisely so it can never admit a value this walk would refuse at the owned world's next
+            // boot.
             if (
-                row.NonNegative &&
-                (cell.Value < 0)
+                (minDeclared is { } lowerBound) &&
+                (cell.Value < lowerBound)
             ) {
                 errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
                     kind: row.Kind,
                     raw: cell.Value
-                )} is negative — this row's floor is non-negative.");
-            }
-
-            if (
-                rangeDeclared &&
-                ((cell.Value < row.Min) || (cell.Value > row.Max))
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
+                )} is below its declared minimum {DescribeValue(
                     kind: row.Kind,
-                    raw: cell.Value
-                )} is outside its declared range {DescribeValue(
-                    kind: row.Kind,
-                    raw: row.Min!.Value
-                )}..{DescribeValue(
-                    kind: row.Kind,
-                    raw: row.Max!.Value
+                    raw: lowerBound
                 )}.");
             }
 
+            if (
+                (maxDeclared is { } upperBound) &&
+                (cell.Value > upperBound)
+            ) {
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
+                    kind: row.Kind,
+                    raw: cell.Value
+                )} is above its declared maximum {DescribeValue(
+                    kind: row.Kind,
+                    raw: upperBound
+                )}.");
+            }
         }
     }
 }

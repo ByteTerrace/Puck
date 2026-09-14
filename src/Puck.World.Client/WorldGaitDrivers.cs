@@ -35,7 +35,7 @@ public static class WorldGaitDrivers {
     /// as well as the pose, and a milliradian of residual swing is invisible.</summary>
     public const float RestWeight = 1e-3f;
 
-    private static bool TryReadStateNumber(WorldDefinition definition, string reference, ulong tick, bool eased, int bodyIndex, out float value) {
+    private static bool TryReadStateNumber(WorldDefinition definition, string reference, ulong tick, ulong engineTick, bool eased, int bodyIndex, out float value) {
         value = 0f;
 
         if (
@@ -61,7 +61,8 @@ public static class WorldGaitDrivers {
                 row: out var row,
                 rowName: rowName,
                 text: out _,
-                tick: tick
+                tick: tick,
+                engineTick: engineTick
             )
             : WorldStateReader.TryRead(
                 definition: definition,
@@ -70,7 +71,8 @@ public static class WorldGaitDrivers {
                 row: out row,
                 rowName: rowName,
                 text: out _,
-                tick: tick
+                tick: tick,
+                engineTick: engineTick
             )
         );
 
@@ -130,7 +132,8 @@ public static class WorldGaitDrivers {
     /// <param name="address">This call's entity address; uninhabited placements use index -1 with no body facts.</param>
     /// <param name="definition">The live definition a state-cell signal reads, or null when none can.</param>
     /// <param name="tick">The tick a state-cell signal is read at.</param>
-    public static void Advance(IReadOnlyList<CreationDriverDocument>? drivers, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldDefinition? definition = null, ulong tick = 0UL) {
+    /// <param name="engineTick">The engine tick a StateAdvance state-cell signal is read at.</param>
+    public static void Advance(IReadOnlyList<CreationDriverDocument>? drivers, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldDefinition? definition = null, ulong tick = 0UL, ulong engineTick = 0UL) {
         if (
             !seeded ||
             (lastAddress != address)
@@ -197,6 +200,7 @@ public static class WorldGaitDrivers {
                 moving: moving,
                 definition: definition,
                 tick: tick,
+                engineTick: engineTick,
                 bodyIndex: address.Index
             );
 
@@ -227,6 +231,7 @@ public static class WorldGaitDrivers {
                     definition: definition,
                     reference: driver.Signal!,
                     tick: tick,
+                    engineTick: engineTick,
                     value: out var stateValue,
                     bodyIndex: address.Index
                 ))
@@ -399,9 +404,10 @@ public static class WorldGaitDrivers {
     /// <param name="definition">The live definition a state token reads, or <see langword="null"/> (a state token
     /// then fails).</param>
     /// <param name="tick">The tick a state token reads at.</param>
+    /// <param name="engineTick">The engine tick a StateAdvance state token reads at.</param>
     /// <param name="bodyIndex">The reading body's index, substituted for <see cref="BodyKeyToken"/>.</param>
     /// <returns><see langword="true"/> when every token holds.</returns>
-    public static bool GateHolds(IReadOnlyList<string>? gate, BodyFacts facts, bool moving, WorldDefinition? definition = null, ulong tick = 0UL, int bodyIndex = -1) {
+    public static bool GateHolds(IReadOnlyList<string>? gate, BodyFacts facts, bool moving, WorldDefinition? definition = null, ulong tick = 0UL, ulong engineTick = 0UL, int bodyIndex = -1) {
         if (gate is not { Count: > 0 } tokens) {
             return true;
         }
@@ -418,6 +424,7 @@ public static class WorldGaitDrivers {
                     eased: false,
                     reference: token,
                     tick: tick,
+                    engineTick: engineTick,
                     value: out var truth
                 ) ||
                     (truth == 0f)
@@ -475,8 +482,9 @@ public static class WorldGaitDrivers {
     /// <param name="definition">The live definition.</param>
     /// <param name="index">The 0-based body index.</param>
     /// <param name="tick">The tick a cycling scale row is read at.</param>
+    /// <param name="engineTick">The engine tick a StateAdvance scale row is read at.</param>
     /// <returns>The body's live scale, or 1 when unauthored.</returns>
-    public static float LiveBodyScale(WorldDefinition definition, int index, ulong tick) {
+    public static float LiveBodyScale(WorldDefinition definition, int index, ulong tick, ulong engineTick = 0UL) {
         if (definition.Population.ScaleRow is not { } scaleRow) {
             return 1f;
         }
@@ -485,6 +493,7 @@ public static class WorldGaitDrivers {
             definition: definition,
             reference: $"state.{scaleRow}.{index}",
             tick: tick,
+            engineTick: engineTick,
             value: out var value
         )
             ? value
@@ -528,15 +537,17 @@ public static class WorldGaitDrivers {
     /// <param name="definition">The live definition.</param>
     /// <param name="reference">The state reference.</param>
     /// <param name="tick">The tick an advancing, cycling, or eased row is read at.</param>
+    /// <param name="engineTick">The engine tick a StateAdvance row is read at.</param>
     /// <param name="value">The cell's value; zero when the cell is absent or not numeric.</param>
     /// <param name="bodyIndex">The reading body's index, substituted for <see cref="BodyKeyToken"/> in the key.</param>
     /// <returns><see langword="true"/> when a numeric cell answered.</returns>
-    public static bool TryReadStateNumber(WorldDefinition definition, string reference, ulong tick, out float value, int bodyIndex = -1) => TryReadStateNumber(
+    public static bool TryReadStateNumber(WorldDefinition definition, string reference, ulong tick, out float value, int bodyIndex = -1, ulong engineTick = 0UL) => TryReadStateNumber(
         bodyIndex: bodyIndex,
         definition: definition,
         eased: true,
         reference: reference,
         tick: tick,
+        engineTick: engineTick,
         value: out value
     );
     /// <summary>Reads a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> numeric cell's STORED value at a tick — the truth a rule
@@ -544,15 +555,17 @@ public static class WorldGaitDrivers {
     /// <param name="definition">The live definition.</param>
     /// <param name="reference">The state reference.</param>
     /// <param name="tick">The tick an advancing or cycling row is read at.</param>
+    /// <param name="engineTick">The engine tick a StateAdvance row is read at.</param>
     /// <param name="value">The cell's value; zero when the cell is absent or not numeric.</param>
     /// <param name="bodyIndex">The reading body's index, substituted for <see cref="BodyKeyToken"/> in the key.</param>
     /// <returns><see langword="true"/> when a numeric cell answered.</returns>
-    public static bool TryReadStateTruth(WorldDefinition definition, string reference, ulong tick, out float value, int bodyIndex = -1) => TryReadStateNumber(
+    public static bool TryReadStateTruth(WorldDefinition definition, string reference, ulong tick, out float value, int bodyIndex = -1, ulong engineTick = 0UL) => TryReadStateNumber(
         bodyIndex: bodyIndex,
         definition: definition,
         eased: false,
         reference: reference,
         tick: tick,
+        engineTick: engineTick,
         value: out value
     );
     /// <summary>Reads a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> text cell spelling a world-space <c>[x, y, z]</c>.</summary>
@@ -578,6 +591,7 @@ public static class WorldGaitDrivers {
             key: authoredKey,
             resolved: out var key
         ) ||
+            // A text row never carries a StateAdvance trait, so the engine-tick coordinate is unreachable here.
             !WorldStateReader.TryRead(
             definition: definition,
             key: key,
@@ -585,7 +599,8 @@ public static class WorldGaitDrivers {
             row: out _,
             rowName: rowName,
             text: out var text,
-            tick: tick
+            tick: tick,
+            engineTick: 0UL
         ) ||
             (text is not { Length: > 0 } spelling)
         ) {

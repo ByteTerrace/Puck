@@ -107,18 +107,18 @@ public static class CartridgeCost {
             total = CostBound.Add(
                 left: total,
                 right: token switch {
-                ValueToken.Constant => CostBound.Zero,
-                ValueToken.State state => Read(
-                    profile: profile,
-                    state: state
-                ),
-                _ => ((ExpressionVocabulary.Operation(token: token) is { } operation)
-                ? Evaluate(
-                        operation: operation,
-                        profile: profile
-                    )
-                : CostBound.Unmodeled(reason: $"'{CartridgeExpressions.Spell(token: token)}' is not an expression a cartridge evaluates.")),
-            }
+                    ValueToken.Constant => CostBound.Zero,
+                    ValueToken.State state => Read(
+                        profile: profile,
+                        state: state
+                    ),
+                    _ => ((ExpressionVocabulary.Operation(token: token) is { } operation)
+                    ? Evaluate(
+                            operation: operation,
+                            profile: profile
+                        )
+                    : CostBound.Unmodeled(reason: $"'{CartridgeExpressions.Spell(token: token)}' is not an expression a cartridge evaluates.")),
+                }
             );
         }
 
@@ -157,114 +157,114 @@ public static class CartridgeCost {
             total = CostBound.Add(
                 left: total,
                 right: statement?.Kind switch {
-                "set" => Step(
-                    profile: profile,
-                    statement: statement
-                ),
-                "if" => CostBound.Add(
-                    left: Conditions(
-                        gate: statement.When,
-                        profile: profile
+                    "set" => Step(
+                        profile: profile,
+                        statement: statement
                     ),
-                    right: CostBound.Max(
-                        left: Statements(
-                            statements: statement.Then,
-                            cells: cells,
-                            payload: payload,
+                    "if" => CostBound.Add(
+                        left: Conditions(
+                            gate: statement.When,
                             profile: profile
                         ),
-                        right: Statements(
-                            statements: statement.Else,
-                            cells: cells,
-                            payload: payload,
-                            profile: profile
-                        )
-                    )
-                ),
-                "repeat" => CostBound.Add(
-                    left: CostBound.Known(cycles: profile.LoopSetup),
-                    right: CostBound.Multiply(
-                        bound: CostBound.Add(
-                            left: CostBound.Known(cycles: profile.LoopStep),
+                        right: CostBound.Max(
+                            left: Statements(
+                                statements: statement.Then,
+                                cells: cells,
+                                payload: payload,
+                                profile: profile
+                            ),
                             right: Statements(
-                                statements: statement.Body,
+                                statements: statement.Else,
                                 cells: cells,
                                 payload: payload,
                                 profile: profile
                             )
-                        ),
-                        multiplier: (statement.Count ?? 0)
-                    )
-                ),
-                // A break emits one jump, strictly less than the load, modify and store a set emits, so a set's weight bounds it.
-                "break" => CostBound.Known(cycles: profile.StepSet),
-                // Both steps walk the payload: a gather or scatter, plus the module's checksum pass over it.
-                // A play, a stop and the per-frame sequencer tick were measured together at this cost; charging the
-                // whole of it to each rather than apportioning it keeps every part an upper bound.
-                "clock" => CostBound.Known(cycles: profile.SaveFixed),
-                // A fade republishes every palette, which is the same shape of work as a save's payload walk.
-                // A plot bounds two coordinates, multiplies, and rebuilds one halfword of video memory.
-                "plot" => CostBound.Add(
-                    left: CostBound.Known(cycles: (profile.StepMultiply + (profile.StepArithmetic * 3))),
-                    right: CostBound.Add(
-                        left: Operand(
-                            expression: statement.Row,
-                            profile: profile
-                        ),
+                        )
+                    ),
+                    "repeat" => CostBound.Add(
+                        left: CostBound.Known(cycles: profile.LoopSetup),
+                        right: CostBound.Multiply(
+                            bound: CostBound.Add(
+                                left: CostBound.Known(cycles: profile.LoopStep),
+                                right: Statements(
+                                    statements: statement.Body,
+                                    cells: cells,
+                                    payload: payload,
+                                    profile: profile
+                                )
+                            ),
+                            multiplier: (statement.Count ?? 0)
+                        )
+                    ),
+                    // A break emits one jump, strictly less than the load, modify and store a set emits, so a set's weight bounds it.
+                    "break" => CostBound.Known(cycles: profile.StepSet),
+                    // Both steps walk the payload: a gather or scatter, plus the module's checksum pass over it.
+                    // A play, a stop and the per-frame sequencer tick were measured together at this cost; charging the
+                    // whole of it to each rather than apportioning it keeps every part an upper bound.
+                    "clock" => CostBound.Known(cycles: profile.SaveFixed),
+                    // A fade republishes every palette, which is the same shape of work as a save's payload walk.
+                    // A plot bounds two coordinates, multiplies, and rebuilds one halfword of video memory.
+                    "plot" => CostBound.Add(
+                        left: CostBound.Known(cycles: (profile.StepMultiply + (profile.StepArithmetic * 3))),
                         right: CostBound.Add(
                             left: Operand(
-                                expression: statement.Column,
+                                expression: statement.Row,
                                 profile: profile
                             ),
-                            right: Operand(
-                                expression: statement.Colour,
-                                profile: profile
+                            right: CostBound.Add(
+                                left: Operand(
+                                    expression: statement.Column,
+                                    profile: profile
+                                ),
+                                right: Operand(
+                                    expression: statement.Colour,
+                                    profile: profile
+                                )
                             )
                         )
-                    )
-                ),
-                // A blend is two register writes and a clamp, so it costs what an arithmetic step does.
-                "blend" => CostBound.Add(
-                    left: CostBound.Known(cycles: profile.StepArithmetic),
-                    right: Operand(
-                        expression: statement.Weight,
-                        profile: profile
-                    )
-                ),
-                "fade" => CostBound.Add(
-                    left: CostBound.Known(cycles: profile.SaveFixed),
-                    right: Operand(
-                        expression: statement.Amount,
-                        profile: profile
-                    )
-                ),
-                "play" or "stop" => CostBound.Known(cycles: profile.Sound),
-                "save" or "load" => CostBound.Known(cycles: (profile.SaveFixed + (profile.SaveByte * payload))),
-                "map" => CostBound.Add(
-                    left: CostBound.Known(cycles: profile.MapWrite),
-                    right: CostBound.Add(
-                        left: Operand(
-                            expression: statement.Row,
+                    ),
+                    // A blend is two register writes and a clamp, so it costs what an arithmetic step does.
+                    "blend" => CostBound.Add(
+                        left: CostBound.Known(cycles: profile.StepArithmetic),
+                        right: Operand(
+                            expression: statement.Weight,
                             profile: profile
-                        ),
+                        )
+                    ),
+                    "fade" => CostBound.Add(
+                        left: CostBound.Known(cycles: profile.SaveFixed),
+                        right: Operand(
+                            expression: statement.Amount,
+                            profile: profile
+                        )
+                    ),
+                    "play" or "stop" => CostBound.Known(cycles: profile.Sound),
+                    "save" or "load" => CostBound.Known(cycles: (profile.SaveFixed + (profile.SaveByte * payload))),
+                    "map" => CostBound.Add(
+                        left: CostBound.Known(cycles: profile.MapWrite),
                         right: CostBound.Add(
                             left: Operand(
-                                expression: statement.Column,
+                                expression: statement.Row,
                                 profile: profile
                             ),
-                            right: Operand(
-                                expression: statement.Tile,
-                                profile: profile
+                            right: CostBound.Add(
+                                left: Operand(
+                                    expression: statement.Column,
+                                    profile: profile
+                                ),
+                                right: Operand(
+                                    expression: statement.Tile,
+                                    profile: profile
+                                )
                             )
                         )
-                    )
-                ),
-                // Measurement puts a small blit near a fixed 600 units but a full-screen one past a whole frame, with
-                // no model spanning both, so it carries no weight and a document using one is refused.
-                // Flat to the cell cap: what a blit costs is the display-off window, not the cells copied.
-                "blit" => CostBound.Known(cycles: profile.Blit),
-                _ => CostBound.Unmodeled(reason: $"Step kind '{statement?.Kind}' has no measured weight."),
-            }
+                    ),
+                    // Measurement puts a small blit near a fixed 600 units but a full-screen one past a whole frame, with
+                    // no model spanning both, so it carries no weight and a document using one is refused.
+                    // Flat to the cell cap: what a blit costs is the display-off window, not the cells copied.
+                    "blit" => CostBound.Known(cycles: profile.Blit),
+                    _ => CostBound.Unmodeled(reason: $"Step kind '{statement?.Kind}' has no measured weight."),
+                }
             );
         }
 

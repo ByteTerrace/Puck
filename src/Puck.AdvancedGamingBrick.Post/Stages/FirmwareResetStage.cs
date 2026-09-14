@@ -25,51 +25,51 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
             r0: flags,
             bios: bios,
             setup: static machine => {
-            var bus = machine.Bus;
+                var bus = machine.Bus;
 
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000084,
-                value: 0x80
-            );
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000082,
-                value: 0x880E
-            );
-            for (var timer = 0u; (timer < 4); ++timer) {
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: (0x04000102 + (timer * 4)),
-                    value: 0
+                    address: 0x04000084,
+                    value: 0x80
                 );
-            }
-            for (var fifo = 0u; (fifo < 2); ++fifo) {
-                for (var word = 0u; (word < 3); ++word) {
-                    Write(
-                        address: (0x040000A0 + (fifo * 4)),
-                        bus: bus,
-                        value: ((0x31231507 + (fifo * 0x08080808)) + word)
+                bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000082,
+                    value: 0x880E
+                );
+                for (var timer = 0u; (timer < 4); ++timer) {
+                    bus.Write16(
+                        access: BusAccessType.NonSequential,
+                        address: (0x04000102 + (timer * 4)),
+                        value: 0
+                    );
+                }
+                for (var fifo = 0u; (fifo < 2); ++fifo) {
+                    for (var word = 0u; (word < 3); ++word) {
+                        Write(
+                            address: (0x040000A0 + (fifo * 4)),
+                            bus: bus,
+                            value: ((0x31231507 + (fifo * 0x08080808)) + word)
+                        );
+                    }
+                }
+                // One explicit peripheral clock seeds a partly consumed playing
+                // word. Timers remain disabled throughout the native SWI call.
+                machine.Apu.OnTimerOverflow(timer: 0);
+                var apu = ((AgbApu)machine.Apu);
+
+                for (var fifo = 0; (fifo < 2); ++fifo) {
+                    Require(
+                        condition: ((apu.DebugFifoWordCount(fifo: fifo) == 2) && (apu.DebugFifoPlayingBytes(fifo: fifo) == 3)),
+                        detail: "FIFO fixture failed to seed ring and playing buffers"
+                    );
+                    bus.Write16(
+                        access: BusAccessType.NonSequential,
+                        address: (0x040000A0 + (((uint)fifo) * 4)),
+                        value: 0x7967
                     );
                 }
             }
-            // One explicit peripheral clock seeds a partly consumed playing
-            // word. Timers remain disabled throughout the native SWI call.
-            machine.Apu.OnTimerOverflow(timer: 0);
-            var apu = ((AgbApu)machine.Apu);
-
-            for (var fifo = 0; (fifo < 2); ++fifo) {
-                Require(
-                    condition: ((apu.DebugFifoWordCount(fifo: fifo) == 2) && (apu.DebugFifoPlayingBytes(fifo: fifo) == 3)),
-                    detail: "FIFO fixture failed to seed ring and playing buffers"
-                );
-                bus.Write16(
-                    access: BusAccessType.NonSequential,
-                    address: (0x040000A0 + (((uint)fifo) * 4)),
-                    value: 0x7967
-                );
-            }
-        }
         );
         var apu = ((AgbApu)core.Instance.Machine.Apu);
         var reset = ((flags & 0x40) != 0);
@@ -153,65 +153,65 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
             r0: flags,
             bios: bios,
             setup: static machine => {
-            var bus = machine.Bus;
+                var bus = machine.Bus;
 
-            SeedRegions(bus: bus);
-            Write(
-                address: 0x03007E00,
-                bus: bus,
-                value: 0xC35A96F0
-            );
-            Write(
-                address: 0x03007FF8,
-                bus: bus,
-                value: 0xC35A96F0
-            );
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000000,
-                value: 0x0403
-            );
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000008,
-                value: 0x1234
-            );
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000132,
-                value: 0x4001
-            );
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000134,
-                value: 0x8001
-            );
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000200,
-                value: 0x1000
-            );
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000204,
-                value: 0x4000
-            );
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000084,
-                value: 0x80
-            );
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000080,
-                value: 0x1177
-            );
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: 0x04000082,
-                value: 0x030E
-            );
-        }
+                SeedRegions(bus: bus);
+                Write(
+                    address: 0x03007E00,
+                    bus: bus,
+                    value: 0xC35A96F0
+                );
+                Write(
+                    address: 0x03007FF8,
+                    bus: bus,
+                    value: 0xC35A96F0
+                );
+                bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000000,
+                    value: 0x0403
+                );
+                bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000008,
+                    value: 0x1234
+                );
+                bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000132,
+                    value: 0x4001
+                );
+                bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000134,
+                    value: 0x8001
+                );
+                bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000200,
+                    value: 0x1000
+                );
+                bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000204,
+                    value: 0x4000
+                );
+                bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000084,
+                    value: 0x80
+                );
+                bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000080,
+                    value: 0x1177
+                );
+                bus.Write16(
+                    access: BusAccessType.NonSequential,
+                    address: 0x04000082,
+                    value: 0x030E
+                );
+            }
         );
         var bus = core.Instance.Machine.Bus;
 

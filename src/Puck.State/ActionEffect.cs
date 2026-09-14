@@ -15,6 +15,7 @@ namespace Puck.State;
 [JsonDerivedType(typeof(ActionEffect.RemoveStateCell), typeDiscriminator: "removeStateCell")]
 [JsonDerivedType(typeof(ActionEffect.ScheduleState), typeDiscriminator: "scheduleState")]
 [JsonDerivedType(typeof(ActionEffect.Transaction), typeDiscriminator: "transaction")]
+[JsonDerivedType(typeof(ActionEffect.If), typeDiscriminator: "if")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ActionEffect {
     /// <summary>Applies a bounded state transform through the ordinary mutation pipeline.</summary>
@@ -105,7 +106,7 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
     ) : ActionEffect;
     /// <summary>Decrements a state countdown by the current simulation step's engine-tick width, saturating at zero.
-    /// The destination must be a <c>kind=Int nonNegative=true</c> row. Unlike an authored <see cref="AddState"/>
+    /// The destination must be a <c>kind=Int min=0</c> row. Unlike an authored <see cref="AddState"/>
     /// constant, this effect consumes the runtime step width, so changing the document's authored tick rate never
     /// retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly
     /// the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.</summary>
@@ -149,4 +150,19 @@ public abstract record ActionEffect {
     /// <param name="Row">The draw site's row name. One name, not a (source, destination) pair: a site's source is its
     /// own facet and a site is a scalar slot, so there is nothing else to address.</param>
     public sealed record Generate(string Row) : ActionEffect;
+    /// <summary>Branches on a predicate: fires <paramref name="Then"/> when it holds, else <paramref name="Else"/>
+    /// when present. Both branches read the frame at the effect's own position, so an earlier effect's same-firing
+    /// write is visible to the condition exactly as it is to a later effect's own operand. A condition that fails to
+    /// evaluate (an arithmetic fault, a missing table key) runs neither branch and is reported the same way a failing
+    /// top-level effect is; a false condition with no branch that fires is not a failure. An effect inside a branch
+    /// that itself refuses is refused on the same terms as a top-level effect — a branch is not a transaction, though
+    /// a <see cref="Transaction"/> may appear inside one when this <c>if</c> is not itself inside a transaction.</summary>
+    /// <param name="Condition">The gate.</param>
+    /// <param name="Then">The branch fired when <paramref name="Condition"/> holds.</param>
+    /// <param name="Else">The branch fired when it does not, or <see langword="null"/> to fire nothing.</param>
+    public sealed record If(
+        ActionPredicate Condition,
+        IReadOnlyList<ActionEffect> Then,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionEffect>? Else = null
+    ) : ActionEffect;
 }

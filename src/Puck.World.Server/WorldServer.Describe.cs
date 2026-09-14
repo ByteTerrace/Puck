@@ -42,7 +42,8 @@ public sealed partial class WorldServer {
                 row: out _,
                 rowName: name,
                 text: out _,
-                tick: tick
+                tick: tick,
+                engineTick: CompletedEngineTicks
             ) &&
                 (raw is { } value) &&
                 (value != 0)

@@ -60,10 +60,12 @@ public static class CartridgeLanguageServices {
             insertText: "map(row: ${1:0}, column: ${2:0}, tile: ${3:0})",
             label: "map"
         );
-        foreach (var name in new[] { "if", "else", "break", "when", "and", "or", "not", "key", "play", "stop", "save", "load", "clock", "blit", "plot", "blend", "fade" }) { Add(
+        foreach (var name in new[] { "if", "else", "break", "when", "and", "or", "not", "key", "play", "stop", "save", "load", "clock", "blit", "plot", "blend", "fade" }) {
+            Add(
             insertText: name,
             label: name
-        ); }
+        );
+        }
         return items;
 
         void Add(string label, string insertText) => items.AppendNode(item: new JsonObject {
@@ -88,12 +90,14 @@ public static class CartridgeLanguageServices {
             sourceMap
         );
 
-        if (lowered.Success) { Validate(
+        if (lowered.Success) {
+            Validate(
             lowered.Value!,
             sourceMap,
             diagnostics,
             document.Span
-        ); }
+        );
+        }
         return true;
     }
     /// <summary>Validates lowered JSON and maps forge paths back to authored rows and properties.</summary>

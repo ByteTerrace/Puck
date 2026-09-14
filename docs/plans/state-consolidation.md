@@ -92,6 +92,11 @@ spelling compact. Preserve a trait declared before its slot has any value:
 normalization must not manufacture a zero-valued cell that changes existence
 or initial-fill behavior.
 
+[Concise state authoring](state-authoring.md#stage-5-row-behavior-applies-to-every-cell)
+adds requirements: a row's behavior applies to every cell, including keys a
+write creates later; a cell's own behavior replaces it as a whole; and timing
+state is held per cell.
+
 Only the location and handling are duplicated. Advance, cycle, and dynamics
 describe different computations. Visibility at row and cell level also has
 different meaning: their restrictions compose and cannot simply replace one

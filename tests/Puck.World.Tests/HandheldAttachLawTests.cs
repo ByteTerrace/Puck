@@ -134,7 +134,7 @@ public sealed class HandheldAttachLawTests {
                 new WorldStateRow(
                 Name: handheldHeld,
                 Kind: CellKind.Int,
-                NonNegative: true,
+                Min: 0L,
                 Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
                         Value: 0L

@@ -90,13 +90,15 @@ public sealed partial class SdfProgram {
                         0
                     )
                 );
-                for (var stop = 0; (stop < paint.Stops.Count); stop++) { Row(
+                for (var stop = 0; (stop < paint.Stops.Count); stop++) {
+                    Row(
                     row: (8 + stop),
                     value: new(
                         value: paint.Stops[stop].Color,
                         w: paint.Stops[stop].Radius
                     )
-                ); }
+                );
+                }
             }
             if (m.Weathering is { } w) {
                 Row(

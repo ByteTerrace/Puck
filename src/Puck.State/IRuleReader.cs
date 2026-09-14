@@ -7,8 +7,13 @@ namespace Puck.State;
 /// <remarks>Every member is read on the tick path. An implementation allocates nothing per call: the scratch spans
 /// are reused buffers, the bound keys are cached strings, and the table lookups index a compiled array.</remarks>
 public interface IRuleReader {
-    /// <summary>Gets the tick the evaluation in flight answers as of.</summary>
+    /// <summary>Gets the simulation tick the evaluation in flight answers as of — what a <see cref="StateCycle"/> or
+    /// <see cref="StateDynamics"/> read is computed at.</summary>
     ulong Tick { get; }
+    /// <summary>Gets the engine tick (<see cref="Puck.Maths.FixedTickConversion.TicksPerSecond"/> per second) the
+    /// evaluation in flight answers as of — what a <see cref="StateAdvance"/> read is computed at. Never a
+    /// simulation tick converted at the world's current rate.</summary>
+    ulong EngineTick { get; }
     /// <summary>Gets where every state read finds a cell's stored value as of this tick: the section's own rows, or a
     /// frame over them.</summary>
     StateStore Store { get; }

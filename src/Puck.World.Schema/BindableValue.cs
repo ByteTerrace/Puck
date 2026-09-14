@@ -82,7 +82,8 @@ public readonly record struct BindableColor(string Raw) {
             row: out var stateRow,
             rowName: row,
             text: out var text,
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ) &&
             (stateRow.Kind == CellKind.Text) &&
             HexColor.TryParseRgba(
@@ -98,7 +99,8 @@ public readonly record struct BindableColor(string Raw) {
     /// <param name="definition">The document to resolve against.</param>
     /// <param name="fallback">The color returned when this token does not resolve.</param>
     /// <param name="tick">The tick a bound cell's value is read as of.</param>
-    public Vector4 Resolve(WorldDefinition definition, Vector4 fallback, ulong tick = 0UL) {
+    /// <param name="engineTick">The engine tick an advancing bound cell's value is read as of.</param>
+    public Vector4 Resolve(WorldDefinition definition, Vector4 fallback, ulong tick = 0UL, ulong engineTick = 0UL) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (!BindableState.TryParseBinding(
@@ -123,7 +125,8 @@ public readonly record struct BindableColor(string Raw) {
             row: out var stateRow,
             rowName: row,
             text: out var text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         ) &&
             (stateRow.Kind == CellKind.Text) &&
             HexColor.TryParseRgba(
@@ -192,7 +195,8 @@ public readonly record struct BindableScalar {
             row: out var stateRow,
             rowName: row,
             text: out _,
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ) &&
             (stateRow.Kind is CellKind.Fixed or CellKind.Int)
         );
@@ -203,7 +207,8 @@ public readonly record struct BindableScalar {
     /// <param name="definition">The document to resolve against.</param>
     /// <param name="fallback">The value returned when this token does not resolve.</param>
     /// <param name="tick">The tick a bound cell's value is read as of.</param>
-    public float Resolve(WorldDefinition definition, float fallback, ulong tick = 0UL) {
+    /// <param name="engineTick">The engine tick an advancing bound cell's value is read as of.</param>
+    public float Resolve(WorldDefinition definition, float fallback, ulong tick = 0UL, ulong engineTick = 0UL) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (Binding is null) {
@@ -226,7 +231,8 @@ public readonly record struct BindableScalar {
             row: out var stateRow,
             rowName: row,
             text: out _,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         ) ||
             (raw is not { } rawValue)
         ) {

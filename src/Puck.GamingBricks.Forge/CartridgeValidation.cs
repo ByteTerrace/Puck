@@ -143,10 +143,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             var array = document.Arrays[index];
             var path = $"arrays[{index}]";
 
-            if (array is null) { Error(
+            if (array is null) {
+                Error(
                 message: "An array cannot be null.",
                 path: path
-            ); continue; }
+            ); continue;
+            }
             Name(
                 name: array.Name,
                 names: names,
@@ -426,10 +428,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         if (
             (value?.Tokens is null) ||
             (value.Tokens.Count == 0)
-        ) { Error(
+        ) {
+            Error(
             message: "Supply an expression.",
             path: path
-        ); return; }
+        ); return;
+        }
         if (value.Tokens.Count > CartridgeExpressions.MaxTokens) {
             Error(
                 path: path,
@@ -595,10 +599,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             var layer = document.Layers[index];
             var path = $"layers[{index}]";
 
-            if (layer is null) { Error(
+            if (layer is null) {
+                Error(
                 message: "A layer cannot be null.",
                 path: path
-            ); continue; }
+            ); continue;
+            }
             if (!Count(
                 items: layer.Map,
                 path: (path + ".map"),
@@ -756,10 +762,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             var row = document.Raster[index];
             var path = $"raster[{index}]";
 
-            if (row is null) { Error(
+            if (row is null) {
+                Error(
                 message: "A raster row cannot be null.",
                 path: path
-            ); continue; }
+            ); continue;
+            }
             if (row.Line is < 1 or > 143) {
                 // Line zero is the document's own scroll, so a row there would name a band that has nothing above it.
                 Error(
@@ -892,10 +900,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             var rule = document.Rules[index];
             var path = $"rules[{index}]";
 
-            if (rule is null) { Error(
+            if (rule is null) {
+                Error(
                 message: "A rule cannot be null.",
                 path: path
-            ); continue; }
+            ); continue;
+            }
             Name(
                 name: rule.Name,
                 names: names,
@@ -1039,10 +1049,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             var screen = document.Screens[index];
             var path = $"screens[{index}]";
 
-            if (screen is null) { Error(
+            if (screen is null) {
+                Error(
                 message: "A screen cannot be null.",
                 path: path
-            ); continue; }
+            ); continue;
+            }
             Name(
                 name: screen.Name,
                 names: names,
@@ -1125,10 +1137,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             var sound = document.Sounds[index];
             var path = $"sounds[{index}]";
 
-            if (sound is null) { Error(
+            if (sound is null) {
+                Error(
                 message: "A sound cannot be null.",
                 path: path
-            ); continue; }
+            ); continue;
+            }
             Name(
                 name: sound.Name,
                 names: names,
@@ -1275,10 +1289,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         }
     }
     private void Statement(CartridgeStatement? value, string path, int depth, bool inLoop) {
-        if (value is null) { Error(
+        if (value is null) {
+            Error(
             message: "A step cannot be null.",
             path: path
-        ); return; }
+        ); return;
+        }
         switch (value.Kind) {
             case "set":
                 Reject(
@@ -1673,7 +1689,8 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 }
 
                 break;
-            default: Error(
+            default:
+                Error(
                 message: "Expected set, if, repeat, break, map, blit, plot, save, load, play, stop, clock, fade or blend.",
                 path: (path + ".kind")
             ); break;
@@ -1715,10 +1732,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         return total;
     }
     private void Target(CartridgeTarget? target, string path) {
-        if (target is null) { Error(
+        if (target is null) {
+            Error(
             message: "Supply a target state or array element.",
             path: path
-        ); return; }
+        ); return;
+        }
         if (target.Key is null) {
             if (m_arrays.ContainsKey(key: target.State)) {
                 Error(
@@ -1936,10 +1955,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             var tile = document.Tiles[index];
             var path = $"tiles[{index}]";
 
-            if (tile is null) { Error(
+            if (tile is null) {
+                Error(
                 message: "A tile cannot be null.",
                 path: path
-            ); continue; }
+            ); continue;
+            }
             Name(
                 name: tile.Name,
                 names: names,
@@ -1988,10 +2009,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         for (var index = 0; (index < document.Variables.Length); ++index) {
             var variable = document.Variables[index];
 
-            if (variable is null) { Error(
+            if (variable is null) {
+                Error(
                 message: "A variable cannot be null.",
                 path: $"variables[{index}]"
-            ); continue; }
+            ); continue;
+            }
             Name(
                 name: variable.Name,
                 names: m_variables,
@@ -2108,10 +2131,12 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             var sprite = document.Sprites[index];
             var path = $"sprites[{index}]";
 
-            if (sprite is null) { Error(
+            if (sprite is null) {
+                Error(
                 message: "A sprite cannot be null.",
                 path: path
-            ); continue; }
+            ); continue;
+            }
             Name(
                 name: sprite.Name,
                 names: names,

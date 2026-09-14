@@ -114,6 +114,42 @@ rollback simply by returning success from preflight. The
 [host protocol](hosting.md#implement-the-mutation-boundary) owns installation,
 validation, journaling, and delivery.
 
+## Branch on a condition
+
+An `if` effect chooses one of two effect lists by a predicate — the same
+grammar a gate compiles. `then` fires when the condition holds; the optional
+`else` fires when it does not. A condition that cannot evaluate (an
+arithmetic fault, or a missing table key) runs neither branch and is reported
+the same way a failing top-level effect is; a condition that evaluates to
+false, with no branch left to run, is not a failure.
+
+```csharp
+var claimBonus = new Rule(
+    Name: CellName.Parse("claimBonus"),
+    Gate: new ActionPredicate.CompareState(
+        State: "$tick", Comparison: ActionStateComparison.GreaterOrEqual, Value: 1m),
+    Mode: ActionTriggerMode.Edge,
+    Effects: [new ActionEffect.If(
+        Condition: new ActionPredicate.CompareState(
+            State: "streak", Comparison: ActionStateComparison.GreaterOrEqual, Value: 3m),
+        Then: [new ActionEffect.SetState(State: "bonusAwarded", Value: 1m)],
+        Else: [new ActionEffect.SetState(State: "bonusAwarded", Value: 0m)]
+    )]);
+```
+
+Each branch effect is its own boundary — preflighted and installed
+individually, exactly like a top-level effect (or, inside a `transaction`,
+any other step); a branch is not itself a transaction. A `transaction` may
+appear inside an `if`'s branch, but only when that `if` is not itself inside
+one — transactions never nest, whether directly or through an intervening
+`if`. A registered effect family opts out of appearing inside any `if`
+branch, at any nesting depth, through `EffectFamily.AllowsInsideBranch`; the
+library's own effects all allow it.
+
+A rule's trace shows which branch a captured evaluation took (`then`,
+`else`, `neither`, or `condition failed`) beside the `if` effect's own
+applied/refused/skipped verdict.
+
 ## Iterate keys without changing the loop beneath it
 
 `ForEach` snapshots the selected row's keys before evaluating them. Effects
@@ -165,7 +201,7 @@ mutation, authority, or persistence pipeline.
 The authored model consists of `Rule` and `RuleBinding`, `ActionPredicate`
 (`compareState`, `compareValue`, `all`, `any`, `not`), `ActionEffect`
 (`setState`, `addState`, `pushState`, `transformState`, `countdownState`,
-`generate`, `removeStateCell`, `scheduleState`, `transaction`),
+`generate`, `removeStateCell`, `scheduleState`, `transaction`, `if`),
 `ActionTarget`, `ActionStateComparison`, and
 `ActionTriggerMode`—the last two shared with `Puck.Physics`' compiled
 per-body predicates, so neither can grow an arm the other lacks.
@@ -192,7 +228,7 @@ effect. These are class hierarchies so a host can extend them:
 | Family | Core facts |
 |---|---|
 | `OperandFact` | `StateCellOperand`, `BindingOperand`, `TableOperand`, `TickOperand`, `ReductionOperand`, `SymmetryOperand`, `BoardOperand`, `PhaseOperand`, `PatternOperand`, `HistoryOperand`. |
-| `EffectFact` | `WriteEffect`, `CountdownEffect`, `GenerateEffect`, `RemoveStateCellEffect`, `ScheduleStateEffect`, `TransactionEffect`, `TransformStateEffect`, `PushStateEffect`. |
+| `EffectFact` | `WriteEffect`, `CountdownEffect`, `GenerateEffect`, `RemoveStateCellEffect`, `ScheduleStateEffect`, `TransactionEffect`, `TransformStateEffect`, `PushStateEffect`, `IfEffect`. |
 
 Operands implement `Read(IRuleReader)`. Facts also report cost and read/write
 dependencies through `Cost`, `CollectReads`, and `CollectWrites`, using

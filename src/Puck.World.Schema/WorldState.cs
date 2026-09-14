@@ -61,7 +61,7 @@ public sealed record WorldStateSection(
 /// <param name="Min">See <see cref="StateRow.Min"/>.</param>
 /// <param name="Max">See <see cref="StateRow.Max"/>.</param>
 /// <param name="Capacity">See <see cref="StateRow.Capacity"/>.</param>
-/// <param name="NonNegative">See <see cref="StateRow.NonNegative"/>.</param>
+/// <param name="Overflow">See <see cref="StateRow.Overflow"/>.</param>
 /// <param name="GatesDrive">Whether this row is a drive-admission gate. When set, this must be a keyed row
 /// (<see cref="StateRow.IsKeyed"/>) whose per-body cell — keyed by the body's 0-based entity index — is consulted
 /// before admitting a drive or action intent for that body: a nonzero cell refuses the body's intents until the cell
@@ -95,7 +95,7 @@ public sealed record WorldStateRow(
     long? Min = null,
     long? Max = null,
     int? Capacity = null,
-    bool NonNegative = false,
+    StateOverflow Overflow = StateOverflow.Refuse,
     bool GatesDrive = false,
     bool Evicts = false,
     IReadOnlyList<StateCell>? Cells = null,
@@ -117,7 +117,7 @@ public sealed record WorldStateRow(
     Min,
     Max,
     Capacity,
-    NonNegative,
+    Overflow,
     Evicts,
     Cells,
     Advance,
@@ -145,7 +145,7 @@ public sealed record WorldStateRow(
         Min: row.Min,
         Max: row.Max,
         Capacity: row.Capacity,
-        NonNegative: row.NonNegative,
+        Overflow: row.Overflow,
         GatesDrive: gatesDrive,
         Evicts: row.Evicts,
         Cells: row.Cells,

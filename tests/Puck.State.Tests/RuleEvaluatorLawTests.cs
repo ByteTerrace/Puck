@@ -139,7 +139,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 1UL
+            tick: 1UL,
+            engineTick: 1UL
         ));
         Assert.Equal(
             5L,
@@ -251,7 +252,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 1UL
+            tick: 1UL,
+            engineTick: 1UL
         ));
         Assert.Equal(
             1L,
@@ -275,7 +277,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 2UL
+            tick: 2UL,
+            engineTick: 2UL
         ));
         Assert.Equal(
             0L,
@@ -288,7 +291,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 3UL
+            tick: 3UL,
+            engineTick: 3UL
         ));
         Assert.Equal(
             -1,
@@ -326,13 +330,15 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 1UL
+            tick: 1UL,
+            engineTick: 1UL
         ));
         Assert.False(condition: evaluator.Evaluate(
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 2UL
+            tick: 2UL,
+            engineTick: 2UL
         ));
 
         var diagnostic = Assert.Single(collection: evaluator.Diagnostics());
@@ -399,7 +405,8 @@ public sealed class RuleEvaluatorLawTests {
                 latch: latch,
                 rules: rules,
                 stepTicks: 1UL,
-                tick: tick
+                tick: tick,
+                engineTick: tick
             )
                 ? 1
                 : 0
@@ -461,7 +468,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 1UL
+            tick: 1UL,
+            engineTick: 1UL
         ));
 
         Assert.Equal(
@@ -522,7 +530,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 1UL
+            tick: 1UL,
+            engineTick: 1UL
         ));
         Assert.Equal(
             0,
@@ -651,7 +660,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: compiled,
             stepTicks: 1UL,
-            tick: 1UL
+            tick: 1UL,
+            engineTick: 1UL
         ));
         Assert.Equal(
             1L,
@@ -700,13 +710,15 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 1UL
+            tick: 1UL,
+            engineTick: 1UL
         ));
         Assert.False(condition: evaluator.Evaluate(
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 2UL
+            tick: 2UL,
+            engineTick: 2UL
         ));
         Assert.True(condition: latch.Held(name: "strike"));
         Assert.Equal(
@@ -729,7 +741,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 3UL
+            tick: 3UL,
+            engineTick: 3UL
         ));
         Assert.False(condition: latch.Held(name: "strike"));
         Assert.True(condition: host.TryApply(
@@ -747,7 +760,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 4UL
+            tick: 4UL,
+            engineTick: 4UL
         ));
         Assert.Equal(
             2L,
@@ -825,7 +839,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 1UL
+            tick: 1UL,
+            engineTick: 1UL
         ));
         // board[3] + board[board[2] - 5] = 47; gate and effect share their key, followed by the nested dependency and its reader.
         Assert.Equal(
@@ -922,7 +937,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 1UL
+            tick: 1UL,
+            engineTick: 1UL
         ));
         Assert.Equal(
             7L,
@@ -965,7 +981,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1UL,
-            tick: 1UL
+            tick: 1UL,
+            engineTick: 1UL
         );
 
         // The gate evaluated to false, so the rule did not fire its effects.
@@ -1018,7 +1035,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1,
-            tick: 1
+            tick: 1,
+            engineTick: 1
         ));
         Assert.Equal(
             1,
@@ -1047,7 +1065,8 @@ public sealed class RuleEvaluatorLawTests {
             latch: latch,
             rules: rules,
             stepTicks: 1,
-            tick: 2
+            tick: 2,
+            engineTick: 2
         ));
         Assert.Equal(
             1,
@@ -1127,6 +1146,7 @@ public sealed class RuleEvaluatorLawTests {
         public StateStore Store => (m_store ??= new RowStore(rows: () => Rows));
         public bool TableKeyMissing { get; set; }
         public ulong Tick => Evaluator.Tick;
+        public ulong EngineTick => Evaluator.EngineTick;
 
         private void Install(StateRow row, List<StateCell> cells, bool preflight) {
             var rows = new List<StateRow>(collection: Rows);
@@ -1153,6 +1173,7 @@ public sealed class RuleEvaluatorLawTests {
                     rowName: row,
                     key: key,
                     tick: Evaluator.Tick,
+                    engineTick: Evaluator.Tick,
                     row: out _,
                     rawValue: out var raw,
                     text: out _

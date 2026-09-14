@@ -1,6 +1,10 @@
 namespace Puck.State;
 
 public sealed partial class RuleEvaluator {
+    // The branch each if chose while a transaction preflighted, in firing order. The post-commit pass replays these
+    // choices rather than re-reading the conditions, because the committed writes can change what a condition reads.
+    private readonly List<bool> m_branchDecisions = [];
+    private bool m_recordingBranchDecisions;
     private bool m_preflightRejected;
 
     /// <summary>Fires a rule's top-level effects in order. Every top-level effect is its own boundary: each performs
@@ -56,17 +60,20 @@ public sealed partial class RuleEvaluator {
                         StateTransform.Transfer transfer => transfer with { Key = ResolveKey(
                         key: transfer.Key,
                         keyFrom: keyRef,
-                        tick: tick
+                        tick: tick,
+                        engineTick: EngineTick
                     ) },
                         StateTransform.ClearEnclosed enclosed => enclosed with { From = ResolveKey(
                         key: enclosed.From,
                         keyFrom: keyRef,
-                        tick: tick
+                        tick: tick,
+                        engineTick: EngineTick
                     ) },
                         StateTransform.WriteSet writeSet => writeSet with { SetKey = ResolveKey(
                         key: writeSet.SetKey,
                         keyFrom: keyRef,
-                        tick: tick
+                        tick: tick,
+                        engineTick: EngineTick
                     ) },
                         _ => transform,
                     };
@@ -105,6 +112,15 @@ public sealed partial class RuleEvaluator {
                     effect: push,
                     preflight: preflight,
                     ruleName: ruleName,
+                    tick: tick
+                );
+            case IfEffect ifEffect:
+                return FireIf(
+                    effect: ifEffect,
+                    preflight: preflight,
+                    ruleName: ruleName,
+                    stepTicks: stepTicks,
+                    strict: strict,
                     tick: tick
                 );
         }
@@ -170,7 +186,8 @@ public sealed partial class RuleEvaluator {
             : ResolveKey(
                 key: addressed.Key,
                 keyFrom: addressed.KeyFrom,
-                tick: tick
+                tick: tick,
+                engineTick: EngineTick
             )
         );
 
@@ -181,6 +198,7 @@ public sealed partial class RuleEvaluator {
                 rowName: removeStateCell.Row,
                 key: destinationKey,
                 tick: tick,
+                engineTick: EngineTick,
                 row: out _,
                 rawValue: out var existing,
                 text: out var existingText
@@ -292,7 +310,8 @@ public sealed partial class RuleEvaluator {
                 rowOrdinal: ordinal,
                 store: store,
                 text: out currentText,
-                tick: tick
+                tick: tick,
+                engineTick: EngineTick
             );
         } else {
             StateReader.ReadCell(
@@ -302,7 +321,8 @@ public sealed partial class RuleEvaluator {
                 rowOrdinal: ordinal,
                 store: store,
                 text: out currentText,
-                tick: tick
+                tick: tick,
+                engineTick: EngineTick
             );
         }
 
@@ -322,9 +342,11 @@ public sealed partial class RuleEvaluator {
                     key: ResolveKey(
                         key: source.Key,
                         keyFrom: source.KeyFrom,
-                        tick: tick
+                        tick: tick,
+                        engineTick: EngineTick
                     ),
                     tick: tick,
+                    engineTick: EngineTick,
                     row: out _,
                     rawValue: out _,
                     text: out nextText
@@ -405,6 +427,7 @@ public sealed partial class RuleEvaluator {
             ((WriteEffect)write),
             row.Kind,
             tick,
+            EngineTick,
             out raw,
             out fault
         ) &&
@@ -508,6 +531,7 @@ public sealed partial class RuleEvaluator {
             effect,
             row.Kind,
             tick,
+            EngineTick,
             out var raw,
             out var fault
         )) {
@@ -538,7 +562,7 @@ public sealed partial class RuleEvaluator {
         );
     }
     // One source read per execution pass. Absence/forever skip a direct copy; expression faults remain diagnostic.
-    private bool TryReadSource(IValueSourcedEffect source, CellKind kind, ulong tick, out long raw, out ExpressionFault fault) {
+    private bool TryReadSource(IValueSourcedEffect source, CellKind kind, ulong tick, ulong engineTick, out long raw, out ExpressionFault fault) {
         fault = ExpressionFault.None;
         if (source.Expression is { } expression) {
             return TryEvaluateExpression(
@@ -546,13 +570,15 @@ public sealed partial class RuleEvaluator {
                 kind: kind,
                 program: expression,
                 tick: tick,
+                engineTick: engineTick,
                 value: out raw
             );
         }
         if (source.From is { } from) {
             var fact = Read(
                 operand: from,
-                tick: tick
+                tick: tick,
+                engineTick: engineTick
             );
 
             raw = 0;
@@ -581,6 +607,67 @@ public sealed partial class RuleEvaluator {
                 detail: DescribeFault(fault: fault)
             );
         }
+    }
+    // The condition reads the same frame view a later effect's own operand does — an earlier same-firing write is
+    // already installed (non-preflight) or already composed into the open preflight scope (inside a transaction), so
+    // GateOpen sees it exactly as any other read would. A faulted condition (an arithmetic fault, a missing table
+    // key — GateOpen's own 'faulted' out-parameter, already reported) runs neither branch and, under preflight,
+    // rejects the same way a failing effect's own preflight does; a false condition with no fault is not a failure,
+    // and each branch effect is its own boundary on the same terms as a top-level effect (or, inside a transaction,
+    // the same terms as any other step).
+    private bool FireIf(IfEffect effect, string ruleName, ulong tick, ulong stepTicks, bool preflight, bool strict) {
+        var open = GateOpen(
+            engineTick: EngineTick,
+            faulted: out var faulted,
+            gate: effect.Condition,
+            ruleName: ruleName,
+            tick: tick
+        );
+
+        if (faulted) {
+            if (preflight) {
+                m_preflightRejected = true;
+            }
+            if (m_traceEntry is not null) {
+                m_traceEffectValue = "condition failed";
+            }
+
+            return false;
+        }
+
+        if (m_recordingBranchDecisions) {
+            m_branchDecisions.Add(item: open);
+        }
+
+        var branch = (open
+            ? effect.Then
+            : effect.Else
+        );
+        var applied = false;
+
+        for (var index = 0; (index < branch.Length); index++) {
+            applied |= Fire(
+                effect: branch[index],
+                preflight: preflight,
+                ruleName: ruleName,
+                stepTicks: stepTicks,
+                strict: strict,
+                tick: tick
+            );
+        }
+
+        // Set after firing the branch: a nested write's own value narration (m_traceEffectValue) would otherwise
+        // overwrite this one, since both share the same one-shot trace slot.
+        if (m_traceEntry is not null) {
+            m_traceEffectValue = (open
+                ? "then"
+                : ((effect.Else.Length > 0)
+                    ? "else"
+                    : "neither"
+            ));
+        }
+
+        return applied;
     }
     // A transaction preflights its branch under one host scope, then commits that scope as one mutation; the steps
     // that submit nothing (a cue, a pose, a body effect) fire afterwards, for real, in order. A refused branch runs
@@ -618,6 +705,8 @@ public sealed partial class RuleEvaluator {
     private bool FireBranch(EffectFact effect, EffectFact[] effects, string ruleName, ulong tick, ulong stepTicks, out bool applied) {
         applied = false;
         m_preflightRejected = false;
+        m_branchDecisions.Clear();
+        m_recordingBranchDecisions = true;
         m_host.BeginPreflight();
 
         var rejected = false;
@@ -638,9 +727,12 @@ public sealed partial class RuleEvaluator {
                 }
             }
         } catch {
+            m_recordingBranchDecisions = false;
             m_host.EndPreflight();
             throw;
         }
+
+        m_recordingBranchDecisions = false;
 
         if (rejected) {
             m_host.EndPreflight();
@@ -666,10 +758,47 @@ public sealed partial class RuleEvaluator {
             return false;
         }
 
+        var decision = 0;
+
+        FireNonSubmittingEffects(
+            decision: ref decision,
+            effects: effects,
+            ruleName: ruleName,
+            stepTicks: stepTicks,
+            tick: tick
+        );
+
+        return true;
+    }
+    // The transaction's own steps already installed as one committed mutation; this replays only what the commit
+    // could not carry — an effect that only emits (SubmitsMutation false) fires for real here, unconditionally, on
+    // the same terms FireBranch's success path always applied. An 'if' step is not itself such an effect, but its
+    // chosen branch may hold one nested arbitrarily deep, so it recurses into that branch alone (chosen by
+    // re-reading the same condition, which the commit guarantees reads the same as it did under preflight) rather
+    // than re-firing the branch's own writes, which already installed.
+    private void FireNonSubmittingEffects(EffectFact[] effects, string ruleName, ulong tick, ulong stepTicks, ref int decision) {
         for (var index = 0; (index < effects.Length); index++) {
-            if (!effects[index].SubmitsMutation) {
+            var effect = effects[index];
+
+            if (effect is IfEffect ifEffect) {
+                var open = m_branchDecisions[decision++];
+
+                FireNonSubmittingEffects(
+                    decision: ref decision,
+                    effects: (open
+                    ? ifEffect.Then
+                    : ifEffect.Else),
+                    ruleName: ruleName,
+                    stepTicks: stepTicks,
+                    tick: tick
+                );
+
+                continue;
+            }
+
+            if (!effect.SubmitsMutation) {
                 _ = Fire(
-                    effect: effects[index],
+                    effect: effect,
                     ruleName: ruleName,
                     tick: tick,
                     stepTicks: stepTicks,
@@ -678,8 +807,6 @@ public sealed partial class RuleEvaluator {
                 );
             }
         }
-
-        return true;
     }
     private bool Apply(EffectFact effect, string ruleName, StateMutation mutation, ulong tick, bool preflight) {
         if (m_host.TryApply(

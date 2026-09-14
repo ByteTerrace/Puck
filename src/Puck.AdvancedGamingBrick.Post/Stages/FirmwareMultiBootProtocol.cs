@@ -33,12 +33,14 @@ internal static class FirmwareMultiBootProtocol {
         CheckArithmeticVectors();
         var wire = new List<Exchange>();
 
-        for (var index = 0; (index < 16); ++index) { wire.Add(item: new(
+        for (var index = 0; (index < 16); ++index) {
+            wire.Add(item: new(
             Reply: ((index == 0)
             ? (ushort)0
             : (ushort)0x7202),
             Sent: 0x6200
-        )); }
+        ));
+        }
         wire.Add(item: new(
             Reply: 0x7202,
             Sent: 0x6102

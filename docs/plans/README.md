@@ -8,6 +8,7 @@ Each plan opens with an implementation status review that separates what has lan
 
 - [Shader pipelines and hybrid rendering](shader-pipeline-evolution.md)—staged graphics attachments, hybrid visibility, packaging, and representation work.
 - [DSL and cartridge release hardening](dsl-release-hardening.md)—release checks and compiler hardening.
+- [Concise state authoring](state-authoring.md)—table and slot declarations, dot access, row bounds, per-second accumulation, piles, grids, and conditional effects.
 - [Retail-scale cartridges](retail-scale-cartridges.md)—capacity and authoring for large cartridge data.
 - [Screens and machine extensions](machine-extensions.md)—machine hosting, firmware, authoring, package boundaries, and hardware interaction.
 - [Product content](product-content.md)—content roots with a product manifest, an engine that ships no content, and one build pointed at any product.

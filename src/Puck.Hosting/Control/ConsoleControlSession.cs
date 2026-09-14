@@ -56,12 +56,14 @@ public sealed class ConsoleControlSession : IControlSession {
             ).ConfigureAwait(continueOnCapturedContext: false);
             var result = await capture.Completion.WaitAsync(cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (!result.Succeeded) { return new(
+            if (!result.Succeeded) {
+                return new(
                 id,
                 "refused",
                 $"Capture failed: {result.Error?.Message}",
                 true
-            ); }
+            );
+            }
             await using var file = new FileStream(
                 access: FileAccess.Read,
                 bufferSize: 4096,
@@ -71,12 +73,14 @@ public sealed class ConsoleControlSession : IControlSession {
                 share: FileShare.Read
             );
 
-            if (file.Length is <= 0 or > ControlLimits.ImageBytes) { return new(
+            if (file.Length is <= 0 or > ControlLimits.ImageBytes) {
+                return new(
                 id,
                 "refused",
                 "Completed PNG exceeds the 16 MiB image limit or is empty.",
                 true
-            ); }
+            );
+            }
             var png = new byte[((int)file.Length)];
 
             await file.ReadExactlyAsync(
@@ -93,17 +97,21 @@ public sealed class ConsoleControlSession : IControlSession {
             if (
                 (capture is not null) &&
                 !capture.Completion.IsCompleted
-            ) { _ = CleanAfterCaptureAsync(
+            ) {
+                _ = CleanAfterCaptureAsync(
                 capture: capture,
                 directory: directory
-            ); } else { Clean(directory: directory); }
+            );
+            } else { Clean(directory: directory); }
         }
     }
     private static void Clean(string directory) {
-        try { File.Delete(path: Path.Combine(
+        try {
+            File.Delete(path: Path.Combine(
             path1: directory,
             path2: "frame.png"
-        )); Directory.Delete(path: directory); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        )); Directory.Delete(path: directory);
+        } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
     private static async Task CleanAfterCaptureAsync(FrameCaptureRequest capture, string directory) {
         await capture.Completion.ConfigureAwait(continueOnCapturedContext: false);
@@ -141,12 +149,14 @@ public sealed class ConsoleControlSession : IControlSession {
                 condition: m_disposed,
                 instance: this
             );
-            if (m_busy) { return new(
+            if (m_busy) {
+                return new(
                 0,
                 "refused",
                 "Console session busy; await the active operation.",
                 true
-            ); }
+            );
+            }
             if (LocalControlServer.Validate(request: request) is { } refusal) { return refusal; }
             deadline = CancellationTokenSource.CreateLinkedTokenSource(
                 token1: cancellationToken,
@@ -162,10 +172,12 @@ public sealed class ConsoleControlSession : IControlSession {
         );
 
         try {
-            if (request.Operation == "capture") { return await CaptureAsync(
+            if (request.Operation == "capture") {
+                return await CaptureAsync(
                 id: request.Id,
                 token: cancellationToken
-            ).ConfigureAwait(continueOnCapturedContext: false); }
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            }
             var completion = new TaskCompletionSource<CommandResult>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
             Volatile.Write(

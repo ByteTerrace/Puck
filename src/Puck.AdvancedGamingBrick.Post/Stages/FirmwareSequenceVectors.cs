@@ -175,7 +175,8 @@ internal static class FirmwareSequenceVectors {
                     6
                 ));
             }
-            if (count != 0) { points.Add(item: new(
+            if (count != 0) {
+                points.Add(item: new(
                 45,
                 0,
                 0,
@@ -188,7 +189,8 @@ internal static class FirmwareSequenceVectors {
                 Repeat: 0,
                 Volume: 45,
                 Wait: 0
-            )); }
+            ));
+            }
             yield return new(
                 Name: $"repeat-{count}",
                 Program: repeat,

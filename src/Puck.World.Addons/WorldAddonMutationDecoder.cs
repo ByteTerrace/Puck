@@ -38,13 +38,17 @@ internal static class WorldAddonMutationDecoder {
     // (WorldStateRowJsonConverter's ONE authored shape), never a bespoke addon-only encoding: one member list, no
     // $type discriminator, `value` xor `cells`.
     private static readonly string[] RemoveStateRowMembers = ["name"];
-    private static readonly string[] StateRowMembers = ["name", "kind", "value", "cells", "min", "max", "capacity", "nonNegative"];
+    private static readonly string[] StateRowMembers = ["name", "kind", "value", "cells", "min", "max", "capacity", "overflow"];
     private static readonly string[] StateCellMembers = ["key", "value"];
     private static readonly Dictionary<string, CellKind> CellKinds = new(comparer: StringComparer.Ordinal) {
         ["int"] = CellKind.Int,
         ["fixed"] = CellKind.Fixed,
         ["bool"] = CellKind.Bool,
         ["text"] = CellKind.Text,
+    };
+    private static readonly Dictionary<string, StateOverflow> Overflows = new(comparer: StringComparer.Ordinal) {
+        ["refuse"] = StateOverflow.Refuse,
+        ["saturate"] = StateOverflow.Saturate,
     };
     private static readonly string[] InputHoldMembers = ["ceilingTicks", "lowerAfterTicks", "defaultTicks", "equalizeByDefault", "participants"];
     private static readonly string[] InputHoldParticipantMembers = ["bodyIndex", "ticks", "equalized"];
@@ -1630,7 +1634,7 @@ internal static class WorldAddonMutationDecoder {
 
     // One shape, matching WorldStateRowJsonConverter's exactly: a name, a kind, the optional envelope fields, and
     // either a bare `value` (sugar for the one cell keyed WorldStateRow.SlotKey) or a keyed `cells` array — one
-    // list, one walk, no per-$type branching. Both-or-neither Min/Max, the value's own in-range check, and the
+    // list, one walk, no per-$type branching. Min/Max ordering, the value's own in-range check, and the
     // capacity/text-length ceilings are all WorldDefinitionValidator's job; this only turns wire scalars into the
     // typed row, exactly like the HUD decoders leave capacity/authoring-policy checks to the same validate stage.
     private static WorldMutation DecodeUpsertStateRow(JsonElement root, WorldPrincipal principal) {
@@ -1711,12 +1715,22 @@ internal static class WorldAddonMutationDecoder {
                 ? capacity
                 : throw new AddonMutationDecodeException(message: $"{Context}: 'capacity' must be an integer"))
             : null),
-                NonNegative: (members.TryGetValue(
-                    key: "nonNegative",
-                    value: out var nonNegativeElement
-                ) && ((nonNegativeElement.ValueKind is JsonValueKind.True or JsonValueKind.False)
-            ? nonNegativeElement.GetBoolean()
-            : throw new AddonMutationDecodeException(message: $"{Context}: 'nonNegative' must be a boolean"))),
+                Overflow: (members.TryGetValue(
+                    key: "overflow",
+                    value: out var overflowElement
+                )
+            ? (Overflows.TryGetValue(
+                    key: ((overflowElement.ValueKind == JsonValueKind.String)
+                        ? (overflowElement.GetString() ?? "")
+                        : throw new AddonMutationDecodeException(message: $"{Context}: 'overflow' must be a string")),
+                    value: out var overflow
+                )
+                ? overflow
+                : throw new AddonMutationDecodeException(message: $"{Context}: 'overflow' names an unknown value — one of {{{string.Join(
+                    separator: ", ",
+                    values: Overflows.Keys
+                )}}}"))
+            : StateOverflow.Refuse),
                 Cells: (hasValue
             ? [DecodeStateCell(
                             context: $"{Context}.value",

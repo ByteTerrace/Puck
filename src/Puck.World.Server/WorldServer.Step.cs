@@ -123,6 +123,7 @@ public sealed partial class WorldServer {
                 PendingOp.Mutate mutate => TryApplyMutation(
                 mutation: mutate.Mutation,
                 tick: tick,
+                engineTick: CompletedEngineTicks,
                 connectionId: mutate.ConnectionId,
                 correlationId: mutate.CorrelationId,
                 preMetered: (mutate.SourceAddonInstanceId >= 0L)
@@ -256,6 +257,7 @@ public sealed partial class WorldServer {
                         Right: -1
                     ),
                     tick: tick,
+                    engineTick: CompletedEngineTicks,
                     stepTicks: stepTicks
                 );
             }
@@ -332,6 +334,7 @@ public sealed partial class WorldServer {
                             Right: right
                         ),
                         tick: tick,
+                        engineTick: CompletedEngineTicks,
                         stepTicks: stepTicks
                     );
                 }
@@ -350,6 +353,7 @@ public sealed partial class WorldServer {
                             Right: right
                         ),
                         tick: tick,
+                        engineTick: CompletedEngineTicks,
                         stepTicks: stepTicks
                     );
                 }
@@ -486,6 +490,8 @@ public sealed partial class WorldServer {
     // definition. One end-of-evaluation fold installs the ordered mutations and delivers once, matching the
     // once-per-step delivery shape of DrainPendingOps.
     private void EvaluateWorldRules(ulong tick, ulong stepTicks) {
+        var engineTick = CompletedEngineTicks;
+
         m_decisionWork = default;
         FreezeDecisionPerception(rules: m_rules);
         LoadRuleFrame(tick: tick);
@@ -493,14 +499,16 @@ public sealed partial class WorldServer {
             latch: m_ruleGateHeld,
             rules: m_rules,
             stepTicks: stepTicks,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
 
         applied |= m_evaluator.Evaluate(
             latch: m_interactionGateHeld,
             rules: m_interactions,
             stepTicks: stepTicks,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
 
         m_ruleFrameActive = false;
@@ -894,7 +902,8 @@ public sealed partial class WorldServer {
                 correlationId: 0,
                 mutation: mutation,
                 preMetered: false,
-                tick: tick
+                tick: tick,
+                engineTick: CompletedEngineTicks
             )) {
                 return true;
             }
@@ -1148,6 +1157,7 @@ public sealed partial class WorldServer {
 
         if (m_search.Step(
             apply: m_searchApply,
+            engineTick: CompletedEngineTicks,
             tick: tick
         )) {
             DeliverPending();
@@ -1186,6 +1196,12 @@ public sealed partial class WorldServer {
         }
     }
     private void StepCore(in FixedStepContext context) {
+        // Settled here, before anything below can compose or rebase a mutation: context.ElapsedTicks is this whole
+        // step's own engine-time coordinate (the exact engine tick the step completes at), so every write and read
+        // this tick performs — an administrative mutation drained below, a rule's own writes, a response sweep —
+        // rebase an Advance epoch, or reads one, against the SAME value. Reassigned identically at the step's own
+        // end (m_lastCompletedEngineTicks = context.ElapsedTicks); setting it again there is a no-op.
+        m_lastCompletedEngineTicks = context.ElapsedTicks;
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.

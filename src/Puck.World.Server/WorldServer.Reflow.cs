@@ -480,6 +480,7 @@ public sealed partial class WorldServer {
                 row,
                 policy.CostKey,
                 tick,
+                CompletedEngineTicks,
                 out var payer,
                 out var value,
                 out _
@@ -571,6 +572,7 @@ public sealed partial class WorldServer {
             definition,
             batch,
             tick,
+            CompletedEngineTicks,
             InstanceIdentity,
             out _,
             out reason,

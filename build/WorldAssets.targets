@@ -9,6 +9,7 @@
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\moth-courtyard.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\tools\hgb-compare.puck" />
         <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\tools\hgb-mirror.puck" />
+        <PuckGeneratedWorldSource Include="$(PuckWorldAssetDirectory)\tools\shader-compare.puck" />
     </ItemGroup>
     <Target Name="GenerateWorldAssets" AfterTargets="Build"
             Condition="'$(DesignTimeBuild)' != 'true'"

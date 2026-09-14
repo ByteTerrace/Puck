@@ -87,14 +87,18 @@ internal sealed class RemoteAttachmentPool : IAsyncDisposable {
                 value: out attachment!
             ) ||
                 (attachment.Owner != owner)
-            ) { return OperatorMcpServer.Error(
+            ) {
+                return OperatorMcpServer.Error(
                 message: "Unknown, closed or expired attachment. Attach explicitly before issuing new work.",
                 unknown: false
-            ); }
-            if (attachment.Busy) { return OperatorMcpServer.Error(
+            );
+            }
+            if (attachment.Busy) {
+                return OperatorMcpServer.Error(
                 message: "Attachment busy; await its active operation.",
                 unknown: false
-            ); }
+            );
+            }
             if (m_clock.GetElapsedTime(startingTimestamp: attachment.LastUse).TotalSeconds >= m_options.IdleTimeoutSeconds) {
                 m_attachments.Remove(key: id); attachment.Close();
                 return OperatorMcpServer.Error(
@@ -116,15 +120,19 @@ internal sealed class RemoteAttachmentPool : IAsyncDisposable {
                 checked(++attachment.Sequence)
             ).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (result.StructuredContent?.GetProperty(propertyName: "status").GetString() == "unknown") { Detach(
+            if (result.StructuredContent?.GetProperty(propertyName: "status").GetString() == "unknown") {
+                Detach(
                 id: id,
                 owner: owner
-            ); }
+            );
+            }
             return result;
-        } catch (OperationCanceledException) { Detach(
+        } catch (OperationCanceledException) {
+            Detach(
             id: id,
             owner: owner
-        ); throw; } finally { lock (m_gate) { attachment.Busy = false; attachment.LastUse = m_clock.GetTimestamp(); } }
+        ); throw;
+        } finally { lock (m_gate) { attachment.Busy = false; attachment.LastUse = m_clock.GetTimestamp(); } }
     }
     internal bool Detach(string owner, string id) {
         lock (m_gate) {

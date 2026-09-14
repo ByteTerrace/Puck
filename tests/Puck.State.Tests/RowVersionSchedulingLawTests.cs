@@ -281,13 +281,15 @@ public sealed class RowVersionSchedulingLawTests {
                 latch: scheduledLatch,
                 rules: scheduledRules,
                 stepTicks: 1UL,
-                tick: tick
+                tick: tick,
+                engineTick: tick
             );
             var wroteFull = full.Evaluator.Evaluate(
                 latch: fullLatch,
                 rules: fullRules,
                 stepTicks: 1UL,
-                tick: tick
+                tick: tick,
+                engineTick: tick
             );
 
             Assert.Equal(

@@ -118,7 +118,8 @@ public sealed partial class SearchRuntime {
 
         _ = m_host.Judge(
             rules: m_judge,
-            tick: tick
+            tick: tick,
+            engineTick: m_engineTick
         );
 
         return (
@@ -147,6 +148,7 @@ public sealed partial class SearchRuntime {
             program: plan.Score!,
             kind: CellKind.Int,
             tick: tick,
+            engineTick: m_engineTick,
             value: out var value
         )
             ? value

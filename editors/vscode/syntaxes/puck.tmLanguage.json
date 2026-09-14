@@ -426,7 +426,7 @@
         "namedBlocks": {
             "patterns": [
                 {
-                    "begin": "\\b(prototype|rule|decision|option|placement|seatRig|layout|addon)\\b",
+                    "begin": "\\b(prototype|rule|decision|option|placement|seatRig|layout|addon|table|slot|row)\\b",
                     "beginCaptures": {
                         "0": {
                             "name": "keyword.declaration.puck"

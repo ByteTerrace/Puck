@@ -132,7 +132,8 @@ public sealed class ZoneEndKeyLawTests {
 
         Assert.False(condition: host.Judge(
             rules: rules,
-            tick: 1
+            tick: 1,
+            engineTick: 1
         ));
         Assert.True(condition: host.Frame.TryStored(
             rows[0],
@@ -161,12 +162,14 @@ public sealed class ZoneEndKeyLawTests {
             : true),
             host.Judge(
                 rules: [rules[0]],
-                tick: 2
+                tick: 2,
+                engineTick: 2
             )
         );
         Assert.True(condition: host.Judge(
             rules: [rules[1]],
-            tick: 3
+            tick: 3,
+            engineTick: 3
         ));
         Assert.True(condition: host.Frame.TryStored(
             rows[0],
@@ -217,7 +220,8 @@ public sealed class ZoneEndKeyLawTests {
             !fail,
             host.Judge(
                 rules: rules,
-                tick: 1
+                tick: 1,
+                engineTick: 1
             )
         );
         Assert.Equal(

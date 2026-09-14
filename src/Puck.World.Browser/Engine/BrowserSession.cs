@@ -222,6 +222,12 @@ public sealed class BrowserSession {
         _ => within.ToString(provider: CultureInfo.InvariantCulture),
     };
 
+    // A design-time session never changes its simulation rate between ticks, so its engine-tick coordinate is the
+    // tick count times the document rate's step width; a resident world (rateHz 0) never advances.
+    private ulong EngineTickAt(ulong tick) => ((Definition.SimulationRateHz > 0)
+        ? checked((tick * (Puck.Maths.FixedTickConversion.TicksPerSecond / ((ulong)Definition.SimulationRateHz))))
+        : 0UL
+    );
     /// <summary>Judges one tick over every rule, capturing every rule's own evaluations and diffing the frame's
     /// values before and after.</summary>
     /// <param name="tick">The tick the reads answer as of.</param>
@@ -231,6 +237,7 @@ public sealed class BrowserSession {
 
         m_host.Evaluator.ArmTraceAll(maxEvaluations: BrowserJudgeLimits.MaxTraceEvaluations);
         m_host.Judge(
+            engineTick: EngineTickAt(tick: tick),
             rules: m_rules,
             tick: tick
         );
@@ -405,6 +412,7 @@ public sealed class BrowserSession {
             kind: kind,
             program: compiled,
             tick: tick,
+            engineTick: EngineTickAt(tick: tick),
             value: out value
         )) {
             error = "the expression could not be evaluated against the current frame (a dynamic-table key miss, or a read the frame refuses).";

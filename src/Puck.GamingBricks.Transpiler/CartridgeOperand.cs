@@ -251,11 +251,13 @@ public static class CartridgeOperand {
                     out var error
                 );
 
-                if (error is not null) { throw new DocumentEvaluationException(
+                if (error is not null) {
+                    throw new DocumentEvaluationException(
                     error,
                     node.Span,
                     Puck.Transpiler.Diagnostics.PuckDiagnosticCodes.InvalidValue
-                ); }
+                );
+                }
                 return lowered!.GetValue<string>();
             }
             return node switch {

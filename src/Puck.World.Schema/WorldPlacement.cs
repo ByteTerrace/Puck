@@ -126,7 +126,8 @@ public sealed record WorldPlacementInhabitCount(int? Literal = null, string? Row
     /// time; a live document edit that drops the row reads defensively as absent rather than throwing).</summary>
     /// <param name="definition">The document to resolve against.</param>
     /// <param name="tick">The tick this read answers as of.</param>
-    public long? Resolve(WorldDefinition definition, ulong tick = 0UL) {
+    /// <param name="engineTick">The engine tick this read answers as of.</param>
+    public long? Resolve(WorldDefinition definition, ulong tick = 0UL, ulong engineTick = 0UL) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (Row is not { } row) {
@@ -140,6 +141,7 @@ public sealed record WorldPlacementInhabitCount(int? Literal = null, string? Row
             row: out _,
             rowName: row,
             tick: tick,
+            engineTick: engineTick,
             text: out _
         )
             ? raw

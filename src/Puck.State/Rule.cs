@@ -21,7 +21,7 @@ namespace Puck.State;
 /// spam if the advance were ever denied. A period of exactly 1 tick never closes its own gate and wants Level.</para>
 /// <para><b>A cooldown is a relative countdown, not a <c>$tick</c> threshold.</b> A <c>nextAllowed</c> row set to
 /// <c>$tick</c>+N on use is open the instant a request arrives once background ticks have accrued. Build a cooldown as
-/// a <c>NonNegative</c> <c>int</c> row a <see cref="ActionTriggerMode.Level"/> rule gated <c>&gt; 0</c> consumes each
+/// an <c>int</c> row declaring <c>min</c> zero, a <see cref="ActionTriggerMode.Level"/> rule gated <c>&gt; 0</c> consumes each
 /// tick with <see cref="ActionEffect.CountdownState"/>, and the ability gated on <c>&lt;= 0</c>; using the ability
 /// re-arms it with <c>setState valueSeconds=N</c>.</para>
 /// <para><b>A copy operand reads the same same-tick state a gate does</b>, so an earlier rule's write is visible to a

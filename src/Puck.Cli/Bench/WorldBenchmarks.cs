@@ -44,7 +44,7 @@ internal static class WorldBenchmarks {
 
         var applied = 0;
 
-        server.MutationJournalTap = (_, _) => applied++;
+        server.MutationJournalTap = (_, _, _) => applied++;
 
         var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         var stopwatch = Stopwatch.StartNew();

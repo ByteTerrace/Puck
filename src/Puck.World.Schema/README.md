@@ -1010,7 +1010,7 @@ ONE authored spelling (`WorldStateRowJsonConverter` in
 {"name":.., "kind":"Int"|"Fixed"|"Bool"|"Text",
  "value":..              // sugar for one cell keyed "$value"
  "cells":[{"key":..,"value":..}],   // ... OR the keyed form; never both
- "min":.., "max":.., "capacity":.., "nonNegative":..}
+ "min":.., "max":.., "capacity":.., "overflow":"Refuse"|"Saturate"}
 ```
 
 `StateCatalog.Compile` turns this authored inventory into immutable typed
@@ -1040,11 +1040,19 @@ CANNOT hold an empty, unsafe, or dotted value, refusing at JSON parse (naming
 the offending character) rather than at whole-document validation; the
 dot-free rule is what makes the `state.<row>.<key>` HUD binding grammar
 unambiguous, since neither half of that token can itself contain the
-separator. `nonNegative`
+separator. Declaring `min` zero
 is what a "timer" meant before the table primitive's separate
 `counter`/`timer` vocabulary reconciled into this same four-token `CellKind`
-(a counter IS `fixed`; a timer IS `int` + `nonNegative`). A row-wide `Min`/
-`Max` are BOTH-OR-NEITHER; a HUD gauge bound to `state.<row>` (the slot form)
+(a counter IS `fixed`; a timer IS `int` + `min: 0`). A row-wide `Min`/
+`Max` are each INDEPENDENTLY optional—a one-sided range (a floor with no
+ceiling, or the reverse) is legal, and when both are declared `Min` must be
+less than `Max`. `overflow` (`Refuse`, the default, or `Saturate`) says what a
+write leaving that range—or a genuine 64-bit arithmetic overflow, even on a
+row declaring no range at all—does: refuse it by name, or clamp it to the
+crossed bound (or to the storage limit on a side with no declared bound).
+`StateRow.TryAdmitWrite` is the one method every write path decides through.
+Both `min`/`max` and `overflow` are legitimate only on `Int`/`Fixed` rows. A
+HUD gauge bound to `state.<row>` (the slot form)
 or `state.<row>.<key>` (the cell form) reads that declared range off the ROW
 either way—a plain `state.<row>` binding on a KEYED row (no single cell to
 show) draws empty, the same "unbound gauge" precedent (see the HUD section
@@ -1071,29 +1079,31 @@ REDRAWING a draw site and re-authoring it.
 **One READ seam over the whole section.** `WorldDefinitionRows.FindStateRow` is
 the one row-find (ordinal, allocation-free, beside `FindCreation`/`FindPlacement`
 /`FindKit`/`FindSpawnPoint`), and `WorldStateReader.TryRead(definition, rowName,
-key, tick, out row, out rawValue, out text)` is the one (row, key) → raw-value
-read. Every live read routes through it: a rule's gate comparand and live copy
-operand, a rule effect's read-modify-write, the `world.state` console read-backs
-at every grain, the HUD `state.<row>`/`state.<row>.<key>` binding, and the
-`UpsertStateCell` Add compose arm—so no two of them can drift in which cell a
+key, tick, engineTick, out row, out rawValue, out text)` is the one (row, key) →
+raw-value read. Every live read routes through it: a rule's gate comparand and
+live copy operand, a rule effect's read-modify-write, the `world.state` console
+read-backs at every grain, the HUD `state.<row>`/`state.<row>.<key>` binding, and
+the `UpsertStateCell` Add compose arm—so no two of them can drift in which cell a
 pair names, or in what that cell currently holds. A null `key` means the row's
 slot cell; an unknown row returns `false`, while a known row with no such cell
 returns `true` with a null `rawValue`, because a rule effect treats an absent
-cell as zero but an absent ROW as nothing to write. The `tick` parameter carries
-the instant the read answers AS OF (the server's completed tick authoritatively,
-the last delivered snapshot's tick on the client—which is itself a SERVER
-tick, so it is comparable to an epoch) and it is what an ADVANCE row's value is
-computed at (below). The reader hands back a RAW value rather than a
+cell as zero but an absent ROW as nothing to write. `tick` and `engineTick`
+carry two independent instants the read answers AS OF (the server's completed
+tick/engine tick authoritatively, the last delivered snapshot's own tick/engine
+tick on the client): `tick` is what a `dynamics`/`cycle` row's value is computed
+at, and `engineTick` is what an ADVANCE row's value is computed at (below)—the
+two never share a coordinate, since simulation rate and engine rate move
+independently. The reader hands back a RAW value rather than a
 `StateCell` for exactly that reason: a computed value has no stored cell to
 hand back, and minting one per read would allocate on the per-frame HUD path.
 The whole-document validator
 deliberately stays off this seam: it builds a name-keyed map once per walk, and
 a linear scan per lookup would make validation quadratic. So do the durable
 identity-document reads (`WorldIdentity`, `Server/WorldOwnedWorlds`)—an
-identity document has no server and no tick, so it has nothing honest to pass
-and an advance row it carries reads FROZEN at its stored base; folding them on
-is a design decision about what identity state means over time, not a
-consolidation.
+identity document has no server and no tick/engine tick, so it has nothing
+honest to pass and an advance row it carries reads FROZEN at its stored base;
+folding them on is a design decision about what identity state means over
+time, not a consolidation.
 
 ## `state.lattices`—fields folded into state
 
@@ -1335,7 +1345,7 @@ truth and overwrites the literal on every fresh load, nothing shadowed
 silently.
 
 **Draw domains are narrowed STATICALLY**, against the site's own admissible range
-(a state row's `min`/`max`/`nonNegative`, the census coherence sum for
+(a state row's `min`/`max`, the census coherence sum for
 `bodies.capacity`, every reachable token for `host.backend`). Without that, a
 draw the validator admits could produce a value the SAME validator refuses on the
 resolved document—so whether the world boots would depend on what it rolled, a
@@ -1348,26 +1358,52 @@ behavior; a positive value is refused only if negative here—the fold that
 actually bounds the journal (`WorldServer.EnforceJournalDepth`, run once per
 tick) lives in `Puck.World.Server`, not this project.
 
-**A row may instead declare an ADVANCE** (`StateAdvance`): `rateNumerator`/
-`rateDenominator` (an exact per-tick rate, in the row's own DISPLAYED unit—for
-a `fixed` row `1/1` is `1.0` per tick, and a rate far slower than one raw Q48.16
-tick still accumulates exactly; may be negative for decay, which mirrors the
-positive rate of equal magnitude rather than flooring the signed quantity) and
-`epochTick` (the tick it starts from). The stored slot cell is a BASE value; the
-READ value is `base + rate*(currentTick-epochTick)`, computed lazily on every
-read via `Puck.Maths.DiscreteMeasure`'s exact rational allocation—nothing
-per-tick materializes and nothing per-tick journals. Legitimate only on an
-int/fixed SCALAR row (no `capacity`, no non-empty `cells`) and never beside
-`draw`—a row is an authored-randomness draw site or a continuous accumulator,
-never both. An explicit write (`UpsertStateRow`, or `UpsertStateCell` naming the row's
-own `SlotKey`) RE-BASES: the written value becomes the new base and the epoch
-becomes the tick the write applied at, `WorldServer.RebaseCellTraits`'s job,
-run for both a live apply and `world.undo`'s per-entry replay (keyed off the
-journal entry's own tick) so undo rewinds an advancing row exactly like it
-rewinds a draw site's `drawCursor`. A declared `min`/`max`/`nonNegative` envelope
-CLAMPS the computed value on every read without rewriting the stored base—the
-read side of the envelope duality (a computed value clamps; an explicit write
-refuses).
+**A row's trait is the default behavior of every cell it carries, including a
+key a later write mints; a cell replaces that default wholesale, or opts out
+with `"behavior": "none"`.** `EffectiveBehavior.Resolve(row, cell)` is the ONE
+place every consumer — readers, the validator, rebase/settle, JSON
+conversion, save capture — decides which of `advance`/`dynamics`/`cycle`, if
+any, governs a cell (its own, else its row's default); `world.state` and the
+HUD read through it identically. A cell may not combine its own trait with
+`"behavior": "none"`, and neither is legitimate on the reserved slot key,
+since a slot's one cell has no separate default of its own to override.
+Timing state — the epoch, a dynamics follower's sampled position/velocity, a
+cycle's carried substep remainder — lives on the CELL, in `clock`
+(`StateCellClock`, `{epochTick?, epochEngineTick?, y0?, v0?, substepTicks?}`,
+every field optional), never on the trait: a key a write mints later starts
+its own clock from the tick (and engine tick) it was created, and a slot
+row's timing state is authored as a `clock` object beside its bare `value`
+sugar. The two epochs are independent: `epochTick` is a simulation tick, read
+by `dynamics`/`cycle`; `epochEngineTick` is an engine tick, read only by
+`advance` (see below).
+
+**A row may declare an ADVANCE** (`StateAdvance`): `perSecondNumerator`/
+`perSecondDenominator` (an exact rate PER SECOND, in the row's own DISPLAYED
+unit—for a `fixed` row `1/1` is `1.0` per second; may be negative for decay,
+which mirrors the positive rate of equal magnitude rather than flooring the
+signed quantity). Legitimate on an int/fixed row whatever its domain (slot or
+keyed), never beside `draw`—a row is an authored-randomness draw site or a
+continuous accumulator, never both. The stored cell is a BASE value; the READ
+value is
+`base + rate*(currentEngineTick-clock.epochEngineTick)/TicksPerSecond`,
+computed lazily on every read via `Puck.Maths.DiscreteMeasure`'s exact
+rational allocation (the per-second rate's own denominator folded together
+with the engine's fixed 50,400-tick-per-second clock,
+`FixedTickConversion.TicksPerSecond`)—nothing per-tick materializes and
+nothing per-tick journals. Advance is evaluated against ENGINE ticks, never
+simulation ticks, so a live change to the world's own `simulation.rateHz`
+moves no epoch and skews no accumulation. An explicit write (`UpsertStateRow`,
+or `UpsertStateCell` naming the cell) RE-BASES: the written value becomes the
+new base and the clock's engine-tick epoch becomes the engine tick the write
+applied at, `WorldServer.RebaseCellTraits` (per cell, `SettleCell`), run for
+both a live apply and `world.undo`'s per-entry replay (keyed off the journal
+entry's own RECORDED engine tick — every journal entry, in-memory and
+durable, carries an engine tick beside its simulation tick) so undo rewinds
+an advancing cell exactly like it rewinds a draw site's `drawCursor`. A
+declared `min`/`max` envelope CLAMPS the computed value on every read without
+rewriting the stored base—the read side of the envelope duality (a computed
+value clamps; an explicit write is decided by `TryAdmitWrite`, refusing or
+saturating per the row's `overflow` policy).
 
 `StateAdvance.ComputeCurrentValue` has one application site,
 `StateReader`'s known-cell computation, and that is the whole design: both
@@ -1381,115 +1417,124 @@ the stored base would have landed on -10 and silently discarded everything
 accumulated since the epoch. A row declared with no value carries no slot cell
 at all, so a rule READING it refuses `StateCellUndeclared` until the first
 write. `world.state`'s row line echoes the trait as
-`advance=<num>/<den>@epoch<n>`.
+`advance=<num>/<den>/s@engineEpoch<n>`.
 
-**`world.save` settles an advancing row/cell, in the serialized PROJECTION
-only.** `epochTick` is SESSION-relative (a tick
+**`world.save` settles an advancing cell, in the serialized PROJECTION
+only.** `clock.epochEngineTick` is SESSION-relative (an engine tick
 count from process start), so writing it verbatim to a saved file left a
 reloaded document reading FROZEN at its stored base until the NEW session's
-own tick counter climbed back past the OLD epoch. `Puck.World`'s
+own engine-tick counter climbed back past the OLD epoch. `Puck.World`'s
 `WorldSessionCapture.Capture` (the `world.save` fold) writes every
-advancing row's slot cell, and every advancing keyed cell's own base, as its
-LIVE computed value at the save tick, and projects `epochTick: 0`—so tick 0
-of the reloaded session already reads that value and keeps advancing
-immediately. The LIVE in-memory document is never touched (a save is a
-snapshot, not a mutation, exactly like every other session dimension this
-fold folds)—only the bytes written to disk carry the settled base/epoch.
+advancing cell's base as its LIVE computed value at the save's completed
+engine tick, and projects `clock.epochEngineTick: 0`—so engine tick 0 of the
+reloaded session already reads that value and keeps advancing immediately.
+The LIVE in-memory document is never touched (a save is a snapshot, not a
+mutation, exactly like every other session dimension this fold folds)—only
+the bytes written to disk carry the settled base/clock.
 
-**A KEYED row's own cells advance INDEPENDENTLY** through `StateCell.Advance`
-—the same `StateAdvance` shape, authored per cell instead of per row:
+**A KEYED row's own cells may instead advance INDEPENDENTLY** through
+`StateCell.Advance`—the same `StateAdvance` shape, authored per cell instead
+of inherited from the row:
 
 ```json
 {"name":"threat","kind":"Fixed","capacity":8,
  "cells":[
-   {"key":"body:0","value":"40.0","advance":{"rateNumerator":1,"rateDenominator":4,"epochTick":0}},
-   {"key":"body:1","value":"10.0","advance":{"rateNumerator":-1,"rateDenominator":2,"epochTick":120}}
+   {"key":"body:0","value":"40.0","advance":{"perSecondNumerator":1,"perSecondDenominator":4}},
+   {"key":"body:1","value":"10.0","advance":{"perSecondNumerator":-1,"perSecondDenominator":2},"clock":{"epochEngineTick":50400}}
  ]}
 ```
 
 Each cell's stored `value` is its own BASE, accumulating from its own
-`epochTick` at its own rate—a body's HP, threat, or resource regenerates
-(or drains) on its own clock, independent of every other cell in the same
-row. Legitimate only on a NON-reserved cell key: the reserved slot key
-(`WorldStateRow.SlotKey`) may carry only the row's OWN `advance` (above),
-never a cell-level one—the two never both name the same cell, so "which
-advance governs this cell" is never an open question. A DRAW SITE's own
-bookkeeping is not reachable here at all: `drawCursor`/`drawnMasks` are typed row
-FIELDS, never cells, so nothing can name them as an accumulator. `StateReader.TryRead` checks the row's own trait first
-(only relevant for the slot cell) and falls back to the CELL's own trait
-otherwise, so a scalar row's behavior is untouched. Because
-`StateReader.Reduce`/`ArgExtremum` resolve the row once and each candidate
-cell once through that identical known-cell computation rather than repeating
-row/key scans or reading `StateCell.Value` directly. A
-`$reduce:sum`/`$argmax:`/`$argmin:` rule operand over a table of independently
-advancing cells therefore sees every cell's LIVE value in one linear pass. A per-cell VALUE write
-(`world.state.cell.set`, `UpsertStateCell`) carries no advance payload of its
-own, so it PRESERVES whatever the cell already declared and re-bases its
-epoch to the write's tick—`WorldServer.RebaseCellTraits`'s widened job,
-run for a whole-row `UpsertStateRow` (which re-bases the row's own slot trait
-AND every keyed cell's own trait, since it re-declares the whole row) and for
-a per-cell `UpsertStateCell` (which re-bases only the ONE cell it names)—
-both for a live apply and for `world.undo`'s per-entry replay, exactly as it
-already did for the scalar case. `world.state`'s cell line echoes a cell's
-own trait the same way the row line echoes the row's:
-`advance=<num>/<den>@epoch<n>`. A value that must wrap is a `cycle` row
-(below), never an advance.
+`clock.epochEngineTick` at its own rate—a body's HP, threat, or resource
+regenerates (or drains) on its own clock, independent of every other cell in
+the same row. A cell's own `advance` (or `dynamics`/`cycle`) is legitimate
+only on a NON-reserved cell key: the reserved slot key (`WorldStateRow.SlotKey`)
+has no separate default of its own to override—the two never both name the
+same cell, so "which advance governs this cell" is never an open question. A
+DRAW SITE's own bookkeeping is not reachable here at all: `drawCursor`/
+`drawnMasks` are typed row FIELDS, never cells, so nothing can name them as
+an accumulator. `EffectiveBehavior.Resolve` checks the cell's own trait
+first and falls back to the row's default otherwise, so a slot row's
+behavior is untouched. Because `StateReader.Reduce`/`ArgExtremum` resolve
+the row once and each candidate cell once through that identical known-cell
+computation rather than repeating row/key scans or reading `StateCell.Value`
+directly, a `$reduce:sum`/`$argmax:`/`$argmin:` rule operand over a table of
+independently advancing cells sees every cell's LIVE value in one linear
+pass. A per-cell VALUE write (`world.state.cell.set`, `UpsertStateCell`)
+carries no advance payload of its own, so it PRESERVES whatever the cell
+already declared (its own trait, or nothing — the row's default keeps
+applying) and re-bases its clock to the write's tick (and engine
+tick)—`WorldServer.RebaseCellTraits`'s
+widened job, run for a whole-row `UpsertStateRow` (which resettles every
+cell the row carries, since it re-declares the whole row) and for a per-cell
+`UpsertStateCell` (which resettles only the ONE cell it names)—both for a
+live apply and for `world.undo`'s per-entry replay, exactly as it already
+did for the scalar case. A key a write mints later inherits the row's
+default and starts its own clock from that tick (and engine tick). `world.state`'s
+cell line echoes a cell's effective trait the same way the row line echoes
+the row's: `advance=<num>/<den>/s@engineEpoch<n>`. A value that must wrap is
+a `cycle` row (below), never an advance.
 
-**A row or keyed cell may instead declare `dynamics`** (`StateDynamics`
-—`row`, `y0`, `v0`, `epochTick`), `advance`'s closed-form sibling: mutually
-exclusive with `advance`/`draw`/a bare `value`, naming a `dynamics` section
-row whose pole-matched second-order response `WorldStateReader.TryReadEased`
-evaluates lazily from `(y0, v0)` at the elapsed tick—no per-tick write. `y0`
-and `v0` are ALWAYS raw Q48.16 continuous-state bits, including on an `int`
-row; only the stored target and the final presented sample use the carrying
-row's encoding. That preserves sub-unit position and velocity across an integer
+**A row or a cell may instead declare `dynamics`** (`StateDynamics`—`row`),
+`advance`'s closed-form sibling: mutually exclusive with `advance`/`draw`/a
+bare `value`, naming a `dynamics` section row whose pole-matched second-order
+response `WorldStateReader.TryReadEased` evaluates lazily from the carrying
+cell's own `clock.y0`/`v0` at the elapsed tick—no per-tick write. `y0` and
+`v0` are ALWAYS raw Q48.16 continuous-state bits, including on an `int` row;
+only the stored target and the final presented sample use the carrying row's
+encoding. That preserves sub-unit position and velocity across an integer
 target's rebase instead of quantizing the follower at every write. The
-stored cell value stays the TRUTH the target; a write rebases the trait
-(`RebaseCellTraits`'s `RebaseDynamics` arm) the same way it rebases `advance`
-—the live eased sample and a `Retarget` velocity kick become the new
-`(y0, v0)` at the writing tick. `y0`/`v0` are authored and echoed in the fixed spelling on every row kind (they are the follower's
-continuous state, not the row's unit). `world.state` echoes
+stored cell value stays the TRUTH the target; a write rebases the cell's
+`clock` (`WorldServer.RebaseCellTraits`'s `SettleDynamicsClock` arm) the same way it rebases
+`advance`—the live eased sample and a `Retarget` velocity kick become the new
+`(y0, v0)` at the writing tick. `y0`/`v0` are authored and echoed in the
+fixed spelling on every row kind (they are the follower's continuous state,
+not the row's unit). `world.state` echoes
 `dynamics=<row> y0=<v> v0=<v>@epoch<n> eased=<v>` beside `value=`.
 
-**A row or keyed cell may instead declare `cycle`** (`StateCycle`—
-`word`, `power`, `output`, `ticksPerStep`, `epochTick`, `substepTicks`): the
-tick-indexed rotation, mutually exclusive with `advance`/`dynamics`/`draw`/
-`lattice` and scalar-only at the row level the same way those are. The value
-is a pure function of the server tick through a generator of the symmetry
-lattice's reflection group (`Puck.Maths.SymmetryWord`): `word` is one to eight
-mirror nodes applied first to last, or omitted for the lattice's own
-thirty-step cycle (`Puck.Maths.CyclicRotation`), and `power` (nonzero, default
-1) is how many applications one step is—with no word, powers 1, 7, 11 and 13
-are the cycle's four rotation planes. The loop's period is the generator's
-order, derived from the word rather than authored: a word of order twelve is a
+**A row or a cell may instead declare `cycle`** (`StateCycle`—`word`,
+`power`, `output`, `ticksPerStep`): the tick-indexed rotation, mutually
+exclusive with `advance`/`dynamics`/`draw`/`lattice`. The value is a pure
+function of the server tick through a generator of the symmetry lattice's
+reflection group (`Puck.Maths.SymmetryWord`): `word` is one to eight mirror
+nodes applied first to last, or omitted for the lattice's own thirty-step
+cycle (`Puck.Maths.CyclicRotation`), and `power` (nonzero, default 1) is how
+many applications one step is—with no word, powers 1, 7, 11 and 13 are the
+cycle's four rotation planes. The loop's period is the generator's order,
+derived from the word rather than authored: a word of order twelve is a
 twelve-position dial, and `world.symmetry.word <mirror>... [node:<n>]` prints a
 word's order and a node's orbit before it is authored. A word that moves no
 node, a power of zero, and a power at or past the order are refused. One step
-lasts `ticksPerStep` ticks from `epochTick`. `output` names what the cell
-reads: `Step` (0..order−1), `Node` or `Ring` (the node's ring, 0..7) on an
-`int` row; `Turns` (`⌊step·2^16/order⌋` raw, so it wraps once per loop the way
-`render.cycle` keys read a row), `Cos`, `Sin` (the order's root of unity at the
-step), `ProjectionX` or `ProjectionY` on a `fixed` row. The lattice outputs
-read through `Puck.Maths.SymmetryLattice`: the stored value is the node
-(0..239) the orbit walk starts from, carried `power` generator applications
-per step, and the projection outputs are that node's point on the plane of
-eight concentric rings of thirty; the lattice's own cycle never leaves a ring,
-so `Ring` is constant under it and moves only under a word whose orbits cross
-rings. The stored cell value is the PHASE, in the
-row's displayed unit (whole steps or a node index; a `fixed` row's phase is the
-whole part of its value): nothing accumulates and nothing rebases, an explicit
-write or a rule's `setState` sets the phase and `addState` turns it by whole
-steps, and a declared envelope clamps the computed value on every read as it
-does an advancing row's. A cycling row is refused as a `state:<row>` control
-context the same way an advancing one is. `world.state` echoes
+lasts `ticksPerStep` ticks from the carrying cell's own `clock.epochTick`.
+`output` names what the cell reads: `Step` (0..order−1), `Node` or `Ring`
+(the node's ring, 0..7) on an `int` row; `Turns` (`⌊step·2^16/order⌋` raw, so
+it wraps once per loop the way `render.cycle` keys read a row), `Cos`, `Sin`
+(the order's root of unity at the step), `ProjectionX` or `ProjectionY` on a
+`fixed` row. The lattice outputs read through `Puck.Maths.SymmetryLattice`:
+the stored value is the node (0..239) the orbit walk starts from, carried
+`power` generator applications per step, and the projection outputs are that
+node's point on the plane of eight concentric rings of thirty; the lattice's
+own cycle never leaves a ring, so `Ring` is constant under it and moves only
+under a word whose orbits cross rings. The stored cell value is the PHASE, in
+the row's displayed unit (whole steps or a node index; a `fixed` row's phase
+is the whole part of its value): an ordinary write under an UNCHANGED
+effective cycle sets the phase and leaves the clock alone (a rule's
+`setState` sets the phase, `addState` turns it by whole steps), and a
+declared envelope clamps the computed value on every read as it does an
+advancing cell's. Only a genuinely re-authored default or override — a fresh
+key, a switch in or out of cycle, a parameter change — resettles the clock,
+per the transition table in `docs/plans/state-authoring.md`. A cycling row
+is refused as a `state:<row>` control context the same way an advancing one
+is. `world.state` echoes
 `cycle=<coxeter|[m,…]>^<power>:<output>/<ticksPerStep>@epoch<n> order=<order>`
 beside the live `value=`, with `+<substepTicks>` appended after the epoch when
 a settled document carries part of a step.
 `world.save` settles a cycling cell in the serialized projection only: the
-stored value becomes the current rotation index (or node), `epochTick` projects
-to `0`, and `substepTicks` carries the elapsed portion of the current step. A
-reload therefore preserves both the first value and the tick of the next
-transition; `substepTicks` is refused outside `[0, ticksPerStep)`.
+stored value becomes the current rotation index (or node), `clock.epochTick`
+projects to `0`, and `clock.substepTicks` carries the elapsed portion of the
+current step. A reload therefore preserves both the first value and the tick
+of the next transition; `clock.substepTicks` is refused outside
+`[0, ticksPerStep)`.
 
 **A keyed `text`-kind row IS the text-table primitive**—an authored, named
 collection of strings (flavor lines, names, phrases) a HUD `Binding` or
@@ -1615,8 +1660,8 @@ fill draws, placement ordinals, body references). `WorldRuleVocabulary` is the
 one `RuleVocabulary` the world registers: an operand family for its reserved
 channels (`WorldRuleFacts`—bodies, distance, line of sight, screens, links,
 regions, the population, the music clock, `$board:cellOf`), one `EffectFamily`
-per world arm of `WorldEffect` with explicit transaction admission,
-the four `WorldPredicate` body-program arms (which refuse in rule scope), and
+per world arm of `WorldEffect` with explicit transaction and `if`-branch
+admission, the four `WorldPredicate` body-program arms (which refuse in rule scope), and
 the `$pair:` key. The same vocabulary's `ExtendJson` is what `WorldJsonVocabulary`
 installs so those arms read and write under their `$type` discriminators. A
 compiled rule is a `CompiledWorldRule : CompiledRule` whose effects and operands
@@ -1904,7 +1949,7 @@ keeps re-blending every tick.
 ### World-rule state effects
 
 The state effects are `setState`, `addState`, `countdownState`,
-`removeStateCell`, `scheduleState`, and `transaction`. Rules may also generate a
+`removeStateCell`, `scheduleState`, `transaction`, and `if`. Rules may also generate a
 text row, edit HUD panels or placements, save the session, pose or drive an
 active body, set or clear one of its target registers, emit a gameplay cue, and
 paint a bounded sphere into a live lattice field. Each effect keeps its native
@@ -2108,6 +2153,21 @@ records, including text writes and expression-sourced history pushes. The
 compiler rejects nested transactions and `save`: persistence I/O cannot be
 rolled back. Registered effect families opt in through `AllowsTransaction`.
 `removeStateCell` lets the same transaction retire keyed membership cleanly.
+
+An `if` effect branches its own `then`/`else` effect lists on a predicate — the
+same grammar a gate compiles. Both branches read the frame at the `if`'s own
+position, so an earlier same-firing write is visible to the condition exactly
+as a later effect's own operand would see it. A condition that cannot
+evaluate runs neither branch and is reported the same way a failing top-level
+effect is; a false condition with no branch left to run is not a failure.
+Each branch effect is its own boundary, on the same terms as a top-level
+effect or, inside a `transaction`, any other step — a branch is not itself a
+transaction. An `if` may sit inside a `transaction`; a `transaction` may sit
+inside an `if` only when that `if` is not itself inside one, since
+transactions never nest either way. `save` is refused inside any `if` branch,
+at any nesting depth, through `EffectFamily.AllowsInsideBranch`. `if` has no
+body-scope meaning and refuses by name in a kit's per-body actions, whose
+compiled instruction stream carries no branch of its own.
 
 `emitCue` publishes a stable dotted token of at most 64 ASCII characters, an
 optional payload of at most 256 UTF-16 code units, an optional body association,

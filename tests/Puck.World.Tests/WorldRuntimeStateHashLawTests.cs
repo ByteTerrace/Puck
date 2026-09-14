@@ -189,9 +189,8 @@ public sealed class WorldRuntimeStateHashLawTests {
                         Value: 5L
                     )],
                 Advance: new StateAdvance(
-                    EpochTick: 0L,
-                    RateDenominator: 1L,
-                    RateNumerator: 1L
+                    PerSecondDenominator: 1L,
+                    PerSecondNumerator: 1L
                 )
             )]),
         };

@@ -114,7 +114,8 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
                 row: out var row,
                 rowName: name,
                 text: out var cellText,
-                tick: m_client.Tick
+                tick: m_client.Tick,
+                engineTick: m_client.EngineTick
             )
             : WorldStateReader.TryReadEased(
                 definition: m_client.Definition,
@@ -123,7 +124,8 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
                 row: out row,
                 rowName: name,
                 text: out cellText,
-                tick: m_client.Tick
+                tick: m_client.Tick,
+                engineTick: m_client.EngineTick
             )
         );
 

@@ -6,15 +6,16 @@ namespace Puck.State;
 
 /// <summary>
 /// A <see cref="StateRow"/>'s continuous accumulation trait: the row's stored cell is a base value, and the
-/// read value advances with elapsed ticks at an exact per-tick rational rate from the tick it was last explicitly
-/// set (<see cref="EpochTick"/>). Used for regen, fractional accumulation, a day/night clock — anything that should
-/// move on its own between observations.
+/// read value advances with elapsed engine ticks at an exact per-second rational rate from the engine tick it was
+/// last explicitly set (<see cref="StateCellClock.EpochEngineTick"/>). Used for regen, fractional accumulation, a
+/// day/night clock — anything that should move on its own between observations.
 /// </summary>
 /// <remarks>
 /// <para>Nothing per-tick materializes or journals: the computed value (<see cref="ComputeCurrentValue"/>) is a pure
-/// function of the base, <see cref="EpochTick"/>, the rate, and the tick asked about. An explicit write —
-/// <c>UpsertStateRow</c> re-authoring the row, or a slot-cell <c>UpsertStateCell</c> — rebases: the written value
-/// becomes the new base and <see cref="EpochTick"/> becomes the tick the write applied at.</para>
+/// function of the base, the carrying cell's own <see cref="StateCellClock.EpochEngineTick"/>, the rate, and the
+/// engine tick asked about. An explicit write — <c>UpsertStateRow</c> re-authoring the row, or an
+/// <c>UpsertStateCell</c> — rebases: the written value becomes the new base and the cell's clock epoch becomes the
+/// engine tick the write applied at.</para>
 /// <para><see cref="ComputeCurrentValue"/> is applied only by <see cref="StateReader"/>'s central known-cell
 /// computation, so both its name and compiled-handle entrances, every aggregate, read-back, rule gate, HUD binding,
 /// and arithmetic write resolve an advancing row through the same code. An
@@ -22,45 +23,50 @@ namespace Puck.State;
 /// <para>A rule's own <c>compareState</c> reads an advancing row's live computed value like any other row. A rule's
 /// <c>setState</c>/<c>addState</c> effect against an advancing row's slot cell is an explicit write, so it rebases —
 /// a rule that writes the same row every tick overrides this trait's accumulation with its own.</para>
-/// <para><see cref="RateNumerator"/>/<see cref="RateDenominator"/> is an exact fraction of the row's own displayed
-/// unit per tick — the unit its <c>value</c>, <see cref="StateRow.Min"/>, and <see cref="StateRow.Max"/>
-/// are authored in, not raw storage. For <see cref="CellKind.Int"/> the two coincide. For
-/// <see cref="CellKind.Fixed"/> they do not: <see cref="ComputeCurrentValue"/> scales the numerator by
-/// <c>2^FixedQ4816.FractionBitCount</c> before allocating via <see cref="Puck.Maths.DiscreteMeasure"/>'s exact
-/// rational allocation, so a rate accumulates without rounding drift.</para>
+/// <para><see cref="PerSecondNumerator"/>/<see cref="PerSecondDenominator"/> is an exact fraction of the row's own
+/// displayed unit per second — the unit its <c>value</c>, <see cref="StateRow.Min"/>, and <see cref="StateRow.Max"/>
+/// are authored in, not raw storage — evaluated against the engine's fixed 50,400-tick-per-second clock
+/// (<see cref="FixedTickConversion.TicksPerSecond"/>, the same base <c>valueSeconds</c> duration authoring already
+/// uses), never against the world's own <c>simulation.rateHz</c>. At a constant simulation rate this reproduces the
+/// same value at every simulation-tick boundary a per-tick rational rate would have, but unlike a per-tick rate it
+/// means the same thing regardless of the world's simulation rate, and a live rate change moves no epoch and skews
+/// no accumulation, because engine ticks accrue at a fixed real-time pace no simulation rate can move. For
+/// <see cref="CellKind.Fixed"/>, the numerator is additionally scaled by <c>2^FixedQ4816.FractionBitCount</c> before
+/// allocating via <see cref="Puck.Maths.DiscreteMeasure"/>'s exact rational allocation, so a rate accumulates without
+/// rounding drift.</para>
 /// <para>The rate may be negative (decay/drain); a negative rate is the exact mirror of its positive twin, not a
 /// floor of the signed affine function — <see cref="Puck.Maths.DiscreteMeasure"/> accepts only a non-negative rate,
 /// so this type floors the magnitude and negates it. Decay and regen at equal magnitude stay symmetric.</para>
-/// <para>A declared <see cref="StateRow.Min"/>/<see cref="StateRow.Max"/> or
-/// <see cref="StateRow.NonNegative"/> floor clamps the computed value on every read; it never rewrites the
-/// stored base or epoch. A value that must wrap is a <see cref="StateCycle"/>, not an advance.</para>
+/// <para>A declared <see cref="StateRow.Min"/>/<see cref="StateRow.Max"/> clamps the computed value on every read;
+/// it never rewrites the stored base or epoch. A value that must wrap is a <see cref="StateCycle"/>, not an
+/// advance.</para>
 /// </remarks>
-/// <param name="RateNumerator">The per-tick rate's signed numerator, in the row's own displayed unit (see this
-/// type's remarks). Negative accumulates downward (decay); zero is declared but inert.</param>
-/// <param name="RateDenominator">The per-tick rate's denominator. Refused at zero or below.</param>
-/// <param name="EpochTick">The server tick the rate starts accumulating from — the tick the row's base value was
-/// last explicitly set, or the loaded document's own authored value for a row never set since. A negative value is
-/// refused; in practice this can only be violated by an authored boot document, since every live write rebases to
-/// the applying tick before validation sees it.</param>
+/// <param name="PerSecondNumerator">The per-second rate's signed numerator, in the row's own displayed unit (see
+/// this type's remarks). Negative accumulates downward (decay); zero is declared but inert.</param>
+/// <param name="PerSecondDenominator">The per-second rate's denominator. Refused at zero or below.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record StateAdvance(long RateNumerator, long RateDenominator, long EpochTick = 0) {
+public sealed record StateAdvance(long PerSecondNumerator, long PerSecondDenominator) {
     /// <summary>Computes <paramref name="row"/>'s current value: <paramref name="baseValue"/> plus the exact
-    /// accumulation between <see cref="EpochTick"/> and <paramref name="currentTick"/>, clamped into the row's
-    /// declared envelope. A <paramref name="currentTick"/> preceding <see cref="EpochTick"/> reads as zero elapsed
-    /// rather than a negative accumulation.</summary>
+    /// accumulation between <paramref name="epochEngineTick"/> and <paramref name="currentEngineTick"/>, clamped
+    /// into the row's declared envelope. A <paramref name="currentEngineTick"/> preceding
+    /// <paramref name="epochEngineTick"/> reads as zero elapsed rather than a negative accumulation.</summary>
     /// <param name="row">The carrying row (for its <see cref="CellKind"/> and envelope).</param>
     /// <param name="baseValue">The row's stored raw cell value.</param>
-    /// <param name="currentTick">The tick to compute the value as of.</param>
+    /// <param name="currentEngineTick">The engine tick (<see cref="FixedTickConversion.TicksPerSecond"/> per second)
+    /// to compute the value as of — never a simulation tick, and never converted at the world's current simulation
+    /// rate.</param>
+    /// <param name="epochEngineTick">The carrying cell's own <see cref="StateCellClock.EpochEngineTick"/> — the
+    /// engine tick the base value was last explicitly set, or its behavior last settled.</param>
     /// <returns>The computed, envelope-clamped raw value.</returns>
-    public long ComputeCurrentValue(StateRow row, long baseValue, ulong currentTick) {
+    public long ComputeCurrentValue(StateRow row, long baseValue, ulong currentEngineTick, long epochEngineTick = 0L) {
         ArgumentNullException.ThrowIfNull(argument: row);
 
         var delta = 0L;
 
         if (
-            (RateNumerator != 0) &&
-            (currentTick > ((ulong)Math.Max(
-            val1: EpochTick,
+            (PerSecondNumerator != 0) &&
+            (currentEngineTick > ((ulong)Math.Max(
+            val1: epochEngineTick,
             val2: 0L
         )))
         ) {
@@ -68,8 +74,8 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
                 ? (1L << FixedQ4816.FractionBitCount)
                 : 1L
             );
-            var elapsed = (currentTick - ((ulong)Math.Max(
-                val1: EpochTick,
+            var elapsed = (currentEngineTick - ((ulong)Math.Max(
+                val1: epochEngineTick,
                 val2: 0L
             )));
 
@@ -78,7 +84,7 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
                 magnitude: out var magnitude,
                 scale: scale
             )) {
-                delta = ((RateNumerator < 0)
+                delta = ((PerSecondNumerator < 0)
                     ? -magnitude
                     : magnitude
                 );
@@ -89,7 +95,7 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
                     elapsed: elapsed,
                     scale: scale
                 );
-                var exact = (baseValue + ((RateNumerator < 0)
+                var exact = (baseValue + ((PerSecondNumerator < 0)
                     ? -wide
                     : wide));
 
@@ -117,10 +123,12 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
         return row.ClampToEnvelope(value: raw);
     }
 
-    // |rate| · scale allocated over the elapsed ticks, as ⌊elapsed · |rate| · scale / denominator⌋ — the exact
-    // rational allocation of DiscreteMeasure. The compiled signed-64-bit form answers every read the tick can produce
-    // in long arithmetic; the exact form remains behind it for a rate or an elapsed span the bounded representation
-    // cannot hold, so the two never disagree on a value, only on cost.
+    // |rate| · scale allocated over the elapsed engine ticks, as ⌊elapsed · |rate| · scale / (denominator ·
+    // TicksPerSecond)⌋ — the exact rational allocation of DiscreteMeasure, with the per-second rate's own denominator
+    // folded together with the engine's fixed ticks-per-second so the allocation is exact over engine ticks directly.
+    // The compiled signed-64-bit form answers every read the tick can produce in long arithmetic; the exact form
+    // remains behind it for a rate or an elapsed span the bounded representation cannot hold, so the two never
+    // disagree on a value, only on cost.
     private bool TryAccumulate(ulong elapsed, long scale, out long magnitude) {
         var compiled = CompiledFor(scale: scale);
 
@@ -160,12 +168,12 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
         // sees either the old cache or the new one. Each scale compiles on its first read only.
         if (
             (cache is null) ||
-            (cache.RateNumerator != RateNumerator) ||
-            (cache.RateDenominator != RateDenominator)
+            (cache.PerSecondNumerator != PerSecondNumerator) ||
+            (cache.PerSecondDenominator != PerSecondDenominator)
         ) {
             cache = new CompiledMeasureCache(
-                RateNumerator: RateNumerator,
-                RateDenominator: RateDenominator
+                PerSecondNumerator: PerSecondNumerator,
+                PerSecondDenominator: PerSecondDenominator
             );
             m_compiled = cache;
         }
@@ -175,33 +183,35 @@ public sealed record StateAdvance(long RateNumerator, long RateDenominator, long
             scale: scale
         );
     }
+    // The per-second rate's denominator, folded together with the engine's own fixed ticks-per-second, so the
+    // resulting measure allocates directly over engine ticks: rate/second == (rate · scale)/(denominator ·
+    // TicksPerSecond) per engine tick, exactly (never rounded), regardless of the world's own simulation rate.
     private DiscreteMeasure ExactMeasure(long scale) =>
         DiscreteMeasure.Rational(
-            denominator: RateDenominator,
-            numerator: (BigInteger.Abs(value: ((BigInteger)RateNumerator)) * scale)
+            denominator: (((BigInteger)PerSecondDenominator) * FixedTickConversion.TicksPerSecond),
+            numerator: (BigInteger.Abs(value: ((BigInteger)PerSecondNumerator)) * scale)
         );
 
     /// <summary>Tests equality over the authored members alone; the compiled-measure cache is runtime acceleration
     /// and never part of the record's identity.</summary>
     public bool Equals(StateAdvance? other) =>
-        ((other is not null) && (RateNumerator == other.RateNumerator) && (RateDenominator == other.RateDenominator) && (EpochTick == other.EpochTick));
+        ((other is not null) && (PerSecondNumerator == other.PerSecondNumerator) && (PerSecondDenominator == other.PerSecondDenominator));
     /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine(
-        value1: RateNumerator,
-        value2: RateDenominator,
-        value3: EpochTick
+        value1: PerSecondNumerator,
+        value2: PerSecondDenominator
     );
 
     // Runtime acceleration beside the immutable record, excluded from its equality above. Invalid compiled values are
     // cached too, so an exact-only rate does not retry compilation on every read.
     private CompiledMeasureCache? m_compiled;
 
-    private sealed class CompiledMeasureCache(long RateNumerator, long RateDenominator) {
+    private sealed class CompiledMeasureCache(long PerSecondNumerator, long PerSecondDenominator) {
         private CompiledDiscreteMeasure64? m_fixed;
         private CompiledDiscreteMeasure64? m_integer;
 
-        public long RateNumerator { get; } = RateNumerator;
-        public long RateDenominator { get; } = RateDenominator;
+        public long PerSecondNumerator { get; } = PerSecondNumerator;
+        public long PerSecondDenominator { get; } = PerSecondDenominator;
 
         private static CompiledDiscreteMeasure64 Compile(StateAdvance advance, long scale) {
             _ = advance.ExactMeasure(scale: scale).TryCompileInt64(compiled: out var compiled);

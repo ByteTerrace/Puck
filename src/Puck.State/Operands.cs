@@ -113,7 +113,8 @@ public sealed class StateCellOperand : OperandFact, IStateAddressedOperand {
                     rowOrdinal: ordinal,
                     row: resolved,
                     index: reader.BoundEachPosition,
-                    tick: reader.Tick
+                    tick: reader.Tick,
+                    engineTick: reader.EngineTick
                 );
 
                 return RuleFact.Finite(
@@ -361,6 +362,7 @@ public sealed class ReductionOperand : OperandFact {
             handle: handle,
             key: null,
             tick: reader.Tick,
+            engineTick: reader.EngineTick,
             row: out var declared,
             rawValue: out _,
             text: out _
@@ -397,6 +399,7 @@ public sealed class ReductionOperand : OperandFact {
                 FilterHandle,
                 null,
                 reader.Tick,
+                reader.EngineTick,
                 out filter,
                 out _,
                 out _
@@ -420,6 +423,7 @@ public sealed class ReductionOperand : OperandFact {
                 declared,
                 Reduce,
                 reader.Tick,
+                reader.EngineTick,
                 filterOrdinal,
                 filter,
                 Range
@@ -621,6 +625,7 @@ public sealed class BoardOperand : OperandFact, IStateAddressedOperand {
             handle: StateHandle,
             key: null,
             tick: reader.Tick,
+            engineTick: reader.EngineTick,
             row: out var row,
             rawValue: out _,
             text: out _
@@ -756,6 +761,7 @@ public sealed class PhaseOperand : OperandFact {
             handle: StateHandle,
             key: null,
             tick: reader.Tick,
+            engineTick: reader.EngineTick,
             row: out var declared,
             rawValue: out _,
             text: out _
@@ -843,6 +849,7 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
             handle: handle,
             key: null,
             tick: reader.Tick,
+            engineTick: reader.EngineTick,
             row: out var row,
             rawValue: out _,
             text: out _
@@ -982,6 +989,7 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
                 handle: FilterHandle,
                 key: null,
                 tick: reader.Tick,
+                engineTick: reader.EngineTick,
                 row: out source,
                 rawValue: out _,
                 text: out _
@@ -995,6 +1003,7 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
                 row: row,
                 source: source,
                 tick: reader.Tick,
+                engineTick: reader.EngineTick,
                 word: word,
                 start: start
             );
@@ -1117,10 +1126,11 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
     /// <param name="row">The word's row.</param>
     /// <param name="source">The row the values are read from — the attribute row for a zone, else <paramref name="row"/>.</param>
     /// <param name="tick">The tick the read answers as of.</param>
+    /// <param name="engineTick">The engine tick the read answers as of.</param>
     /// <param name="word">The word buffer.</param>
     /// <returns>The word's length.</returns>
     /// <param name="start">The token the word starts at, or <see langword="null"/> to read the whole row.</param>
-    public static int ReadWord(StateStore store, StateRow row, StateRow source, ulong tick, Span<long> word, string? start = null) {
+    public static int ReadWord(StateStore store, StateRow row, StateRow source, ulong tick, ulong engineTick, Span<long> word, string? start = null) {
         ArgumentNullException.ThrowIfNull(argument: store);
         var length = 0;
 
@@ -1161,6 +1171,7 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
                 row: source,
                 key: key.Value,
                 tick: tick,
+                engineTick: engineTick,
                 rawValue: out var raw,
                 text: out _
             );
@@ -1258,6 +1269,7 @@ public sealed class HistoryOperand : OperandFact {
             handle: StateHandle,
             key: null,
             tick: reader.Tick,
+            engineTick: reader.EngineTick,
             row: out var row,
             rawValue: out _,
             text: out _
