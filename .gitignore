@@ -81,6 +81,7 @@ worlds/
 /src/Puck.World/Assets/worlds/moth-courtyard.world.json
 /src/Puck.World/Assets/worlds/tools/hgb-compare.world.json
 /src/Puck.World/Assets/worlds/tools/hgb-mirror.world.json
+/src/Puck.World/Assets/worlds/tools/shader-compare.world.json
 # A battery's own test world is repo content too, and without it the battery cannot run at all.
 !/wasm/puck-addon-channelwalk/worlds/
 # A battery's own test cartridge is repo content too: a real, synthetic, code-generated Game Boy ROM
