@@ -43,8 +43,9 @@ public class SamplesCompileTests {
 
         var diagnostics = new DiagnosticBag();
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            source,
-            diagnostics: diagnostics
+            source: source,
+            diagnostics: diagnostics,
+            vocabulary: WorldDocumentVocabulary.Instance
         );
 
         Assert.NotNull(@object: parseResult.Value);
@@ -52,7 +53,8 @@ public class SamplesCompileTests {
         ModuleResolver.ValidateImportGraph(
             diagnostics: diagnostics,
             rootDoc: parseResult.Value,
-            rootPath: path
+            rootPath: path,
+            vocabulary: WorldDocumentVocabulary.Instance
         );
 
         WorldDocumentEmitter.LowerWithDiagnostics(

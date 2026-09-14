@@ -10,7 +10,8 @@ internal static class DecompileCommand {
     internal static int Run(
         string path,
         string? output,
-        bool overwrite
+        bool overwrite,
+        bool sql = false
     ) {
         var fullPath = Path.GetFullPath(path: path);
 
@@ -47,7 +48,7 @@ internal static class DecompileCommand {
             // The document's own schema picks the vocabulary, the same way compiling does.
             puckSource = (((System.Text.Json.Nodes.JsonNode.Parse(json: json) is System.Text.Json.Nodes.JsonObject document) && DecompileCartridge.Handles(document: document))
                 ? DecompileCartridge.Run(document: document)
-                : WorldDecompiler.Decompile(jsonText: json)
+                : WorldDecompiler.Decompile(jsonText: json, sql: sql)
             );
             puckSource = Puck.Transpiler.Formatting.PuckFormatter.Format(puckSource);
         } catch (Exception ex) {
@@ -120,6 +121,7 @@ internal static class DecompileCommand {
             aliases: ["-o"]
         ) { Description = "Destination output .puck path (defaults to <path>.puck)." };
         var overwriteOption = new Option<bool>(name: "--overwrite") { Description = "Overwrite destination file if it already exists." };
+        var sqlOption = new Option<bool>(name: "--sql") { Description = "Project representable state tables, slots, and rules into an embedded SQL block." };
 
         var command = new Command(
             description: "Decompile a JSON world definition into idiomatic .puck DSL source.",
@@ -128,12 +130,14 @@ internal static class DecompileCommand {
             pathArgument,
             outputOption,
             overwriteOption,
+            sqlOption,
         };
 
         command.SetAction(action: parseResult => Run(
             output: parseResult.GetValue(option: outputOption),
             overwrite: parseResult.GetValue(option: overwriteOption),
-            path: parseResult.GetRequiredValue(argument: pathArgument)
+            path: parseResult.GetRequiredValue(argument: pathArgument),
+            sql: parseResult.GetValue(option: sqlOption)
         ));
 
         return command;

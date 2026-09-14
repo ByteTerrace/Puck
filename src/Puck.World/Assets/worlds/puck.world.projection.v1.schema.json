@@ -7149,7 +7149,8 @@
                                 "Int",
                                 "Fixed",
                                 "Bool",
-                                "Text"
+                                "Text",
+                                "Vector"
                               ],
                               "default": "Fixed",
                               "title": "CellKind"
@@ -7297,7 +7298,8 @@
                                           "Int",
                                           "Fixed",
                                           "Bool",
-                                          "Text"
+                                          "Text",
+                                          "Vector"
                                         ],
                                         "default": "Fixed",
                                         "title": "CellKind"
@@ -7476,7 +7478,8 @@
                                                   "Int",
                                                   "Fixed",
                                                   "Bool",
-                                                  "Text"
+                                                  "Text",
+                                                  "Vector"
                                                 ],
                                                 "default": "Fixed",
                                                 "title": "CellKind"
@@ -17486,6 +17489,174 @@
                               ],
                               "additionalProperties": false,
                               "title": "StateTransformObserve"
+                            },
+                            {
+                              "description": "Writes the normalized sum of 1 to 8 weighted vector terms.",
+                              "properties": {
+                                "$type": {
+                                  "const": "mix"
+                                },
+                                "into": {
+                                  "description": "The target vector cell or slot.",
+                                  "type": "string"
+                                },
+                                "terms": {
+                                  "description": "The weighted vector terms.",
+                                  "type": "array",
+                                  "items": {
+                                    "description": "One term of a Mix: a vector operand with an integer weight.",
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ],
+                                    "properties": {
+                                      "from": {
+                                        "description": "The vector operand.",
+                                        "type": "string"
+                                      },
+                                      "weight": {
+                                        "description": "The integer weight in [-1000, 1000] and non-zero.",
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "from",
+                                      "weight"
+                                    ],
+                                    "additionalProperties": false,
+                                    "title": "VectorTerm"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "into",
+                                "terms"
+                              ],
+                              "additionalProperties": false,
+                              "title": "StateTransformMix"
+                            },
+                            {
+                              "description": "Writes the normalized sum of every candidate cell of a table.",
+                              "properties": {
+                                "$type": {
+                                  "const": "mean"
+                                },
+                                "from": {
+                                  "description": "The source vector table.",
+                                  "type": "string"
+                                },
+                                "into": {
+                                  "description": "The target vector cell or slot.",
+                                  "type": "string"
+                                },
+                                "where": {
+                                  "description": "Optional boolean filter row.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                }
+                              },
+                              "required": [
+                                "from",
+                                "into"
+                              ],
+                              "additionalProperties": false,
+                              "title": "StateTransformMean"
+                            },
+                            {
+                              "description": "Writes the closest cells of a table.",
+                              "properties": {
+                                "$type": {
+                                  "const": "nearest"
+                                },
+                                "from": {
+                                  "description": "The source vector table.",
+                                  "type": "string"
+                                },
+                                "query": {
+                                  "description": "The query vector cell, slot, or literal.",
+                                  "type": "string"
+                                },
+                                "into": {
+                                  "description": "The destination table or slot.",
+                                  "type": "string"
+                                },
+                                "k": {
+                                  "description": "How many nearest results to recall.",
+                                  "type": "integer"
+                                },
+                                "threshold": {
+                                  "description": "Optional threshold score.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "where": {
+                                  "description": "Optional boolean row filter.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "exclude": {
+                                  "description": "Optional key to exclude from candidates.",
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "farthest": {
+                                  "description": "Whether to rank lower scores first.",
+                                  "type": "boolean",
+                                  "default": false
+                                }
+                              },
+                              "required": [
+                                "from",
+                                "query",
+                                "into",
+                                "k"
+                              ],
+                              "additionalProperties": false,
+                              "title": "StateTransformNearest"
+                            },
+                            {
+                              "description": "Stores a vector unless the table already holds a near-duplicate.",
+                              "properties": {
+                                "$type": {
+                                  "const": "remember"
+                                },
+                                "into": {
+                                  "description": "The destination vector table.",
+                                  "type": "string"
+                                },
+                                "key": {
+                                  "description": "The key to write.",
+                                  "type": "string"
+                                },
+                                "from": {
+                                  "description": "The source vector.",
+                                  "type": "string"
+                                },
+                                "unlessWithin": {
+                                  "description": "Cosine similarity threshold in [0, 1].",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "into",
+                                "key",
+                                "from",
+                                "unlessWithin"
+                              ],
+                              "additionalProperties": false,
+                              "title": "StateTransformRemember"
                             }
                           ],
                           "title": "StateTransform"
@@ -17754,7 +17925,8 @@
                                     "Int",
                                     "Fixed",
                                     "Bool",
-                                    "Text"
+                                    "Text",
+                                    "Vector"
                                   ],
                                   "default": "Fixed",
                                   "title": "CellKind"
@@ -19022,7 +19194,8 @@
               "Int",
               "Fixed",
               "Bool",
-              "Text"
+              "Text",
+              "Vector"
             ],
             "title": "CellKind"
           },

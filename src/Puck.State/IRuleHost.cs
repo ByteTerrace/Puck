@@ -86,7 +86,8 @@ public abstract record StateMutation {
     /// A host using the handle must verify that it names the same row as the replayable string address.</param>
     /// <param name="CellKey">The pre-parsed form of <paramref name="Key"/>, or default. A host using this value must
     /// verify that it matches the string key, so frame writes and replay address the same cell.</param>
-    public sealed record UpsertCell(string Row, string Key, long Value, StateWriteKind Write, string? Text = null, StateHandle Handle = default, CellName CellKey = default) : StateMutation;
+    /// <param name="Vector">The vector payload for a vector row, or <see langword="null"/>.</param>
+    public sealed record UpsertCell(string Row, string Key, long Value, StateWriteKind Write, string? Text = null, StateHandle Handle = default, CellName CellKey = default, StateVector? Vector = null) : StateMutation;
     /// <summary>Removes one cell of a keyed row.</summary>
     /// <param name="Row">The row.</param>
     /// <param name="Key">The cell key, resolved.</param>
@@ -99,4 +100,7 @@ public abstract record StateMutation {
     /// <param name="Handle">The destination row handle for a push, or default. A host using it must verify that
     /// it matches the transform's replayable row name; other transforms do not use this hint.</param>
     public sealed record Apply(StateTransform Transform, StateHandle Handle = default) : StateMutation;
+    /// <summary>Applies one pre-resolved vector transform.</summary>
+    /// <param name="Transform">The resolved vector transform.</param>
+    public sealed record ApplyVector(ResolvedVectorTransform Transform) : StateMutation;
 }

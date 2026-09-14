@@ -4774,6 +4774,17 @@
         }
       ]
     },
+    "CellKind": {
+      "description": "The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.",
+      "enum": [
+        "Int",
+        "Fixed",
+        "Bool",
+        "Text",
+        "Vector"
+      ],
+      "title": "CellKind"
+    },
     "ActionPredicateCompareValue": {
       "description": "Comparison of two bounded numeric expressions. Arithmetic failure makes this comparison false.",
       "properties": {
@@ -4793,15 +4804,9 @@
           "description": "Right numeric expression."
         },
         "kind": {
+          "$ref": "#/$defs/CellKind",
           "description": "The common Int or Fixed domain; no implicit conversion is performed.",
-          "enum": [
-            "Int",
-            "Fixed",
-            "Bool",
-            "Text"
-          ],
-          "default": "Fixed",
-          "title": "CellKind"
+          "default": "Fixed"
         }
       },
       "required": [
@@ -5711,6 +5716,177 @@
       "additionalProperties": false,
       "title": "StateTransformObserve"
     },
+    "VectorTerm": {
+      "description": "One term of a Mix: a vector operand with an integer weight.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "from": {
+          "description": "The vector operand.",
+          "type": "string"
+        },
+        "weight": {
+          "description": "The integer weight in [-1000, 1000] and non-zero.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "weight"
+      ],
+      "additionalProperties": false,
+      "title": "VectorTerm"
+    },
+    "StateTransformMix": {
+      "description": "Writes the normalized sum of 1 to 8 weighted vector terms.",
+      "properties": {
+        "$type": {
+          "const": "mix"
+        },
+        "into": {
+          "description": "The target vector cell or slot.",
+          "type": "string"
+        },
+        "terms": {
+          "description": "The weighted vector terms.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VectorTerm"
+          }
+        }
+      },
+      "required": [
+        "into",
+        "terms"
+      ],
+      "additionalProperties": false,
+      "title": "StateTransformMix"
+    },
+    "StateTransformMean": {
+      "description": "Writes the normalized sum of every candidate cell of a table.",
+      "properties": {
+        "$type": {
+          "const": "mean"
+        },
+        "from": {
+          "description": "The source vector table.",
+          "type": "string"
+        },
+        "into": {
+          "description": "The target vector cell or slot.",
+          "type": "string"
+        },
+        "where": {
+          "description": "Optional boolean filter row.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "from",
+        "into"
+      ],
+      "additionalProperties": false,
+      "title": "StateTransformMean"
+    },
+    "StateTransformNearest": {
+      "description": "Writes the closest cells of a table.",
+      "properties": {
+        "$type": {
+          "const": "nearest"
+        },
+        "from": {
+          "description": "The source vector table.",
+          "type": "string"
+        },
+        "query": {
+          "description": "The query vector cell, slot, or literal.",
+          "type": "string"
+        },
+        "into": {
+          "description": "The destination table or slot.",
+          "type": "string"
+        },
+        "k": {
+          "description": "How many nearest results to recall.",
+          "type": "integer"
+        },
+        "threshold": {
+          "description": "Optional threshold score.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "where": {
+          "description": "Optional boolean row filter.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "exclude": {
+          "description": "Optional key to exclude from candidates.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "farthest": {
+          "description": "Whether to rank lower scores first.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "from",
+        "query",
+        "into",
+        "k"
+      ],
+      "additionalProperties": false,
+      "title": "StateTransformNearest"
+    },
+    "StateTransformRemember": {
+      "description": "Stores a vector unless the table already holds a near-duplicate.",
+      "properties": {
+        "$type": {
+          "const": "remember"
+        },
+        "into": {
+          "description": "The destination vector table.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The key to write.",
+          "type": "string"
+        },
+        "from": {
+          "description": "The source vector.",
+          "type": "string"
+        },
+        "unlessWithin": {
+          "description": "Cosine similarity threshold in [0, 1].",
+          "type": "string"
+        }
+      },
+      "required": [
+        "into",
+        "key",
+        "from",
+        "unlessWithin"
+      ],
+      "additionalProperties": false,
+      "title": "StateTransformRemember"
+    },
     "StateTransform": {
       "description": "The closed set of atomic state transforms. Each folds one candidate document and journals once.",
       "type": "object",
@@ -5750,6 +5926,18 @@
         },
         {
           "$ref": "#/$defs/StateTransformObserve"
+        },
+        {
+          "$ref": "#/$defs/StateTransformMix"
+        },
+        {
+          "$ref": "#/$defs/StateTransformMean"
+        },
+        {
+          "$ref": "#/$defs/StateTransformNearest"
+        },
+        {
+          "$ref": "#/$defs/StateTransformRemember"
         }
       ],
       "title": "StateTransform"
@@ -8167,7 +8355,7 @@
       "additionalProperties": false
     },
     "StateDynamics": {
-      "description": "A StateCell/StateRow\u0027s second-order easing trait: the STORED value stays the TRUTH (what rules, gates, and comparands read), while an eased read (StateReader) computes a second-order follower\u0027s current sample from the carrying cell\u0027s own Y0/ V0 at its EpochTick, chasing the stored value as its target \u2014 the closed-form counterpart to StateAdvance\u0027s linear accumulation, no per-tick work either. An explicit write REBASES: the cell\u0027s clock Y0/V0 become the eased value and velocity computed AT the write\u0027s own tick, and EpochTick becomes that tick \u2014 the same rebase discipline StateAdvance\u0027s own write rule follows, so a retune never jumps.",
+      "description": "A StateCell/StateRow\u0027s second-order easing trait: the STORED value stays the TRUTH (what rules, gates, and comparands read), while an eased read (StateReader) computes a second-order follower\u0027s current sample from the carrying cell\u0027s own Y0/ V0 at its EpochTick, chasing the stored value as its target \u2014 the closed-form counterpart to StateAdvance\u0027s linear accumulation, no per-tick work either. An explicit write REBASES: the cell\u0027s clock Y0/V0 become the eased value and velocity computed AT the write\u0027s own tick, and EpochTick becomes that tick \u2014 the same rebase discipline StateAdvance\u0027s own write rule follows, so a retune never jumps. A cell composed with this trait but no clock yet (never settled or explicitly written) reads its own stored value as the follower\u0027s position, at rest \u2014 see TryEvaluateDynamics.",
       "type": "object",
       "properties": {
         "row": {

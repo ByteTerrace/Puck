@@ -2,557 +2,557 @@
   "Domains": [
     {
       "Block": 512,
-      "Index": 10586,
+      "Index": 10594,
       "Key": "algebra-fractional"
     },
     {
       "Block": 256,
-      "Index": 425,
+      "Index": 432,
       "Key": "binary-field"
     },
     {
       "Block": 256,
-      "Index": 425,
+      "Index": 432,
       "Key": "binary-field-axioms"
     },
     {
       "Block": 256,
-      "Index": 514,
+      "Index": 522,
       "Key": "binary-field-group"
     },
     {
       "Block": 256,
-      "Index": 517,
+      "Index": 525,
       "Key": "binary-polynomial"
     },
     {
       "Block": 256,
-      "Index": 517,
+      "Index": 525,
       "Key": "binary-polynomial-division"
     },
     {
       "Block": 256,
-      "Index": 517,
+      "Index": 525,
       "Key": "binary-polynomial-gcd"
     },
     {
       "Block": 512,
-      "Index": 342,
+      "Index": 349,
       "Key": "clifford-motor"
     },
     {
       "Block": 512,
-      "Index": 342,
+      "Index": 349,
       "Key": "clifford-multivector"
     },
     {
       "Block": 512,
-      "Index": 342,
+      "Index": 349,
       "Key": "clifford-planar-complex"
     },
     {
       "Block": 512,
-      "Index": 342,
+      "Index": 349,
       "Key": "clifford-planar-dual"
     },
     {
       "Block": 512,
-      "Index": 342,
+      "Index": 349,
       "Key": "clifford-planar-split"
     },
     {
       "Block": 512,
-      "Index": 342,
+      "Index": 349,
       "Key": "clifford-quaternion-even"
     },
     {
       "Block": 512,
-      "Index": 342,
+      "Index": 349,
       "Key": "clifford-reverse"
     },
     {
       "Block": 512,
-      "Index": 576,
+      "Index": 583,
       "Key": "closed-unit"
     },
     {
       "Block": 512,
-      "Index": 10587,
+      "Index": 10595,
       "Key": "complex"
     },
     {
       "Block": 512,
-      "Index": 470,
+      "Index": 477,
       "Key": "complex-direction"
     },
     {
       "Block": 512,
-      "Index": 577,
+      "Index": 585,
       "Key": "complex-divide"
     },
     {
       "Block": 512,
-      "Index": 577,
+      "Index": 585,
       "Key": "complex-rotate"
     },
     {
       "Block": 512,
-      "Index": 261,
+      "Index": 268,
       "Key": "contribution-fold-analog"
     },
     {
       "Block": 512,
-      "Index": 261,
+      "Index": 268,
       "Key": "contribution-fold-formula"
     },
     {
       "Block": 512,
-      "Index": 261,
+      "Index": 268,
       "Key": "contribution-fold-no-pool"
     },
     {
       "Block": 512,
-      "Index": 261,
+      "Index": 268,
       "Key": "contribution-fold-order"
     },
     {
       "Block": 512,
-      "Index": 261,
+      "Index": 268,
       "Key": "contribution-fold-quantization"
     },
     {
       "Block": 512,
-      "Index": 8,
+      "Index": 15,
       "Key": "cost-bound-arithmetic"
     },
     {
       "Block": 512,
-      "Index": 8,
+      "Index": 15,
       "Key": "cost-model-budgets"
     },
     {
       "Block": 512,
-      "Index": 8,
+      "Index": 15,
       "Key": "cost-model-conversions"
     },
     {
       "Block": 512,
-      "Index": 193,
+      "Index": 200,
       "Key": "directed-magnitude"
     },
     {
       "Block": 512,
-      "Index": 193,
+      "Index": 200,
       "Key": "directed-product"
     },
     {
       "Block": 512,
-      "Index": 193,
+      "Index": 200,
       "Key": "directed-product-sum"
     },
     {
       "Block": 512,
-      "Index": 193,
+      "Index": 200,
       "Key": "directed-quotient"
     },
     {
       "Block": 512,
-      "Index": 193,
+      "Index": 200,
       "Key": "directed-root"
     },
     {
       "Block": 512,
-      "Index": 8360,
+      "Index": 8367,
       "Key": "dual"
     },
     {
       "Block": 512,
-      "Index": 470,
+      "Index": 477,
       "Key": "dual-divide"
     },
     {
       "Block": 512,
-      "Index": 470,
+      "Index": 477,
       "Key": "dual-generic"
     },
     {
       "Block": 512,
-      "Index": 577,
+      "Index": 585,
       "Key": "dual-quaternion"
     },
     {
       "Block": 512,
-      "Index": 78,
+      "Index": 85,
       "Key": "dynamics"
     },
     {
       "Block": 256,
-      "Index": 503,
+      "Index": 511,
       "Key": "extension-field"
     },
     {
       "Block": 256,
-      "Index": 418,
+      "Index": 425,
       "Key": "extension-field-inverse"
     },
     {
       "Block": 256,
-      "Index": 503,
+      "Index": 511,
       "Key": "extension-field-norm"
     },
     {
       "Block": 256,
-      "Index": 418,
+      "Index": 425,
       "Key": "extension-field-power"
     },
     {
       "Block": 256,
-      "Index": 503,
+      "Index": 511,
       "Key": "extension-field-product"
     },
     {
       "Block": 512,
-      "Index": 8,
+      "Index": 15,
       "Key": "fixed-saturate"
     },
     {
       "Block": 512,
-      "Index": 41,
+      "Index": 49,
       "Key": "integer-hexagonal-index"
     },
     {
       "Block": 512,
-      "Index": 39,
+      "Index": 46,
       "Key": "integer-magic-constants"
     },
     {
       "Block": 256,
-      "Index": 193,
+      "Index": 200,
       "Key": "mass-box"
     },
     {
       "Block": 256,
-      "Index": 193,
+      "Index": 200,
       "Key": "mass-capsule"
     },
     {
       "Block": 256,
-      "Index": 193,
+      "Index": 200,
       "Key": "mass-compound"
     },
     {
       "Block": 256,
-      "Index": 193,
+      "Index": 200,
       "Key": "mass-cylinder"
     },
     {
       "Block": 256,
-      "Index": 193,
+      "Index": 200,
       "Key": "mass-parallel-axis"
     },
     {
       "Block": 256,
-      "Index": 193,
+      "Index": 200,
       "Key": "mass-sphere"
     },
     {
       "Block": 256,
-      "Index": 193,
+      "Index": 200,
       "Key": "mass-volume"
     },
     {
       "Block": 512,
-      "Index": 252,
+      "Index": 259,
       "Key": "meet-associative"
     },
     {
       "Block": 512,
-      "Index": 252,
+      "Index": 259,
       "Key": "meet-bottom-absorption"
     },
     {
       "Block": 512,
-      "Index": 252,
+      "Index": 259,
       "Key": "meet-commutative"
     },
     {
       "Block": 512,
-      "Index": 252,
+      "Index": 259,
       "Key": "meet-idempotent"
     },
     {
       "Block": 512,
-      "Index": 252,
+      "Index": 259,
       "Key": "meet-monotonicity"
     },
     {
       "Block": 512,
-      "Index": 252,
+      "Index": 259,
       "Key": "meet-order-coherence"
     },
     {
       "Block": 512,
-      "Index": 252,
+      "Index": 259,
       "Key": "meet-product-composition"
     },
     {
       "Block": 512,
-      "Index": 252,
+      "Index": 259,
       "Key": "meet-top-identity"
     },
     {
       "Block": 512,
-      "Index": 193,
+      "Index": 200,
       "Key": "mixed-scale"
     },
     {
       "Block": 512,
-      "Index": 193,
+      "Index": 200,
       "Key": "mixed-scale-triple"
     },
     {
       "Block": 512,
-      "Index": 8360,
+      "Index": 8367,
       "Key": "mobius"
     },
     {
       "Block": 512,
-      "Index": 342,
+      "Index": 349,
       "Key": "monogenic-exact"
     },
     {
       "Block": 512,
-      "Index": 342,
+      "Index": 349,
       "Key": "monogenic-fusion"
     },
     {
       "Block": 512,
-      "Index": 457,
+      "Index": 464,
       "Key": "position"
     },
     {
       "Block": 512,
-      "Index": 560,
+      "Index": 568,
       "Key": "position-delta"
     },
     {
       "Block": 512,
-      "Index": 560,
+      "Index": 568,
       "Key": "position-translate"
     },
     {
       "Block": 512,
-      "Index": 858,
+      "Index": 866,
       "Key": "presented"
     },
     {
       "Block": 256,
-      "Index": 508,
+      "Index": 516,
       "Key": "prime-field"
     },
     {
       "Block": 256,
-      "Index": 508,
+      "Index": 516,
       "Key": "prime-field-chain"
     },
     {
       "Block": 256,
-      "Index": 508,
+      "Index": 516,
       "Key": "prime-field-lucas"
     },
     {
       "Block": 256,
-      "Index": 508,
+      "Index": 516,
       "Key": "prime-field-primality"
     },
     {
       "Block": 256,
-      "Index": 508,
+      "Index": 516,
       "Key": "prime-field-root"
     },
     {
       "Block": 512,
-      "Index": 243,
+      "Index": 250,
       "Key": "q1648-scalar"
     },
     {
       "Block": 512,
-      "Index": 241,
+      "Index": 248,
       "Key": "q1648-scalar-division"
     },
     {
       "Block": 512,
-      "Index": 206,
+      "Index": 213,
       "Key": "q3232-scalar"
     },
     {
       "Block": 512,
-      "Index": 205,
+      "Index": 212,
       "Key": "q3232-scalar-division"
     },
     {
       "Block": 512,
-      "Index": 577,
+      "Index": 585,
       "Key": "quaternion"
     },
     {
       "Block": 512,
-      "Index": 470,
+      "Index": 477,
       "Key": "quaternion-direction"
     },
     {
       "Block": 512,
-      "Index": 470,
+      "Index": 477,
       "Key": "quaternion-rotate"
     },
     {
       "Block": 256,
-      "Index": 470,
+      "Index": 477,
       "Key": "quaternion-sublattice"
     },
     {
       "Block": 512,
-      "Index": 561,
+      "Index": 569,
       "Key": "rate"
     },
     {
       "Block": 512,
-      "Index": 600,
+      "Index": 608,
       "Key": "rigid"
     },
     {
       "Block": 512,
-      "Index": 481,
+      "Index": 488,
       "Key": "rigid-direction"
     },
     {
       "Block": 512,
-      "Index": 600,
+      "Index": 608,
       "Key": "rigid-point"
     },
     {
       "Block": 512,
-      "Index": 8364,
+      "Index": 8371,
       "Key": "scalar"
     },
     {
       "Block": 512,
-      "Index": 595,
+      "Index": 603,
       "Key": "scalar-division"
     },
     {
       "Block": 512,
-      "Index": 595,
+      "Index": 603,
       "Key": "scalar-text"
     },
     {
       "Block": 512,
-      "Index": 597,
+      "Index": 605,
       "Key": "scalar-transcendental"
     },
     {
       "Block": 64,
-      "Index": 2090,
+      "Index": 2097,
       "Key": "smoke"
     },
     {
       "Block": 512,
-      "Index": 10587,
+      "Index": 10595,
       "Key": "split"
     },
     {
       "Block": 512,
-      "Index": 577,
+      "Index": 585,
       "Key": "split-divide"
     },
     {
       "Block": 512,
-      "Index": 577,
+      "Index": 585,
       "Key": "split-transform"
     },
     {
       "Block": 512,
-      "Index": 30,
+      "Index": 38,
       "Key": "square-grid"
     },
     {
       "Block": 256,
-      "Index": 4520,
+      "Index": 4527,
       "Key": "sublattice"
     },
     {
       "Block": 512,
-      "Index": 193,
+      "Index": 200,
       "Key": "symmetric-apply2"
     },
     {
       "Block": 512,
-      "Index": 193,
+      "Index": 200,
       "Key": "symmetric-apply3"
     },
     {
       "Block": 256,
-      "Index": 236,
+      "Index": 243,
       "Key": "symmetric-invert2"
     },
     {
       "Block": 256,
-      "Index": 236,
+      "Index": 243,
       "Key": "symmetric-invert3"
     },
     {
       "Block": 512,
-      "Index": 236,
+      "Index": 243,
       "Key": "symmetric-solve2"
     },
     {
       "Block": 512,
-      "Index": 237,
+      "Index": 244,
       "Key": "symmetric-solve3"
     },
     {
       "Block": 512,
-      "Index": 490,
+      "Index": 497,
       "Key": "unit-fraction16"
     },
     {
       "Block": 512,
-      "Index": 602,
+      "Index": 610,
       "Key": "unit-fraction32"
     },
     {
       "Block": 512,
-      "Index": 588,
+      "Index": 596,
       "Key": "unsigned-scalar"
     },
     {
       "Block": 512,
-      "Index": 572,
+      "Index": 580,
       "Key": "vector"
     },
     {
       "Block": 512,
-      "Index": 572,
+      "Index": 580,
       "Key": "vector-direction"
     },
     {
       "Block": 512,
-      "Index": 466,
+      "Index": 473,
       "Key": "vector-lattice"
     },
     {
       "Block": 512,
-      "Index": 572,
+      "Index": 580,
       "Key": "vector-narrow"
     },
     {
       "Block": 512,
-      "Index": 466,
+      "Index": 473,
       "Key": "vector-norm"
     },
     {
       "Block": 512,
-      "Index": 129,
+      "Index": 136,
       "Key": "vector-orthonormal-basis"
     }
   ]

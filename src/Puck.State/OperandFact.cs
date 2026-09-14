@@ -106,7 +106,8 @@ public sealed class BindingKeyFact : KeyFact {
 /// known, the cell is the binding".</param>
 /// <param name="CellKey">The pre-parsed literal <paramref name="Key"/> of the source cell, or default.
 /// An indirection reads that cell's value to obtain the destination key.</param>
-public readonly record struct CompiledCellRef(string Row, string Key, BoundKey Binding = BoundKey.None, StateHandle Handle = default, KeyFact? Custom = null, BoundKey InnerKeyBinding = BoundKey.None, CellName CellKey = default);
+/// <param name="Kind">The cell kind of the source cell (Int or Text).</param>
+public readonly record struct CompiledCellRef(string Row, string Key, BoundKey Binding = BoundKey.None, StateHandle Handle = default, KeyFact? Custom = null, BoundKey InnerKeyBinding = BoundKey.None, CellName CellKey = default, CellKind Kind = CellKind.Int);
 /// <summary>One state cell a rule reads or writes — a literal <c>row.key</c>, or a whole row when the key is resolved
 /// live (a <c>$cell:</c> indirection, a bound <c>$each</c>, a push, a generate, a transform).</summary>
 /// <param name="Row">The state row.</param>

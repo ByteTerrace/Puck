@@ -62,7 +62,10 @@ internal static class PuckWorldLoader {
             return false;
         }
 
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source: puckSource);
+        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
+            source: puckSource,
+            vocabulary: WorldDocumentVocabulary.Instance
+        );
 
         if (
             parseResult.Diagnostics.HasErrors ||

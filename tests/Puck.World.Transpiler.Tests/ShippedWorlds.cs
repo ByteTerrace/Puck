@@ -44,11 +44,13 @@ internal static class ShippedWorlds {
     /// <summary>Returns every <c>*.world.json</c> under the worlds directory that has no <c>.puck</c> source,
     /// recursively, as forward-slashed paths relative to it, in ordinal order.</summary>
     /// <returns>The decompilation corpus as xUnit theory data.</returns>
-    public static TheoryData<string> Files() {
+    public static IEnumerable<string> FilePaths() {
         var sourceDocuments = Enumerate(pattern: "*.puck").Select(selector: DocumentOf).ToHashSet(comparer: StringComparer.Ordinal);
 
-        return new TheoryData<string>(values: Enumerate(pattern: "*.world.json").Where(predicate: path => !sourceDocuments.Contains(item: path)));
+        return Enumerate(pattern: "*.world.json").Where(predicate: path => !sourceDocuments.Contains(item: path));
     }
+
+    public static TheoryData<string> Files() => new(values: FilePaths());
     /// <summary>Returns the absolute path of <c>src/Puck.World/Assets/worlds</c>, walked up from the test
     /// runner's own directory.</summary>
     /// <returns>The worlds directory.</returns>

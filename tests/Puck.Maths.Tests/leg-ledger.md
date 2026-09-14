@@ -1,4 +1,4 @@
-﻿# Puck.Maths.Tests — LEG LEDGER
+# Puck.Maths.Tests — LEG LEDGER
 
 Machine-written by the assembly ledger when the leg gates ran. Every gate statement declares the legs it stands
 on — every one of them a law case in LawRegistry.cs — and this file is those declarations read back. Never
@@ -13,7 +13,7 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 806 | 527 |
+| classical | — | 812 | 533 |
 | presented-twin | — | 9 | 8 |
 | in-tree-independent | — | 31 | 25 |
 | shared-substrate | fused-substrate | 36 | 34 |
@@ -24,14 +24,14 @@ adversarial review's job, not this file's.
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
 | structural | — | 1186 | 594 |
-| **total** | | **2283** | **751** |
+| **total** | | **2289** | **757** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 112 | 148 | 123 | 21 |
-| law: Default | 610 | 878 | 1062 | 187 |
+| law: Default | 616 | 884 | 1062 | 187 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -1963,6 +1963,12 @@ adversarial review's job, not this file's.
 | scalar.trigonometry-turns | law: Default | classical | — | SinCosTurns on the shared scalar transcendental domain | Oracles.EncloseSinCosTurns with 0.50000001 raw Q16 ULP envelope | — | — |
 | scalar.trigonometry-turns-deep | law: Deep | classical | — | MIRROR of scalar.trigonometry-turns over the Deep domain budget | Independent turn interval series with the same fixed error envelope | — | — |
 | scalar.trigonometry-twiddles | law: Default | classical | — | Every FFT and DCT plan twiddle for powers of two from 1 through 1024 | Oracles.EncloseSinCosTurns of each exact ideal dyadic phase, with 0.50000001 raw Q16 ULP envelope; inverse entries equal exact conjugates | — | — |
+| signed-byte-vectors.admission-tolerance | law: Default | classical | — | SignedByteVectorFunctions.AdmissionTolerance calculation | ceil(sqrt(n)/2)+1 for every n in [1, 1024] | — | — |
+| signed-byte-vectors.cosine-vs-oracle | law: Default | classical | — | SignedByteVectorFunctions.CosineQ16 against exact rational oracle rounded with BigInteger | Exact BigInteger rational rounding oracle with self-cosine 65536, symmetry, range [-65536, 65536], and orthogonal/opposite vectors | — | — |
+| signed-byte-vectors.dot-tiers-vs-scalar-rung | law: Default | classical | — | SignedByteVectorFunctions supported SIMD tiers (Vector128, Vector256, Vector512) | SignedByteVectorFunctions.DotScalar reference rung over identical inputs | — | — |
+| signed-byte-vectors.dot-vs-oracle | law: Default | classical | — | SignedByteVectorFunctions.Dot and SumOfSquares against independent BigInteger sum over random vectors, all-127, all--127, alternating extremes, and -128, at lengths 0 through 1025 and 1048577 | BigInteger sum of products | — | — |
+| signed-byte-vectors.normalize-admits | law: Default | classical | — | SignedByteVectorFunctions.TryNormalize output matches BigInteger rounding oracle and passes IsUnitAdmissible | BigInteger rounding oracle across dimensions 8, 9, 255, 256, 1000, 1024, one-hot, equal magnitudes, quotients on .5, 2^24 bound, and zero/over-bound refusals | — | — |
+| signed-byte-vectors.quantize-unit | law: Default | classical | — | SignedByteVectorFunctions.TryQuantizeUnit pinned bytes for known double vectors | Pinned byte sequences and refusals for non-finite, oversize, and zero inputs | — | — |
 | smoke.binary-field-product-vs-oracle | law: Smoke | classical | — | BinaryFields.Degree8.Multiply and BinaryFields.Degree16.Multiply | Oracles.BinaryFieldProduct at degrees 8 and 16. MIRROR of presented.gf2-twins-binaryfield's oracle legs and of binary-field.product-and-reduction-vs-oracle at SmokeDomain: no new evidence. ENVELOPE: the lane encoding Subjects.PackBits carries reads bit zero of each lane, so the swept element is eight or sixteen operand PARITIES rather than a full-range draw — the same envelope presented.gf2-twins-binaryfield already runs under | — | — |
 | smoke.closed-unit-mul-ties-to-even | law: Smoke | classical | — | UnitInterval32.Multiply(x, y) — its own branchless UInt128 ties-to-even at the 2⁻³² grid | Oracles.ClosedUnitProduct — one Oracles.RoundDyadic of the exact BigInteger product at shift 32. MIRROR of closed-unit.mul-vs-oracle at SmokeDomain | — | — |
 | smoke.complex-twin-quad | law: Smoke | shared-substrate | fused-substrate | FixedComplex.op_Multiply | QuadraticAlgebra<FixedQ4816>.Multiply at the (0, −1) relation, integer lane | FixedQ4816.RoundProductSum, BOTH overloads (long and Int128) — the IDENTICAL member, not a sibling copy, selected at the identical 2³¹ FusedArithmetic.RawMagnitude gate. MIRROR of complex.twin-quad at SmokeDomain: no new evidence | — |

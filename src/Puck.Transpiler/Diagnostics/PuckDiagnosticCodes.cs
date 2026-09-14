@@ -178,4 +178,44 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK066: a <c>grid</c> reusing a topology name already declared by another <c>grid</c> or an
     /// explicitly authored <c>state.lattices</c> entry.</summary>
     public const string StateDeclarationDuplicateTopologyName = "PUCK066";
+    /// <summary>PUCK070: a floating-point column type (<c>REAL</c>, <c>FLOAT</c>, <c>DOUBLE</c>) in a SQL table declaration — state holds no floats, use <c>FIXED</c>.</summary>
+    public const string SqlUnsupportedType = "PUCK070";
+    /// <summary>PUCK071: a composite <c>PRIMARY KEY (a, b)</c> in a SQL table declaration — a state cell has exactly one key.</summary>
+    public const string SqlCompositePrimaryKey = "PUCK071";
+    /// <summary>PUCK072: a <c>CHECK</c> constraint shape outside <c>BETWEEN a AND b</c>, <c>&gt;= a</c>, or <c>&lt;= b</c>.</summary>
+    public const string SqlInvalidCheckShape = "PUCK072";
+    /// <summary>PUCK073: an unsupported SQL clause or construct (<c>GROUP BY</c>, <c>HAVING</c>, <c>WINDOW</c>, <c>LIMIT</c>, cross-key <c>JOIN</c>, <c>UNION</c>, <c>TRIGGER</c>, etc.).</summary>
+    public const string SqlUnsupportedClause = "PUCK073";
+    /// <summary>PUCK074: a set-based <c>UPDATE</c> reading a column it writes at other keys — self-referential multi-key updates are refused.</summary>
+    public const string SqlSelfReferentialSetUpdate = "PUCK074";
+    /// <summary>PUCK075: an inserted row missing a <c>NOT NULL</c> column that declares no default value.</summary>
+    public const string SqlMissingRequiredColumn = "PUCK075";
+    /// <summary>PUCK076: a syntax or grammatical refusal inside a <c>sql { ... }</c> block.</summary>
+    public const string SqlSyntaxError = "PUCK076";
+    /// <summary>PUCK077: a space is malformed: an unknown or missing field, dimensions out of range, a duplicate name, or over the space limit.</summary>
+    public const string EmbeddingSpaceInvalid = "PUCK077";
+    /// <summary>PUCK078: a Vector row names no space and there is no default, names an undeclared space, or a non-Vector row names a space.</summary>
+    public const string EmbeddingSpaceUnknown = "PUCK078";
+    /// <summary>PUCK079: an embedded text has no lock entry; run puck embed.</summary>
+    public const string EmbeddingLockMissing = "PUCK079";
+    /// <summary>PUCK080: the lock's model, revision, or dimensions differ from the space; run puck embed.</summary>
+    public const string EmbeddingLockStale = "PUCK080";
+    /// <summary>PUCK081: a vector literal is not base64url, has the wrong length, holds -128, or fails admission.</summary>
+    public const string VectorLiteralInvalid = "PUCK081";
+    /// <summary>PUCK082: embed or vector appears where no vector operand or value is admitted.</summary>
+    public const string VectorLiteralMisplaced = "PUCK082";
+    /// <summary>PUCK083: capacity × dimensions or the section total exceeds its ceiling.</summary>
+    public const string VectorRowTooLarge = "PUCK083";
+    /// <summary>PUCK084: a vector operation names a non-vector operand, mixes spaces, or gives nearest or remember a shape, k, or threshold they do not admit.</summary>
+    public const string VectorOperandMismatch = "PUCK084";
+    /// <summary>PUCK085: an embed literal has no operand, destination, or default to take its space from.</summary>
+    public const string EmbeddingSpaceAmbiguous = "PUCK085";
+    /// <summary>PUCK086: embeds on something other than a Text table, or a colliding row name.</summary>
+    public const string EmbedsInvalid = "PUCK086";
+    /// <summary>PUCK087: a mix term count or weight is out of range, or a weight is zero.</summary>
+    public const string VectorMixInvalid = "PUCK087";
+    /// <summary>PUCK088: where is not a keyed Bool row, or exclude is malformed.</summary>
+    public const string VectorFilterInvalid = "PUCK088";
+    /// <summary>PUCK_LINT_010: a literal mix weight's share is below 1/64; consider mean over a history table.</summary>
+    public const string VectorMixStall = "PUCK_LINT_010";
 }

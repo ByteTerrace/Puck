@@ -171,6 +171,22 @@ public static class ExpressionSpelling {
                     Name: state.Name,
                     Key: state.Key
                 );
+            case ValueToken.VectorCall vectorCall: {
+                    var opName = vectorCall.Operation switch {
+                        ExpressionOp.Dot => "dot",
+                        ExpressionOp.Similarity => "similarity",
+                        ExpressionOp.Identical => "identical",
+                        _ => null
+                    };
+                    if (opName is null) { return null; }
+                    var left = LowerVectorOperand(operand: vectorCall.Left);
+                    var right = LowerVectorOperand(operand: vectorCall.Right);
+                    return new Call(
+                        Arguments: [left, right],
+                        Name: opName,
+                        Names: []
+                    );
+                }
             case ValueToken.BoardShift shift:
                 return ((stack.Count >= 1)
                     ? new Call(
@@ -612,6 +628,16 @@ public static class ExpressionSpelling {
             }
         }
     }
+    private sealed record VectorLiteral(string Value) : Node {
+        public override int Level => PrimaryLevel;
+
+        public override void Emit(List<ValueToken> into) =>
+            throw new SyntaxException(message: "a vector literal cannot appear as a scalar expression operand");
+
+        public override void PrintBare(StringBuilder into) {
+            into.Append(value: "vector(\"").Append(value: Value).Append(value: "\")");
+        }
+    }
     private sealed record Unary(string Operator, Node Operand) : Node {
         public override int Level => UnaryLevel;
 
@@ -690,6 +716,22 @@ public static class ExpressionSpelling {
         public override int Level => PrimaryLevel;
 
         public override void Emit(List<ValueToken> into) {
+            if (Name is "dot" or "similarity" or "identical") {
+                if ((Arguments.Length != 2) || (Names.Length != 0)) {
+                    throw new SyntaxException(message: $"'{Name}' takes exactly 2 vector arguments");
+                }
+                var op = Name switch {
+                    "dot" => ExpressionOp.Dot,
+                    "similarity" => ExpressionOp.Similarity,
+                    "identical" => ExpressionOp.Identical,
+                    _ => throw new InvalidOperationException()
+                };
+                var left = ConvertToVectorOperand(node: Arguments[0]);
+                var right = ConvertToVectorOperand(node: Arguments[1]);
+                into.Add(item: new ValueToken.VectorCall(Operation: op, Left: left, Right: right));
+                return;
+            }
+
             foreach (var argument in Arguments) {
                 argument.Emit(into: into);
             }
@@ -725,8 +767,18 @@ public static class ExpressionSpelling {
             into.Append(value: ')');
         }
     }
+    private static VectorOperandToken ConvertToVectorOperand(Node node) => node switch {
+        StateRead state => new VectorOperandToken.Cell(Name: state.Name, Key: state.Key),
+        VectorLiteral vec => new VectorOperandToken.Literal(Value: vec.Value),
+        _ => throw new SyntaxException(message: $"argument to vector function must be a state read or vector literal, found '{node.GetType().Name}'")
+    };
+    private static Node LowerVectorOperand(VectorOperandToken operand) => operand switch {
+        VectorOperandToken.Cell cell => new StateRead(Name: cell.Name, Key: cell.Key),
+        VectorOperandToken.Literal lit => new VectorLiteral(Value: lit.Value),
+        _ => throw new InvalidOperationException()
+    };
     private sealed class SyntaxException(string message) : Exception(message: message);
-    private enum Lexeme : byte { End, Number, Name, Punctuation }
+    private enum Lexeme : byte { End, Number, Name, Punctuation, String }
     // A recursive-descent parser over a one-token lookahead lexer; the grammar is small enough that the two live in
     // one class and the token stream is never materialized.
     private sealed class Parser(string text) {
@@ -789,6 +841,21 @@ public static class ExpressionSpelling {
                 m_kind = Lexeme.Number;
                 m_value = text[m_position..end];
                 m_position = end;
+                return;
+            }
+            if (character == '"') {
+                var close = text.IndexOf(
+                    startIndex: (m_position + 1),
+                    value: '"'
+                );
+
+                if (close < 0) {
+                    throw Fail(message: "a double-quoted string is not closed");
+                }
+                m_kind = Lexeme.String;
+                m_value = text[(m_position + 1)..close];
+                m_quoted = true;
+                m_position = (close + 1);
                 return;
             }
             if (character == '`') {
@@ -993,6 +1060,25 @@ public static class ExpressionSpelling {
                         var quoted = m_quoted;
 
                         Advance();
+                        if (!quoted && (name == "vector")) {
+                            if (Accept(punctuation: "(")) {
+                                Prime();
+                                if (m_kind != Lexeme.String) {
+                                    throw Fail(message: "vector literal expects a double-quoted base64url string");
+                                }
+                                var vecBase64 = m_value;
+                                Advance();
+                                Expect(punctuation: ")");
+                                return new VectorLiteral(Value: vecBase64);
+                            }
+                        }
+                        if (!quoted && (name is "dot" or "similarity" or "identical")) {
+                            return ParseCall(
+                                name: name,
+                                arity: 2,
+                                names: 0
+                            );
+                        }
                         if (
                             !quoted &&
                             Calls.TryGetValue(

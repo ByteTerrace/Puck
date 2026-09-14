@@ -71,9 +71,11 @@ internal static class CompileCommand {
             return 2;
         }
 
+        var vocabulary = CliVocabularyResolver.Instance.Resolve(source: sourceText);
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(
             source: sourceText,
-            diagnostics: diagnostics
+            diagnostics: diagnostics,
+            vocabulary: vocabulary
         );
         var documentNode = parseResult.Value;
 
@@ -93,7 +95,8 @@ internal static class CompileCommand {
             var bundledDoc = ModuleResolver.BundleDocument(
                 diagnostics: diagnostics,
                 rootDoc: documentNode,
-                rootPath: sourcePath
+                rootPath: sourcePath,
+                vocabulary: vocabulary
             );
 
             if (bundledDoc is not null) {
@@ -103,7 +106,8 @@ internal static class CompileCommand {
             ModuleResolver.ValidateImportGraph(
                 diagnostics: diagnostics,
                 rootDoc: documentNode,
-                rootPath: sourcePath
+                rootPath: sourcePath,
+                vocabulary: vocabulary
             );
         }
 

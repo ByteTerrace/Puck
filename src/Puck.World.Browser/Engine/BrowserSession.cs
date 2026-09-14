@@ -99,6 +99,10 @@ public sealed class BrowserSession {
             topology: name => WorldTopologyCompilation.Find(
                 definition: definition,
                 name: name
+            ),
+            spaces: name => WorldStateSpaces.Find(
+                definition: definition,
+                name: name
             )
         );
 

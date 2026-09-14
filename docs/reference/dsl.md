@@ -227,6 +227,31 @@ classification and reuses the same arithmetic; it never restates that `ms` divid
 The one place the core itself asserts a dimension is `schedule <row> in 250ms`, where the grammar—not a field
 name—says the operand is a time.
 
+## Embedded language blocks: `sql { ... }`
+
+```puck
+sql {
+    CREATE TABLE fighters (
+        id   TEXT PRIMARY KEY,
+        hp   INT  NOT NULL DEFAULT 100 CHECK (hp BETWEEN 0 AND 100) ON OVERFLOW SATURATE,
+        mana INT  DEFAULT 0 ADVANCE 5 PER SECOND
+    ) CAPACITY 32;
+
+    INSERT INTO fighters (id, hp, mana) VALUES
+        ('hero', 80, 50);
+
+    DECLARE turnCount INT DEFAULT 0;
+
+    CREATE RULE healHero ON ENTER AS
+        UPDATE fighters SET hp = hp + 10 WHERE id = 'hero';
+}
+```
+
+The core parser supports embedded language blocks through `IDocumentVocabulary.IsEmbeddedLanguage`. When
+an identifier matches an admitted embedded language (such as `sql`), the parser produces an `EmbeddedBlockNode`
+preserving raw statement text and token spans without running the core Parlot expression parser on its body.
+The owning vocabulary lowers the embedded language directly into document JSON.
+
 ## Verification
 
 The [DSL release plan](../plans/dsl-release-hardening.md) preserves the semantic-consistency decisions, regression combinations and combined World release evidence required before further language growth.

@@ -263,7 +263,8 @@ public sealed partial class SearchRuntime {
     /// <param name="topology">Resolves a row domain's named topology, for the frame layout.</param>
     /// <param name="patterns">The installed section's compiled patterns.</param>
     /// <param name="tables">The installed section's compiled tables.</param>
-    public void Rebuild(SearchPlan[] plans, CompiledRule[] judge, IReadOnlyList<StateRow> rows, StateCatalog catalog, Func<string, CompiledTopology?> topology, CompiledPatterns patterns, IReadOnlyList<CompiledTable> tables) {
+    /// <param name="spaces">Resolves a vector row's space by name, for the frame layout.</param>
+    public void Rebuild(SearchPlan[] plans, CompiledRule[] judge, IReadOnlyList<StateRow> rows, StateCatalog catalog, Func<string, CompiledTopology?> topology, CompiledPatterns patterns, IReadOnlyList<CompiledTable> tables, Func<string, StateSpace?>? spaces = null) {
         ArgumentNullException.ThrowIfNull(argument: plans);
         ArgumentNullException.ThrowIfNull(argument: judge);
         ArgumentNullException.ThrowIfNull(argument: rows);
@@ -292,7 +293,8 @@ public sealed partial class SearchRuntime {
         ) {
             m_layout = new FrameLayout(
                 rows: rows,
-                topology: topology
+                topology: topology,
+                spaces: spaces
             );
             m_host = new FrameHost(
                 catalog: catalog,

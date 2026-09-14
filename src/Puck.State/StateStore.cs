@@ -169,6 +169,42 @@ public abstract class StateStore {
             cell: out cell
         );
     }
+    /// <summary>Reads a vector cell's components beneath a key.</summary>
+    /// <param name="row">The row, one of <see cref="Rows"/>.</param>
+    /// <param name="key">The cell key.</param>
+    /// <param name="components">The vector components, or empty.</param>
+    /// <returns><see langword="true"/> when the row holds a vector cell under that key.</returns>
+    public virtual bool TryStoredVector(StateRow row, CellName key, out ReadOnlySpan<sbyte> components) {
+        if ((row.Kind == CellKind.Vector) && (row.Cells is { } cells)) {
+            var cell = StateRows.FindCell(cells: cells, key: key);
+
+            if (cell?.Vector is { } vector) {
+                components = vector.Components;
+
+                return true;
+            }
+        }
+
+        components = default;
+
+        return false;
+    }
+    /// <summary>Reads a vector cell's components beneath a key by row ordinal.</summary>
+    /// <param name="rowOrdinal">The row's ordinal in <see cref="Rows"/>.</param>
+    /// <param name="key">The cell key.</param>
+    /// <param name="components">The vector components, or empty.</param>
+    /// <returns><see langword="true"/> when the row holds a vector cell under that key.</returns>
+    public virtual bool TryStoredVector(int rowOrdinal, CellName key, out ReadOnlySpan<sbyte> components) {
+        var rows = Rows;
+
+        if (((uint)rowOrdinal) < ((uint)rows.Count)) {
+            return TryStoredVector(row: rows[rowOrdinal], key: key, out components);
+        }
+
+        components = default;
+
+        return false;
+    }
     /// <summary>Reads the stored raw value of the cell at a position of the row's cell order.</summary>
     /// <param name="row">The row.</param>
     /// <param name="index">The position in <see cref="StateRow.Cells"/> order — for a ring, the slot.</param>

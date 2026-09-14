@@ -2,6 +2,7 @@ using Parlot;
 using Parlot.Fluent;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Lowering;
 
 namespace Puck.Transpiler.Parsing;
 
@@ -9,12 +10,108 @@ namespace Puck.Transpiler.Parsing;
 public static partial class PuckParser {
     private static readonly PuckWhiteSpaceParser WhiteSpace = new();
 
+    private static bool IsEmbeddedLanguage(string identifier, IDocumentVocabulary? vocabulary) {
+        return (vocabulary is not null) && vocabulary.IsEmbeddedLanguage(identifier: identifier);
+    }
+
+    /// <summary>Reads the top-level schema directive by running the scanner/lexer only, skipping comments, strings, and nested blocks.</summary>
+    /// <param name="source">The source text.</param>
+    /// <param name="schema">The parsed top-level schema string, or null if omitted.</param>
+    /// <returns>True if a top-level schema directive was found, false otherwise.</returns>
+    public static bool TryReadDocumentSchema(string source, out string? schema) {
+        schema = null;
+        if (string.IsNullOrWhiteSpace(source)) {
+            return false;
+        }
+
+        try {
+            var context = CreateContext(source);
+            SkipWhiteSpace(context);
+
+            var braceDepth = 0;
+
+            while (!context.Scanner.Cursor.Eof) {
+                var cursor = context.Scanner.Cursor;
+                var c = cursor.Current;
+
+                if (c == '{') {
+                    braceDepth++;
+                    cursor.Advance();
+                    SkipWhiteSpace(context);
+                    continue;
+                }
+
+                if (c == '}') {
+                    if (braceDepth > 0) {
+                        braceDepth--;
+                    }
+                    cursor.Advance();
+                    SkipWhiteSpace(context);
+                    continue;
+                }
+
+                // Strings (raw, interpolated, or regular)
+                if ((c == '"') || ((c == '$') && (cursor.PeekNext() == '"'))) {
+                    if (TryReadStringExpression(context: context, node: out _)) {
+                        SkipWhiteSpace(context);
+                        continue;
+                    }
+                }
+
+                // Numbers: digits or negative number
+                if (char.IsDigit(c) || ((c == '-') && char.IsDigit(cursor.PeekNext()))) {
+                    cursor.Advance();
+                    while (!cursor.Eof && (char.IsLetterOrDigit(cursor.Current) || cursor.Current == '.' || cursor.Current == '_')) {
+                        cursor.Advance();
+                    }
+                    SkipWhiteSpace(context);
+                    continue;
+                }
+
+                // Identifiers / keywords
+                if (char.IsLetter(c) || c == '_' || c == '$') {
+                    if (braceDepth == 0 && TryMatchKeyword(context, "schema")) {
+                        SkipWhiteSpace(context);
+                        if (TryConsume(context, ':')) {
+                            SkipWhiteSpace(context);
+                            if (TryReadString(context, out var schemaVal) || TryReadIdentifier(context, out schemaVal)) {
+                                schema = schemaVal;
+                                return true;
+                            }
+                            return false;
+                        }
+                    }
+
+                    // Not a matched top-level schema:, skip identifier as whole token
+                    if (TryReadIdentifier(context, out _)) {
+                        SkipWhiteSpace(context);
+                        continue;
+                    }
+                }
+
+                // Any other token (punctuation, operator)
+                cursor.Advance();
+                SkipWhiteSpace(context);
+            }
+        } catch {
+            // Ignore lexer exceptions
+        }
+
+        return false;
+    }
+
     /// <summary>Parses the entire Puck source text into a <see cref="DocumentNode"/>, collecting all diagnostics with resilient recovery.</summary>
     /// <param name="source">The source text of the Puck file.</param>
     /// <param name="defaultSchema">The default schema tag if omitted by author.</param>
     /// <param name="diagnostics">The DiagnosticBag to collect errors and warnings into.</param>
+    /// <param name="vocabulary">Optional vocabulary providing schema-specific lexical rules.</param>
     /// <returns>A CompilationResult carrying the parsed DocumentNode and DiagnosticBag.</returns>
-    public static CompilationResult<DocumentNode> ParseDocumentWithDiagnostics(string source, string? defaultSchema = null, DiagnosticBag? diagnostics = null) {
+    public static CompilationResult<DocumentNode> ParseDocumentWithDiagnostics(
+        string source,
+        string? defaultSchema = null,
+        DiagnosticBag? diagnostics = null,
+        IDocumentVocabulary? vocabulary = null
+    ) {
         ArgumentNullException.ThrowIfNull(source);
 
         diagnostics ??= new DiagnosticBag();
@@ -76,7 +173,7 @@ public static partial class PuckParser {
                 continue;
             }
 
-            var statement = ParseStatement(context, diagnostics);
+            var statement = ParseStatement(context, diagnostics, schema, vocabulary);
             if (statement is not null) {
                 statements.Add(statement);
             }
@@ -103,10 +200,11 @@ public static partial class PuckParser {
     /// <summary>Parses the entire Puck source text into a <see cref="DocumentNode"/>.</summary>
     /// <param name="source">The source text of the Puck file.</param>
     /// <param name="defaultSchema">The default schema tag if omitted by author.</param>
+    /// <param name="vocabulary">Optional vocabulary providing schema-specific lexical rules.</param>
     /// <returns>The root document node.</returns>
     /// <exception cref="PuckParseException">Thrown when a syntax error is encountered.</exception>
-    public static DocumentNode ParseDocument(string source, string? defaultSchema = null) {
-        var result = ParseDocumentWithDiagnostics(source, defaultSchema);
+    public static DocumentNode ParseDocument(string source, string? defaultSchema = null, IDocumentVocabulary? vocabulary = null) {
+        var result = ParseDocumentWithDiagnostics(source, defaultSchema, vocabulary: vocabulary);
         if (result.Diagnostics.HasErrors) {
             var firstError = result.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error);
             throw new PuckParseException(firstError.Message, offset: firstError.Span.Offset, line: firstError.Span.Line, column: firstError.Span.Column) { Code = firstError.Code };
@@ -133,7 +231,7 @@ public static partial class PuckParser {
         return expr;
     }
 
-    private static StatementNode ParseStatement(ParseContext context, DiagnosticBag? diagnostics = null) {
+    private static StatementNode ParseStatement(ParseContext context, DiagnosticBag? diagnostics = null, string? schema = null, IDocumentVocabulary? vocabulary = null) {
         SkipWhiteSpace(context);
         var cursor = context.Scanner.Cursor;
         var startOffset = cursor.Offset;
@@ -144,7 +242,7 @@ public static partial class PuckParser {
         }
 
         try {
-            return ParseStatementCore(context, diagnostics);
+            return ParseStatementCore(context, diagnostics, schema, vocabulary);
         } catch (PuckParseException ex) {
             if (diagnostics is null) {
                 throw;
@@ -164,7 +262,7 @@ public static partial class PuckParser {
         }
     }
 
-    private static StatementNode ParseStatementCore(ParseContext context, DiagnosticBag? diagnostics) {
+    private static StatementNode ParseStatementCore(ParseContext context, DiagnosticBag? diagnostics, string? schema = null, IDocumentVocabulary? vocabulary = null) {
         SkipWhiteSpace(context);
         var cursor = context.Scanner.Cursor;
         var startOffset = cursor.Offset;
@@ -187,7 +285,7 @@ public static partial class PuckParser {
         }
 
         if (TryMatchKeyword(context, "for")) {
-            return ParseForStatement(context, startOffset, line, col, diagnostics);
+            return ParseForStatement(context, startOffset, line, col, diagnostics, schema, vocabulary);
         }
 
         if (TryMatchKeyword(context, "import")) {
@@ -408,7 +506,11 @@ public static partial class PuckParser {
 
         // Check if block without name: firstId { ... }
         if (cursor.Current == '{') {
-            return ParseBlock(context, identifier: firstId, name: null, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics);
+            if (IsEmbeddedLanguage(firstId, vocabulary)) {
+                return ParseEmbeddedBlock(context, firstId, startOffset, line, col, diagnostics);
+            }
+
+            return ParseBlock(context, identifier: firstId, name: null, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
         }
 
         // Bare keyword statement: `firstId` ended its own line, so nothing can belong to it — e.g. the `solid`
@@ -494,7 +596,7 @@ public static partial class PuckParser {
     }
 
     // `for item in sequence { … }` and `for (item, index) in sequence { … }`.
-    private static ForStatementNode ParseForStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
+    private static ForStatementNode ParseForStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, string? schema = null, IDocumentVocabulary? vocabulary = null) {
         var cursor = context.Scanner.Cursor;
 
         SkipWhiteSpace(context);
@@ -548,7 +650,7 @@ public static partial class PuckParser {
         SkipWhiteSpace(context);
 
         while (!cursor.Eof && (cursor.Current != '}')) {
-            body.Add(ParseStatement(context, diagnostics));
+            body.Add(ParseStatement(context, diagnostics, schema, vocabulary));
             ConsumeSeparator(context);
             SkipWhiteSpace(context);
         }
@@ -560,7 +662,7 @@ public static partial class PuckParser {
         return new ForStatementNode(item, index, sequence, body, startOffset, (cursor.Offset - startOffset), line, col);
     }
 
-    private static BlockNode ParseBlock(ParseContext context, string identifier, string? name, string? target, int startOffset, int line, int col, DiagnosticBag? diagnostics = null) {
+    private static BlockNode ParseBlock(ParseContext context, string identifier, string? name, string? target, int startOffset, int line, int col, DiagnosticBag? diagnostics = null, string? schema = null, IDocumentVocabulary? vocabulary = null) {
         if (!TryConsume(context, '{')) {
             throw CreateException(context, $"Expected '{{' starting block for '{identifier}'");
         }
@@ -569,7 +671,7 @@ public static partial class PuckParser {
         SkipWhiteSpace(context);
 
         while (!context.Scanner.Cursor.Eof && context.Scanner.Cursor.Current != '}') {
-            var stmt = ParseStatement(context, diagnostics);
+            var stmt = ParseStatement(context, diagnostics, schema, vocabulary);
             if (stmt is not null) {
                 statements.Add(stmt);
             }
@@ -592,6 +694,114 @@ public static partial class PuckParser {
 
         var len = context.Scanner.Cursor.Offset - startOffset;
         return new BlockNode(Identifier: identifier, Name: name, Target: target, Statements: statements, Offset: startOffset, Length: len, Line: line, Column: col);
+    }
+
+    private static StatementNode ParseEmbeddedBlock(
+        ParseContext context,
+        string language,
+        int startOffset,
+        int line,
+        int col,
+        DiagnosticBag? diagnostics
+    ) {
+        var cursor = context.Scanner.Cursor;
+        if (!TryConsume(context, '{')) {
+            throw CreateException(context, $"Expected '{{' starting embedded '{language}' block");
+        }
+
+        var bodyStartOffset = cursor.Offset;
+        var (bodyLine, bodyCol) = GetLineAndColumn(context.Scanner.Buffer, bodyStartOffset);
+        var buffer = context.Scanner.Buffer;
+        var depth = 1;
+
+        while (!cursor.Eof) {
+            var c = cursor.Current;
+
+            // Handle string literals: single or double quote
+            if (c is '"' or '\'') {
+                var quote = c;
+                cursor.Advance();
+                while (!cursor.Eof) {
+                    var ch = cursor.Current;
+                    if ((ch == '\\') && (quote == '"')) {
+                        cursor.Advance();
+                        if (!cursor.Eof) {
+                            cursor.Advance();
+                        }
+                        continue;
+                    }
+                    if (ch == quote) {
+                        cursor.Advance();
+                        // SQL allows '' escaping inside single-quoted strings
+                        if ((quote == '\'') && !cursor.Eof && (cursor.Current == '\'')) {
+                            cursor.Advance();
+                            continue;
+                        }
+                        break;
+                    }
+                    cursor.Advance();
+                }
+                continue;
+            }
+
+            // Handle line comments: // or --
+            if (((c == '/') && (cursor.PeekNext() == '/')) || ((c == '-') && (cursor.PeekNext() == '-'))) {
+                cursor.Advance();
+                cursor.Advance();
+                while (!cursor.Eof && (cursor.Current is not '\n' and not '\r')) {
+                    cursor.Advance();
+                }
+                continue;
+            }
+
+            // Handle block comments: /* ... */
+            if ((c == '/') && (cursor.PeekNext() == '*')) {
+                cursor.Advance();
+                cursor.Advance();
+                while (!cursor.Eof) {
+                    if ((cursor.Current == '*') && (cursor.PeekNext() == '/')) {
+                        cursor.Advance();
+                        cursor.Advance();
+                        break;
+                    }
+                    cursor.Advance();
+                }
+                continue;
+            }
+
+            if (c == '{') {
+                depth++;
+                cursor.Advance();
+                continue;
+            }
+
+            if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    var bodyLen = cursor.Offset - bodyStartOffset;
+                    var bodyText = buffer.Substring(bodyStartOffset, bodyLen);
+                    cursor.Advance();
+                    var totalLen = cursor.Offset - startOffset;
+                    return new EmbeddedBlockNode(
+                        Language: language,
+                        Body: bodyText,
+                        BodyOffset: bodyStartOffset,
+                        BodyLine: bodyLine,
+                        BodyColumn: bodyCol,
+                        Offset: startOffset,
+                        Length: totalLen,
+                        Line: line,
+                        Column: col
+                    );
+                }
+                cursor.Advance();
+                continue;
+            }
+
+            cursor.Advance();
+        }
+
+        throw CreateException(context, $"Expected '}}' closing embedded '{language}' block");
     }
 
     private static void SynchronizeToStatementBoundary(ParseContext context) {

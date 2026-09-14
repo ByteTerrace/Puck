@@ -58,6 +58,10 @@ public enum BoardCombineOp : byte {
 [JsonDerivedType(typeof(StateTransform.Push), "push")]
 [JsonDerivedType(typeof(StateTransform.ClearEnclosed), "clearEnclosed")]
 [JsonDerivedType(typeof(StateTransform.Observe), "observe")]
+[JsonDerivedType(typeof(StateTransform.Mix), "mix")]
+[JsonDerivedType(typeof(StateTransform.Mean), "mean")]
+[JsonDerivedType(typeof(StateTransform.Nearest), "nearest")]
+[JsonDerivedType(typeof(StateTransform.Remember), "remember")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public abstract record StateTransform {
     /// <summary>Refreshes a knowledge board from its declared source and visibility mask; authority only.</summary>
@@ -149,9 +153,39 @@ public abstract record StateTransform {
     /// <param name="Lower">The enclosed range's inclusive low end; the board's empty value lies outside it.</param>
     /// <param name="Upper">The enclosed range's inclusive high end.</param>
     public sealed record ClearEnclosed(string Row, string From, long Lower, long Upper) : StateTransform;
+    /// <summary>Writes the normalized sum of 1 to 8 weighted vector terms.</summary>
+    /// <param name="Into">The target vector cell or slot.</param>
+    /// <param name="Terms">The weighted vector terms.</param>
+    public sealed record Mix(string Into, IReadOnlyList<VectorTerm> Terms) : StateTransform;
+    /// <summary>Writes the normalized sum of every candidate cell of a table.</summary>
+    /// <param name="From">The source vector table.</param>
+    /// <param name="Into">The target vector cell or slot.</param>
+    /// <param name="Where">Optional boolean filter row.</param>
+    public sealed record Mean(string From, string Into, string? Where = null) : StateTransform;
+    /// <summary>Writes the closest cells of a table.</summary>
+    /// <param name="From">The source vector table.</param>
+    /// <param name="Query">The query vector cell, slot, or literal.</param>
+    /// <param name="Into">The destination table or slot.</param>
+    /// <param name="K">How many nearest results to recall.</param>
+    /// <param name="Threshold">Optional threshold score.</param>
+    /// <param name="Where">Optional boolean row filter.</param>
+    /// <param name="Exclude">Optional key to exclude from candidates.</param>
+    /// <param name="Farthest">Whether to rank lower scores first.</param>
+    public sealed record Nearest(string From, string Query, string Into, int K, string? Threshold = null, string? Where = null, string? Exclude = null, bool Farthest = false) : StateTransform;
+    /// <summary>Stores a vector unless the table already holds a near-duplicate.</summary>
+    /// <param name="Into">The destination vector table.</param>
+    /// <param name="Key">The key to write.</param>
+    /// <param name="From">The source vector.</param>
+    /// <param name="UnlessWithin">Cosine similarity threshold in [0, 1].</param>
+    public sealed record Remember(string Into, string Key, string From, string UnlessWithin) : StateTransform;
 }
 /// <summary>One key of a zone <c>sort</c>: a keyed numeric attribute row over the zone's token domain.</summary>
 /// <param name="Row">The attribute row.</param>
 /// <param name="Descending">Whether the greatest value comes first under this key.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record SortKey(string Row, bool Descending = false);
+/// <summary>One term of a <see cref="StateTransform.Mix"/>: a vector operand with an integer weight.</summary>
+/// <param name="From">The vector operand.</param>
+/// <param name="Weight">The integer weight in [-1000, 1000] and non-zero.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record VectorTerm(string From, int Weight);

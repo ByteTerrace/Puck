@@ -286,6 +286,23 @@ public static partial class WorldDocumentEmitter {
                     break;
                 }
 
+            case EmbeddedBlockNode embeddedBlock: {
+                    if (string.Equals(embeddedBlock.Language, "sql", StringComparison.OrdinalIgnoreCase)) {
+                        LowerStateSqlBlock(
+                            block: embeddedBlock,
+                            parent: target,
+                            scope: scope
+                        );
+                    } else {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.UnrecognizedSectionStatement,
+                            message: $"Unrecognized embedded language '{embeddedBlock.Language}'",
+                            span: embeddedBlock.Span
+                        );
+                    }
+                    break;
+                }
+
             case BlockNode blockNode: {
                     LowerBlock(
                         block: blockNode,

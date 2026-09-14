@@ -103,7 +103,8 @@ public sealed record StateCellClock(long EpochTick = 0, long EpochEngineTick = 0
 /// settled anywhere but tick zero. See <see cref="StateCellClock"/>.</param>
 /// <param name="Visibility">An additional cell-level audience restriction; slot policies belong on the row.</param>
 /// <param name="Observation">The persisted last-seen stamp of a knowledge cell.</param>
-public sealed record StateCell(CellName Key, long Value = 0, string? Text = null, StateAdvance? Advance = null, string? Provenance = null, StateDynamics? Dynamics = null, StateCycle? Cycle = null, StateCellBehavior Behavior = StateCellBehavior.Inherit, StateCellClock? Clock = null, StateVisibility? Visibility = null, StateObservation? Observation = null);
+/// <param name="Vector">The cell's vector value for <see cref="CellKind.Vector"/>; <see langword="null"/> for every other kind.</param>
+public sealed record StateCell(CellName Key, long Value = 0, string? Text = null, StateAdvance? Advance = null, string? Provenance = null, StateDynamics? Dynamics = null, StateCycle? Cycle = null, StateCellBehavior Behavior = StateCellBehavior.Inherit, StateCellClock? Clock = null, StateVisibility? Visibility = null, StateObservation? Observation = null, StateVector? Vector = null);
 /// <summary>
 /// One row of the <c>state</c> section — a named cell or a named collection of cells, addressed by its stable
 /// <see cref="Name"/>. <see cref="Name"/> is the <c>UpsertStateRow</c>/<c>RemoveStateRow</c> key, the
@@ -206,6 +207,7 @@ public sealed record StateCell(CellName Key, long Value = 0, string? Text = null
 /// <param name="HistoryCursor">How many values have ever been pushed into a <see cref="StateDomain.Ring"/> row —
 /// engine bookkeeping that names the next slot (<c>cursor mod capacity</c>) and how much of the ring is filled. Zero
 /// without the trait; refused negative.</param>
+/// <param name="Space">The vector space this row belongs to; required for <see cref="CellKind.Vector"/>, refused for every other kind.</param>
 public record StateRow(
     CellName Name,
     CellKind Kind,
@@ -225,7 +227,8 @@ public record StateRow(
     string? ValuesFrom = null,
     StateInverse? Inverse = null,
     StatePhase? Phase = null, StateVisibility? Visibility = null, StateKnowledge? Knowledge = null, string? PhaseOf = null,
-    long HistoryCursor = 0
+    long HistoryCursor = 0,
+    string? Space = null
 ) {
     /// <summary>The prefix every engine-minted row or cell name carries, and the one an author may never spell. A
     /// row name starting with it is refused outright (nothing mints a row); a cell key starting with it is refused
@@ -476,4 +479,20 @@ public static class StateCapacity {
     public const int MaxSortKeys = MaxRows;
     /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units.</summary>
     public const int MaxTextValueLength = 256;
+    /// <summary>The minimum allowed dimensions for a vector embedding space.</summary>
+    public const int MinVectorDimensions = 8;
+    /// <summary>The maximum allowed dimensions for a vector embedding space.</summary>
+    public const int MaxVectorDimensions = 1024;
+    /// <summary>The maximum number of vector embedding spaces a world may declare.</summary>
+    public const int MaxVectorSpaces = 16;
+    /// <summary>The maximum byte capacity of a single vector row (capacity * dimensions).</summary>
+    public const int MaxVectorRowBytes = 65536;
+    /// <summary>The maximum total byte capacity of all vector rows across a state section (4 MiB).</summary>
+    public const int MaxVectorSectionBytes = 4194304;
+    /// <summary>The maximum number of results returned by a nearest vector transform.</summary>
+    public const int MaxNearestResults = 64;
+    /// <summary>The maximum number of terms in a mix vector transform.</summary>
+    public const int MaxMixTerms = 8;
+    /// <summary>The maximum absolute weight magnitude of a term in a mix vector transform.</summary>
+    public const int MaxMixWeight = 1000;
 }

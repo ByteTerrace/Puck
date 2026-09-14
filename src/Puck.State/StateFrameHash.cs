@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Puck.Maths;
 
 namespace Puck.State;
@@ -17,6 +18,14 @@ public static class StateFrameHash {
 
         foreach (var value in frame.Values) {
             hash.Add(value: value);
+        }
+
+        var vectorValues = frame.VectorValues;
+
+        if (!vectorValues.IsEmpty) {
+            var byteSpan = MemoryMarshal.Cast<sbyte, byte>(vectorValues);
+
+            hash.Add(values: byteSpan);
         }
 
         return hash.Value;

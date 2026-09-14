@@ -10,6 +10,7 @@ namespace Puck.World.Transpiler.Tests;
 /// <summary><see cref="PuckFormatter"/> against the concise state-row declarations: formatting is idempotent and
 /// never changes what a document compiles to.</summary>
 public class StateDeclarationFormatterTests {
+
     private const string DeclarationSource = """
         schema: "puck.world.definition.v1"
 
@@ -51,7 +52,10 @@ public class StateDeclarationFormatterTests {
         """;
 
     private static (JsonObject Json, DiagnosticBag Diagnostics) Lower(string source) {
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(source);
+        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
+            source: source,
+            vocabulary: WorldDocumentVocabulary.Instance
+        );
 
         Assert.False(
             condition: parseResult.Diagnostics.HasErrors,
@@ -95,4 +99,66 @@ public class StateDeclarationFormatterTests {
 
         Assert.Null(@object: mismatch);
     }
+
+    private const string SqlDeclarationSource = """
+        schema: "puck.world.definition.v1"
+
+        sql {
+            -- Define the fighters table
+            CREATE TABLE fighters (
+                id TEXT PRIMARY KEY,
+                hp INT NOT NULL DEFAULT 100 CHECK (hp BETWEEN 0 AND 100) ON OVERFLOW SATURATE,
+                mana INT DEFAULT 0 ADVANCE 5 PER SECOND,
+                title TEXT
+            ) CAPACITY 32;
+
+            /* Initial seed fighters */
+            INSERT INTO fighters (id, hp, title) VALUES
+                ('hero', 80, 'Hero''s Journey'),
+                ('goblin', 30, 'Goblin');
+
+            DECLARE gold INT DEFAULT 10 CHECK (gold >= 0);
+
+            CREATE RULE regen EVERY TICK AS
+                UPDATE fighters SET mana = mana + 1 WHERE mana < 100;
+
+            CREATE RULE heal EVERY TICK AS
+            BEGIN ATOMIC
+                UPDATE fighters SET hp = 100 WHERE id = 'hero';
+            EXCEPTION
+                UPDATE fighters SET hp = 0 WHERE id = 'hero';
+            END;
+        }
+
+        """;
+
+    [Fact]
+    public void FormattingSqlDeclarationTwiceIsIdempotent() {
+        var pass1 = PuckFormatter.Format(SqlDeclarationSource);
+        var pass2 = PuckFormatter.Format(pass1);
+
+        Assert.Equal(
+            actual: pass2,
+            expected: pass1
+        );
+    }
+
+    [Fact]
+    public void FormattingPreservesWhatSqlDeclarationsCompileTo() {
+        var (beforeJson, beforeDiagnostics) = Lower(source: SqlDeclarationSource);
+        var formatted = PuckFormatter.Format(SqlDeclarationSource);
+        var (afterJson, afterDiagnostics) = Lower(source: formatted);
+
+        Assert.False(condition: beforeDiagnostics.HasErrors, userMessage: beforeDiagnostics.FormatReport(""));
+        Assert.False(condition: afterDiagnostics.HasErrors, userMessage: afterDiagnostics.FormatReport(""));
+
+        var mismatch = JsonMismatch.Find(
+            actual: afterJson,
+            expected: beforeJson,
+            path: "$"
+        );
+
+        Assert.Null(@object: mismatch);
+    }
 }
+

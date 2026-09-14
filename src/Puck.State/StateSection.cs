@@ -18,6 +18,8 @@ public interface IStateSlot {
 /// section record implements this so the catalog, the reader, and the rule compiler consume it without knowing the
 /// document.</summary>
 public interface IStateSection {
+    /// <summary>Gets the declared vector embedding spaces, or <see langword="null"/> for none.</summary>
+    IReadOnlyList<StateSpace>? Spaces => null;
     /// <summary>Gets the document-owned cell rows.</summary>
     IReadOnlyList<StateRow>? Rows { get; }
     /// <summary>Gets the lattice topologies the section's lattice-shaped rows lie over.</summary>
@@ -38,17 +40,22 @@ public sealed record StateSlot(string Name, StateValueKind ValueKind) : IStateSl
 /// this record is the shape a host with no document of its own reads and writes. The section owns an immutable
 /// snapshot of every list it carries, taken at construction and again on every <c>with</c>, so a caller's array or
 /// list can never be mutated in place through the section afterward.</summary>
+/// <param name="Spaces">The declared vector embedding spaces.</param>
 /// <param name="Rows">The document-owned cell rows.</param>
 /// <param name="Lattices">The lattice topologies the lattice-shaped rows lie over.</param>
 /// <param name="ParticipantSlots">The per-participant ephemeral slots.</param>
 /// <param name="IdentitySlots">The per-identity durable slots.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StateSection(
+    IReadOnlyList<StateSpace>? Spaces = null,
     IReadOnlyList<StateRow>? Rows = null,
     IReadOnlyList<LatticeTopology>? Lattices = null,
     IReadOnlyList<StateSlot>? ParticipantSlots = null,
     IReadOnlyList<StateSlot>? IdentitySlots = null
 ) : IStateSection {
+    /// <inheritdoc cref="Spaces"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StateSpace>? Spaces { get => field; init => field = Freeze(items: value); } = Freeze(items: Spaces);
     /// <inheritdoc cref="Rows"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<StateRow>? Rows { get => field; init => field = Freeze(items: value); } = Freeze(items: Rows);

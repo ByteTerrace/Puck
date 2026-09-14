@@ -1138,7 +1138,11 @@ public sealed partial class WorldServer {
                 name: name
             ),
             patterns: m_patterns,
-            tables: m_tables
+            tables: m_tables,
+            spaces: name => WorldStateSpaces.Find(
+                definition: definition,
+                name: name
+            )
         );
         m_population.BindFlockAffinities(
             definition: definition,

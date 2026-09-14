@@ -42,6 +42,19 @@ public static partial class WorldDocumentEmitter {
                 continue;
             }
 
+            if (stmt is PropertyNode { Name: "world" } prop) {
+                if (scope.Annotations.ContainsKey("StateWorldDeclarationBlock") ||
+                    scope.Annotations.ContainsKey("StateWorldSqlForm")) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.StateWorldSectionMixed,
+                        message: "'state.world' is authored more than once — write it either as the array form ('world [ ]') or the declaration block ('world { }'), never both",
+                        span: prop.Span
+                    );
+                    continue;
+                }
+                scope.Annotations["StateWorldArrayForm"] = true;
+            }
+
             scope.CurrentPointer = statePointer;
             ProcessStatement(
                 scope: scope,
@@ -53,7 +66,9 @@ public static partial class WorldDocumentEmitter {
         scope.CurrentPointer = oldPointer;
     }
     private static void LowerStateWorldBlock(BlockNode block, JsonObject stateObj, DocumentScope scope, string statePointer) {
-        if (stateObj.ContainsKey(propertyName: "world")) {
+        if (scope.Annotations.ContainsKey("StateWorldArrayForm") ||
+            scope.Annotations.ContainsKey("StateWorldDeclarationBlock") ||
+            (stateObj.ContainsKey("world") && !scope.Annotations.ContainsKey("StateWorldSqlForm"))) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.StateWorldSectionMixed,
                 message: "'state.world' is authored more than once — write it either as the array form ('world [ ]') or the declaration block ('world { }'), never both",
@@ -63,9 +78,15 @@ public static partial class WorldDocumentEmitter {
             return;
         }
 
-        var worldArr = new JsonArray();
+        scope.Annotations["StateWorldDeclarationBlock"] = true;
 
-        stateObj["world"] = worldArr;
+        JsonArray worldArr;
+        if (stateObj["world"] is JsonArray existingArr) {
+            worldArr = existingArr;
+        } else {
+            worldArr = [];
+            stateObj["world"] = worldArr;
+        }
 
         var worldPointer = $"{statePointer}/world";
 

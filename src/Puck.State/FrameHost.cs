@@ -131,6 +131,15 @@ public sealed class FrameHost : IRuleHost {
             return false;
         }
 
+        if (cell.Vector is { } vec) {
+            return Frame.TryWriteVector(
+                rowOrdinal: ordinal,
+                key: key,
+                components: vec.Components,
+                reason: out reason
+            );
+        }
+
         return Frame.TryWrite(
             rowOrdinal: ordinal,
             key: key,
@@ -237,6 +246,10 @@ public sealed class FrameHost : IRuleHost {
             message: $"a frame does not apply a {apply.Transform.GetType().Name} transform",
             reason: out reason
         ),
+            StateMutation.ApplyVector applyVector => TryApplyVector(
+            applyVector: applyVector,
+            reason: out reason
+        ),
             StateMutation.RemoveCell => Refuse(
             message: "a frame never removes a cell",
             reason: out reason
@@ -256,6 +269,17 @@ public sealed class FrameHost : IRuleHost {
         }
 
         return applied;
+    }
+    private bool TryApplyVector(StateMutation.ApplyVector applyVector, out string reason) {
+        var transform = applyVector.Transform;
+        return transform switch {
+            ResolvedVectorTransform.Copy or ResolvedVectorTransform.Mix or ResolvedVectorTransform.Mean =>
+                Frame.TryApplyVector(transform: transform, reason: out reason),
+            _ => Refuse(
+                message: $"a frame does not apply a {transform.GetType().Name} vector transform",
+                reason: out reason
+            ),
+        };
     }
     /// <inheritdoc/>
     public bool TryCommitPreflight(ulong tick, out string reason) {

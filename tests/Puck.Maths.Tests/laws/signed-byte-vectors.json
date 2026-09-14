@@ -1,0 +1,131 @@
+[
+  {
+    "Id": "signed-byte-vectors.dot-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SignedByteVectorFunctions",
+        "Name": "Dot"
+      },
+      {
+        "Type": "Puck.Maths.SignedByteVectorFunctions",
+        "Name": "SumOfSquares"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SignedByteVectorFunctions.Dot and SumOfSquares against independent BigInteger sum over random vectors, all-127, all--127, alternating extremes, and -128, at lengths 0 through 1025 and 1048577",
+        "Against": "BigInteger sum of products",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "signed-byte-vectors.dot-tiers-vs-scalar-rung",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SignedByteVectorFunctions supported SIMD tiers (Vector128, Vector256, Vector512)",
+        "Against": "SignedByteVectorFunctions.DotScalar reference rung over identical inputs",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "signed-byte-vectors.cosine-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SignedByteVectorFunctions",
+        "Name": "CosineQ16"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SignedByteVectorFunctions.CosineQ16 against exact rational oracle rounded with BigInteger",
+        "Against": "Exact BigInteger rational rounding oracle with self-cosine 65536, symmetry, range [-65536, 65536], and orthogonal/opposite vectors",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "signed-byte-vectors.normalize-admits",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SignedByteVectorFunctions",
+        "Name": "TryNormalize"
+      },
+      {
+        "Type": "Puck.Maths.SignedByteVectorFunctions",
+        "Name": "IsUnitAdmissible"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SignedByteVectorFunctions.TryNormalize output matches BigInteger rounding oracle and passes IsUnitAdmissible",
+        "Against": "BigInteger rounding oracle across dimensions 8, 9, 255, 256, 1000, 1024, one-hot, equal magnitudes, quotients on .5, 2^24 bound, and zero/over-bound refusals",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "signed-byte-vectors.quantize-unit",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SignedByteVectorFunctions",
+        "Name": "TryQuantizeUnit"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SignedByteVectorFunctions.TryQuantizeUnit pinned bytes for known double vectors",
+        "Against": "Pinned byte sequences and refusals for non-finite, oversize, and zero inputs",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "signed-byte-vectors.admission-tolerance",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SignedByteVectorFunctions",
+        "Name": "AdmissionTolerance"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SignedByteVectorFunctions.AdmissionTolerance calculation",
+        "Against": "ceil(sqrt(n)/2)+1 for every n in [1, 1024]",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

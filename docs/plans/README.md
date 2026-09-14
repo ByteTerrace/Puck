@@ -9,6 +9,7 @@ Each plan opens with an implementation status review that separates what has lan
 - [Shader pipelines and hybrid rendering](shader-pipeline-evolution.md)—staged graphics attachments, hybrid visibility, packaging, and representation work.
 - [DSL and cartridge release hardening](dsl-release-hardening.md)—release checks and compiler hardening.
 - [Concise state authoring](state-authoring.md)—table and slot declarations, dot access, row bounds, per-second accumulation, piles, grids, and conditional effects.
+- [SQL-flavored state authoring](state-sql.md)—a SQL-shaped dialect for tables, slots, policies, and rules that lowers to the native state documents.
 - [Retail-scale cartridges](retail-scale-cartridges.md)—capacity and authoring for large cartridge data.
 - [Screens and machine extensions](machine-extensions.md)—machine hosting, firmware, authoring, package boundaries, and hardware interaction.
 - [Product content](product-content.md)—content roots with a product manifest, an engine that ships no content, and one build pointed at any product.
@@ -23,6 +24,7 @@ Each plan opens with an implementation status review that separates what has lan
 - [Abstract-machine costing](abstract-machine-costing.md)—deterministic instruction pricing and bounded work.
 - [State consolidation](state-consolidation.md)—remaining state-system reuse opportunities.
 - [Compiled worlds](compiled-worlds.md)—a binary file of everything a world derives from its document, so boot, restore, and replay stop re-deriving it.
+- [Embeddings in state](state-embeddings.md)—deterministic vector cells, exact similarity, mixing and recall, authored and runtime text embedded outside the simulation.
 - [State addressing on the tick path](state-addressing.md)—removing name lookups, key parsing, and cell scans from rule reads and writes without binding rules to frame layout.
 
 ## Documentation

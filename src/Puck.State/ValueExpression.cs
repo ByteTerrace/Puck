@@ -146,6 +146,7 @@ public sealed record ValueExpression(IReadOnlyList<ValueToken> Tokens) {
 [JsonDerivedType(typeof(ValueToken.ArrangementRank), typeDiscriminator: "arrangementRank")]
 [JsonDerivedType(typeof(ValueToken.ArrangementAt), typeDiscriminator: "arrangementAt")]
 [JsonDerivedType(typeof(ValueToken.ArrangementMember), typeDiscriminator: "arrangementMember")]
+[JsonDerivedType(typeof(ValueToken.VectorCall), typeDiscriminator: "vectorCall")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ValueToken {
     /// <summary>An exact authored decimal, converted to the destination row's numeric kind at compile time.</summary>
@@ -428,6 +429,32 @@ public abstract record ValueToken {
     public sealed record ArrangementAt : ValueToken;
     /// <summary>The element at position i of the permutation of 0..n−1 at a lexicographic rank.</summary>
     public sealed record ArrangementMember : ValueToken;
+    /// <summary>Calls a vector function (dot, similarity, identical) over two vector operands and pushes the scalar result.</summary>
+    /// <param name="Operation">The vector operation (ExpressionOp.Dot, ExpressionOp.Similarity, or ExpressionOp.Identical).</param>
+    /// <param name="Left">The left vector operand (cell or literal).</param>
+    /// <param name="Right">The right vector operand (cell or literal).</param>
+    public sealed record VectorCall(
+        ExpressionOp Operation,
+        VectorOperandToken Left,
+        VectorOperandToken Right
+    ) : ValueToken;
+}
+/// <summary>One operand to a vector expression call (dot, similarity, identical).</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(VectorOperandToken.Cell), typeDiscriminator: "cell")]
+[JsonDerivedType(typeof(VectorOperandToken.Literal), typeDiscriminator: "literal")]
+public abstract record VectorOperandToken {
+    /// <summary>A vector state cell operand.</summary>
+    /// <param name="Name">The state row name.</param>
+    /// <param name="Key">The optional key or key indirection.</param>
+    public sealed record Cell(
+        string Name,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
+    ) : VectorOperandToken;
+
+    /// <summary>A base64url encoded vector literal operand.</summary>
+    /// <param name="Value">The base64url encoded component bytes.</param>
+    public sealed record Literal(string Value) : VectorOperandToken;
 }
 /// <summary>Converts an exact authored decimal literal into the Q48.16 fixed-point carrier a state cell holds — the one
 /// conversion every <see cref="ValueToken.Constant"/>, table value, and authored fixed literal crosses, so the

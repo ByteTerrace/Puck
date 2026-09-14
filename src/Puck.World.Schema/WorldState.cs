@@ -17,11 +17,13 @@ namespace Puck.World;
 /// <param name="Identity">Per-body counters and timers synchronized through the durable identity-document seam.</param>
 /// <param name="Lattices">The lattice topologies the section's lattice-shaped rows lie over (see
 /// <see cref="LatticeTopology"/>; the document adds the physical <see cref="WorldFieldTopology"/> case).</param>
+/// <param name="Spaces">The declared vector embedding spaces, or <see langword="null"/> for none.</param>
 public sealed record WorldStateSection(
     IReadOnlyList<WorldStateRow>? World = null,
     IReadOnlyList<ActionStateSlot>? Body = null,
     IReadOnlyList<ActionStateSlot>? Identity = null,
-    IReadOnlyList<LatticeTopology>? Lattices = null
+    IReadOnlyList<LatticeTopology>? Lattices = null,
+    IReadOnlyList<StateSpace>? Spaces = null
 ) : IStateSection {
     /// <inheritdoc cref="World"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -35,7 +37,11 @@ public sealed record WorldStateSection(
     /// <inheritdoc cref="Lattices"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(items: value); } = Freeze(items: Lattices);
+    /// <inheritdoc cref="Spaces"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StateSpace>? Spaces { get => field; init => field = Freeze(items: value); } = Freeze(items: Spaces);
 
+    IReadOnlyList<StateSpace>? IStateSection.Spaces => Spaces;
     IReadOnlyList<IStateSlot>? IStateSection.IdentitySlots => Identity;
     IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => Body;
     IReadOnlyList<StateRow>? IStateSection.Rows => World;

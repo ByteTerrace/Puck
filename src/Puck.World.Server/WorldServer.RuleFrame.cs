@@ -38,6 +38,10 @@ public sealed partial class WorldServer {
                 topology: name => WorldTopologyCompilation.Find(
                     definition: m_definition,
                     name: name
+                ),
+                spaces: name => WorldStateSpaces.Find(
+                    definition: m_definition,
+                    name: name
                 )
             );
             m_ruleFrame = new StateFrame(

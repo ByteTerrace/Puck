@@ -94,7 +94,8 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                 var diagnostics = new DiagnosticBag();
                 var parsed = PuckParser.ParseDocumentWithDiagnostics(
                     source: puckText,
-                    diagnostics: diagnostics
+                    diagnostics: diagnostics,
+                    vocabulary: WorldDocumentVocabulary.Instance
                 );
                 var lowered = ((parsed.Value is { } document)
                     ? WorldDocumentEmitter.LowerWithDiagnostics(

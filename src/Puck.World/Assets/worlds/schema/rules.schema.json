@@ -150,15 +150,9 @@
             "title": "WorldDecisionMode"
           },
           "scoreKind": {
+            "$ref": "./common.schema.json#/$defs/CellKind",
             "description": "The common numeric kind, Int or Fixed; operands must match it.",
-            "enum": [
-              "Int",
-              "Fixed",
-              "Bool",
-              "Text"
-            ],
-            "default": "Fixed",
-            "title": "CellKind"
+            "default": "Fixed"
           },
           "commitmentSeconds": {
             "description": "Non-negative exact duration protecting a newly selected option from ordinary reconsideration.",
@@ -219,14 +213,8 @@
               "type": "string"
             },
             "kind": {
-              "description": "The value\u0027s cell kind, Int or Fixed.",
-              "enum": [
-                "Int",
-                "Fixed",
-                "Bool",
-                "Text"
-              ],
-              "title": "CellKind"
+              "$ref": "./common.schema.json#/$defs/CellKind",
+              "description": "The value\u0027s cell kind, Int or Fixed."
             },
             "expression": {
               "$ref": "./common.schema.json#/$defs/ValueExpression",

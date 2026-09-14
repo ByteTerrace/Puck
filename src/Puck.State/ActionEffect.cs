@@ -71,6 +71,7 @@ public abstract record ActionEffect {
     /// document row names.</param>
     /// <param name="Expression">A bounded numeric expression evaluated in the destination row's integer or
     /// fixed-point domain. Exactly one source spelling is authored.</param>
+    /// <param name="Vector">The base64url-encoded vector literal a vector state row's cell takes.</param>
     public sealed record SetState(
         string State,
         decimal? Value = null,
@@ -80,7 +81,8 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Vector = null
     ) : ActionEffect;
     /// <summary>Adds to a named state cell — the same shape as <see cref="SetState"/>, here the source is the addend
     /// rather than the replacement.</summary>

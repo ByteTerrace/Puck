@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
+using Puck.Transpiler.Lowering;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Validation;
@@ -282,12 +283,16 @@ public sealed class PuckLanguageServer {
         "m" => "**`m` Unit**\n\nSpatial metric unit in meters.",
         _ => null
     };
+
     // Best-effort: lowers the open document and looks `word` up as a declared `state` row's name, reporting its
     // kind. Swallows parse/lowering failures — a document mid-edit need not lower cleanly for hover to still work
     // on the parts that do.
-    private static string? GetStateRowHoverCard(string text, string word) {
+    private string? GetStateRowHoverCard(string text, string word) {
         try {
-            var parseResult = PuckParser.ParseDocumentWithDiagnostics(text);
+            var parseResult = PuckParser.ParseDocumentWithDiagnostics(
+                source: text,
+                vocabulary: m_vocabularyResolver.Resolve(text)
+            );
 
             if (parseResult.Value is not { } document) {
                 return null;
@@ -475,9 +480,9 @@ public sealed class PuckLanguageServer {
     // dotted read sits inside an already-closed rule), and the fallback truncates at the cursor and synthesizes
     // the closing braces/brackets/parens the truncated prefix is still owed, so an unclosed rule or block being
     // typed for the first time still parses far enough to see its declared rows.
-    private static DocumentNode? TryParseDocumentBestEffort(string text, int cursorOffset) {
+    private DocumentNode? TryParseDocumentBestEffort(string text, int cursorOffset) {
         try {
-            if (PuckParser.ParseDocumentWithDiagnostics(text).Value is { } direct) {
+            if (PuckParser.ParseDocumentWithDiagnostics(source: text, vocabulary: m_vocabularyResolver.Resolve(text)).Value is { } direct) {
                 return direct;
             }
         } catch {
@@ -492,7 +497,7 @@ public sealed class PuckLanguageServer {
             )];
             var recovered = (prefix + ComputeClosingSuffix(source: prefix));
 
-            return PuckParser.ParseDocumentWithDiagnostics(recovered).Value;
+            return PuckParser.ParseDocumentWithDiagnostics(source: recovered, vocabulary: m_vocabularyResolver.Resolve(recovered)).Value;
         } catch {
             return null;
         }
@@ -585,7 +590,7 @@ public sealed class PuckLanguageServer {
     // completion items — the dot-access counterpart to `GetStateRowHoverCard`'s row lookup. Returns null rather
     // than an empty array when the row can't be found or carries no cells, so the caller falls back to the
     // generic keyword list instead of offering zero completions for what might just be an unresolved recovery.
-    private static JsonArray? GetStateRowKeyCompletions(string text, string rowName, int cursorOffset) {
+    private JsonArray? GetStateRowKeyCompletions(string text, string rowName, int cursorOffset) {
         try {
             if (TryParseDocumentBestEffort(
                 cursorOffset: cursorOffset,
@@ -642,7 +647,7 @@ public sealed class PuckLanguageServer {
             key: uri,
             value: out var source
         ) &&
-            (PuckParser.ParseDocumentWithDiagnostics(source).Value is { } document) &&
+            (PuckParser.ParseDocumentWithDiagnostics(source: source, vocabulary: m_vocabularyResolver.Resolve(source)).Value is { } document) &&
             (m_completeDocument(document) is { } specialized)
         ) {
             await SendResponseAsync(
@@ -673,11 +678,15 @@ public sealed class PuckLanguageServer {
         )
         ) {
             var cursorOffset = (text.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
-            var keyItems = GetStateRowKeyCompletions(
+            var keyItems = (GetStateRowKeyCompletions(
                 cursorOffset: cursorOffset,
                 rowName: dotRowName,
                 text: text
-            );
+            ) ?? PuckSqlLsp.GetSqlTableColumnCompletions(
+                tableName: dotRowName,
+                text: text,
+                resolver: m_vocabularyResolver
+            ));
 
             if (keyItems is { Count: > 0 }) {
                 await SendResponseAsync(
@@ -687,6 +696,30 @@ public sealed class PuckLanguageServer {
                 return;
             }
         }
+
+        if (
+            m_documents.TryGetValue(
+            key: uri,
+            value: out var docText
+        )
+        ) {
+            var offset = (docText.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
+
+            if (PuckSqlLsp.IsCursorInsideSqlBlock(
+                cursorOffset: offset,
+                text: docText,
+                resolver: m_vocabularyResolver
+            )) {
+                var sqlItems = PuckSqlLsp.GetSqlCompletions(text: docText, resolver: m_vocabularyResolver);
+
+                await SendResponseAsync(
+                    id: id,
+                    result: new JsonObject { ["isIncomplete"] = false, ["items"] = sqlItems }
+                ).ConfigureAwait(continueOnCapturedContext: false);
+                return;
+            }
+        }
+
         var items = new JsonArray();
 
         // 1. Directives & Keywords
@@ -1334,7 +1367,10 @@ public sealed class PuckLanguageServer {
             return;
         }
 
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(text);
+        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
+            source: text,
+            vocabulary: m_vocabularyResolver.Resolve(text)
+        );
         var docNode = parseResult.Value;
 
         if (docNode is null) {
@@ -1538,14 +1574,20 @@ public sealed class PuckLanguageServer {
         }
 
         var offset = (text.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
-        var docCard = (PuckHoverInfo.Declaration(
+        var docCard = (PuckSqlLsp.GetSqlHoverCard(
+            offset: offset,
+            text: text,
+            word: word,
+            resolver: m_vocabularyResolver
+        ) ?? (PuckHoverInfo.Declaration(
             offset: offset,
             source: text,
-            word: word
+            word: word,
+            resolver: m_vocabularyResolver
         ) ?? (PuckHoverInfo.Builtin(word: word) ?? (GetDocumentationForWord(word: word) ?? GetStateRowHoverCard(
             text: text,
             word: word
-        ))));
+        )))));
 
         if (docCard is null) {
             await SendResponseAsync(
@@ -1728,7 +1770,8 @@ public sealed class PuckLanguageServer {
         var diagnosticsBag = new DiagnosticBag();
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(
             text,
-            diagnostics: diagnosticsBag
+            diagnostics: diagnosticsBag,
+            vocabulary: m_vocabularyResolver.Resolve(text)
         );
 
         if (
@@ -1981,16 +2024,24 @@ public sealed class PuckLanguageServer {
         }
     }
 
+    private readonly DocumentVocabularyResolver m_vocabularyResolver;
+
     /// <summary>Creates a new instance of the Puck Language Server over the given input and output streams.</summary>
     /// <param name="input">The stream to read LSP JSON-RPC messages from (e.g. Console.OpenStandardInput()).</param>
     /// <param name="output">The stream to write LSP JSON-RPC messages to (e.g. Console.OpenStandardOutput()).</param>
     /// <param name="diagnoseDocument">An optional schema dispatcher; returns true when it supplies the document's diagnostics.</param>
     /// <param name="completeDocument">An optional schema completion provider; null retains World completions.</param>
+    /// <param name="vocabularyResolver">An optional vocabulary resolver; null uses default World resolver.</param>
     public PuckLanguageServer(Stream input, Stream output, Func<DocumentNode, string?, DiagnosticBag, bool>? diagnoseDocument = null,
-        Func<DocumentNode, JsonArray?>? completeDocument = null) {
+        Func<DocumentNode, JsonArray?>? completeDocument = null,
+        DocumentVocabularyResolver? vocabularyResolver = null) {
         m_input = input;
         m_output = output;
         m_diagnoseDocument = diagnoseDocument;
         m_completeDocument = completeDocument;
+        m_vocabularyResolver = vocabularyResolver ?? new DocumentVocabularyResolver(
+            vocabularies: new Dictionary<string, IDocumentVocabulary>(),
+            fallback: WorldDocumentVocabulary.Instance
+        );
     }
 }

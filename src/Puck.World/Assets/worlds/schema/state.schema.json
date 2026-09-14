@@ -25,7 +25,8 @@
               "Int",
               "Fixed",
               "Bool",
-              "Text"
+              "Text",
+              "Vector"
             ]
           },
           "value": {
@@ -395,6 +396,10 @@
           "clock": {
             "$ref": "./common.schema.json#/$defs/ShapeNonNullable2"
           },
+          "space": {
+            "description": "The vector space this row belongs to; required for Vector, refused for every other kind.",
+            "type": "string"
+          },
           "gatesDrive": {
             "description": "Whether this row is a drive-admission gate. When set, this must be a keyed row (IsKeyed) whose per-body cell \u2014 keyed by the body\u0027s 0-based entity index \u2014 is consulted before admitting a drive or action intent for that body: a nonzero cell refuses the body\u0027s intents until the cell reads zero again, checked fresh every tick. The engine does not interpret the row\u0027s name; several independently named gate rows may exist at once, any one of which can refuse. Legitimate only on a row declaring Capacity, and only for Int/Fixed/ Bool. Default false.",
             "type": "boolean"
@@ -752,6 +757,50 @@
                     }
                   }
                 }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "Vector"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "description": "Unpadded base64url encoded signed 8-bit vector components."
+                },
+                "cells": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "description": "Unpadded base64url encoded signed 8-bit vector components."
+                      }
+                    }
+                  }
+                }
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "min"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "max"
+                    ]
+                  }
+                ]
               }
             }
           },

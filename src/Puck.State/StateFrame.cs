@@ -16,6 +16,8 @@ public enum FrameRowKind : byte {
     /// member's ordinal in the token domain in pile order, then each member's value — so a transfer inside a frame
     /// changes membership without minting a row.</summary>
     Zone,
+    /// <summary>One vector per cell of the row's cell list, in list order; a slot has one run. Laid into the frame's vector byte buffer.</summary>
+    Vector,
 }
 /// <summary>One row's place in a frame.</summary>
 /// <param name="Kind">How the row is laid out.</param>
@@ -30,7 +32,11 @@ public enum FrameRowKind : byte {
 /// <param name="DomainOrdinal">For a <see cref="FrameRowKind.Zone"/>, the ordinal of the token domain row its member
 /// ordinals index; -1 on every other kind.</param>
 /// <param name="HasTraits">Whether this row or any of its cells declares advance or cycle traits.</param>
-public readonly record struct FrameRowLayout(FrameRowKind Kind, int Offset, int Length, CompiledTopology? Topology, long Empty, int InverseTokensOrdinal = -1, int InverseCodesOrdinal = -1, int DomainOrdinal = -1, bool HasTraits = false) {
+/// <param name="VectorOffset">For a vector row, the byte offset in the frame's vector buffer.</param>
+/// <param name="Dimensions">For a vector row, the dimensions of its space.</param>
+/// <param name="VectorCells">For a vector row, the cell count (1 for a slot).</param>
+/// <param name="VectorCellStart">For a vector row, the cumulative vector cell index across rows.</param>
+public readonly record struct FrameRowLayout(FrameRowKind Kind, int Offset, int Length, CompiledTopology? Topology, long Empty, int InverseTokensOrdinal = -1, int InverseCodesOrdinal = -1, int DomainOrdinal = -1, bool HasTraits = false, int VectorOffset = 0, int Dimensions = 0, int VectorCells = 0, int VectorCellStart = 0) {
     /// <summary>Gets a value indicating whether this board's cells are derived from a token row rather than
     /// authored — <see cref="InverseTokensOrdinal"/> and <see cref="InverseCodesOrdinal"/> both resolved.</summary>
     public bool IsDerivedBoard => ((InverseTokensOrdinal >= 0) && (InverseCodesOrdinal >= 0));
@@ -46,8 +52,10 @@ public sealed class FrameLayout {
     // Every frame value index -> the row ordinal owning it, so a per-cell write bumps that row's version with one
     // array read rather than a binary search over row offsets.
     private readonly int[] m_rowOfIndex;
+    private readonly int[] m_rowOfVectorOffset;
     private readonly FrameRowLayout[] m_rows;
     private readonly Func<string, CompiledTopology?> m_topology;
+    private readonly Func<string, StateSpace?>? m_spaces;
 
     private readonly Dictionary<string, int> m_ordinals = new(comparer: StringComparer.Ordinal);
     // A tokens row ordinal -> the derived board ordinals it feeds, so a keyed write can find what to recompute
@@ -59,17 +67,21 @@ public sealed class FrameLayout {
     /// <summary>Lays out a section's rows.</summary>
     /// <param name="rows">The rows.</param>
     /// <param name="topology">Resolves a board row's topology by name; a board whose topology does not resolve is unframed.</param>
-    public FrameLayout(IReadOnlyList<StateRow> rows, Func<string, CompiledTopology?> topology) {
+    /// <param name="spaces">Resolves a vector row's space by name; a vector whose space does not resolve is unframed.</param>
+    public FrameLayout(IReadOnlyList<StateRow> rows, Func<string, CompiledTopology?> topology, Func<string, StateSpace?>? spaces = null) {
         ArgumentNullException.ThrowIfNull(argument: rows);
         ArgumentNullException.ThrowIfNull(argument: topology);
         m_rows = new FrameRowLayout[rows.Count];
         m_topology = topology;
+        m_spaces = spaces;
 
         for (var index = 0; (index < rows.Count); index++) {
             m_ordinals[rows[index].Name.Value] = index;
         }
 
         var offset = 0;
+        var vectorOffset = 0;
+        var vectorCellCount = 0;
         var dependents = new Dictionary<int, List<int>>();
         var codeDependents = new Dictionary<int, List<int>>();
 
@@ -77,14 +89,23 @@ public sealed class FrameLayout {
             var row = rows[index];
             var layout = Layout(
                 offset: offset,
+                vectorOffset: vectorOffset,
+                vectorCellStart: vectorCellCount,
                 ordinals: m_ordinals,
                 row: row,
                 rows: rows,
-                topology: topology
+                topology: topology,
+                spaces: spaces
             );
 
             m_rows[index] = layout;
             offset += layout.Length;
+
+            if (layout.Kind == FrameRowKind.Vector) {
+                var cellCount = (row.IsSlot ? 1 : (row.Cells?.Count ?? 0));
+                vectorOffset += (cellCount * layout.Dimensions);
+                vectorCellCount += cellCount;
+            }
 
             if (layout.IsDerivedBoard) {
                 if (!dependents.TryGetValue(
@@ -117,15 +138,32 @@ public sealed class FrameLayout {
         }
 
         Length = offset;
+        VectorLength = vectorOffset;
+        VectorCellCount = vectorCellCount;
         m_rowOfIndex = new int[Length];
+        m_rowOfVectorOffset = (VectorLength > 0) ? new int[VectorLength] : [];
 
         for (var index = 0; (index < rows.Count); index++) {
             var layout = m_rows[index];
 
-            m_rowOfIndex.AsSpan(
-                length: layout.Length,
-                start: layout.Offset
-            ).Fill(value: index);
+            if (layout.Length > 0) {
+                m_rowOfIndex.AsSpan(
+                    length: layout.Length,
+                    start: layout.Offset
+                ).Fill(value: index);
+            }
+
+            if (layout.Kind == FrameRowKind.Vector) {
+                var cellCount = (rows[index].IsSlot ? 1 : (rows[index].Cells?.Count ?? 0));
+                var byteLength = cellCount * layout.Dimensions;
+
+                if (byteLength > 0) {
+                    m_rowOfVectorOffset.AsSpan(
+                        length: byteLength,
+                        start: layout.VectorOffset
+                    ).Fill(value: index);
+                }
+            }
         }
     }
 
@@ -152,10 +190,67 @@ public sealed class FrameLayout {
 
         return false;
     }
-    private static FrameRowLayout Layout(StateRow row, IReadOnlyList<StateRow> rows, Func<string, CompiledTopology?> topology, int offset, Dictionary<string, int> ordinals) {
+    private static FrameRowLayout Layout(StateRow row, IReadOnlyList<StateRow> rows, Func<string, CompiledTopology?> topology, Func<string, StateSpace?>? spaces, int offset, int vectorOffset, int vectorCellStart, Dictionary<string, int> ordinals) {
         var hasTraits = HasTraits(row: row);
 
         if (row.Kind == CellKind.Text) {
+            return new FrameRowLayout(
+                Kind: FrameRowKind.Unframed,
+                Offset: offset,
+                Length: 0,
+                Topology: null,
+                Empty: 0L,
+                HasTraits: hasTraits
+            );
+        }
+
+        if (row.Kind == CellKind.Vector) {
+            var spaceName = row.Space;
+            var space = (string.IsNullOrEmpty(spaceName) ? null : spaces?.Invoke(spaceName));
+
+            if (space is null) {
+                return new FrameRowLayout(
+                    Kind: FrameRowKind.Unframed,
+                    Offset: offset,
+                    Length: 0,
+                    Topology: null,
+                    Empty: 0L,
+                    HasTraits: hasTraits
+                );
+            }
+
+            if (row.IsSlot) {
+                return new FrameRowLayout(
+                    Kind: FrameRowKind.Vector,
+                    Offset: offset,
+                    Length: 0,
+                    Topology: null,
+                    Empty: 0L,
+                    HasTraits: hasTraits,
+                    VectorOffset: vectorOffset,
+                    Dimensions: space.Dimensions,
+                    VectorCells: 1,
+                    VectorCellStart: vectorCellStart
+                );
+            }
+
+            if (row.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } &&
+                row.EffectiveDomain is not StateDomain.CellsOf &&
+                row.EffectiveDomain is not StateDomain.Ring) {
+                return new FrameRowLayout(
+                    Kind: FrameRowKind.Vector,
+                    Offset: offset,
+                    Length: 0,
+                    Topology: null,
+                    Empty: 0L,
+                    HasTraits: hasTraits,
+                    VectorOffset: vectorOffset,
+                    Dimensions: space.Dimensions,
+                    VectorCells: (row.Cells?.Count ?? 0),
+                    VectorCellStart: vectorCellStart
+                );
+            }
+
             return new FrameRowLayout(
                 Kind: FrameRowKind.Unframed,
                 Offset: offset,
@@ -322,7 +417,10 @@ public sealed class FrameLayout {
                 row: row,
                 rows: rows,
                 topology: m_topology,
+                spaces: m_spaces,
                 offset: m_rows[index].Offset,
+                vectorOffset: m_rows[index].VectorOffset,
+                vectorCellStart: m_rows[index].VectorCellStart,
                 ordinals: m_ordinals
             );
 
@@ -337,7 +435,11 @@ public sealed class FrameLayout {
             ) ||
                 (candidate.InverseTokensOrdinal != m_rows[index].InverseTokensOrdinal) ||
                 (candidate.InverseCodesOrdinal != m_rows[index].InverseCodesOrdinal) ||
-                (candidate.DomainOrdinal != m_rows[index].DomainOrdinal)
+                (candidate.DomainOrdinal != m_rows[index].DomainOrdinal) ||
+                (candidate.VectorOffset != m_rows[index].VectorOffset) ||
+                (candidate.Dimensions != m_rows[index].Dimensions) ||
+                (candidate.VectorCells != m_rows[index].VectorCells) ||
+                (candidate.VectorCellStart != m_rows[index].VectorCellStart)
             ) {
                 return false;
             }
@@ -348,6 +450,9 @@ public sealed class FrameLayout {
     /// <summary>Gets the row ordinal owning a frame value index.</summary>
     /// <param name="index">The frame value index.</param>
     public int RowOfIndex(int index) => m_rowOfIndex[index];
+    /// <summary>Gets the row ordinal owning a frame vector byte offset.</summary>
+    /// <param name="offset">The vector byte offset.</param>
+    public int RowOfVectorOffset(int offset) => m_rowOfVectorOffset[offset];
     /// <summary>Finds a row's ordinal by name.</summary>
     /// <param name="name">The row name.</param>
     /// <param name="ordinal">The ordinal.</param>
@@ -360,6 +465,10 @@ public sealed class FrameLayout {
     public int Count => m_rows.Length;
     /// <summary>Gets how many values a frame on this layout holds.</summary>
     public int Length { get; }
+    /// <summary>Gets how many vector bytes a frame on this layout holds.</summary>
+    public int VectorLength { get; }
+    /// <summary>Gets how many vector cells a frame on this layout holds.</summary>
+    public int VectorCellCount { get; }
     /// <summary>Gets how many rows the layout covers.</summary>
     public int RowCount => m_rows.Length;
 
@@ -371,7 +480,7 @@ public sealed class FrameLayout {
 /// a hypothetical evaluation reads and writes an array while the rows keep supplying keys, domains, and traits. A
 /// frame never changes structure — it refuses a key its row does not hold — and a text row reads through to the
 /// row's own cells.</summary>
-public sealed class StateFrame : StateStore {
+public sealed partial class StateFrame : StateStore {
     // One overwritten value the journal can restore, recorded before the write it undoes.
     private readonly record struct JournalEntry(int Index, long Previous);
 
@@ -400,6 +509,7 @@ public sealed class StateFrame : StateStore {
         m_rows = rows;
         m_values = new long[layout.Length];
         m_rowVersions = new ulong[layout.RowCount];
+        InitializeVectors(layout: layout, rows: rows);
     }
 
     // Bumps the version of the row owning a frame index — one array read via the layout's precomputed inverse map.
@@ -854,6 +964,7 @@ public sealed class StateFrame : StateStore {
 
         if (m_journalScopes == 0) {
             m_journalLength = 0;
+            ClearVectorJournal();
         }
     }
     /// <summary>Copies another frame on the same layout.</summary>
@@ -872,6 +983,7 @@ public sealed class StateFrame : StateStore {
 
         RequireNoJournalScope();
         other.m_values.AsSpan().CopyTo(destination: m_values);
+        CopyVectorsFrom(other: other);
 
         for (var ordinal = 0; (ordinal < m_rowVersions.Length); ordinal++) {
             m_rowVersions[ordinal]++;
@@ -987,6 +1099,14 @@ public sealed class StateFrame : StateStore {
                         values[0] = count;
                         break;
                     }
+                case FrameRowKind.Vector:
+                    LoadVectorRow(
+                        layout: layout,
+                        row: row,
+                        rowOrdinal: ordinal,
+                        source: source
+                    );
+                    break;
                 default:
                     break;
             }
@@ -1080,12 +1200,20 @@ public sealed class StateFrame : StateStore {
         for (var index = (m_journalLength - 1); (index >= mark); index--) {
             var cell = m_journal[index].Index;
 
-            m_values[cell] = m_journal[index].Previous;
-            BumpRow(index: cell);
+            if (cell < 0) {
+                RestoreVectorJournalEntry(entry: m_journal[index]);
+            } else {
+                m_values[cell] = m_journal[index].Previous;
+                BumpRow(index: cell);
+            }
         }
 
         m_journalLength = mark;
         m_journalScopes--;
+
+        if (m_journalScopes == 0) {
+            ClearVectorJournal();
+        }
     }
     /// <summary>Gets a row's version: a counter bumped on every write to any of its cells, including a transform's
     /// whole-span write and a journal rewind. Two reads of the same row taken with no bump between them prove the

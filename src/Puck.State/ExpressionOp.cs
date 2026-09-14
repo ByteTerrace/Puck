@@ -245,4 +245,10 @@ public enum ExpressionOp : byte {
     ReplicationMask,
     /// <summary>A pattern repeated across 64 bits; the width must divide 64 and the pattern must fit its block.</summary>
     RepeatBits,
+    /// <summary>The dot product of two vectors of the same space: an integer sum of component products.</summary>
+    Dot,
+    /// <summary>The cosine similarity of two vectors of the same space, in Q48.16 (Fixed); fixed expressions only.</summary>
+    Similarity,
+    /// <summary>Whether two vectors of the same space are identical component-by-component; 1 when equal, 0 otherwise.</summary>
+    Identical,
 }

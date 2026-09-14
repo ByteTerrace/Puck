@@ -1,6 +1,8 @@
 using Puck.State;
 using Puck.Transpiler.Ast;
+using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
+using Puck.World.Transpiler.Lowering;
 
 namespace Puck.World.Transpiler.Lsp;
 
@@ -49,8 +51,12 @@ internal static class PuckHoverInfo {
         }
         return null;
     }
-    internal static string? Declaration(string source, string word, int offset) {
-        var document = PuckParser.ParseDocumentWithDiagnostics(source).Value;
+    internal static string? Declaration(string source, string word, int offset, DocumentVocabularyResolver? resolver = null) {
+        var vocabulary = (resolver?.Resolve(source) ?? WorldDocumentVocabulary.Instance);
+        var document = PuckParser.ParseDocumentWithDiagnostics(
+            source: source,
+            vocabulary: vocabulary
+        ).Value;
 
         if (document is null) {
             return null;
@@ -72,6 +78,20 @@ internal static class PuckHoverInfo {
         }
         for (var index = (path.Count - 1); (index >= 0); --index) {
             switch (path[index]) {
+                case EmbeddedBlockNode eb when string.Equals(
+                    a: eb.Language,
+                    b: "sql",
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                ):
+                    if (PuckSqlLsp.GetSqlHoverCard(
+                        offset: offset,
+                        resolver: resolver,
+                        text: source,
+                        word: word
+                    ) is { } sqlCard) {
+                        return sqlCard;
+                    }
+                    break;
                 case LambdaExpressionNode lambda when lambda.Parameters.Contains(value: word):
                     return Card(
                         $"{word} — lambda parameter",

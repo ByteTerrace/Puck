@@ -6,7 +6,7 @@ namespace Puck.Transpiler.Formatting;
 
 /// <summary>Opinionated, idempotent source code formatter for the Puck authoring language (.puck).</summary>
 public static class PuckFormatter {
-    private static int CalculateNestingDelta(string line) {
+    private static int CalculateNestingDelta(string line, bool countParens = false, bool inSql = false) {
         var delta = 0;
         var inString = false;
         var stringDelimiter = '\0';
@@ -24,34 +24,51 @@ public static class PuckFormatter {
                 ) {
                     escape = true;
                 } else if (c == stringDelimiter) {
+                    if (inSql && (stringDelimiter == '\'') && ((i + 1) < line.Length) && (line[i + 1] == '\'')) {
+                        i++;
+                        continue;
+                    }
                     inString = false;
                 }
                 continue;
             }
 
-            // Check single line comment start
+            // Check single line comment start: // or (if inSql) --
             if (
-                (c == '/') &&
-                ((i + 1) < line.Length) &&
-                (line[(i + 1)] == '/')
+                ((c == '/') && ((i + 1) < line.Length) && (line[(i + 1)] == '/')) ||
+                (inSql && (c == '-') && ((i + 1) < line.Length) && (line[(i + 1)] == '-'))
             ) {
                 break; // rest of line is comment
             }
 
-            if (c is '"' or '`') {
+            if (c is '"' or '`' || (inSql && (c == '\''))) {
                 inString = true;
                 stringDelimiter = c;
                 continue;
             }
 
-            if (c is '{' or '[') {
+            if (c is '{' or '[' || (countParens && (c == '('))) {
                 delta++;
-            } else if (c is '}' or ']') {
+            } else if (c is '}' or ']' || (countParens && (c == ')'))) {
                 delta--;
             }
         }
 
         return delta;
+    }
+
+    private static bool IsSqlBlockOpening(string trimmed) {
+        if (!trimmed.StartsWith("sql", StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+        var rest = trimmed.AsSpan(3).TrimStart();
+        if (rest.Length > 0 && rest[0] == '"') {
+            var close = rest[1..].IndexOf('"');
+            if (close >= 0) {
+                rest = rest[(close + 2)..].TrimStart();
+            }
+        }
+        return rest.Length > 0 && rest[0] == '{';
     }
     private static bool CanAttachEgyptianBrace(string prevTrimmed, string brace) {
         if (string.IsNullOrWhiteSpace(value: prevTrimmed)) {
@@ -107,17 +124,18 @@ public static class PuckFormatter {
 
         return false;
     }
-    private static int CountLeadingClosingDelimiters(string trimmedLine) {
+    private static int CountLeadingClosingDelimiters(string trimmedLine, bool countParens = false) {
         var count = 0;
 
         for (var i = 0; (i < trimmedLine.Length); i++) {
             var c = trimmedLine[i];
 
-            if (c is '}' or ']') {
+            if (c is '}' or ']' || (countParens && (c == ')'))) {
                 count++;
             } else if (
                 !char.IsWhiteSpace(c: c) &&
-                (c != ',')
+                (c != ',') &&
+                (c != ';')
             ) {
                 break;
             }
@@ -237,6 +255,7 @@ public static class PuckFormatter {
         var indentLevel = 0;
         var inMultiLineComment = false;
         var previousWasEmpty = false;
+        int? sqlBlockDepth = null;
 
         for (var i = 0; (i < preprocessed.Count); i++) {
             var rawLine = preprocessed[i];
@@ -308,15 +327,18 @@ public static class PuckFormatter {
                 continue;
             }
 
+            var inSql = (sqlBlockDepth is not null);
+            var isSqlOpening = (!inSql) && IsSqlBlockOpening(trimmed);
+
             // Count leading closing delimiters for current line's indentation
-            var leadingClosingCount = CountLeadingClosingDelimiters(trimmedLine: trimmed);
+            var leadingClosingCount = CountLeadingClosingDelimiters(trimmedLine: trimmed, countParens: inSql);
             var effectiveIndent = Math.Max(
                 val1: 0,
                 val2: (indentLevel - leadingClosingCount)
             );
 
             // Normalize line content (spacing around colons, commas, etc.)
-            var normalizedContent = NormalizeLineContent(trimmed: trimmed);
+            var normalizedContent = (inSql ? trimmed : NormalizeLineContent(trimmed: trimmed));
 
             var indent = new string(
                 c: (insertSpaces
@@ -331,12 +353,18 @@ public static class PuckFormatter {
             previousWasEmpty = false;
 
             // Update indentLevel for next lines based on delimiters outside string literals and comments
-            var delta = CalculateNestingDelta(line: trimmed);
+            var delta = CalculateNestingDelta(line: trimmed, countParens: (inSql || isSqlOpening), inSql: (inSql || isSqlOpening));
 
             indentLevel = Math.Max(
                 val1: 0,
                 val2: (indentLevel + delta)
             );
+
+            if (isSqlOpening) {
+                sqlBlockDepth = effectiveIndent;
+            } else if ((sqlBlockDepth is not null) && (indentLevel <= sqlBlockDepth.Value)) {
+                sqlBlockDepth = null;
+            }
         }
 
         // Remove any trailing empty lines before final newline

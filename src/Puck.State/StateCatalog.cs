@@ -38,11 +38,14 @@ public enum StateValueKind : byte {
     /// <summary>A bounded text value.</summary>
     Text = ((byte)CellKind.Text),
 
+    /// <summary>A vector value.</summary>
+    Vector = ((byte)CellKind.Vector),
+
     /// <summary>A per-participant Q48.16 counter.</summary>
-    Counter = 4,
+    Counter = 5,
 
     /// <summary>A per-participant duration stored in engine ticks.</summary>
-    Timer,
+    Timer = 6,
 }
 /// <summary>Identifies one descriptor in the <see cref="StateCatalog"/> that minted it.</summary>
 /// <remarks>Handles are bound to one catalog instance. A processor resolves a name during compilation, retains the
@@ -154,6 +157,7 @@ public sealed class StateCatalog {
         CellKind.Fixed => StateValueKind.Fixed,
         CellKind.Bool => StateValueKind.Bool,
         CellKind.Text => StateValueKind.Text,
+        CellKind.Vector => StateValueKind.Vector,
         _ => throw new InvalidOperationException(message: $"Unknown state cell kind '{kind}'."),
     };
     private static bool MatchesSlotLane(IReadOnlyList<IStateSlot> declarations, StateLane ownership, IReadOnlyList<StateDescriptor> descriptors, ref int descriptorIndex) {

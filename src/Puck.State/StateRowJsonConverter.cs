@@ -159,10 +159,36 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             SubstepTicks: substepTicks
         );
     }
+    private static StateVector ReadVector(JsonElement element, string context) {
+        if (element.ValueKind != JsonValueKind.String) {
+            throw new JsonException(message: $"{context} must be an unpadded base64url vector string.");
+        }
+
+        var text = element.GetString() ?? string.Empty;
+
+        if (!StateVector.TryParseBase64Url(text: text, vector: out var vector, error: out var error)) {
+            throw new JsonException(message: $"{context} is not a valid StateVector: {error}");
+        }
+
+        return vector;
+    }
     private static StateCell ReadCell(CellKind cellKind, CellName key, JsonElement element, string context, StateAdvance? advance = null, string? provenance = null, StateDynamics? dynamics = null, StateCycle? cycle = null, StateCellBehavior behavior = StateCellBehavior.Inherit, StateCellClock? clock = null) => cellKind switch {
         CellKind.Text => new StateCell(
         Key: key,
         Text: RequireString(
+            context: context,
+            element: element
+        ),
+        Advance: advance,
+        Provenance: provenance,
+        Dynamics: dynamics,
+        Cycle: cycle,
+        Behavior: behavior,
+        Clock: clock
+    ),
+        CellKind.Vector => new StateCell(
+        Key: key,
+        Vector: ReadVector(
             context: context,
             element: element
         ),
@@ -436,6 +462,16 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     value: (cell.Text ?? string.Empty)
                 );
                 break;
+            case CellKind.Vector:
+                if (cell.Vector is null) {
+                    throw new InvalidOperationException(message: "A Vector cell must hold a StateVector.");
+                }
+
+                writer.WriteString(
+                    propertyName: propertyName,
+                    value: cell.Vector.ToBase64Url()
+                );
+                break;
             case CellKind.Bool:
                 writer.WriteBoolean(
                     propertyName: propertyName,
@@ -546,6 +582,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         JsonElement? dynamics = null;
         JsonElement? cycle = null;
         JsonElement? clock = null;
+        string? space = null;
         var members = new RowMembers();
 
         while (
@@ -568,6 +605,9 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                         ? reader.GetString()
                         : null
                     );
+                    break;
+                case "space":
+                    space = reader.GetString();
                     break;
                 case "kind":
                     kind = JsonElement.ParseValue(reader: ref reader);
@@ -890,7 +930,8 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     context: $"state row '{name}'.historyCursor",
                     element: historyCursorElement
                 )
-            : 0L)
+            : 0L),
+            Space: space
         );
 
         return Create(
@@ -912,6 +953,14 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             propertyName: "kind",
             value: StateSpelling.Kind(kind: value.Kind)
         );
+
+        if (value.Space is { } spaceName) {
+            writer.WriteString(
+                propertyName: "space",
+                value: spaceName
+            );
+        }
+
         WriteOptionalNumeric(
             writer: writer,
             propertyName: "min",

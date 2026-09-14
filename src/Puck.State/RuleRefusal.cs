@@ -154,6 +154,50 @@ public enum RuleRefusal : byte {
     /// a keyed row (a per-participant tally) instead.</summary>
     [Refusal(door: "world.rule.compile", condition: "an argmax/argmin body reference names a row that is not KEYED — a slot row's cell has no body-index key", kind: RefusalKind.Verdict)]
     ArgRowNotKeyed,
+
+    /// <summary>Vector operands do not share the same space or length.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector operands do not belong to the same space", kind: RefusalKind.Verdict)]
+    VectorSpaceMismatch,
+
+    /// <summary>An operand expected to be a vector is not of kind Vector.</summary>
+    [Refusal(door: "world.rule.compile", condition: "an operand is not a vector", kind: RefusalKind.Verdict)]
+    VectorOperandNotVector,
+
+    /// <summary>A vector mix produced a zero sum.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a vector mix sum of terms is zero", kind: RefusalKind.Verdict)]
+    VectorMixZero,
+
+    /// <summary>Vector mix term count or weight is out of range.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector mix terms count or weight is out of range", kind: RefusalKind.Verdict)]
+    VectorMixTerms,
+
+    /// <summary>Vector mean has no candidate cells or sum is zero.</summary>
+    [Refusal(door: "world.rule.effect", condition: "vector mean has no candidates or sum is zero", kind: RefusalKind.Verdict)]
+    VectorMeanEmpty,
+
+    /// <summary>Vector filter where row is not a keyed Bool row.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector where row is not a keyed Bool row", kind: RefusalKind.Verdict)]
+    VectorFilterShape,
+
+    /// <summary>Vector exclude key is malformed.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector exclude key is malformed", kind: RefusalKind.Verdict)]
+    VectorExcludeKey,
+
+    /// <summary>Vector nearest destination shape or parameters are invalid.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector nearest transform shape or parameters are invalid", kind: RefusalKind.Verdict)]
+    VectorNearestShape,
+
+    /// <summary>Vector remember destination shape or parameters are invalid.</summary>
+    [Refusal(door: "world.rule.compile", condition: "vector remember transform shape or parameters are invalid", kind: RefusalKind.Verdict)]
+    VectorRememberShape,
+
+    /// <summary>A vector cell was targeted by an effect kind that does not admit vectors.</summary>
+    [Refusal(door: "world.rule.compile", condition: "a vector cell was targeted by an unsupported effect kind", kind: RefusalKind.Verdict)]
+    VectorEffectNotAdmitted,
+
+    /// <summary>A text key indirection cell contains text that is not a valid cell name.</summary>
+    [Refusal(door: "world.rule.effect", condition: "a text key indirection value is not a valid cell name", kind: RefusalKind.Verdict)]
+    KeyIndirectionInvalid,
 }
 /// <summary>Reports a rule compilation refusal — caught and reported by name at validation. The category is a
 /// <see cref="RuleRefusal"/> for the refusals the state-neutral compiler raises itself, or a member of a document

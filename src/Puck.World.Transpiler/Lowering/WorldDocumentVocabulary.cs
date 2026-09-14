@@ -6,8 +6,15 @@ namespace Puck.World.Transpiler.Lowering;
 /// <summary>The <c>puck.world.definition.v1</c> answers to the questions generic value lowering cannot settle for
 /// itself.</summary>
 public sealed class WorldDocumentVocabulary : IDocumentVocabulary {
+    /// <summary>The canonical schema URI for world definitions.</summary>
+    public const string Schema = "puck.world.definition.v1";
+
     /// <summary>The shared instance; the vocabulary is a pure lookup and carries no per-pass state.</summary>
     public static WorldDocumentVocabulary Instance { get; } = new();
+
+    /// <inheritdoc />
+    public bool IsEmbeddedLanguage(string identifier) =>
+        string.Equals(identifier, "sql", StringComparison.OrdinalIgnoreCase);
 
     /// <inheritdoc />
     public UnitDimension ClassifyField(string fieldKey) => WorldDocumentEmitterUnits.Classify(fieldKey: fieldKey);

@@ -27,4 +27,8 @@ public enum CellKind : byte {
     /// to it. The only kind whose value is carried in <c>Text</c> rather than
     /// <c>Value</c>.</summary>
     Text,
+
+    /// <summary>A vector cell holding an admitted, normalized signed 8-bit embedding vector,
+    /// carried in <c>Vector</c> rather than <c>Value</c> or <c>Text</c>.</summary>
+    Vector,
 }

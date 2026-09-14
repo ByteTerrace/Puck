@@ -339,6 +339,66 @@ sugar (a second board over a topology a `grid` already declared, or a `pile`/boa
 authored the same way it always has been, nested one level deeper inside `world { }` instead of as one element of
 the `world [ ]` array.
 
+### State SQL dialect (`sql { ... }`)
+
+```puck
+sql {
+    CREATE TABLE characters (
+        id   TEXT PRIMARY KEY,
+        hp   INT  NOT NULL DEFAULT 100 CHECK (hp BETWEEN 0 AND 100) ON OVERFLOW SATURATE,
+        mana INT  DEFAULT 0 ADVANCE 5 PER SECOND
+    ) CAPACITY 32;
+
+    INSERT INTO characters (id, hp, mana) VALUES
+        ('hero', 80, 50),
+        ('goblin', 30, 0);
+
+    DECLARE turnCount INT DEFAULT 0 CHECK (turnCount >= 0) ADVANCE 1 PER SECOND;
+
+    CREATE TABLE deck (id TEXT PRIMARY KEY REFERENCES cardNames) ORDERED CAPACITY 3;
+
+    CREATE RULE healHero ON ENTER AS
+        UPDATE characters SET hp = hp + 10 WHERE id = 'hero';
+
+    CREATE RULE spendMana EVERY TICK AS
+        BEGIN ATOMIC
+            UPDATE characters SET mana = mana - 1 WHERE id = 'hero';
+        END;
+}
+```
+
+A hermetic SQL authoring dialect embedded in `.puck` world documents via `sql { ... }` blocks.
+It compiles directly to native Puck state rows and rules without external or embedded SQLite dependencies.
+
+- **Multi-column tables**: `CREATE TABLE fighters (id TEXT PRIMARY KEY, hp INT, mana INT) CAPACITY n;` decomposes
+  into prefix-named state rows (`fightersHp`, `fightersMana`) sharing the primary key domain and capacity.
+  Columns admit `NOT NULL`, `DEFAULT <val>`, `CHECK (<col> BETWEEN min AND max | >= min | <= max)`,
+  `ON OVERFLOW SATURATE`, `ADVANCE <rate> PER SECOND`, and `DYNAMICS <row>`.
+- **Scalar slots**: `DECLARE name TYPE [DEFAULT v] [CHECK ...] [ADVANCE r PER SECOND];` compiles directly into
+  a single scalar state row.
+- **Piles**: `CREATE TABLE name (id TEXT PRIMARY KEY REFERENCES target) ORDERED CAPACITY n;` spells an ordered
+  sequence table (native pile).
+- **Rules**: `CREATE RULE name EVERY TICK | ON ENTER AS <statement>` compiles directly into native rules JSON.
+- **Transactions**: `BEGIN ATOMIC <statement>* [EXCEPTION <statement>*] END;` compiles to atomic transaction
+  effects (`transaction` with optional `onFailure`).
+
+| Code | Severity | Refusal |
+|---|---|---|
+| PUCK070 | Error | Floating-point column type (`REAL`, `FLOAT`, `DOUBLE`) in a SQL table declaration — state holds no floats, use `FIXED`. |
+| PUCK071 | Error | Composite `PRIMARY KEY (a, b)` in a SQL table declaration — a state cell has exactly one key. |
+| PUCK072 | Error | `CHECK` constraint shape outside `BETWEEN a AND b`, `>= a`, or `<= b`. |
+| PUCK073 | Error | Unsupported SQL clause or construct (`GROUP BY`, `HAVING`, `WINDOW`, `LIMIT`, cross-key `JOIN`, `UNION`, `TRIGGER`, etc.). |
+| PUCK074 | Error | Set-based `UPDATE` reading a column it writes at other keys — self-referential multi-key updates are refused. |
+| PUCK075 | Error | Inserted row missing a `NOT NULL` column that declares no default value. |
+| PUCK076 | Error | Syntax or grammatical refusal inside a `sql { ... }` block. |
+
+Shared state declaration and semantic codes also apply:
+- **PUCK051**: Duplicate table/slot name or duplicate inserted primary key.
+- **PUCK053**: Default value or SET assignment literal that does not fit the target column or slot's kind.
+- **PUCK054**: Table `CAPACITY` smaller than inserted row count.
+- **PUCK058**: `ADVANCE` rate that does not reduce to an exact 64-bit fraction.
+- **PUCK059**: Unknown table, column, or slot reference.
+
 ## Decompiling
 
 `WorldDecompiler.Decompile` opens every file with a one-time-import header comment (`let`/`template` cannot be

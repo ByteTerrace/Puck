@@ -16,14 +16,8 @@
         "type": "string"
       },
       "kind": {
-        "description": "The numeric kind of the values the word is read from: Int or Fixed.",
-        "enum": [
-          "Int",
-          "Fixed",
-          "Bool",
-          "Text"
-        ],
-        "title": "CellKind"
+        "$ref": "./common.schema.json#/$defs/CellKind",
+        "description": "The numeric kind of the values the word is read from: Int or Fixed."
       },
       "symbols": {
         "description": "The alphabet, 1..32 named value ranges.",

@@ -1,9 +1,9 @@
-using Puck.World.Machines;
-using System.CommandLine;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
+using Puck.World.Machines;
+using Puck.World.Transpiler.Lowering;
 using Puck.World.Transpiler.Validation;
+using System.CommandLine;
 
 namespace Puck.Cli.Transpiler;
 
@@ -20,10 +20,12 @@ internal static class LintCommand {
             return 2;
         }
 
+        var vocabulary = CliVocabularyResolver.Instance.Resolve(source: sourceText);
         var diagnostics = new DiagnosticBag();
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(
             sourceText,
-            diagnostics: diagnostics
+            diagnostics: diagnostics,
+            vocabulary: vocabulary
         );
         var documentNode = parseResult.Value;
 
