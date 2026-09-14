@@ -56,6 +56,9 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     public WorldDefinition Definition => m_mirror.Definition;
     /// <summary>The stable runtime identity of this authority endpoint. It is never inferred from its transport.</summary>
     public string Identity { get; }
+    /// <summary>The engine-tick coordinate of the endpoint's last delivered snapshot, the time its delivered
+    /// definition's advancing state is read as of.</summary>
+    public ulong EngineTick => m_mirror.EngineTick;
     /// <summary>The endpoint's next authoritative input coordinate.</summary>
     public ulong NextInputTick => m_nextInputTick();
     /// <summary>The endpoint's ordinary submission door.</summary>

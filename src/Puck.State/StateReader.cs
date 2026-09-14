@@ -1003,9 +1003,19 @@ public static class StateReader {
             : 0UL
         );
 
+        // No clock at all (a cell just composed with a dynamics behavior, never yet settled) starts the follower at
+        // its own stored value rather than raw zero — the stored value is the trait's target, so an unsettled
+        // follower reads its authored value immediately instead of easing in from zero on first read.
+        var initialValue = ((clock is null)
+            ? DynamicsRowRawToFixed(
+            row: row,
+            raw: cell.Value
+        )
+            : DynamicsTraitRawToFixed(raw: clock.Y0));
+
         sample = dynamicsRow.Compiled.Evaluate(
             elapsedTicks: elapsed,
-            initialValue: DynamicsTraitRawToFixed(raw: (clock?.Y0 ?? 0L)),
+            initialValue: initialValue,
             initialVelocity: DynamicsTraitRawToFixed(raw: (clock?.V0 ?? 0L)),
             target: DynamicsRowRawToFixed(
                 row: row,

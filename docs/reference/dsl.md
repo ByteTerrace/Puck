@@ -23,21 +23,24 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 | `Units/` | `UnitDimension`/`UnitConversion`: what `deg`, `rad`, `s`, `ms`, `m`, `cm`, `mm`, `hz`, `%` represent. |
 | (root) | `CompilationResult<T>`, and `PuckDslVocabulary`—the DSL's spelling of `Puck.State`'s comparison and cell-kind enums. |
 
-## Row declarations: `table`/`slot`
+## Row declarations: `table`/`slot`/`pile`/`grid`
 
 ```puck
 table name : Kind [modifier(...)]* { key = value [modifier(...)]* ... }
 slot name : Kind [= value] [modifier(...)]*
+pile name of tokenRow [modifier(...)]* { token ... }
+grid name : Kind [modifier(...)]* [{ key = value ... }]
 ```
 
 `Ast/StateDeclarationNodes.cs` and `Parsing/PuckParser.StateDeclarations.cs` parse this shape for every vocabulary:
-a declared name, a kind spelled as a bare identifier, zero or more `name(args)` modifier calls (reusing the ordinary
-call-expression grammar verbatim), and — for `table` — a `{ }` body of `key = value` cell entries, each with its own
-modifiers. The core assigns no meaning to `Kind`, a modifier's name, or where a declaration is legal; it is a
-syntax shape only, so a second document vocabulary with its own row-shaped concept could reuse it without touching
-this project. `Puck.World.Transpiler` is `puck.world.definition.v1`'s vocabulary for it today — see its
-[README](../../src/Puck.World.Transpiler/README.md#state-declarations) for `state.world`'s exact lowering, defaults,
-and refusals.
+a declared name, an optional kind spelled as a bare identifier, an optional bare-identifier reference (`pile`'s
+`of tokenRow`), zero or more `name(args)` modifier calls (reusing the ordinary call-expression grammar verbatim),
+and an optional `{ }` body — `key = value` cell entries with their own modifiers (`table`/`grid`), or bare `token`
+entries (`pile`). The core assigns no meaning to `Kind`, a reference, a modifier's name, or where a declaration is
+legal; it is a syntax shape only, so a second document vocabulary with its own row-shaped concept could reuse it
+without touching this project. `Puck.World.Transpiler` is `puck.world.definition.v1`'s vocabulary for it today —
+see its [README](../../src/Puck.World.Transpiler/README.md#state-declarations) for `state.world`'s exact lowering,
+defaults, and refusals.
 
 ## `for`, over an array known at compile time
 

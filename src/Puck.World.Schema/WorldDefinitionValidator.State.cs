@@ -994,8 +994,9 @@ public static partial class WorldDefinitionValidator {
                 break;
         }
     }
-    // The state section: schema cap (MaxRows), name uniqueness, both-or-neither Min/Max range (applied to every
-    // cell's value), text-cell length against MaxTextValueLength, and per-row cell-count ceiling (MaxCellsPerRow,
+    // The state section: schema cap (MaxRows), name uniqueness, the independently-optional Min/Max range (each
+    // bound applied to every cell's value; a one-sided range is legal), text-cell length against
+    // MaxTextValueLength, and per-row cell-count ceiling (MaxCellsPerRow,
     // optionally narrowed by an authored Capacity). CellName already refuses an empty/unsafe/dotted row name at
     // JSON parse, so this pass checks only uniqueness. Returns the declared rows by name so ValidateHud can refuse
     // an unknown state.<row>/state.<row>.<key> binding.
@@ -1093,7 +1094,7 @@ public static partial class WorldDefinitionValidator {
         return byName;
     }
     // Every check a single state row (and its own cells) can fail on its own terms — the field trait shape, the
-    // reserved-name prefix, the range/nonNegative/gatesDrive/evicts/capacity envelope, the draw/history/advance/
+    // reserved-name prefix, the range/overflow/gatesDrive/evicts/capacity envelope, the draw/history/advance/
     // dynamics/cycle traits, and each cell's own key uniqueness, reserved-key rule, per-trait checks, and value. The
     // whole-document walk (<see cref="ValidateState"/>, one row per authored index) and a state mutation's touched-
     // row walk (<see cref="TryValidateTouchedStateRows"/>, one row by name) both call this — the same failure

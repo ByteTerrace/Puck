@@ -226,9 +226,9 @@ public class ControlFlowTests {
         );
     }
     [Fact]
+    // `if` is absent: world rules lower it onto the conditional effect.
     public void TestWorldLoweringRefusesEachControlFlowStatementByName() {
         foreach (var (body, keyword) in new[] {
-            ("if score[total] > 8 {\n        score[total] = 0\n    }", "if"),
             ("repeat 4 as k {\n        score[total] = 0\n    }", "repeat"),
             ("break", "break"),
         }) {

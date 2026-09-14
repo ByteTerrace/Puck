@@ -561,11 +561,9 @@ public static partial class WorldDocumentEmitter {
         compound: compound,
         scope: scope
     ),
-        IfStatementNode => RefuseControlFlow(
-        alternative: "gate the rule itself with 'when', or split it into two rules",
-        keyword: "if",
-        scope: scope,
-        stmt: stmt
+        IfStatementNode ifStmt => LowerIf(
+        ifStmt: ifStmt,
+        scope: scope
     ),
         RepeatStatementNode => RefuseControlFlow(
         alternative: "a rule already runs once per matching subject - use 'forEach'",
@@ -596,6 +594,46 @@ public static partial class WorldDocumentEmitter {
         );
 
         return null;
+    }
+    // `if Gate { ... } [else { ... }]` lowers to ActionEffect.If, reusing the same predicate lowering `when` uses
+    // for its own condition. An `else if` chain is already one nested IfStatementNode per level (the parser's own
+    // shape), so recursing through LowerEffectStatement nests it the same way with no separate case. `repeat` and
+    // `break` still have nothing to lower onto in a straight-line rule body.
+    private static JsonObject LowerIf(IfStatementNode ifStmt, DocumentScope scope) {
+        var thenArr = new JsonArray();
+
+        foreach (var thenStmt in ifStmt.Then) {
+            if (LowerEffectStatement(
+                scope: scope,
+                stmt: thenStmt
+            ) is { } lowered) {
+                thenArr.AppendNode(item: lowered);
+            }
+        }
+
+        var obj = new JsonObject {
+            ["$type"] = "if",
+            ["condition"] = LowerPredicate(
+                node: ifStmt.Condition,
+                scope: scope
+            ),
+            ["then"] = thenArr,
+        };
+
+        if (ifStmt.Else is { } elseStatements) {
+            var elseArr = new JsonArray();
+
+            foreach (var elseStmt in elseStatements) {
+                if (LowerEffectStatement(
+                    scope: scope,
+                    stmt: elseStmt
+                ) is { } lowered) {
+                    elseArr.AppendNode(item: lowered);
+                }
+            }
+            obj["else"] = elseArr;
+        }
+        return obj;
     }
     // puck.world.definition.v1 rule effects are a straight line: the rule's own gate decides whether the whole body runs,
     // and there is no branch or loop for one to lower onto. The language still parses control flow, because another

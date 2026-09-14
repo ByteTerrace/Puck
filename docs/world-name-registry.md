@@ -145,6 +145,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onPress.effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onPress.effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onPress.effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onPress.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -273,6 +294,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onRelease.effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onRelease.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -401,6 +443,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onFact[].effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onFact[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -705,6 +768,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `rules[].effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `rules[].effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `rules[].effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `rules[].effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `rules[].effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `rules[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -840,6 +924,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `rules[].decision.options[].effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].decision.options[].effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.options[].effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `rules[].decision.options[].effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `rules[].decision.options[].effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `rules[].decision.options[].effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.options[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.options[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.options[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.options[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].decision.options[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.options[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].decision.options[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -987,6 +1092,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `rules[].decision.onNoChoice[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].decision.onNoChoice[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.onNoChoice[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `rules[].decision.onNoChoice[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `rules[].decision.onNoChoice[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `rules[].decision.onNoChoice[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.onNoChoice[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.onNoChoice[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.onNoChoice[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.onNoChoice[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].decision.onNoChoice[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.onNoChoice[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].decision.onNoChoice[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -1105,6 +1231,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `interactions.interactions[].effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `interactions.interactions[].effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `interactions.interactions[].effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `interactions.interactions[].effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `interactions.interactions[].effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `interactions.interactions[].effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `interactions.interactions[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `interactions.interactions[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `interactions.interactions[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `interactions.interactions[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `interactions.interactions[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `interactions.interactions[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `interactions.interactions[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `interactions.interactions[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -1228,6 +1375,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].motion.shaping[].when[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].motion.holds[].name` | `WorldHold.Name` | a hold name, local to its kit |
 | `kits.rows[].motion.holds[].spend.state` | `WorldHoldSpend.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onPress.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onPress.effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1248,6 +1396,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onPress.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onRelease.effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1268,6 +1417,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onRelease.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onFact[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1372,6 +1522,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.lattices[][graph].edges[].to` | `GraphEdge.To` | a graph cell id is local to its topology |
 | `state.lattices[][field].reactions[][emit].tag` | `WorldReaction.Emit.Tag` | an emission tag |
 | `markers[].id` | `WorldMarkerRow.Id` | a marker id |
+| `rules[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1393,6 +1544,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.options[].name` | `WorldDecisionOption.Name` | an option name is local to its decision |
+| `rules[].decision.options[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.options[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].decision.options[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.options[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1414,6 +1566,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].decision.options[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.interrupt[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `rules[].decision.onNoChoice[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.onNoChoice[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].decision.onNoChoice[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.onNoChoice[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1445,6 +1598,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `groups.ownership[].subject.id` | `OwnershipSubject.Id` | an ownership subject id |
 | `properties.names` | `WorldPropertyRegistrySection.Names` | property names are the properties section's own namespace |
 | `interactions.interactions[].name` | `WorldInteraction.Name` | an interaction name is the interactions section's own namespace |
+| `interactions.interactions[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `interactions.interactions[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `interactions.interactions[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `interactions.interactions[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |

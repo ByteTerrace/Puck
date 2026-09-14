@@ -41,10 +41,11 @@ an operation expects a key. [Live zones and absent endpoints](rules.md#the-facts
 explain what happens when the pile is empty.
 
 `row.key` and `row[key]` parse to the same read for a literal key: the dot
-form takes exactly one dot on an unreserved, unquoted name (more than one is
-a parse error naming the fix). A dynamic key, `$each`, a binding, or any other
-expression still needs bracket form. A reserved (`$`-prefixed) or backquoted
-name never splits at a dot — its dotted segments stay part of the name.
+form takes exactly one dot on an unreserved, unquoted name (more than one, or
+a key half that is itself reserved — `row.$each` — is a parse error naming the
+fix). A dynamic key, `$each`, a binding, or any other expression still needs
+bracket form. A reserved (`$`-prefixed) or backquoted name never splits at a
+dot — its dotted segments stay part of the name.
 
 ## Expressions
 

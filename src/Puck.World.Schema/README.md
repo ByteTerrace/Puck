@@ -1360,12 +1360,12 @@ tick) lives in `Puck.World.Server`, not this project.
 
 **A row's trait is the default behavior of every cell it carries, including a
 key a later write mints; a cell replaces that default wholesale, or opts out
-with `"behavior": "none"`.** `EffectiveBehavior.Resolve(row, cell)` is the ONE
+with `"behavior": "None"`.** `EffectiveBehavior.Resolve(row, cell)` is the ONE
 place every consumer — readers, the validator, rebase/settle, JSON
 conversion, save capture — decides which of `advance`/`dynamics`/`cycle`, if
 any, governs a cell (its own, else its row's default); `world.state` and the
 HUD read through it identically. A cell may not combine its own trait with
-`"behavior": "none"`, and neither is legitimate on the reserved slot key,
+`"behavior": "None"`, and neither is legitimate on the reserved slot key,
 since a slot's one cell has no separate default of its own to override.
 Timing state — the epoch, a dynamics follower's sampled position/velocity, a
 cycle's carried substep remainder — lives on the CELL, in `clock`

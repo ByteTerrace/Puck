@@ -270,11 +270,13 @@ public static partial class WorldDocumentEmitter {
                 // Parser error recovery placeholder; already recorded in DiagnosticBag
                 break;
 
-            case StateTableDeclarationNode or StateSlotDeclarationNode: {
-                    var keyword = ((statement is StateTableDeclarationNode)
-                        ? "table"
-                        : "slot"
-                    );
+            case StateTableDeclarationNode or StateSlotDeclarationNode or StatePileDeclarationNode or StateGridDeclarationNode: {
+                    var keyword = (statement switch {
+                        StateTableDeclarationNode => "table",
+                        StateSlotDeclarationNode => "slot",
+                        StatePileDeclarationNode => "pile",
+                        _ => "grid",
+                    });
 
                     scope.Diagnostics.ReportError(
                         code: PuckDiagnosticCodes.StateDeclarationOutsideWorld,

@@ -1,6 +1,6 @@
 # Moth concept pack
 
-Six concept sheets expand the owner's selected Moth into a visual handoff for
+Seven concept sheets expand the owner's selected Moth into a visual handoff for
 character modeling and procedural animation. They describe the intended
 quality; the current engine prototype is not the visual reference to reproduce.
 The pack was generated with the built-in image_gen tool, including targeted
@@ -17,6 +17,7 @@ preference for two subtle shells and supersede the earlier folding-fan proposal.
 | [Face and armor](02-face-and-armor.png) | Facial identity and expression, curved hood opening, swept shoulder layers, tapered boots and dark joint gaps. |
 | Compact-wing owner reference | The owner's design reference (from [Owner source](00-owner-source.png)) for the two curved shells, compact size and band placement. |
 | [Compact wing views](05-compact-wing-views.png) | Back, side and rear three-quarter views; matching rest and subtle hover opening. Current pack construction reference. |
+| [Isolated wing jetpack](07-isolated-wing-jetpack.png) | Equipment alone from rear, side, low, and three-quarter angles, plus body-facing and hover studies. Revised from the owner's close-ups to preserve defined plate edges, raised bands, and tapered lower lips. Hidden mounting surfaces are inferred. |
 | [Compact wing motion](06-compact-wing-motion.png) | Jump preparation, takeoff, hover, forward flight, air brake and touchdown with the same two-shell assembly. Current flight pose reference. |
 | [Earlier flight exploration](03-flight-system.png) | Historical folding-fan proposal, superseded by the compact wing views. Do not implement its extra segments. |
 | [Earlier movement and weight](04-movement-and-weight.png) | Additional ready, sprint, bank and recovery gestures. Its fan-wing hardware is superseded. |
@@ -36,6 +37,12 @@ Keep exactly two rigid, curved pods beside a narrow central spine. Each has two 
 Let the body compress before a jump and extend on takeoff, with the shells opening slightly as thrust begins. Hover uses an upright torso and balanced downward jets. Forward flight pitches the body forward; braking pitches it back, changing thrust direction while the pack remains attached. Touchdown transfers weight through both flat boot soles, bent knees and hips, with the shells still slightly open. Settle the body before closing them. These sheets use the two backpack outlets for powered poses; boot ports remain idle cyan lights. Exhaust is short and translucent, and it is off in jump preparation and touchdown.
 
 ## Resolve differences deliberately
+
+Sheet 7 isolates the pack from sheet 5 and the owner's close-ups for geometry
+study. Its low view is an angled perspective, and its body-facing mounting details are a
+proposal because the character hides those surfaces in the source. Use sheet 5
+to resolve exterior proportions and sheet 6 for movement; sheet 7 does not
+establish exact dimensions or additional hardware.
 
 The owner source and subsequent owner feedback take precedence. Sheet 1 anchors overall identity and costume; sheet 2 clarifies surface treatment and expression. Sheet 5 anchors the compact pack; sheet 6 supplies its movement intent. Sheets 3–4 remain historical explorations. Generated perspective views are not exact orthographic blueprints: use one shared rig to verify hinge travel, armor clearance and exhaust separation through the complete motions. Small perspective or seam differences do not authorize new parts or outlets. Incidental slogans on the sheets are not game copy, lore or implementation requirements.
 

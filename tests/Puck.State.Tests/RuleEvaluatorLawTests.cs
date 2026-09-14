@@ -544,6 +544,121 @@ public sealed class RuleEvaluatorLawTests {
             StringComparison.Ordinal
         );
     }
+    // A write whose exact result would leave the row's envelope (or overflow 64-bit storage on an unbounded row) is
+    // refused by name, whether the cell already sits on the crossed bound or the write crosses it from inside.
+    [Theory]
+    [InlineData(0L, -1L, StateWriteKind.Add)]
+    [InlineData(10L, 50L, StateWriteKind.Set)]
+    [InlineData(2L, -5L, StateWriteKind.Add)]
+    [InlineData(long.MaxValue, 1L, StateWriteKind.Add)]
+    public void AWriteThatWouldLeaveTheEnvelopeIsRefusedByNameRatherThanSkippedOrSilentlyApplied(long current, long operand, StateWriteKind write) {
+        var bounded = (current != long.MaxValue);
+        var row = new StateRow(
+            Name: CellName.Parse(candidate: "meter"),
+            Kind: CellKind.Int,
+            Cells: [new StateCell(
+                    Key: StateRow.SlotKey,
+                    Value: current
+                )],
+            Min: (bounded ? 0L : null),
+            Max: (bounded ? 10L : null)
+        );
+        ActionEffect effect = ((write == StateWriteKind.Add)
+            ? new ActionEffect.AddState(
+                State: "meter",
+                Value: operand
+            )
+            : new ActionEffect.SetState(
+                State: "meter",
+                Value: operand
+            )
+        );
+        var (host, evaluator, rules, latch) = Arrange(
+            rules: [R(
+                    name: "push",
+                    gate: null,
+                    effects: effect
+                )],
+            rows: [row]
+        );
+
+        Assert.True(condition: evaluator.ArmTrace(
+            evaluations: 1,
+            rule: "push"
+        ));
+        evaluator.Evaluate(
+            latch: latch,
+            rules: rules,
+            stepTicks: 1UL,
+            tick: 1UL,
+            engineTick: 1UL
+        );
+
+        Assert.Equal(
+            current,
+            host.Cell(row: "meter")
+        );
+        Assert.Equal(
+            0,
+            host.Installs
+        );
+
+        var diagnostic = Assert.Single(collection: evaluator.Diagnostics());
+
+        Assert.Equal<Enum>(
+            RuleEffectRefusal.MutationRejected,
+            diagnostic.Refusal
+        );
+        Assert.Contains(
+            "refused (MutationRejected",
+            evaluator.DescribeTrace(verb: "trace")!,
+            StringComparison.Ordinal
+        );
+    }
+    // The mirror control: a write that stays inside the declared envelope is neither skipped nor refused — it
+    // applies normally.
+    [Fact]
+    public void AWriteThatStaysInsideTheEnvelopeAppliesNormally() {
+        var row = new StateRow(
+            Name: CellName.Parse(candidate: "meter"),
+            Kind: CellKind.Int,
+            Cells: [new StateCell(
+                    Key: StateRow.SlotKey,
+                    Value: 5L
+                )],
+            Min: 0L,
+            Max: 10L
+        );
+        var (host, evaluator, rules, latch) = Arrange(
+            rules: [R(
+                    name: "push",
+                    gate: null,
+                    effects: new ActionEffect.AddState(
+                        State: "meter",
+                        Value: 2m
+                    )
+                )],
+            rows: [row]
+        );
+
+        evaluator.Evaluate(
+            latch: latch,
+            rules: rules,
+            stepTicks: 1UL,
+            tick: 1UL,
+            engineTick: 1UL
+        );
+
+        Assert.Equal(
+            7L,
+            host.Cell(row: "meter")
+        );
+        Assert.Equal(
+            1,
+            host.Installs
+        );
+        Assert.Empty(collection: evaluator.Diagnostics());
+    }
     // A solitaire column: a run is legal from a card when every later card is one rank lower in the same suit. The
     // pattern's value expression reads the current token and the one before it; the word starts at the keyed card.
     [Fact]
@@ -1208,11 +1323,27 @@ public sealed class RuleEvaluatorLawTests {
                             ? cells[at].Value
                             : 0L
                         );
+
+                        // Mirrors the real StateFrame's admission door (StateRow.TryAdmitWrite) rather than
+                        // installing the raw operand unconditionally, so a rule law exercising an out-of-range
+                        // write sees the same refuse/saturate verdict production code would.
+                        var admitted = current;
+
+                        if (cell.Text is null) {
+                            if (!row.TryAdmitWrite(
+                                current: current,
+                                operand: cell.Value,
+                                reason: out reason,
+                                stored: out admitted,
+                                write: cell.Write
+                            )) {
+                                return false;
+                            }
+                        }
+
                         var next = new StateCell(
                             Key: key,
-                            Value: ((cell.Write == StateWriteKind.Add)
-                            ? (current + cell.Value)
-                            : cell.Value),
+                            Value: admitted,
                             Text: cell.Text
                         );
 

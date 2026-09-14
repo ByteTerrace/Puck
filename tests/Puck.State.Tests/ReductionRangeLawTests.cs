@@ -38,7 +38,7 @@ public sealed class ReductionRangeLawTests {
             row,
             "31",
             3,
-            3,
+            3 * Puck.Maths.FixedTickConversion.TicksPerSecond,
             out var value,
             out _
         );
@@ -176,7 +176,7 @@ public sealed class ReductionRangeLawTests {
                 row: values,
                 store: store,
                 tick: 1,
-                engineTick: 1
+                engineTick: Puck.Maths.FixedTickConversion.TicksPerSecond
             )
         );
         Assert.Equal(
@@ -186,7 +186,7 @@ public sealed class ReductionRangeLawTests {
                 row: values,
                 store: store,
                 tick: 1,
-                engineTick: 1
+                engineTick: Puck.Maths.FixedTickConversion.TicksPerSecond
             )
         );
     }
@@ -203,7 +203,7 @@ public sealed class ReductionRangeLawTests {
             1,
             2
         ) }).ToArray() };
-        var reader = new Reader(row) { Tick = 1 };
+        var reader = new Reader(row) { Tick = 1, EngineTick = Puck.Maths.FixedTickConversion.TicksPerSecond };
 
         Assert.Equal(
             2,
@@ -217,6 +217,7 @@ public sealed class ReductionRangeLawTests {
             )
         );
         reader.Tick = 5;
+        reader.EngineTick = 5 * Puck.Maths.FixedTickConversion.TicksPerSecond;
         Assert.Equal(
             1,
             reader.Evaluate("$reduce:count:values:between:0.5:1.5")

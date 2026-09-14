@@ -6,12 +6,12 @@ public sealed partial class WorldServer {
     // An EXPLICIT write against a cell's effective behavior (its own trait or its row's default) — a whole-row
     // UpsertStateRow (which resettles every cell the row carries, since it re-declares the whole row) or an
     // UpsertStateCell (which resettles only the one cell it names) — settles that cell's <see cref="StateCellClock"/>
-    // to `tick`/`engineTick`, per the transition ENGINE CONTRACT section B states: an Advance or Dynamics cell always
-    // resettles on an explicit write (its base/sample becomes what the write just installed, or an eased sample plus
-    // a Retarget kick); a Cycling cell resettles only when its EFFECTIVE cycle trait itself changed — a fresh key, a
-    // switch into or out of cycle, or a parameter change — never on an ordinary phase write, which the write itself
-    // already is. Switching behavior kind (including to/from none) settles the OLD behavior's current value as the
-    // new stored base and zeroes velocity/substep. Runs AFTER TryCompose so it sees the row/cell TryCompose just
+    // to `tick`/`engineTick`: an Advance cell rebases on every explicit write, keeping the value the write composed; a
+    // Dynamics cell keeps chasing from its live eased sample with a Retarget kick; a Cycling cell resettles only when
+    // its EFFECTIVE cycle trait itself changed — a fresh key, a switch into or out of cycle, or a parameter change —
+    // never on an ordinary phase write, which the write itself already is. A change of effective behavior (a switch,
+    // including to or from none, or a parameter change) carries the OLD behavior's current value forward as the new
+    // stored value unless the write replaced that value itself, and zeroes velocity/substep. Runs AFTER TryCompose so it sees the row/cell TryCompose just
     // installed, and BEFORE validation/journal so a settled clock is what gets journaled, replayed by world.undo, and
     // read back. `original` is the document the mutation composed against (before this mutation applied). A no-op
     // for every other mutation kind, and for a cell whose effective behavior was and remains none. `tick` is the
@@ -135,26 +135,39 @@ public sealed partial class WorldServer {
         );
         var epoch = unchecked((long)tick);
         var engineEpoch = unchecked((long)engineTick);
-
-        if (newBehavior.Advance is not null) {
-            // An advancing cell always resettles on an explicit write — the written/inherited value becomes the
-            // new base and the epoch moves, whether or not the cell already advanced under a different (or the
-            // same) rate; see StateAdvance's own remarks.
-            var settledValue = SettleOldValue(
+        // An ordinary write keeps the value it composed. Only a change of the effective behavior carries the old
+        // behavior's live value forward, and only when the write did not replace the stored value itself.
+        var behaviorChanged = (!isNewCell && !IsSameBehavior(
+            first: oldBehavior,
+            second: newBehavior
+        ));
+        var carriedValue = ((behaviorChanged && (originalCell!.Value == cell.Value))
+            ? SettleOldValue(
                 cell: cell,
                 fallbackValue: cell.Value,
                 oldBehavior: oldBehavior,
+                original: original,
                 originalCell: originalCell,
                 originalRow: originalRow,
                 tick: tick,
                 engineTick: engineTick
-            );
+            )
+            : cell.Value
+        );
 
-            return (cell with { Value = settledValue, Clock = new StateCellClock(EpochTick: epoch, EpochEngineTick: engineEpoch) });
+        if (newBehavior.Advance is not null) {
+            // An explicit write rebases an advancing cell: the carried value becomes the base and the epoch moves.
+            return (cell with { Value = carriedValue, Clock = new StateCellClock(EpochTick: epoch, EpochEngineTick: engineEpoch) });
         }
 
         if (newBehavior.Dynamics is not null) {
+            // A dynamics cell's value is its target. Entering dynamics from another behavior rests the target on the
+            // carried value; retuning an existing follower keeps the target it was already easing toward.
             return (cell with {
+                Value = ((oldBehavior.Dynamics is null)
+                    ? carriedValue
+                    : cell.Value
+                ),
                 Clock = SettleDynamicsClock(
                 cell: cell,
                 engineTick: engineTick,
@@ -174,22 +187,12 @@ public sealed partial class WorldServer {
             // write IS the operation (see StateCycle's own remarks).
             if (
                 !isNewCell &&
-                (oldBehavior.Cycle is { } sameCycle) &&
-                sameCycle.Equals(other: newCycle)
+                !behaviorChanged
             ) {
                 return cell;
             }
 
             var oldClock = originalCell?.Clock;
-            var settledPhase = SettleOldValue(
-                cell: cell,
-                fallbackValue: cell.Value,
-                oldBehavior: oldBehavior,
-                originalCell: originalCell,
-                originalRow: originalRow,
-                tick: tick,
-                engineTick: engineTick
-            );
             var settledSubstep = ((oldBehavior.Cycle is { } oldCycle)
                 ? oldCycle.SettledSubstep(
                     currentTick: tick,
@@ -199,7 +202,7 @@ public sealed partial class WorldServer {
                 : 0L
             );
 
-            return (cell with { Value = settledPhase, Clock = new StateCellClock(EpochTick: epoch, EpochEngineTick: engineEpoch, SubstepTicks: settledSubstep) });
+            return (cell with { Value = carriedValue, Clock = new StateCellClock(EpochTick: epoch, EpochEngineTick: engineEpoch, SubstepTicks: settledSubstep) });
         }
 
         // The effective behavior is none. A cell that was already none stays exactly as TryCompose left it; one
@@ -209,26 +212,36 @@ public sealed partial class WorldServer {
             return cell;
         }
 
-        var frozenValue = SettleOldValue(
-            cell: cell,
-            fallbackValue: cell.Value,
-            oldBehavior: oldBehavior,
-            originalCell: originalCell,
-            originalRow: originalRow,
-            tick: tick,
-            engineTick: engineTick
-        );
-
-        return (cell with { Value = frozenValue, Clock = new StateCellClock(EpochTick: epoch, EpochEngineTick: engineEpoch) });
+        return (cell with { Value = carriedValue, Clock = new StateCellClock(EpochTick: epoch, EpochEngineTick: engineEpoch) });
     }
-    // The current value the OLD effective behavior would report at `tick`/`engineTick` — the settled base a switch
-    // (including a fresh mint, whose old behavior is EffectiveBehavior.None) carries forward: an advancing cell's
-    // live accumulation (read against `engineTick`/its clock's EpochEngineTick), a cycling cell's live rotation
-    // reduced back to a storable phase (against `tick`/EpochTick), or (dynamics/none) the stored truth already
-    // sitting in `originalCell`/`fallbackValue`, since neither rewrites Value on its own.
-    private static long SettleOldValue(WorldStateRow? originalRow, StateCell? originalCell, EffectiveBehavior oldBehavior, StateCell cell, long fallbackValue, ulong tick, ulong engineTick) {
+    private static bool IsSameBehavior(EffectiveBehavior first, EffectiveBehavior second) =>
+        (Equals(objA: first.Advance, objB: second.Advance) && Equals(objA: first.Dynamics, objB: second.Dynamics) && Equals(objA: first.Cycle, objB: second.Cycle));
+    // The current value the OLD effective behavior would report at `tick`/`engineTick`, carried forward across a
+    // behavior change: an advancing cell's live accumulation (against `engineTick`/EpochEngineTick), a cycling cell's
+    // live rotation reduced back to a storable phase (against `tick`/EpochTick), a dynamics follower's sampled
+    // position (never its target), or the stored value when the old behavior is none.
+    private static long SettleOldValue(WorldDefinition original, WorldStateRow? originalRow, StateCell? originalCell, EffectiveBehavior oldBehavior, StateCell cell, long fallbackValue, ulong tick, ulong engineTick) {
         var baseValue = (originalCell?.Value ?? fallbackValue);
         var clock = originalCell?.Clock;
+
+        if (
+            (oldBehavior.Dynamics is not null) &&
+            (originalRow is not null) &&
+            (originalCell is not null) &&
+            WorldStateReader.TryEvaluateDynamics(
+            cell: originalCell,
+            definition: original,
+            row: originalRow,
+            sample: out var sample,
+            tick: tick,
+            trait: out _
+        )
+        ) {
+            return originalRow.ClampToEnvelope(value: StateReader.DynamicsFixedToRowRaw(
+                row: originalRow,
+                value: sample.Value
+            ));
+        }
 
         if (
             (oldBehavior.Advance is { } advance) &&
@@ -311,6 +324,7 @@ public sealed partial class WorldServer {
             cell: cell,
             fallbackValue: cell.Value,
             oldBehavior: oldBehavior,
+            original: original,
             originalCell: originalCell,
             originalRow: originalRow,
             tick: tick,

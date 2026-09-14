@@ -29,7 +29,8 @@ public sealed class CreationStateRigLawTests {
             new StateCell(
                 Key: CellName.Parse(candidate: "0"),
                 Value: FixedQ4816.One.Value,
-                Dynamics: new StateDynamics(Row: EaseRow)
+                Dynamics: new StateDynamics(Row: EaseRow),
+                Clock: new StateCellClock(Y0: 0L)
             ),
             new StateCell(
                 Key: CellName.Parse(candidate: "1"),
@@ -157,7 +158,7 @@ public sealed class CreationStateRigLawTests {
             actual: Refusal(definition: world)
         );
 
-        // Body 0's cell eases: at the epoch it reads the follower's seed (0), not the stored 1; long after, the
+        // Body 0's cell eases: at the epoch it reads its clock's seed (0), not the stored 1; long after, the
         // follower has settled on the stored 1. Body 1's cell carries no trait and reads its stored 1 at once. Body 2
         // has no cell and reads nothing.
         Assert.Equal(

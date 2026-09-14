@@ -66,6 +66,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     private readonly BindingProfileDocument?[] m_sessionRebinds;
     private readonly int[] m_stateEntityIndices;
     private readonly IReadOnlyList<WorldStateRow>[] m_stateSource;
+    private readonly ulong[] m_stateEngineTicks;
     private readonly ulong[] m_stateTicks;
 
     event Action<int?> IInputBindingsReloadSource.Reloading {
@@ -86,12 +87,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // the reveal's carrier: a gated overlay's chords/pages appear only once the fact it names is set. Absence always
     // composes (today's behavior). Unfilled trailing slots stay null, which WorldBindingComposer.Compose already
     // skips (profile/session are routinely null too), so no second pass to re-size the array is needed.
-    // `tick` doubles as the engine-tick coordinate here: a routed seat's authority endpoint does not carry a
-    // federated engine-tick clock today (WorldAuthorityEndpoint/WorldRemoteAuthority track only the simulation-tick
-    // route), so an overlay gate that names an authored StateAdvance row reads it against this presentation-only
-    // approximation rather than a real engine time. Reported plainly rather than left silent: this affects only
-    // which overlay chords/pages the HUD shows, never authoritative simulation state.
-    private BindingProfileDocument?[] BaseLayers(IReadOnlyList<WorldBindingOverlay> overlays, WorldDefinition definition, ulong tick, BindingProfileDocument? profile, BindingProfileDocument? session) {
+    private BindingProfileDocument?[] BaseLayers(IReadOnlyList<WorldBindingOverlay> overlays, WorldDefinition definition, ulong tick, ulong engineTick, BindingProfileDocument? profile, BindingProfileDocument? session) {
         var layers = new BindingProfileDocument?[(overlays.Count + 2)];
         var index = 0;
 
@@ -101,7 +97,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 !when.Holds(
                 definition: definition,
                 tick: tick,
-                engineTick: tick
+                engineTick: engineTick
             )
             ) {
                 continue;
@@ -137,6 +133,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             overlays: m_overlays[0],
             profile: null,
             session: null,
+            engineTick: m_stateEngineTicks[0],
             tick: m_stateTicks[0]
         ));
     }
@@ -146,6 +143,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             overlays: m_overlays[slot],
             profile: m_profileBindings[slot],
             session: m_sessionRebinds[slot],
+            engineTick: m_stateEngineTicks[slot],
             tick: m_stateTicks[slot]
         ));
     }
@@ -255,7 +253,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // never set). Two documents whose gates disagree past bit 63 alias to the same signature, so a false-negative
     // recompose skip is possible only past a 64-overlay document — a scale WorldResponseCapacity-shaped documents
     // never reach.
-    private static ulong OverlayGateSignature(IReadOnlyList<WorldBindingOverlay> overlays, WorldDefinition definition, ulong tick) {
+    private static ulong OverlayGateSignature(IReadOnlyList<WorldBindingOverlay> overlays, WorldDefinition definition, ulong tick, ulong engineTick) {
         var signature = 0UL;
 
         for (var index = 0; (index < overlays.Count); index++) {
@@ -264,7 +262,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 when.Holds(
                 definition: definition,
                 tick: tick,
-                engineTick: tick
+                engineTick: engineTick
             )
             ) {
                 signature |= (1UL << (index & 63));
@@ -1023,19 +1021,21 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         return (((IReadOnlyList<(int Slot, BindingChordEdge Edge)>?)due) ?? []);
     }
-    /// <summary>Gets the live definition and completed tick seat <paramref name="slot"/> currently resolves through.
+    /// <summary>Gets the live definition, completed tick, and engine-tick coordinate seat <paramref name="slot"/> currently resolves through.
     /// Both values move with <see cref="SyncSeat"/>, so presentation derived from binding state reads the destination
     /// authority after a crossing rather than the boot client's document. An out-of-range slot reads slot 0.</summary>
     /// <param name="slot">The 0-based local roster slot.</param>
     /// <param name="definition">The seat's routed definition.</param>
     /// <param name="tick">The completed tick at that authority.</param>
-    public void GetRoutedState(int slot, out WorldDefinition definition, out ulong tick) {
+    /// <param name="engineTick">The engine-tick coordinate the routed definition's advancing state is read as of.</param>
+    public void GetRoutedState(int slot, out WorldDefinition definition, out ulong tick, out ulong engineTick) {
         slot = ((((uint)slot) < SeatCount)
             ? slot
             : 0
         );
         definition = m_definitions[slot];
         tick = m_stateTicks[slot];
+        engineTick = m_stateEngineTicks[slot];
     }
     /// <inheritdoc/>
     public bool HoldsSource(int slot, string source) {
@@ -1234,8 +1234,9 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     /// <param name="entityIndex">The controlled body's entity index, used to address a keyed state context.</param>
     /// <param name="nextInputTick">The routed authority's next input tick; the preceding delivered tick is used to
     /// read state.</param>
+    /// <param name="engineTick">The engine-tick coordinate the routed authority's delivered state is read as of.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public void SyncSeat(int slot, WorldDefinition definition, int entityIndex, ulong nextInputTick) {
+    public void SyncSeat(int slot, WorldDefinition definition, int entityIndex, ulong nextInputTick, ulong engineTick) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (((uint)slot) >= SeatCount) {
@@ -1279,6 +1280,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         m_definitions[slot] = definition;
         m_stateTicks[slot] = CompletedTick(endpointNextInputTick: nextInputTick);
+        m_stateEngineTicks[slot] = engineTick;
 
         // A gated overlay's own When is state, not a document swap — its holds() value can flip on any tick that
         // moves the routed state section, never only on an overlay-list mutation. This is the cheap check (a bit
@@ -1294,6 +1296,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 overlays: (bindingsChanged
                 ? (overlays ?? [])
                 : m_overlays[slot]),
+                engineTick: m_stateEngineTicks[slot],
                 tick: m_stateTicks[slot]
             );
 
@@ -1420,6 +1423,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 overlays: m_overlays[slot],
                 profile: m_profileBindings[slot],
                 session: rebinds,
+                engineTick: m_stateEngineTicks[slot],
                 tick: m_stateTicks[slot]
             ));
 
@@ -1542,6 +1546,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         m_modeSource = new IReadOnlyList<WorldSeatModeFamily>[SeatCount];
         m_stateEntityIndices = new int[SeatCount];
         m_stateSource = new IReadOnlyList<WorldStateRow>[SeatCount];
+        m_stateEngineTicks = new ulong[SeatCount];
         m_stateTicks = new ulong[SeatCount];
 
         // Every seat's authority claim begins at boot, so
@@ -1553,6 +1558,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         var bootGateSignature = OverlayGateSignature(
             definition: definition,
             overlays: bootOverlays,
+            engineTick: 0UL,
             tick: 0UL
         );
 

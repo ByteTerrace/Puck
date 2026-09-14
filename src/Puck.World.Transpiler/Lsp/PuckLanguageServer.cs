@@ -141,7 +141,51 @@ public sealed class PuckLanguageServer {
                         )
                     );
                     break;
+                case StatePileDeclarationNode pile:
+                    AddNode(
+                        array: children,
+                        node: CreateStatePileSymbol(pile: pile)
+                    );
+                    break;
+                case StateGridDeclarationNode grid:
+                    AddNode(
+                        array: children,
+                        node: CreateSymbol(
+                            $"grid {grid.Name} : {grid.Kind}",
+                            8,
+                            (grid.Line - 1),
+                            (grid.Column - 1),
+                            grid.Length
+                        )
+                    );
+                    break;
             }
+        }
+
+        symbol["children"] = children;
+        return symbol;
+    }
+    private static JsonObject CreateStatePileSymbol(StatePileDeclarationNode pile) {
+        var symbol = CreateSymbol(
+            $"pile {pile.Name} of {pile.TokenRow}",
+            8,
+            (pile.Line - 1),
+            (pile.Column - 1),
+            pile.Length
+        );
+        var children = new JsonArray();
+
+        foreach (var token in pile.Tokens) {
+            AddNode(
+                array: children,
+                node: CreateSymbol(
+                    token.Key,
+                    7,
+                    (token.Line - 1),
+                    (token.Column - 1),
+                    token.Length
+                )
+            );
         }
 
         symbol["children"] = children;
@@ -215,6 +259,16 @@ public sealed class PuckLanguageServer {
         "capacity" => "**`capacity(n)`**\n\nDeclares a `table` row's cell-count ceiling. Refused smaller than the table's own authored cells.",
         "behavior" => "**`behavior(none)`**\n\nOpts a table cell out of its row's default `advance` behavior. The only admitted argument is `none`.",
         "advance" => "**`advance(perSecond:)`**\n\nDeclares a table/slot row's (or table cell's) per-second continuous accumulation rate, evaluated on engine ticks. Only legal on an `Int`/`Fixed` row.",
+        "pile" => "**`pile name of tokenRow [capacity(n)] { token ... }`**\n\nDeclares an ordered-membership `state.world` row over `tokenRow`'s keys — sugar for a `keysOf` domain with `ordered` set. Legal only directly inside `state.world`.",
+        "grid" => "**`grid name : Kind dimensions(width:, depth:) [wrap(...)] [cellSize(...)] [origin(...)] [band(...)] [empty(...)] [positions(...)] [inverse(tokens:, codes:)] [bounds(...)] [{ key = value ... }]`**\n\nDeclares a physical-lattice occupancy row — mints a `state.lattices` Grid topology of the same name and a `cellsOf` row over it. Legal only directly inside `state.world`.",
+        "dimensions" => "**`dimensions(width:, depth:)`**\n\nA `grid`'s cell counts along +X and +Z. Required.",
+        "wrap" => "**`wrap(None|X|Y|Both)`**\n\nA `grid`'s wrapped axes. Defaults to `None`.",
+        "cellSize" => "**`cellSize(n)`**\n\nA `grid`'s cubic cell edge, in world units. Defaults to `1`.",
+        "origin" => "**`origin(x, y, z)`**\n\nA `grid`'s minimum corner, in world units. Defaults to `(0, 0, 0)`.",
+        "band" => "**`band(n)`**\n\nA `grid`'s vertical half-extent a position must lie within to resolve to a cell. Defaults to `0` (any height).",
+        "empty" => "**`empty(value)`**\n\nThe value an unwritten `grid` cell reads. Defaults to `0`/`false`.",
+        "positions" => "**`positions(tokenRow)`**\n\nMarks another row's integer values as cell ordinals of this `grid`'s own topology — sets that row's `valuesFrom`.",
+        "inverse" => "**`inverse(tokens:, codes:)`**\n\nDeclares this `grid` a board derived from a token row's current cells and a codes row, rather than authored directly. Refused together with an authored cell body.",
         "Bool" => "**CellKind: `Bool`**\n\nA 0/1 boolean cell.",
         "Text" => "**CellKind: `Text`**\n\nA UTF-16 string cell.",
         "rules" => "**`rules` Section**\n\nDeclarative reactive rules evaluated on each engine tick (`effects`, `gate`, `mode`).",
@@ -352,6 +406,233 @@ public sealed class PuckLanguageServer {
             : null
         );
     }
+    // Whether `targetLine`/`targetCol` sits right after `<row>.` or `<row>.<partial key>` — a dot-access read
+    // (stage 3) with the key half not yet typed, or only partly typed. `row` excludes a leading `$` (a reserved
+    // channel keeps its dots, per `ExpressionSpelling`) and a leading digit (a decimal literal's own dot, e.g.
+    // `0.25`), and requires at least one character before the dot.
+    private static bool TryGetDotAccessRowName(string text, int targetLine, int targetCol, out string rowName) {
+        rowName = "";
+        var lines = text.Split('\n');
+
+        if (
+            (targetLine < 0) ||
+            (targetLine >= lines.Length)
+        ) {
+            return false;
+        }
+
+        var lineText = lines[targetLine];
+        var col = Math.Clamp(
+            max: lineText.Length,
+            min: 0,
+            value: targetCol
+        );
+        var pos = col;
+
+        while (
+            (pos > 0) &&
+            (char.IsLetterOrDigit(c: lineText[(pos - 1)]) || (lineText[(pos - 1)] == '_'))
+        ) {
+            pos--;
+        }
+
+        if (
+            (pos == 0) ||
+            (lineText[(pos - 1)] != '.')
+        ) {
+            return false;
+        }
+
+        var rowEnd = (pos - 1);
+        var rowStart = rowEnd;
+
+        while (
+            (rowStart > 0) &&
+            (char.IsLetterOrDigit(c: lineText[(rowStart - 1)]) || (lineText[(rowStart - 1)] == '_'))
+        ) {
+            rowStart--;
+        }
+        if (rowStart == rowEnd) {
+            return false;
+        }
+
+        var candidate = lineText.Substring(
+            length: (rowEnd - rowStart),
+            startIndex: rowStart
+        );
+
+        if (
+            char.IsDigit(c: candidate[0]) ||
+            ((rowStart > 0) && (lineText[(rowStart - 1)] is '$' or '`'))
+        ) {
+            return false;
+        }
+
+        rowName = candidate;
+        return true;
+    }
+    // Best-effort, recovery-tolerant parse for a buffer mid-edit: a clean parse covers the common case (the
+    // dotted read sits inside an already-closed rule), and the fallback truncates at the cursor and synthesizes
+    // the closing braces/brackets/parens the truncated prefix is still owed, so an unclosed rule or block being
+    // typed for the first time still parses far enough to see its declared rows.
+    private static DocumentNode? TryParseDocumentBestEffort(string text, int cursorOffset) {
+        try {
+            if (PuckParser.ParseDocumentWithDiagnostics(text).Value is { } direct) {
+                return direct;
+            }
+        } catch {
+            // Falls through to the truncate-and-close recovery below.
+        }
+
+        try {
+            var prefix = text[..Math.Clamp(
+                max: text.Length,
+                min: 0,
+                value: cursorOffset
+            )];
+            var recovered = (prefix + ComputeClosingSuffix(source: prefix));
+
+            return PuckParser.ParseDocumentWithDiagnostics(recovered).Value;
+        } catch {
+            return null;
+        }
+    }
+    // The closing `}`/`]`/`)` sequence, innermost first, that balances every delimiter `source` opened and never
+    // closed — skipping string/backquote contents and comments, exactly like the formatter's own nesting scan.
+    private static string ComputeClosingSuffix(string source) {
+        var stack = new Stack<char>();
+        var i = 0;
+
+        while (i < source.Length) {
+            var c = source[i];
+
+            if (c is '"' or '`') {
+                var quote = c;
+
+                i++;
+                while (
+                    (i < source.Length) &&
+                    (source[i] != quote)
+                ) {
+                    if (
+                        (quote == '"') &&
+                        (source[i] == '\\') &&
+                        ((i + 1) < source.Length)
+                    ) {
+                        i++;
+                    }
+                    i++;
+                }
+                i++;
+                continue;
+            }
+            if (
+                (c == '/') &&
+                ((i + 1) < source.Length) &&
+                (source[(i + 1)] == '/')
+            ) {
+                while (
+                    (i < source.Length) &&
+                    (source[i] != '\n')
+                ) {
+                    i++;
+                }
+                continue;
+            }
+            if (
+                (c == '/') &&
+                ((i + 1) < source.Length) &&
+                (source[(i + 1)] == '*')
+            ) {
+                i += 2;
+                while (
+                    ((i + 1) < source.Length) &&
+                    !((source[i] == '*') && (source[(i + 1)] == '/'))
+                ) {
+                    i++;
+                }
+                i += 2;
+                continue;
+            }
+
+            switch (c) {
+                case '{':
+                    stack.Push(item: '}');
+                    break;
+                case '[':
+                    stack.Push(item: ']');
+                    break;
+                case '(':
+                    stack.Push(item: ')');
+                    break;
+                case '}' or ']' or ')':
+                    if (stack.Count > 0) {
+                        stack.Pop();
+                    }
+                    break;
+            }
+            i++;
+        }
+
+        var sb = new StringBuilder();
+
+        while (stack.Count > 0) {
+            sb.Append(value: '\n').Append(value: stack.Pop());
+        }
+        return sb.ToString();
+    }
+    // Looks `rowName` up as a declared `state` row (world, body, or identity) and lists its cell keys as
+    // completion items — the dot-access counterpart to `GetStateRowHoverCard`'s row lookup. Returns null rather
+    // than an empty array when the row can't be found or carries no cells, so the caller falls back to the
+    // generic keyword list instead of offering zero completions for what might just be an unresolved recovery.
+    private static JsonArray? GetStateRowKeyCompletions(string text, string rowName, int cursorOffset) {
+        try {
+            if (TryParseDocumentBestEffort(
+                cursorOffset: cursorOffset,
+                text: text
+            ) is not { } document) {
+                return null;
+            }
+            if (WorldDocumentEmitter.LowerWithDiagnostics(document).Value?["state"] is not JsonObject stateSection) {
+                return null;
+            }
+            foreach (var (_, section) in stateSection) {
+                if (section is not JsonArray rows) {
+                    continue;
+                }
+                foreach (var row in rows) {
+                    if (
+                        (row is not JsonObject rowObj) ||
+                        (rowObj["name"]?.ToString() != rowName) ||
+                        (rowObj["cells"] is not JsonArray cells)
+                    ) {
+                        continue;
+                    }
+
+                    var items = new JsonArray();
+
+                    foreach (var cell in cells) {
+                        if (
+                            (cell is JsonObject cellObj) &&
+                            (cellObj["key"]?.ToString() is { } key)
+                        ) {
+                            AddCompletion(
+                                detail: $"state cell — {rowName}.{key}",
+                                insertText: key,
+                                items: items,
+                                kind: 5,
+                                label: key
+                            );
+                        }
+                    }
+                    return items;
+                }
+            }
+        } catch {
+            return null;
+        }
+        return null;
+    }
     private async Task HandleCompletionAsync(JsonNode? id, JsonObject? @params) {
         var uri = (@params?["textDocument"]?["uri"]?.ToString() ?? "");
 
@@ -369,6 +650,42 @@ public sealed class PuckLanguageServer {
                 result: new JsonObject { ["isIncomplete"] = false, ["items"] = specialized }
             ).ConfigureAwait(continueOnCapturedContext: false);
             return;
+        }
+
+        // A dot-access read (`vitals.`) completes the declared table's own cell keys instead of the generic
+        // keyword list — the same grammar `ExpressionSpelling` reads `row.key` through (stage 3). The cursor's
+        // line/column, not its dotted-access AST, decides the row name: the surrounding statement is very often
+        // still incomplete while this fires (trailing dot, unclosed rule), so `TryGetDotAccessRowName` reads raw
+        // text and `GetStateRowKeyCompletions` reparses with recovery rather than trusting a clean parse.
+        var line = ((int?)@params?["position"]?["line"] ?? 0);
+        var col = ((int?)@params?["position"]?["character"] ?? 0);
+
+        if (
+            m_documents.TryGetValue(
+            key: uri,
+            value: out var text
+        ) &&
+            TryGetDotAccessRowName(
+            targetCol: col,
+            targetLine: line,
+            text: text,
+            rowName: out var dotRowName
+        )
+        ) {
+            var cursorOffset = (text.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
+            var keyItems = GetStateRowKeyCompletions(
+                cursorOffset: cursorOffset,
+                rowName: dotRowName,
+                text: text
+            );
+
+            if (keyItems is { Count: > 0 }) {
+                await SendResponseAsync(
+                    id: id,
+                    result: new JsonObject { ["isIncomplete"] = false, ["items"] = keyItems }
+                ).ConfigureAwait(continueOnCapturedContext: false);
+                return;
+            }
         }
         var items = new JsonArray();
 
@@ -727,6 +1044,20 @@ public sealed class PuckLanguageServer {
             label: "onFailure"
         );
         AddCompletion(
+            detail: "Keyword: Conditional effect — lowers to the 'if' effect",
+            insertText: "if ${1:condition} {\n    $0\n}",
+            items: items,
+            kind: 14,
+            label: "if"
+        );
+        AddCompletion(
+            detail: "Keyword: 'if' alternate branch",
+            insertText: "else {\n    $0\n}",
+            items: items,
+            kind: 14,
+            label: "else"
+        );
+        AddCompletion(
             detail: "Keyword: Reconsidered decision",
             insertText: "decision {\n    periodSeconds: ${1:1s}\n    option \"${2:name}\" {\n        score: $0\n    }\n}",
             items: items,
@@ -795,6 +1126,76 @@ public sealed class PuckLanguageServer {
             items: items,
             kind: 14,
             label: "row"
+        );
+        AddCompletion(
+            detail: "Declaration: ordered-membership state.world row",
+            insertText: "pile ${1:name} of ${2:tokenRow} {\n    $0\n}",
+            items: items,
+            kind: 14,
+            label: "pile"
+        );
+        AddCompletion(
+            detail: "Declaration: physical-lattice occupancy state.world row",
+            insertText: "grid ${1:name} : ${2|Int,Bool|} dimensions(width: ${3:8}, depth: ${4:8})",
+            items: items,
+            kind: 14,
+            label: "grid"
+        );
+        AddCompletion(
+            detail: "Modifier: a grid's cell counts",
+            insertText: "dimensions(width: ${1:8}, depth: ${2:8})",
+            items: items,
+            kind: 3,
+            label: "dimensions"
+        );
+        AddCompletion(
+            detail: "Modifier: a grid's wrapped axes",
+            insertText: "wrap(${1|None,X,Y,Both|})",
+            items: items,
+            kind: 3,
+            label: "wrap"
+        );
+        AddCompletion(
+            detail: "Modifier: a grid's cubic cell edge",
+            insertText: "cellSize(${1:1})",
+            items: items,
+            kind: 3,
+            label: "cellSize"
+        );
+        AddCompletion(
+            detail: "Modifier: a grid's minimum corner",
+            insertText: "origin(${1:0}, ${2:0}, ${3:0})",
+            items: items,
+            kind: 3,
+            label: "origin"
+        );
+        AddCompletion(
+            detail: "Modifier: a grid's vertical resolve band",
+            insertText: "band(${1:0})",
+            items: items,
+            kind: 3,
+            label: "band"
+        );
+        AddCompletion(
+            detail: "Modifier: a grid's unwritten-cell value",
+            insertText: "empty(${1:0})",
+            items: items,
+            kind: 3,
+            label: "empty"
+        );
+        AddCompletion(
+            detail: "Modifier: names a row whose values are this grid's cell ordinals",
+            insertText: "positions(${1:tokenRow})",
+            items: items,
+            kind: 3,
+            label: "positions"
+        );
+        AddCompletion(
+            detail: "Modifier: derives this grid from a tokens/codes row pair",
+            insertText: "inverse(tokens: ${1:tokens}, codes: ${2:codes})",
+            items: items,
+            kind: 3,
+            label: "inverse"
         );
         AddCompletion(
             detail: "Modifier: range and overflow policy",

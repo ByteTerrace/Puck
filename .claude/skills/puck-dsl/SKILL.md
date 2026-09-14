@@ -124,11 +124,14 @@ another in a document. Full detail, examples, and the indexing/nesting rules:
 
 **Control flow, call-form gates, and compound assignment are core-parsed for
 every vocabulary, but whether a vocabulary's rule shape can CARRY them is its
-own answer** — refused as **PUCK037** (control flow in a straight-line-only
-shape), **PUCK038** (call-form gate where only comparisons are legal), or
-**PUCK039** (an assignment operator the vocabulary's effects don't carry).
-The world vocabulary's rule body is straight-line (PUCK037 fires there);
-cartridge rules support `if`/`repeat`/`break` (see `rom-forge`).
+own answer** — refused as **PUCK037** (control flow the vocabulary's rule
+shape can't carry), **PUCK038** (call-form gate where only comparisons are
+legal), or **PUCK039** (an assignment operator the vocabulary's effects don't
+carry). The world vocabulary's rule body lowers `if`/`else if`/`else` to the
+state engine's conditional effect, reusing the same predicate lowering `when`
+uses for the condition; `repeat`/`break` still have nothing to lower onto
+there and PUCK037 still fires for them. Cartridge rules support all three —
+`if`/`repeat`/`break` (see `rom-forge`).
 
 ## Known traps, verified against the current tree
 

@@ -78,13 +78,19 @@ future-decision state, rather than manifest compatibility, is the assertion.
 As `.puck` — `state.body`/`state.identity` have no dedicated sugar beyond the
 shared block/array/property grammar (the same generic form `looks`/`views`
 use); `envelope`'s `$type` union prints through the shared call-form escape
-hatch. `state.world` additionally admits `table`/`slot` declarations — see
+hatch. `state.world` additionally admits `table`/`slot`/`pile`/`grid`
+declarations — see
 [`Puck.World.Transpiler/README.md`](../../../../src/Puck.World.Transpiler/README.md#state-declarations)
-for the exact grammar, lowering, and refusals; `puck-dsl`'s
-[`grammar.md`](../../puck-dsl/references/grammar.md#row-declarations-tableslot)
+for the exact grammar, lowering, and refusals (`pile` lowers to a `keysOf`
+domain with `ordered` set over another row's keys; `grid` mints a
+`state.lattices` Grid topology and a `cellsOf` row over it in one
+declaration — see [documents.md](documents.md)'s `state.lattices` section and
+the top-level skill's tabletop-primitive notes for the shape either spells
+explicitly); `puck-dsl`'s
+[`grammar.md`](../../puck-dsl/references/grammar.md#row-declarations-tableslotpilegrid)
 owns the schema-agnostic parse the core supplies it through. A `state.world`
-row is either the array/block-of-explicit-rows form below, or `table`/`slot`
-sugar, never mixed within the same section:
+row is either the array/block-of-explicit-rows form below, or `table`/`slot`/
+`pile`/`grid` sugar, never mixed within the same section:
 
 ```
 state {
@@ -118,9 +124,10 @@ state {
 
 `puck compile` (structural, no `--validate`) round-trips either `state.world`
 spelling byte-for-shape back to the JSON above; the decompiler always emits
-the declaration-block spelling, printing a row as `table`/`slot` sugar only
-when the whole row is representable without loss and falling back to
-`row { }` (the explicit form) otherwise.
+the declaration-block spelling, printing a row as `table`/`slot`/`pile`/`grid`
+sugar only when the whole row (and, for `grid`, its `state.lattices` topology)
+is representable without loss and falling back to `row { }` (the explicit
+form) otherwise.
 
 There is **no `$type`** and no `rows` member — both are retired spellings of
 the pre-collapse shape and refuse as unmapped members like any other stale
@@ -179,7 +186,7 @@ legitimate on int/fixed cells whatever the row's domain (slot or keyed), never
 beside `draw`. A cell replaces its row's default WHOLESALE with its own
 `advance`/`dynamics`/`cycle` (never two of the three; never on the reserved
 slot key, since a slot's one cell has no separate default to override), or
-opts out entirely with `"behavior": "none"` (refused beside its own trait, and
+opts out entirely with `"behavior": "None"` (refused beside its own trait, and
 on the slot key). `EffectiveBehavior.Resolve(row, cell)` is the ONE place
 every consumer — readers, the validator, rebase/settle, JSON conversion, save
 capture — decides which trait, if any, governs a cell; `world.state` and the
@@ -212,7 +219,10 @@ DISPLAYED unit (a `fixed` row's `1/1` is `1.0` per second, so `1/240` reads
 positive twin rather than flooring the signed quantity. Advance is evaluated
 against engine ticks, never simulation ticks, so a live change to the world's
 own `simulation.rateHz` moves no epoch and skews no accumulation — the same
-rate reads the same value at the same wall-clock moment regardless of rate.
+rate reads the same value at the same wall-clock moment regardless of rate. A
+`rateHz: 0` world never steps, so its engine tick never advances either;
+`advance` is legal there (not refused) and simply never accrues past whatever
+base its last explicit write left it at.
 An explicit write RE-BASES (base=written value, `clock.epochEngineTick`=the
 applying engine tick, unconditionally — `Server.WorldServer.RebaseCellTraits`
 (per cell, `SettleCell`), which also runs inside `world.undo`'s per-entry
@@ -272,7 +282,9 @@ while an explicit trailing `.$target` facet reads truth (see
 [hud.md](hud.md)). `world.save` settles a `dynamics` cell's clock the
 identical way it settles `advance`'s: `y0`/`v0` become the live eased sample
 at the saved tick and `epochTick` projects to `0`, so a reloaded session
-keeps easing with no freeze.
+keeps easing with no freeze. A cell composed with a `dynamics` behavior but no
+`clock` at all reads its own stored value as the eased sample (at rest, zero
+velocity) rather than easing in from zero.
 
 **Cycle.** The value is a pure function of the server tick through a
 generator of the lattice's reflection group (`Puck.Maths.SymmetryWord`:

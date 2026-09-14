@@ -136,6 +136,128 @@ public static partial class PuckParser {
 
         return new StateSlotDeclarationNode(Column: col, Kind: kind, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset, Value: value);
     }
+    // `pile` opens a declaration only when a row name and the bare keyword 'of' follow on the same line, mirroring
+    // `TryMatchDeclarationKeyword`'s own guard — an ordinary `pile: ...` property still parses as it always has.
+    private static bool TryMatchPileKeyword(ParseContext context) {
+        var cursor = context.Scanner.Cursor;
+        var saved = cursor.Position;
+
+        if (TryMatchKeyword(context: context, keyword: "pile") && SkipSpacesOnLine(context: context)) {
+            if (TryReadIdentifier(context: context, identifier: out _)) {
+                SkipSpacesOnLine(context: context);
+
+                if (TryMatchKeyword(context: context, keyword: "of")) {
+                    cursor.ResetPosition(position: saved);
+
+                    return TryMatchKeyword(context: context, keyword: "pile");
+                }
+            }
+        }
+
+        cursor.ResetPosition(position: saved);
+
+        return false;
+    }
+    private static StatementNode ParseStatePileDeclaration(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
+        var cursor = context.Scanner.Cursor;
+
+        SkipWhiteSpace(context: context);
+        if (!TryReadIdentifier(context: context, identifier: out var name)) {
+            throw CreateException(context: context, message: "Expected a row name after 'pile'");
+        }
+
+        SkipWhiteSpace(context: context);
+        if (!TryMatchKeyword(context: context, keyword: "of")) {
+            throw CreateException(context: context, message: $"Expected 'of' and a token-domain row after 'pile {name}'");
+        }
+
+        SkipWhiteSpace(context: context);
+        if (!TryReadIdentifier(context: context, identifier: out var tokenRow)) {
+            throw CreateException(context: context, message: $"Expected a token-domain row name after 'pile {name} of'");
+        }
+
+        var modifiers = ParseStateModifiers(context: context);
+
+        SkipWhiteSpace(context: context);
+        if (!TryConsume(c: '{', context: context)) {
+            throw CreateException(context: context, message: $"Expected '{{' starting the token body for 'pile {name}'");
+        }
+
+        var tokens = new List<StatePileTokenNode>();
+
+        SkipWhiteSpace(context: context);
+        while (!cursor.Eof && (cursor.Current != '}')) {
+            tokens.Add(item: ParseStatePileToken(context: context));
+            ConsumeSeparator(context: context);
+            SkipWhiteSpace(context: context);
+        }
+
+        if (!TryConsume(c: '}', context: context)) {
+            throw CreateException(context: context, message: $"Expected '}}' closing the token body for 'pile {name}'");
+        }
+
+        var len = (cursor.Offset - startOffset);
+
+        return new StatePileDeclarationNode(Column: col, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset, TokenRow: tokenRow, Tokens: tokens);
+    }
+    private static StatePileTokenNode ParseStatePileToken(ParseContext context) {
+        var cursor = context.Scanner.Cursor;
+
+        SkipWhiteSpace(context: context);
+        var startOffset = cursor.Offset;
+
+        var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
+
+        if (!TryReadIdentifierOrString(context: context, value: out var key)) {
+            throw CreateException(context: context, message: "Expected a token key inside a 'pile' body");
+        }
+
+        var len = (cursor.Offset - startOffset);
+
+        return new StatePileTokenNode(Column: col, Key: key, Length: len, Line: line, Offset: startOffset);
+    }
+    private static StatementNode ParseStateGridDeclaration(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
+        var cursor = context.Scanner.Cursor;
+
+        SkipWhiteSpace(context: context);
+        if (!TryReadIdentifier(context: context, identifier: out var name)) {
+            throw CreateException(context: context, message: "Expected a row name after 'grid'");
+        }
+
+        SkipWhiteSpace(context: context);
+        if (!TryConsume(c: ':', context: context)) {
+            throw CreateException(context: context, message: $"Expected ':' and a kind after 'grid {name}'");
+        }
+
+        SkipWhiteSpace(context: context);
+        if (!TryReadIdentifier(context: context, identifier: out var kind)) {
+            throw CreateException(context: context, message: $"Expected a kind (Int or Bool) after 'grid {name} :'");
+        }
+
+        var modifiers = ParseStateModifiers(context: context);
+        var cells = new List<StateCellEntryNode>();
+        var hasBody = false;
+
+        SkipWhiteSpace(context: context);
+        if (TryConsume(c: '{', context: context)) {
+            hasBody = true;
+
+            SkipWhiteSpace(context: context);
+            while (!cursor.Eof && (cursor.Current != '}')) {
+                cells.Add(item: ParseStateCellEntry(context: context, diagnostics: diagnostics));
+                ConsumeSeparator(context: context);
+                SkipWhiteSpace(context: context);
+            }
+
+            if (!TryConsume(c: '}', context: context)) {
+                throw CreateException(context: context, message: $"Expected '}}' closing the cell body for 'grid {name}'");
+            }
+        }
+
+        var len = (cursor.Offset - startOffset);
+
+        return new StateGridDeclarationNode(Cells: cells, Column: col, HasBody: hasBody, Kind: kind, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset);
+    }
     // Zero or more `name(args)` calls, chained: `bounds(...) advance(...)`. Each candidate is read speculatively —
     // an identifier not immediately followed by '(' belongs to whatever statement comes next (the next declaration,
     // an unrelated block), so the cursor rewinds rather than consuming a token this declaration does not own.

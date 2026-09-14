@@ -104,3 +104,84 @@ public sealed record StateSlotDeclarationNode(
     Line,
     Column
 );
+/// <summary>One bare token entry inside a <c>pile</c> declaration's body — just the token's key, e.g. <c>king</c> or
+/// <c>"queen of hearts"</c>. Unlike <see cref="StateCellEntryNode"/> it carries no value or modifiers: a pile
+/// member's cell is always the boolean presence flag <c>true</c>, so there is nothing else to spell.</summary>
+/// <param name="Key">The token's key (an identifier or a quoted string) — a key of the pile's <c>of</c> token-domain
+/// row.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record StatePileTokenNode(
+    string Key,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : SyntaxNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary>A <c>pile</c> declaration: <c>pile name of tokenRow [modifier]* { token* }</c> — the ordered-membership
+/// sugar over a <c>keysOf</c> domain with <c>ordered</c> set. Legal only where the owning vocabulary admits a
+/// state-row declaration.</summary>
+/// <param name="Name">The declared row's name.</param>
+/// <param name="TokenRow">The name of the row supplying the token domain (the <c>keysOf</c> target) — written after
+/// <c>of</c>.</param>
+/// <param name="Modifiers">The row-level modifier calls, in written order (only <c>capacity</c> is legal — the
+/// owning vocabulary refuses the rest by name).</param>
+/// <param name="Tokens">The declared initial members, in pile order (first entry is index 0 of <c>cells</c>).</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record StatePileDeclarationNode(
+    string Name,
+    string TokenRow,
+    IReadOnlyList<StateModifierNode> Modifiers,
+    IReadOnlyList<StatePileTokenNode> Tokens,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary>A <c>grid</c> declaration: <c>grid name : Kind [modifier]* [{ cellEntry* }]</c> — the physical-lattice
+/// occupancy sugar. It mints both a <c>state.lattices</c> Grid topology (named identically to the declared row) and
+/// the row itself, over a <c>cellsOf</c> domain lying on that topology. Legal only where the owning vocabulary
+/// admits a state-row declaration.</summary>
+/// <param name="Name">The declared row's name, reused as the topology's own name.</param>
+/// <param name="Kind">The declared cell kind, exactly as written (a board admits only <c>Int</c>/<c>Bool</c> — the
+/// owning vocabulary's own refusal, not a parse error).</param>
+/// <param name="Modifiers">The row- and topology-level modifier calls, in written order.</param>
+/// <param name="Cells">The declared initial cell entries, in written order — empty for a derived (<c>inverse</c>)
+/// board, which authors no cells of its own.</param>
+/// <param name="HasBody">Whether a <c>{ }</c> body was written at all, distinct from an empty one — a table's own
+/// convention (see <see cref="StateTableDeclarationNode"/>) does not apply here because a grid's body is optional.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record StateGridDeclarationNode(
+    string Name,
+    string Kind,
+    IReadOnlyList<StateModifierNode> Modifiers,
+    IReadOnlyList<StateCellEntryNode> Cells,
+    bool HasBody,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);

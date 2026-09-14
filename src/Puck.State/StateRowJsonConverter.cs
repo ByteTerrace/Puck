@@ -1182,7 +1182,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 /// <summary>The row converter of the standalone state document — the shared shape and nothing more.</summary>
 public sealed class StateRowJsonConverter : StateRowJsonConverter<StateRow> {
     /// <inheritdoc/>
-    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"behavior\":\"none\",\"clock\":{…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
+    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"behavior\":\"None\",\"clock\":{…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
 
     /// <inheritdoc/>
     protected override StateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => row;

@@ -30,7 +30,9 @@ namespace Puck.State;
 /// uses), never against the world's own <c>simulation.rateHz</c>. At a constant simulation rate this reproduces the
 /// same value at every simulation-tick boundary a per-tick rational rate would have, but unlike a per-tick rate it
 /// means the same thing regardless of the world's simulation rate, and a live rate change moves no epoch and skews
-/// no accumulation, because engine ticks accrue at a fixed real-time pace no simulation rate can move. For
+/// no accumulation, because engine ticks accrue at a fixed real-time pace no simulation rate can move. A world
+/// authored at <c>simulation.rateHz: 0</c> never steps, so its engine tick never accrues either — this trait is
+/// legal there and simply reads whatever base the last explicit write left, unmoving. For
 /// <see cref="CellKind.Fixed"/>, the numerator is additionally scaled by <c>2^FixedQ4816.FractionBitCount</c> before
 /// allocating via <see cref="Puck.Maths.DiscreteMeasure"/>'s exact rational allocation, so a rate accumulates without
 /// rounding drift.</para>

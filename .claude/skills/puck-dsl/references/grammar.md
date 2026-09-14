@@ -23,18 +23,21 @@ literal, not what the value turns out to be; a call's named argument keeps its
 colon too (`worldPoint(point: [0, 1, 0])`), being call syntax rather than a
 statement.
 
-## Row declarations: `table`/`slot`
+## Row declarations: `table`/`slot`/`pile`/`grid`
 
 ```
 table name : Kind [modifier(...)]* { key = value [modifier(...)]* ... }
 slot name : Kind [= value] [modifier(...)]*
+pile name of tokenRow [modifier(...)]* { token ... }
+grid name : Kind [modifier(...)]* [{ key = value ... }]
 ```
 
 A schema-agnostic grammar shape (`Ast/StateDeclarationNodes.cs`, `Parsing/PuckParser.StateDeclarations.cs`): a name,
-a bare-identifier kind, zero or more `name(args)` modifier calls, and — for `table` — a `{ }` body of cell entries.
-The core parses the shape only; which kind names, modifier names, and locations are legal is the owning
-vocabulary's answer. `puck.world.definition.v1`'s `state.world` is the one vocabulary use today — grammar,
-lowering, defaults, and PUCK049–PUCK058 refusals are in
+an optional bare-identifier kind, an optional bare-identifier reference (`pile`'s `of tokenRow`), zero or more
+`name(args)` modifier calls, and an optional `{ }` body of `key = value` cell entries (`table`/`grid`) or bare
+`token` entries (`pile`). The core parses the shape only; which kind names, modifier names, and locations are legal
+is the owning vocabulary's answer. `puck.world.definition.v1`'s `state.world` is the one vocabulary use today —
+grammar, lowering, defaults, and PUCK049–PUCK066 refusals are in
 [`Puck.World.Transpiler/README.md`](../../../../src/Puck.World.Transpiler/README.md#state-declarations).
 
 ## `let`, `template`, `import`/`export`
@@ -197,12 +200,17 @@ carry them is that vocabulary's own answer:
 
 | Code | Refusal |
 |---|---|
-| PUCK037 | Control flow (`if`/`repeat`/`break`) in a rule shape that is straight-line only. |
+| PUCK037 | Control flow (`repeat`/`break`, or `if` in a vocabulary whose rule shape has nothing to lower it onto) in a rule shape that can't carry it. |
 | PUCK038 | A call-form gate where the vocabulary admits comparisons only. |
 | PUCK039 | A compound-assignment operator the vocabulary's effects don't carry. |
 
-The world vocabulary's rule body is straight-line, so PUCK037 fires there;
-cartridge rules support `if`/`repeat`/`break` (`rom-forge` owns that grammar).
+The world vocabulary's rule body lowers `if`/`else if`/`else` to the state
+engine's conditional effect (`ActionEffect.If`), reusing the `when` gate's own
+predicate lowering for the condition — see the [world transpiler
+guide](../../../../src/Puck.World.Transpiler/README.md#rules). `repeat`/`break`
+still have nothing to lower onto there, so PUCK037 still fires for them.
+Cartridge rules support all three, `if`/`repeat`/`break` (`rom-forge` owns
+that grammar).
 
 ## Compilation limits
 

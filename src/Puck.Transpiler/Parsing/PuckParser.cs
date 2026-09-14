@@ -307,6 +307,14 @@ public static partial class PuckParser {
             return ParseStateSlotDeclaration(context, startOffset, line, col, diagnostics);
         }
 
+        if (TryMatchPileKeyword(context: context)) {
+            return ParseStatePileDeclaration(context, startOffset, line, col, diagnostics);
+        }
+
+        if (TryMatchDeclarationKeyword(context: context, keyword: "grid")) {
+            return ParseStateGridDeclaration(context, startOffset, line, col, diagnostics);
+        }
+
         // Addon capability request: request Mutate "section:state"
         if (TryMatchKeyword(context, "request")) {
             SkipWhiteSpace(context);
@@ -1066,7 +1074,8 @@ public static partial class PuckParser {
         }
 
         var totalLen = cursor.Offset - startOffset;
-        return new LiteralExpressionNode(Value: numVal, Unit: unit, Offset: startOffset, Length: totalLen, Line: line, Column: col);
+        var rawText = ((hasDecimalPoint || hasExponent) ? signedNumStr : null);
+        return new LiteralExpressionNode(Value: numVal, Unit: unit, Offset: startOffset, Length: totalLen, Line: line, Column: col, RawText: rawText);
     }
 
     private static ColorExpressionNode ParseHexColor(ParseContext context) {

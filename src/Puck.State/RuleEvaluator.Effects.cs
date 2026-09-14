@@ -45,10 +45,11 @@ public sealed partial class RuleEvaluator {
         return applied;
     }
 
-    // A write that cannot move the destination is skipped before submission — either the resolved value already
-    // matches the cell, or the row's declared envelope pins the cell where it is: a level-triggered gate re-fires
-    // every tick it holds, and without this a standing rule would append an identical journal entry forever, or draw
-    // an identical refusal forever. A generate is never a no-op — it advances the generator's cursor by construction.
+    // An admitted write that composes to the value the cell already holds is skipped before submission: a
+    // level-triggered gate re-fires every tick it holds, and without this a standing rule would append an identical
+    // journal entry forever. A refused write is never skipped, even on a cell already sitting on the crossed bound,
+    // so a transaction step that cannot pay still rolls its transaction back. A generate is never a no-op — it
+    // advances the generator's cursor by construction.
     // Under `strict` (a transaction step, or the private preflight of a top-level effect) a remove of an absent cell
     // is submitted and refused by the door rather than skipped.
     private bool Fire(EffectFact effect, string ruleName, ulong tick, ulong stepTicks, bool preflight, bool strict) {
@@ -459,18 +460,18 @@ public sealed partial class RuleEvaluator {
             );
         }
 
-        var next = ((write.Write == StateWriteKind.Add)
-            ? unchecked((current + raw))
-            : raw
-        );
-
-        // Submit only what could move the destination. Arithmetic identity is not the whole of that test: a cell
-        // already sitting on a bound its own row declares cannot be pushed further past it, so a Level gate pointed
-        // at a floored row would go on composing a candidate the validator refuses, once per tick, for the life of
-        // the session. The projection decides whether to submit and never what is submitted: the mutation still
-        // carries the rule's own unclamped operand, so a write that genuinely tries to cross a bound is still
-        // submitted and still refused by name.
-        if (row.ClampToEnvelope(value: next) == current) {
+        // Skip only an admitted write that leaves the cell unchanged. A refused write reaches Apply and is refused by
+        // name at the mutation door; the mutation carries the rule's own unclamped operand either way.
+        if (
+            row.TryAdmitWrite(
+            current: current,
+            operand: raw,
+            reason: out _,
+            stored: out var admitted,
+            write: write.Write
+        ) &&
+            (admitted == current)
+        ) {
             return false;
         }
 
@@ -773,9 +774,9 @@ public sealed partial class RuleEvaluator {
     // The transaction's own steps already installed as one committed mutation; this replays only what the commit
     // could not carry — an effect that only emits (SubmitsMutation false) fires for real here, unconditionally, on
     // the same terms FireBranch's success path always applied. An 'if' step is not itself such an effect, but its
-    // chosen branch may hold one nested arbitrarily deep, so it recurses into that branch alone (chosen by
-    // re-reading the same condition, which the commit guarantees reads the same as it did under preflight) rather
-    // than re-firing the branch's own writes, which already installed.
+    // chosen branch may hold one nested arbitrarily deep, so it recurses into that branch alone (replayed from the
+    // matching m_branchDecisions entry recorded during preflight, never re-read from the condition) rather than
+    // re-firing the branch's own writes, which already installed.
     private void FireNonSubmittingEffects(EffectFact[] effects, string ruleName, ulong tick, ulong stepTicks, ref int decision) {
         for (var index = 0; (index < effects.Length); index++) {
             var effect = effects[index];

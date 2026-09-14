@@ -281,7 +281,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         );
     }
     [Fact]
-    public void CurrentContractsRemainVersionThreeAndRejectAnotherCheckpointVersion() {
+    public void CurrentCheckpointUsesVersionFourAndRejectsThePreviousVersion() {
         using var fixture = Fixtures.FreshServer();
 
         Assert.True(
@@ -295,7 +295,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!);
 
         Assert.Equal(
-            ((ushort)3),
+            ((ushort)4),
             System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(source: bytes.AsSpan(start: 4))
         );
         Assert.Equal(
@@ -316,7 +316,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         );
         System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
             destination: bytes.AsSpan(start: 4),
-            value: 4
+            value: 3
         );
         Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
             bytes: bytes,
@@ -325,7 +325,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: "version 4"
+            expectedSubstring: "version 3"
         );
     }
     [Fact]

@@ -127,14 +127,14 @@ public static class PuckDiagnosticCodes {
     /// shape is straight-line. The language parses control flow for every vocabulary; whether one can CARRY a branch
     /// is the vocabulary's own answer.</summary>
     public const string UnsupportedControlFlow = "PUCK037";
-    /// <summary>PUCK049: a <c>table</c>/<c>slot</c> declaration outside <c>state.world</c> — in <c>state.body</c>,
-    /// <c>state.identity</c>, or anywhere else the owning vocabulary does not admit one.</summary>
+    /// <summary>PUCK049: a <c>table</c>/<c>slot</c>/<c>pile</c>/<c>grid</c> declaration outside <c>state.world</c> —
+    /// in <c>state.body</c>, <c>state.identity</c>, or anywhere else the owning vocabulary does not admit one.</summary>
     public const string StateDeclarationOutsideWorld = "PUCK049";
     /// <summary>PUCK050: <c>state.world</c> authored more than once — as the array form and a declaration block, as
     /// two declaration blocks, or as two arrays.</summary>
     public const string StateWorldSectionMixed = "PUCK050";
-    /// <summary>PUCK051: a <c>table</c>/<c>slot</c> declaration reusing a row name already declared in the same
-    /// <c>state.world</c>, or a <c>table</c> cell reusing a key already declared in the same row.</summary>
+    /// <summary>PUCK051: a declaration reusing a row name already declared in the same <c>state.world</c>, or a
+    /// <c>table</c>/<c>grid</c> cell reusing a key already declared in the same row.</summary>
     public const string StateDeclarationDuplicateName = "PUCK051";
     /// <summary>PUCK052: a declared row name or cell key carrying the reserved <c>$</c> prefix.</summary>
     public const string StateDeclarationReservedKey = "PUCK052";
@@ -152,4 +152,30 @@ public static class PuckDiagnosticCodes {
     public const string StateDeclarationUnknownModifier = "PUCK057";
     /// <summary>PUCK058: an <c>advance(perSecond: ...)</c> rate that does not reduce to an exact 64-bit fraction.</summary>
     public const string StateDeclarationRateInexact = "PUCK058";
+    /// <summary>PUCK059: a <c>pile</c>/<c>grid</c> declaration naming another row that does not exist in the same
+    /// <c>state.world</c> — an unknown <c>of</c> token row, <c>positions</c> row, or <c>inverse</c> tokens/codes
+    /// row.</summary>
+    public const string StateDeclarationUnknownReference = "PUCK059";
+    /// <summary>PUCK060: a <c>pile</c>/<c>grid</c> declaration naming a row that exists but carries the wrong shape
+    /// for the reference — a <c>pile</c>'s <c>of</c> row that is not a plain token domain, a <c>positions</c> row
+    /// that is not an integer <c>keysOf</c> row, or an <c>inverse</c> pair whose keys or order disagree.</summary>
+    public const string StateDeclarationReferenceShapeMismatch = "PUCK060";
+    /// <summary>PUCK061: a <c>pile</c> declaring the same token, or a <c>grid</c> declaring the same cell key, more
+    /// than once.</summary>
+    public const string StateDeclarationDuplicateToken = "PUCK061";
+    /// <summary>PUCK062: a <c>pile</c>'s <c>capacity(...)</c> greater than the token count its <c>of</c> row
+    /// provides — a pile can never hold more members than its domain admits.</summary>
+    public const string StateDeclarationCapacityExceedsDomain = "PUCK062";
+    /// <summary>PUCK063: a <c>grid</c> declared with a kind other than <c>Int</c> or <c>Bool</c> — the two kinds a
+    /// physical-lattice board's cells may carry.</summary>
+    public const string StateDeclarationKindNotAdmitted = "PUCK063";
+    /// <summary>PUCK064: a <c>grid</c> cell key that is not a whole-number topology cell ordinal inside
+    /// <c>0..width*depth-1</c>.</summary>
+    public const string StateDeclarationInvalidCellReference = "PUCK064";
+    /// <summary>PUCK065: a <c>grid</c> combining <c>inverse(...)</c> with an authored cell body — a derived board's
+    /// cells come from its tokens/codes rows alone.</summary>
+    public const string StateDeclarationInverseWithAuthoredCells = "PUCK065";
+    /// <summary>PUCK066: a <c>grid</c> reusing a topology name already declared by another <c>grid</c> or an
+    /// explicitly authored <c>state.lattices</c> entry.</summary>
+    public const string StateDeclarationDuplicateTopologyName = "PUCK066";
 }

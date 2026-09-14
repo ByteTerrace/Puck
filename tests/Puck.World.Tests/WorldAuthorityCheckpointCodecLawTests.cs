@@ -617,8 +617,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
         var downgraded = ((byte[])encoded.Clone());
 
-        // Version 5 predates the curve-follow producer's arc-position state on the population entry. The current
-        // decoder must reject that exact prior layout instead of reading its shorter population residue.
+        // A future version must refuse even when the payload has the current shape.
         downgraded[4] = 5;
         downgraded[5] = 0;
 
@@ -633,14 +632,14 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         );
     }
     [Fact]
-    public void Version_four_envelope_refuses_by_name() {
+    public void Version_three_envelope_refuses_by_name() {
         var checkpoint = CapturedCheckpoint();
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
         var downgraded = ((byte[])encoded.Clone());
 
-        // Version 4 predates checkpoint-only arbitrary-up, follower-seed, and tether continuation state. The
-        // current decoder must reject that exact prior layout instead of reading its shorter population residue.
-        downgraded[4] = 4;
+        // Version 3 predates the journal's recorded engine-tick timestamp. Refuse its envelope before
+        // attempting to decode a journal entry using the new layout.
+        downgraded[4] = 3;
         downgraded[5] = 0;
 
         Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
@@ -650,7 +649,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: "version 4"
+            expectedSubstring: "version 3"
         );
     }
     [Fact]

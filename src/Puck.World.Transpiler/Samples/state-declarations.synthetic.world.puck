@@ -1,0 +1,40 @@
+schema: "puck.world.definition.v1"
+documentId: "state-declarations-synthetic-v1"
+
+// State catalog authored with the concise table/slot/pile/grid declarations instead of explicit row objects.
+state {
+  world {
+    table vitals : Int bounds(minimum: 0, maximum: 100, overflow: Saturate) {
+      health = 100
+      mana = 50 advance(perSecond: 5)
+    }
+
+    slot gold : Int = 10 bounds(minimum: 0)
+
+    table cardNames : Int capacity(3) {
+      king = 0
+      queen = 1
+      jack = 2
+    }
+
+    pile deck of cardNames capacity(3) {
+      king
+      queen
+      jack
+    }
+
+    grid board : Int dimensions(width: 2, depth: 2) empty(-1) {
+      "0" = 1
+      "3" = 2
+    }
+  }
+}
+
+rule "spend-mana-or-refuse" {
+  when vitals.mana >= 10
+  if vitals.mana >= 10 {
+    vitals.mana = vitals.mana - 10
+  } else {
+    gold = gold - 1
+  }
+}

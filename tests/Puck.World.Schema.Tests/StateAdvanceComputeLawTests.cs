@@ -7,7 +7,7 @@ namespace Puck.World.Schema.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: <see cref="StateAdvance.ComputeCurrentValue"/> — the compiled signed-64-bit allocation and
 /// the exact <see cref="BigInteger"/> allocation behind it must be one function of (rate, kind, elapsed). Every read is
-/// checked against <c>⌊elapsed · |rate| · scale / denominator⌋</c> formed here in <see cref="BigInteger"/> arithmetic
+/// checked against <c>⌊elapsedEngineTicks · |rate| · scale / (denominator · 50400)⌋</c> formed here in <see cref="BigInteger"/> arithmetic
 /// that shares no line with the subject, over rates the bounded form holds and rates it must decline.
 /// </summary>
 public sealed class StateAdvanceComputeLawTests {
@@ -26,7 +26,7 @@ public sealed class StateAdvanceComputeLawTests {
         );
         var magnitude = BigInteger.Divide(
             dividend: ((elapsed * BigInteger.Abs(value: advance.PerSecondNumerator)) * scale),
-            divisor: advance.PerSecondDenominator
+            divisor: (new BigInteger(advance.PerSecondDenominator) * 50400)
         );
         var raw = (baseValue + ((advance.PerSecondNumerator < 0)
             ? -magnitude
@@ -67,7 +67,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: 30L,
             actual: advance.ComputeCurrentValue(
                 baseValue: 0L,
-                currentEngineTick: 10UL,
+                currentEngineTick: 10UL * 50400UL,
                 row: row
             )
         );
@@ -75,7 +75,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: 100L,
             actual: advance.ComputeCurrentValue(
                 baseValue: 0L,
-                currentEngineTick: 1000UL,
+                currentEngineTick: 1000UL * 50400UL,
                 row: row
             )
         );
@@ -83,7 +83,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: 100L,
             actual: advance.ComputeCurrentValue(
                 baseValue: long.MaxValue,
-                currentEngineTick: 1000UL,
+                currentEngineTick: 1000UL * 50400UL,
                 row: row
             )
         );
@@ -97,7 +97,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: -5L,
             actual: drain.ComputeCurrentValue(
                 baseValue: 0L,
-                currentEngineTick: 1000UL,
+                currentEngineTick: 1000UL * 50400UL,
                 row: row
             )
         );
@@ -105,7 +105,7 @@ public sealed class StateAdvanceComputeLawTests {
             expected: -5L,
             actual: drain.ComputeCurrentValue(
                 baseValue: long.MinValue,
-                currentEngineTick: 1000UL,
+                currentEngineTick: 1000UL * 50400UL,
                 row: row
             )
         );

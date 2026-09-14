@@ -240,13 +240,22 @@ public abstract record ExpressionNode(int Offset = 0, int Length = 0, int Line =
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
+/// <param name="RawText">
+/// For a fractional numeric literal (a decimal point or an exponent), the exact author-typed digits — sign,
+/// integer part, fractional part, and exponent — before they were parsed into <see cref="Value"/>'s <c>double</c>.
+/// A consumer that needs the author's own precision (an exact-fraction reduction, never a double's raw bits) reads
+/// this instead of re-deriving text from the already-rounded <c>double</c>. Null for every other literal, including
+/// an integer, a bool, a string, or a fractional value produced by folding an expression rather than parsing source
+/// text directly.
+/// </param>
 public sealed record LiteralExpressionNode(
     object? Value,
     string? Unit = null,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1
+    int Column = 1,
+    string? RawText = null
 ) : ExpressionNode(
     Offset,
     Length,

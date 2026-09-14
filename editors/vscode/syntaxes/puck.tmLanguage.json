@@ -418,7 +418,7 @@
                     ]
                 },
                 {
-                    "match": "\\b(in|as|else|and|or|not|transaction|onFailure|onNoChoice|bind|push|countdown|remove|schedule|transform|score)\\b",
+                    "match": "\\b(in|as|of|else|break|and|or|not|transaction|onFailure|onNoChoice|bind|push|countdown|remove|schedule|transform|score)\\b",
                     "name": "keyword.control.puck"
                 }
             ]
@@ -426,7 +426,7 @@
         "namedBlocks": {
             "patterns": [
                 {
-                    "begin": "\\b(prototype|rule|decision|option|placement|seatRig|layout|addon|table|slot|row)\\b",
+                    "begin": "\\b(prototype|rule|decision|option|placement|seatRig|layout|addon|table|slot|pile|grid|row)\\b",
                     "beginCaptures": {
                         "0": {
                             "name": "keyword.declaration.puck"

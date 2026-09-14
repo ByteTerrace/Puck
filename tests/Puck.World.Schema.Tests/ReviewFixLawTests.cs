@@ -411,15 +411,13 @@ public sealed class ReviewFixLawTests {
     }
     [Fact]
     public void RuntimeCellValidator_RefusesWhatTheBootWalkRefuses() {
-        // A keyed cell minted beside a row-level advance: the boot walk refuses it, so the live door must too.
+        // Keyed cells inherit a row-level advance through both the boot and live validation doors.
         var keyedBesideAdvance = Definition(rows: [
             new WorldStateRow(
                 Name: CellName.Parse(candidate: "regen"),
                 Kind: CellKind.Int,
+                Capacity: 8,
                 Cells: [new StateCell(
-                        Key: WorldStateRow.SlotKey,
-                        Value: 10
-                    ), new StateCell(
                         Key: CellName.Parse(candidate: "1"),
                         Value: 5
                     )],
@@ -430,15 +428,15 @@ public sealed class ReviewFixLawTests {
             ),
         ]);
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidateRuntimeStateCell(
-            definition: keyedBesideAdvance,
-            key: "1",
-            reason: out var advanceReason,
-            rowName: "regen"
-        ));
-        Assert.Contains(
-            actualString: advanceReason,
-            expectedSubstring: "declares advance on a keyed row"
+        Assert.Empty(collection: Refusal(definition: keyedBesideAdvance));
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateRuntimeStateCell(
+                definition: keyedBesideAdvance,
+                key: "1",
+                reason: out var advanceReason,
+                rowName: "regen"
+            ),
+            userMessage: advanceReason
         );
 
         // A phase outside the lattice on a node-output cycle row.

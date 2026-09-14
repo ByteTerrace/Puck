@@ -101,6 +101,7 @@ public sealed class PresentationReadsStateLawTests {
         bindings.SyncSeat(
             slot: 0,
             definition: DocumentWithGate(awakened: 1),
+            engineTick: 0UL,
             entityIndex: 0,
             nextInputTick: 1UL
         );
@@ -115,6 +116,7 @@ public sealed class PresentationReadsStateLawTests {
         bindings.SyncSeat(
             slot: 0,
             definition: DocumentWithGate(awakened: 0),
+            engineTick: 0UL,
             entityIndex: 0,
             nextInputTick: 2UL
         );

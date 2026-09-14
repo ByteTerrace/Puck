@@ -92,7 +92,10 @@ If an accumulating cell stores 10 at engine tick 0 and advances by 60 per
 second, its Int read one full second later (engine tick 50,400) is 70. The
 stored base can still be 10. Adding three at that engine tick must start from
 the current 70, then establish a new base of 73 at that engine tick. This is
-why readers and writers use the shared state helpers. `StateDynamics` and
+why readers and writers use the shared state helpers. A world authored at
+`simulation.rateHz: 0` never steps, so its engine tick never advances either:
+an `advance` row there is legal, not refused, and simply never accrues past
+whatever base its last explicit write left it at. `StateDynamics` and
 `StateCycle` stay on simulation ticks — only `StateAdvance` reads the engine
 clock.
 
@@ -109,7 +112,10 @@ substep — lives on the cell itself (`StateCellClock`), not on the trait: a key
 minted later starts its own clock from the tick (and engine tick) it was
 created. `StateCellClock` carries two independent epochs: `EpochTick` (a
 simulation tick, for `Dynamics`/`Cycle`) and `EpochEngineTick` (an engine
-tick, for `Advance`) — the two clocks never share a coordinate. Re-authoring a
+tick, for `Advance`) — the two clocks never share a coordinate. A cell
+authored with a `Dynamics` behavior and no `StateCellClock` at all reads its
+own stored value as the follower's position, at rest, rather than easing in
+from zero. Re-authoring a
 row's default or a cell's own behavior settles every affected cell at the
 change tick, per the transition each behavior pair follows (a parameter
 change keeps the live value and moves the epoch; switching behaviors, or to

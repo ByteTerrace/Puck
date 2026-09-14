@@ -58,6 +58,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
                 m_seatBindings.SyncSeat(
                     slot: slot,
                     definition: route.Endpoint.Definition,
+                    engineTick: route.Endpoint.EngineTick,
                     entityIndex: route.EntityIndex,
                     nextInputTick: route.Endpoint.NextInputTick
                 );

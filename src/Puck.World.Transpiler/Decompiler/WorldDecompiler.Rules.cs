@@ -686,6 +686,14 @@ public static partial class WorldDecompiler {
                     sb: sb
                 );
                 break;
+            case "if":
+                AppendIfStatement(
+                    indentLevel: indentLevel,
+                    keyword: "if",
+                    obj: obj,
+                    sb: sb
+                );
+                break;
             default:
                 sb.AppendLine(
                     CultureInfo.InvariantCulture,
@@ -941,5 +949,88 @@ public static partial class WorldDecompiler {
                 $"{indent}}}"
             );
         }
+    }
+    // `if Gate { }` mandates a Gate-grammar condition with no property-style escape hatch the way a rule's own
+    // `gate` has: `AppendGateProperty` falls back to a raw `gate: <value>` property (parsed generically, never
+    // re-entering Gate grammar) when the sugar cannot safely reproduce a predicate, but `if` has nowhere to fall
+    // back to — the core parser reads `if(...)` at statement position unconditionally as this same if-statement
+    // grammar, never as a generic call the way every other effect verb is, so no text this method could emit both
+    // preserves an unsafe predicate's exact shape and reparses at all. Refuse to decompile rather than emit text
+    // that silently recompiles to a different predicate tree (a `compareValue` whose `left` itself starts with '(',
+    // misread by `ParseAtom`'s leading-'(' sub-gate case) or fails to reparse at all (an unparseable comparison
+    // name, a single-operand `all`/`any`).
+    private static string FormatSafeIfCondition(JsonObject cond, string keyword) {
+        if (!IsPredicateSafeForGateSugar(node: cond)) {
+            throw new InvalidOperationException(message: $"cannot decompile this '{keyword}' effect to .puck source: its condition (\"{cond["$type"]}\") has no DSL spelling that reparses back to the same predicate — author or edit this rule as JSON instead");
+        }
+
+        return FormatPredicate(node: cond);
+    }
+    // An `else` branch holding exactly one nested `if` prints as `else if`, the same shape the parser stores for
+    // both an authored `else if` and an authored `else { if ... }` — either recompiles to the identical JSON, so
+    // recursing here rather than always opening a fresh `else { }` block is purely a readability choice.
+    private static void AppendIfStatement(StringBuilder sb, JsonObject obj, int indentLevel, string keyword) {
+        var indent = new string(
+            c: ' ',
+            count: (indentLevel * 4)
+        );
+        var condition = ((obj["condition"] is JsonObject cond)
+            ? FormatSafeIfCondition(
+                cond: cond,
+                keyword: keyword
+            )
+            : ""
+        );
+
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}{keyword} {condition} {{"
+        );
+        if (obj["then"] is JsonArray thenArr) {
+            foreach (var e in thenArr) {
+                AppendEffectStatement(
+                    effectNode: e,
+                    indentLevel: (indentLevel + 1),
+                    sb: sb
+                );
+            }
+        }
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}}}"
+        );
+
+        if (obj["else"] is not JsonArray elseArr) {
+            return;
+        }
+        if (
+            (elseArr.Count == 1) &&
+            (elseArr[0] is JsonObject nestedIf) &&
+            (nestedIf["$type"]?.ToString() == "if")
+        ) {
+            AppendIfStatement(
+                indentLevel: indentLevel,
+                keyword: "else if",
+                obj: nestedIf,
+                sb: sb
+            );
+            return;
+        }
+
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}else {{"
+        );
+        foreach (var e in elseArr) {
+            AppendEffectStatement(
+                effectNode: e,
+                indentLevel: (indentLevel + 1),
+                sb: sb
+            );
+        }
+        sb.AppendLine(
+            CultureInfo.InvariantCulture,
+            $"{indent}}}"
+        );
     }
 }

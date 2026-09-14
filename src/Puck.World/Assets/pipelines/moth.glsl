@@ -29,6 +29,7 @@
 #define AUTO_TURN 0
 #define CLOSE_UP 0
 #define PACK_VIEW 0
+#define ISOLATE_PACK 1
 #define JETS 1
 #define PACK_DEPLOY -1.0
 #define ANIMATE_PACK 1
@@ -275,37 +276,72 @@ float gauntletShell(vec3 q) {
     shell=smoothIntersection(shell,abs(a.z)-(.214+.10*a.y),.016);
     return smoothIntersection(shell,-q.x-.035-.25*q.y,.025);
 }
-vec3 nozzlePosition() { return vec3(.300,2.175,-.545); }
+vec3 nozzlePosition() { return vec3(.225,2.010,-.410); }
 vec3 nozzleCoordinates(vec3 p) {
-    // Geometry, gas and lighting share a frame aft of the thigh envelope.
     p-=nozzlePosition();
-    float cant=mix(.32,.08,smoothstep(0.,.3,motion.thrust));
-    cant-=.30*smoothstep(.02,.16,-motion.pitch);
-    p.xy=rot(.10)*p.xy; p.yz=rot(cant)*p.yz;
+    float cant=mix(.48,.12,smoothstep(0.,.3,motion.thrust));
+    cant-=.28*smoothstep(.02,.16,-motion.pitch);
+    p.xy=rot(-.18)*p.xy; p.yz=rot(cant)*p.yz;
     return p;
 }
 float podBandCoordinate(vec3 p) {
-    float x=p.x-.12;
-    return p.y+.27*x+.20*x*x;
+    float xRel=max(p.x-.038,0.);
+    return p.y+.38*pow(xRel,1.15);
 }
 float podBandEdges(vec3 p) {
     float u=podBandCoordinate(p);
-    return min(abs(abs(u-2.855)-.080),abs(abs(u-2.395)-.100));
+    float hSeams=min(abs(abs(u-2.72)-.11),abs(abs(u-2.33)-.11));
+    float vSeam=abs(p.x-.205);
+    return min(hSeams,vSeam);
 }
 float podShell(vec3 q) {
-    // Fuller behind the ribs, narrow at the root, swept outward toward the lower lip.
-    float u=clamp((3.17-q.y)/1.10,0.,1.);
-    vec3 a=q-vec3(.205+.155*u,2.62,-.405-.085*sin(PI*u)-.035*u);
-    a.z+=.12*a.x*a.x;
-    float shell=ell(a,vec3(.250,.575,.175));
-    float innerMargin=.045+.36*pow(max(2.45-q.y,0.),1.20);
-    shell=smoothIntersection(shell,innerMargin-q.x,.024);
-    shell=smoothIntersection(shell,q.z+.335,.020);
-    // An open-bottom arch leaves a swept outer lip instead of punching a face hole.
-    // Its shape is rigid; only the small bell inside the recess vectors thrust.
-    vec2 arch=vec2((q.x-.285)/.115,max(q.y-2.085,0.)/.170);
-    float socket=(length(arch)-1.)*.115;
-    return max(shell,-socket)*.64;
+    // Moth-wing elytron shell: sculpted aerodynamic airfoil with sweeping convex outer curve,
+    // separated inner spine margin, sharp angled jet aperture, and protective wingtip cowl.
+    float t=clamp((q.y-1.82)/1.34,0.,1.);
+
+    // Inner edge: straight vertical spine margin leaving a clean reveal gap (0.038),
+    // rounding gently into the top shoulder dome above y = 3.08
+    float xIn=.038+.020*smoothstep(3.08,3.16,q.y);
+
+    // Outer aerodynamic wing contour:
+    // Holds width through shoulder (0.31 at y=3.0), swells to broad belly (0.465 at y=2.45),
+    // and tapers to lower beak (0.346 at y=1.84)
+    float dy=q.y-2.45;
+    float curve=dy>0.?.52*dy*dy:.32*dy*dy;
+    float xOut=.465-curve;
+
+    // Top apex shoulder dome:
+    float dTop=(q.y-3.16)+1.65*square(q.x-.170);
+
+    // Bottom cowl rake: cuts from outer wingtip beak (y=1.84) up-inward to inner spine (y=2.10)
+    float yCut=q.x>.22?2.10-1.25*(q.x-.22):2.10;
+    float dCut=(yCut-q.y)/1.50;
+
+    // Smoothly blend outer contour with top dome and bottom beak to avoid clipped edges:
+    float dOuter=q.x-xOut;
+    float dTopCorner=smoothIntersection(dOuter,dTop,.045);
+    float dBeak=smoothIntersection(dOuter,dCut,.025);
+    float d2D=max(max(xIn-q.x,dCut),max(dTopCorner,dBeak));
+
+    // 3D Airfoil camber with authentic wing volume:
+    // Longitudinal crest line runs at x = 0.205
+    float zApex=-.410-.135*sin(PI*pow(t,.75));
+    float crestX=.205;
+    float zRear=zApex+.45*square(q.x-crestX);
+    float zFront=-.265;
+    float dRear=zRear-q.z;
+    float dFront=q.z-zFront;
+    float dZ=max(dRear,dFront);
+
+    vec2 dBox=max(vec2(d2D,dZ),0.);
+    float shell=length(dBox)+min(max(d2D,dZ),0.)-.018;
+
+    // Cowl interior cavity: hollows out the inside for the recessed thruster nozzle
+    vec3 noz=nozzleCoordinates(q);
+    float cowlCavity=max(length(noz.xz)-.098,abs(noz.y+.025)-.085);
+    shell=max(shell,-cowlCavity);
+
+    return shell*.72;
 }
 // Torso/head, thighs/shins, upper arms/forearms, shoulders, pods, then feet.
 mat3 partFrame[16];
@@ -420,36 +456,58 @@ void preparePack() {
         float side=i==0?1.:-1.;
         mat3 mirror=mat3(vec3(side,0,0),vec3(0,1,0),vec3(0,0,1));
         mat3 frame=mirror*partFrame[0]; vec3 offset=mirror*partOffset[0];
-        vec3 pivot=vec3(.18,3.10,-.37);
+        vec3 pivot=vec3(.14,3.04,-.29);
         float settle=ANIMATE_PACK==1?.035*sin(iTime*1.1+side*.35)*packOpening:0.;
         float opening=clamp(packOpening+settle,0.,1.);
-        mat2 r=rot(.105*opening);
+        mat2 r=rot(.26*opening);
         mat3 hinge=mat3(vec3(r[0],0),vec3(r[1],0),vec3(0,0,1));
         frame=hinge*frame; offset=hinge*(offset-pivot)+pivot;
-        rotateFrame(frame,offset,pivot,.070*opening);
+        rotateFrame(frame,offset,pivot,.085*opening);
         partFrame[12+i]=frame; partOffset[12+i]=offset;
     }
 }
 vec2 podScene(vec3 p,bool detail) {
-    float bound=box(p-vec3(.29,2.62,-.49),vec3(.34,.65,.28),.02);
-    if(bound>.12) return vec2(bound,-1.);
+    float bound=box(p-vec3(.25,2.50,-.38),vec3(.42,.78,.30),.02);
+    if(bound>.15) return vec2(bound,-1.);
     vec2 h=vec2(10.,LILAC);
     // Paint boundaries, shallow reveals and wear use the same curved coordinates.
     float shell=podShell(p),u=podBandCoordinate(p);
+    // Pillowed 3D banding relief on all slats:
+    float d1=abs(u-2.72)-.11,d2=abs(u-2.33)-.11;
+    float t1=clamp(1.0-square((u-2.72)/.11),0.,1.);
+    float t2=clamp(1.0-square((u-2.33)/.11),0.,1.);
+    float tMid=clamp(1.0-square((u-2.53)/.07),0.,1.);
+    shell-=.0038*max(max(t1,t2),tMid);
     if(detail && GEOMETRIC_SEAMS==1 && abs(shell)<.024)
-        shell=carvePanel(shell,podBandEdges(p),.0015,.0030,.0008);
-    float vent=length(vec2(max(abs(p.x-.22)-.014,0.),p.y-3.035))-.009;
-    add(h,shell,vent<0. && p.z<-.46?JOINT:LILAC);
-    float ivory=min(abs(u-2.855)-.080,abs(u-2.395)-.100);
-    add(h,max(shell-.0012,ivory),IVORY);
+        shell=carvePanel(shell,podBandEdges(p),.0024,.0048,.0012);
+    // Top intake cavity on shoulder dome:
+    float topVent=box(p-vec3(.170,3.03,-.425),vec3(.024,.016,.030),.005);
+    shell=max(shell,-(topVent+.006));
+    // Badges and vent markings on bands:
+    float dBadge=max(abs(p.x-.285)-.022,abs(u-2.33)-.009);
+    float dPin=length(vec2(p.x-.355,u-2.33))-.0045;
+    float dPinUpper=length(vec2(p.x-.260,u-2.72))-.004;
+    add(h,shell,LILAC);
+    float ivory=min(d1,d2);
+    add(h,max(shell-.0015,ivory),IVORY);
+    if(dBadge<0. && shell<.012) add(h,shell-.0026,STEEL);
+    if(dPin<0. && shell<.012) add(h,shell-.0029,JOINT);
+    if(dPinUpper<0. && shell<.012) add(h,shell-.0028,JOINT);
+    if(topVent<0. && p.z<-.38) add(h,topVent,JOINT);
+    // Thruster assembly nested inside the cowl:
     vec3 noz=nozzleCoordinates(p);
-    float flare=.052-.20*clamp(noz.y,-.055,.055);
-    float bell=max(abs(noz.y)-.057,abs(length(noz.xz)-flare)-.009);
+    float flare=.082-.15*clamp(noz.y,-.050,.050);
+    float bell=max(abs(noz.y)-.050,abs(length(noz.xz)-flare)-.008);
     add(h,bell,JOINT);
-    float lip=length(vec2(length(noz.xz)-.063,noz.y+.055))-.0055;
+    float lip=length(vec2(length(noz.xz)-.085,noz.y+.044))-.007;
     add(h,lip,STEEL);
-    add(h,ell(noz-vec3(0,-.044,0),vec3(.044,.008,.044)),CYAN);
-    add(h,cylZ(p-vec3(.18,3.10,-.37),.042,.022)-.005,JOINT);
+    float cyanCore=ell(noz-vec3(0,-.025,0),vec3(.066,.012,.066));
+    add(h,cyanCore,CYAN);
+    float hub=ell(noz-vec3(0,-.028,0),vec3(.022,.014,.022));
+    add(h,hub,STEEL);
+    // Beveled steel cowl rim around opening:
+    float cowlLip=length(vec2(length(noz.xz)-.098,noz.y+.030))-.006;
+    if(cowlLip<0. && shell<.012) add(h,shell-.002,STEEL);
     return h;
 }
 vec3 braidCenter(float t) {
@@ -829,12 +887,12 @@ vec2 torsoScene(vec3 p) {
     add(h,pelvicPlate,LILAC);
 
     // Central spine and compact mounts sit between the two curved flight shells.
-    add(h,box(p-vec3(0,2.69,-.310),vec3(.045,.355,.025),.015),JOINT);
+    add(h,box(p-vec3(0,2.61,-.375),vec3(.028,.49,.024),.008),JOINT);
     for(int i=0;i<5;i++)
-        add(h,box(p-vec3(0,2.405+.135*float(i),-.330),vec3(.038,.024,.014),.006),JOINT);
+        add(h,box(p-vec3(0,2.30+.135*float(i),-.392),vec3(.025,.022,.014),.005),JOINT);
     s=p; s.x=abs(s.x);
-    add(h,cap(s,vec3(.04,3.08,-.30),vec3(.18,3.10,-.37),.028),JOINT);
-    add(h,cylZ(s-vec3(.18,3.10,-.37),.036,.012)-.004,STEEL);
+    add(h,cap(s,vec3(.02,3.06,-.30),vec3(.17,3.06,-.32),.018),JOINT);
+    add(h,cylZ(s-vec3(.17,3.06,-.32),.026,.014)-.004,STEEL);
     q=p-vec3(0,2.12,-.215);
     add(h,smoothIntersection(ell(q,vec3(.165,.19,.075)),-q.y-.17+.6*abs(q.x),.02),OCHRE);
     // The collar is seated in the breastplate. A broad, low undersuit yoke
@@ -854,8 +912,36 @@ vec2 torsoScene(vec3 p) {
     return h;
 }
 
+vec2 torsoPackMountScene(vec3 p) {
+    vec2 h=vec2(10.,JOINT);
+    // Central spine column terminating neatly between the wing shoulder domes
+    add(h,box(p-vec3(0,2.59,-.375),vec3(.028,.48,.024),.008),JOINT);
+    // 5 prominent ribbed vertebrae plates protruding proudly between the wings
+    for(int i=0;i<5;i++)
+        add(h,box(p-vec3(0,2.26+.15*float(i),-.392),vec3(.025,.022,.014),.005),JOINT);
+    // Base bracket between thruster cutouts
+    add(h,box(p-vec3(0,2.10,-.365),vec3(.038,.040,.024),.008),JOINT);
+    // Upper mounting arms and cylindrical hinge pivots (seated behind the wings)
+    vec3 s=p; s.x=abs(s.x);
+    add(h,cap(s,vec3(.02,3.02,-.28),vec3(.14,3.02,-.29),.016),JOINT);
+    add(h,cylZ(s-vec3(.14,3.02,-.29),.022,.012)-.004,STEEL);
+    // Body-facing mounting backplate (inferred mounting surfaces)
+    add(h,box(s-vec3(.13,2.62,-.290),vec3(.080,.32,.020),.015),JOINT);
+    return h;
+}
+
 vec2 scene(vec3 p) {
     vec2 h=vec2(p.y,0.);
+#if ISOLATE_PACK == 1
+    float bound=box(p-vec3(0,2.55+characterLift,-.40),vec3(.65,.75,.45),.02);
+    if(bound>.15) { add(h,bound,-1.); return h; }
+    vec2 part=torsoPackMountScene(localPosition(p,0)); add(h,part.x,part.y);
+    for(int i=0;i<2;i++) {
+        part=podScene(localPosition(p,12+i),true);
+        add(h,part.x,part.y+20.*float(12+i));
+    }
+    return h;
+#else
     float bound=box(p-vec3(0,2.15+characterLift,0),vec3(1.9,2.7,3.),.03);
     if(bound>.35) { add(h,bound,-1.); return h; }
     vec2 part=torsoScene(localPosition(p,0)); add(h,part.x,part.y);
@@ -874,6 +960,7 @@ vec2 scene(vec3 p) {
         add(h,part.x,part.y+20.*float(12+i));
     }
     return h;
+#endif
 }
 vec4 surfaceGradient(vec3 p) {
     vec3 n=vec3(0);
@@ -888,6 +975,13 @@ vec4 surfaceGradient(vec3 p) {
 vec2 secondaryScene(vec3 p) {
     // Secondary rays resolve the larger forms; eyelids and grooves use local shading.
     vec2 h=vec2(p.y,0.),piece;
+#if ISOLATE_PACK == 1
+    piece=torsoPackMountScene(localPosition(p,0)); add(h,piece.x,piece.y);
+    for(int i=0;i<2;i++) {
+        piece=podScene(localPosition(p,12+i),false); add(h,piece.x,piece.y);
+    }
+    return h;
+#else
     vec3 q=localPosition(p,1);
     float skull=skullBound(q);
     if(skull>.10) add(h,skull*.88,-1.);
@@ -916,6 +1010,7 @@ vec2 secondaryScene(vec3 p) {
         piece=podScene(localPosition(p,12+i),false); add(h,piece.x,piece.y);
     }
     return h;
+#endif
 }
 float shadow(vec3 p,vec3 l,float distanceScale) {
     float v=1.,t=.025;
@@ -1092,8 +1187,10 @@ float armorHeight(vec2 d) {
 vec2 detailAt(vec3 p,float m,int part) {
     vec3 q=localPosition(p,part);
     if(part==12 || part==13) {
-        float notch=length(vec2(max(abs(q.x-.365)-.019,0.),podBandCoordinate(q)-2.40));
-        return vec2(podBandEdges(q),notch);
+        float u=podBandCoordinate(q);
+        float notch1=length(vec2(max(abs(q.x-.365)-.015,0.),u-2.88));
+        float notch2=length(vec2(max(abs(q.x-.355)-.015,0.),u-2.38));
+        return vec2(podBandEdges(q),min(notch1,notch2));
     }
     return armorDetail(q,m);
 }
@@ -1143,7 +1240,7 @@ void armorWear(vec3 p,vec3 n,vec2 detail,float pixel,int part,inout Surface surf
         edge=min(detail.x+.010,max(end,abs(side)));
         contact=.34;
     } else if(part==12 || part==13) {
-        edge=min(podBandEdges(q)+.012,min(abs(q.y-2.12),abs(q.y-3.14)));
+        edge=min(podBandEdges(q)+.012,min(abs(q.y-1.92),abs(q.y-3.16)));
         contact=.15;
     } else if(part>=10) {
         q-=vec3(.62,3.,.015);
@@ -1323,6 +1420,9 @@ vec3 render(vec2 uv,vec2 lightSample) {
         uu=normalize(cross(ww,normalize(iCameraUp*worldToPipeline)));
         vv=cross(uu,ww);
         focal=.5/tan(iCameraFov*.5);
+#if ISOLATE_PACK == 1
+        focal*=1.48;
+#endif
         rd=normalize(uv.x*uu+uv.y*vv+focal*ww);
     } else {
     float yaw=POSE==7?-.75:.22, pitch=.055;

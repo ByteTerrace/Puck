@@ -218,6 +218,44 @@ public static partial class PuckLinter {
                 }
                 break;
 
+            case StatePileDeclarationNode pile:
+                foreach (var modifier in pile.Modifiers) {
+                    CollectReferences(
+                        modifier,
+                        references,
+                        diagnostics,
+                        inLet: false
+                    );
+                }
+                break;
+
+            case StateGridDeclarationNode grid:
+                foreach (var modifier in grid.Modifiers) {
+                    CollectReferences(
+                        modifier,
+                        references,
+                        diagnostics,
+                        inLet: false
+                    );
+                }
+                foreach (var cell in grid.Cells) {
+                    CollectReferences(
+                        cell.Value,
+                        references,
+                        diagnostics,
+                        inLet: false
+                    );
+                    foreach (var modifier in cell.Modifiers) {
+                        CollectReferences(
+                            modifier,
+                            references,
+                            diagnostics,
+                            inLet: false
+                        );
+                    }
+                }
+                break;
+
             case StateModifierNode modifier:
                 foreach (var arg in modifier.Arguments) {
                     CollectReferences(

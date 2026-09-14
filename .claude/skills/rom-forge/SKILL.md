@@ -27,14 +27,16 @@ diagnostics catalog belong to the puck-dsl skill; read that rather than re-deriv
 skill owns the cartridge vocabulary's own shape and the loop that turns a `.puck` edit into a running,
 observable cartridge.
 
-**The rule-body asymmetry.** A cartridge rule admits control flow a world rule refuses outright: `if …
-{ } else { }`/chained `else if`, `repeat <count> as <name> { }` (count a compile-time literal 1..255) with
-`break`, call-form gates (`key(<button>, held|pressed|released)`), and every compound-assignment operator
-(`+= -= *= /= %= &= |= ^= <<= >>=`). Writing any of these into a `puck.world.def.v1` document instead trips
-**PUCK037** (control flow where the vocabulary's rule shape is straight-line), **PUCK038** (a call-form gate
-where only comparisons are legal), or **PUCK039** (a compound assignment the vocabulary's effects carry no
-operator for) — `src/Puck.Transpiler/Diagnostics/PuckDiagnosticCodes.cs`. Porting a cartridge idiom into a
-world document, or a world rule's straight-line habit into a cartridge, is the concrete way this bites.
+**The rule-body asymmetry.** A cartridge rule admits control flow a world rule mostly refuses: `repeat <count>
+as <name> { }` (count a compile-time literal 1..255) with `break`, call-form gates (`key(<button>,
+held|pressed|released)`), and every compound-assignment operator (`+= -= *= /= %= &= |= ^= <<= >>=`) all trip a
+world-vocabulary refusal — `if … { } else { }`/chained `else if` does not, since a world rule lowers it to its
+own conditional effect (`puck-world` owns that shape). Writing `repeat`/`break`/a call-form gate/a compound
+assignment into a `puck.world.def.v1` document instead trips **PUCK037** (control flow the vocabulary's rule
+shape has nothing to lower onto), **PUCK038** (a call-form gate where only comparisons are legal), or
+**PUCK039** (a compound assignment the vocabulary's effects carry no operator for) —
+`src/Puck.Transpiler/Diagnostics/PuckDiagnosticCodes.cs`. Porting a cartridge idiom into a world document, or a
+world rule's straight-line habit into a cartridge, is the concrete way this bites.
 
 A rule step or gate lowers to JSON as:
 

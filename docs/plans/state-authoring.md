@@ -21,7 +21,49 @@ changes may reach an official persisted world.
 
 ## Implementation status
 
-Reviewed against `e729409c5`. Nothing in this plan is implemented.
+Every stage's core behavior has landed.
+
+- **Stage 2 (table/slot declarations)** and **stages 7-8 (pile/grid
+  declarations)** are implemented in `Puck.Transpiler`/`Puck.World.Transpiler`:
+  parsing, lowering, the full refusal set (PUCK049-PUCK066), formatter
+  round-tripping, decompiler sugar with a `row { }` fallback for anything not
+  representable losslessly, and LSP completion/hover/`documentSymbol` support.
+  `draw`/`shuffle`/`deal` sugar over a `pile` remains unimplemented, as scoped.
+- **Stage 3 (dot access)** is implemented in `ExpressionSpelling` and threaded
+  through `WorldModuleNamespace`, the linter, and the LSP; `row.key` and
+  `row[key]` compile to identical rule facts.
+- **Stage 4 (bounds and overflow)** replaced `StateRow.Min`/`Max`/`NonNegative`
+  with an independently-optional envelope and `StateOverflow`, added
+  `StateRow.TryAdmitWrite` as the one admission point every write path calls,
+  and migrated every shipped document; `nonNegative` is refused by the strict
+  parser.
+- **Stage 5 (behavior inherits per cell)** consolidated slot/keyed trait
+  resolution into `EffectiveBehavior`, moved timing state onto
+  `StateCell.Clock`, and implemented the settle-on-change transition table.
+- **Stage 6 (per-second accumulation)** renamed `StateAdvance` to
+  `PerSecondNumerator`/`PerSecondDenominator`, added the engine-tick epoch
+  (`StateCellClock.EpochEngineTick`, independent of `EpochTick`), and threaded
+  a real engine-tick coordinate through every rebase path (journal, undo,
+  batches, administrative writes, checkpoint restore, `world.save` settling).
+- **Stage 9 (conditional effects)** added `ActionEffect.If` to `Puck.State`,
+  with condition/branch compilation, transaction-nesting and `save`-in-branch
+  refusals, `world.rule.trace` branch narration, and replay/undo reproducing
+  the taken branch's mutations without re-evaluating the condition. The
+  transpiler lowers `.puck` `if`/`else if`/`else` onto this effect — the one
+  control-flow keyword the world vocabulary's rule body carries; `repeat` and
+  `break` still have nothing to lower onto and stay refused as PUCK037. The
+  formatter needs no dedicated support (it is textual and already
+  meaning-preserving over control flow); the decompiler prints `if`/`else if`/
+  `else` losslessly, and the LSP completes a declared table's own cell keys
+  after a dot-access read, recovering from an in-progress, not-yet-closed
+  statement.
+
+`tests/Puck.World.Transpiler.Tests` and `tests/Puck.GamingBricks.Transpiler.Tests`
+pass in full. Dedicated law-test coverage for each stage's own "Complete when"
+bullets — independently derived engine-stage expectations, the declaration/
+pile/grid refusal matrix, and conditional-effect branch/replay/undo cases — is
+a separate, not-yet-done pass; today's coverage comes from the existing suites
+plus targeted manual verification recorded in each stage's own change.
 
 ## Delivery order
 
@@ -33,28 +75,33 @@ Reviewed against `e729409c5`. Nothing in this plan is implemented.
 
 ## Facts the design rests on
 
-- **One row has one kind and one range.** `StateRow` declares `Kind`, `Min`,
-  `Max`, and `NonNegative` once for all of its cells
+- **One row has one kind and one envelope.** `StateRow` declares `Kind`, `Min`,
+  `Max`, and `Overflow` once for all of its cells
   ([StateRow.cs](../../src/Puck.State/StateRow.cs)). Cells with different kinds
   or ranges need separate rows.
 - **Only world state holds `StateRow`s.** `state.body` and `state.identity` hold
   `ActionStateSlot`, a different record with a float initial value and
   Counter/Timer kinds ([WorldState.cs](../../src/Puck.World.Schema/WorldState.cs)).
-- **A range refuses writes. It does not clamp them.** A rule write carries its
-  unclamped value, and the write is refused by name when it would leave the
-  range ([RuleEvaluator.Effects.cs](../../src/Puck.State/RuleEvaluator.Effects.cs),
+- **One method decides every write.** `StateRow.TryAdmitWrite` computes the
+  result without wrapping (a 128-bit intermediate), then either admits it,
+  refuses it by name (`Refuse`, the default — including an overflow on a row
+  with no envelope, counted as an `Arithmetic` rule failure), or clamps it to
+  the authored bound or the 64-bit storage limit (`Saturate`). The rule frame
+  write, mutation compose, ring push, board combine, write sets, and the rule
+  evaluator's no-op check all decide through this one method
+  ([StateRow.cs](../../src/Puck.State/StateRow.cs),
+  [RuleEvaluator.Effects.cs](../../src/Puck.State/RuleEvaluator.Effects.cs),
   [StateFrame.cs](../../src/Puck.State/StateFrame.cs)). Only computed reads,
-  such as an advancing row's value, clamp.
-- **Adding to a cell wraps on overflow.** Both the rule evaluator and the frame
-  compute an add with `unchecked` 64-bit arithmetic, so a row with no range
-  silently wraps. An overflowing expression, by contrast, fails and is counted
-  as an `Arithmetic` rule failure.
-- **`advance` counts simulation ticks.** The rate is a fraction of the row's
-  displayed unit per server tick, and a write rebases the epoch to the server
-  tick ([StateAdvance.cs](../../src/Puck.State/StateAdvance.cs),
-  `WorldServer.RebaseCellTraits`). Durations authored as `valueSeconds` convert
-  to engine ticks instead, at 50,400 per second, so the engine uses two time
-  bases.
+  such as an advancing row's value, clamp independently, through
+  `ClampToEnvelope`.
+- **`advance` is authored per second and evaluated on engine ticks.** The rate
+  is a fraction of the row's displayed unit per second, evaluated against the
+  same engine-tick clock durations authored as `valueSeconds` already use, at
+  50,400 per second — not the simulation tick. A cell's `StateCellClock`
+  carries two independent epochs: a write rebases `EpochEngineTick` for
+  `advance`, while `EpochTick` (simulation ticks) still serves `dynamics` and
+  `cycle` ([StateAdvance.cs](../../src/Puck.State/StateAdvance.cs),
+  `StateCellClock` in [StateRow.cs](../../src/Puck.State/StateRow.cs)).
 - **The two clocks are independent.** A server keeps a completed simulation
   tick and a separate, checkpointed engine-tick total accumulated from each
   step's width ([WorldServer.Step.cs](../../src/Puck.World.Server/WorldServer.Step.cs)).
@@ -63,18 +110,22 @@ Reviewed against `e729409c5`. Nothing in this plan is implemented.
   ([WorldInstanceHost.cs](../../src/Puck.World.Server/WorldInstanceHost.cs)).
   Engine time is therefore not a simulation tick multiplied by the current step
   width.
-- **The journal records only the simulation tick.** Each entry is
-  `JournalEntry(ulong Tick, WorldMutation Mutation)`, and undo passes that tick
-  back into trait rebasing
+- **The journal records both clocks.** Each entry is `JournalEntry(ulong Tick,
+  ulong EngineTick, WorldMutation Mutation)`; undo rebases a `dynamics` or
+  `cycle` epoch from the simulation tick and an `advance` epoch from the engine
+  tick
   ([WorldServer.Checkpoint.cs](../../src/Puck.World.Server/WorldServer.Checkpoint.cs)).
-- **Saving settles traits.** `world.save` writes each advancing value as its
-  live value at epoch zero. It samples a dynamics trait's position and velocity,
-  and keeps a cycle's settled phase and substep remainder
+- **Saving settles every clock.** `world.save` writes each cell's live value at
+  epoch zero: it samples a dynamics cell's position and velocity, and keeps a
+  cycle cell's settled phase and substep remainder, on that cell's own
+  `StateCellClock`
   ([WorldSessionCapture.cs](../../src/Puck.World/WorldSessionCapture.cs)).
   Authority checkpoints and journals keep live epochs.
-- **A row trait covers only a slot.** A keyed row's cells each carry their own
-  `Advance`, `Dynamics`, or `Cycle`, and the three are mutually exclusive. A key
-  first created by a write gets no trait (`WorldServer.MutationCompose.Cells.cs`).
+- **A row's behavior is the default for every cell.** `EffectiveBehavior`
+  resolves a cell's own `Advance`, `Dynamics`, or `Cycle` if it declares one
+  (including an opt-out to `none`), otherwise the row's default — for slot and
+  keyed rows alike, and for a key a write mints later
+  ([EffectiveBehavior.cs](../../src/Puck.State/EffectiveBehavior.cs)).
 - **An undeclared domain is inferred.** A row with no cells and no capacity is
   inferred to be a slot (`StateRow.InferDomain`).
 - **Rule operands are text.** The parser checks each operand through
@@ -82,18 +133,23 @@ Reviewed against `e729409c5`. Nothing in this plan is implemented.
   unchanged
   ([WorldDocumentEmitter.Rules.cs](../../src/Puck.World.Transpiler/Lowering/WorldDocumentEmitter.Rules.cs)).
   Assignment targets resolve through the same parser.
-- **The infix name lexer accepts dots, and cell names forbid them.**
-  `ExpressionSpelling` reads `player.health` as one row name, which `CellName`
-  refuses. Row and cell names exclude dots so that the HUD binding
-  `state.<row>.<key>` is unambiguous
-  ([SafeName.cs](../../src/Puck.State/SafeName.cs)).
+- **Dot access is part of the expression grammar, and cell names forbid dots.**
+  `ExpressionSpelling` splits an unreserved, unquoted `player.health` into the
+  state read `player[health]` at parse time; a reserved `$` name or a
+  backquoted name keeps its dots as part of one name instead. Row and cell
+  names themselves still exclude dots, so the HUD binding `state.<row>.<key>`
+  stays unambiguous
+  ([ExpressionSpelling.cs](../../src/Puck.State/ExpressionSpelling.cs),
+  [SafeName.cs](../../src/Puck.State/SafeName.cs)).
 - **Imports rename with an underscore.** An imported fragment's names become
-  `<alias>_<name>`. `WorldModuleNamespace` rewrites expression text with its own
-  copy of the infix name lexer
+  `<alias>_<name>`. `WorldModuleNamespace` rewrites expression text through
+  `ExpressionSpelling`'s own name-scanning and dot-splitting APIs rather than a
+  duplicate lexer of its own
   ([WorldModuleNamespace.cs](../../src/Puck.World.Schema/WorldModuleNamespace.cs)).
-- **World rules have no conditional effect.** `ActionEffect` has nine arms, and
-  none of them branches ([ActionEffect.cs](../../src/Puck.State/ActionEffect.cs)).
-  The world emitter refuses `if` as PUCK037.
+- **World rules can branch.** `ActionEffect.If` compiles a condition and two
+  branches; a `.puck` rule's `if`/`else if`/`else` lowers onto it
+  ([ActionEffect.cs](../../src/Puck.State/ActionEffect.cs)). `repeat` and
+  `break` still have nothing to lower onto and are refused as PUCK037.
 - **Replay and undo reproduce different things.** Tape replay re-drives
   recorded inputs, so rules run again. Undo rebuilds state by reapplying
   journaled mutations, so rules don't run. A replay hash covers the explicitly
@@ -221,8 +277,9 @@ Write the exact contract into this plan before any code lands. It needs:
   - More than one behavior on a row or cell.
   - Declarations in `body` or `identity`.
   - Mixing the array and block forms.
-- Defaults. A table emits `domain: keys`, so an empty table is never inferred to
-  be a slot. It emits no capacity unless one is declared.
+- Defaults. A table with no cells and no capacity emits `domain: keys`, so an
+  empty table is never inferred to be a slot. It emits no capacity unless one is
+  declared.
 - How `let`, `template`, and compile-time `for` compose with declarations.
 - Formatter output and decompiler behavior. The decompiler prints a declaration
   only when the whole row can be represented without loss; otherwise it prints
@@ -428,12 +485,21 @@ coordinate, never a simulation tick converted at the current rate:
   and addon mutations), batches, and checkpoint restore use the same coordinate.
 - A simulation-rate change moves no epoch.
 
-Resolve these before implementation:
+Resolved during implementation:
 
-- What the engine-tick clock does when a world authors `rateHz: 0`, and whether
-  `advance` is refused there.
-- How save-time settling and checkpoints record epochs.
-- How `world.state` echoes the rate.
+- A `rateHz: 0` world never steps — `Advance`/`Step` are never invoked for the
+  resident, non-stepping world `simulation.rateHz` already documents, so its
+  engine tick (`CompletedEngineTicks`) never advances either. `advance` is
+  legal, not refused, on a `rateHz: 0` row; its computed value simply never
+  moves past whatever base the last explicit write left it at, exactly like
+  every other tick-driven behavior on a world that never steps. This is a
+  consequence of the existing rate-0 contract (no code was added to special-
+  case `advance` against the simulation rate — `StateAdvance` reads only the
+  engine tick, never `simulation.rateHz`), not a separate refusal.
+- Save-time settling and checkpoints record `StateCellClock.EpochEngineTick`
+  beside `EpochTick`; `world.save` settles it to zero like every other epoch.
+- `world.state`/`world.state.row` echo the rate as
+  `advance=<numerator>/<denominator>/s@engineEpoch<n>`.
 
 If engine ticks prove unsuitable, the fallback is to keep per-tick storage and
 convert from the effective rate. The transpiler would use `PuckDocumentComposer`,
@@ -462,7 +528,8 @@ separately.
   then undoes both writes and continues from a checkpoint, asserting the value
   at each step.
 - An administrative write and a rule write rebase identically.
-- `rateHz: 0` behaves as decided above.
+- A law test proves an `advance` row on a `rateHz: 0` world never accrues past
+  its last explicit write, matching the decision above.
 - `hgb-mirror.puck`'s clocks are migrated, and its capture still shows the same
   frames.
 - Every re-recorded baseline names the contract change that moved it.

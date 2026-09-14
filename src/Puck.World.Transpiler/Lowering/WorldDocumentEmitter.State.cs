@@ -75,6 +75,7 @@ public static partial class WorldDocumentEmitter {
         );
 
         var seenNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var pendingReferences = new List<PendingStateReference>();
 
         foreach (var (stmt, rowScope) in Expand(
             block.Statements,
@@ -89,6 +90,17 @@ public static partial class WorldDocumentEmitter {
                     scope: rowScope,
                     slot: slot
                 ),
+                StatePileDeclarationNode pile => LowerStatePileDeclaration(
+                    pending: pendingReferences,
+                    pile: pile,
+                    scope: rowScope
+                ),
+                StateGridDeclarationNode grid => LowerStateGridDeclaration(
+                    grid: grid,
+                    pending: pendingReferences,
+                    scope: rowScope,
+                    stateObj: stateObj
+                ),
                 BlockNode { Identifier: "row", Name: null, Target: null } rowBlock => LowerBlockToObject(
                     block: rowBlock,
                     scope: rowScope
@@ -98,7 +110,7 @@ public static partial class WorldDocumentEmitter {
 
             if (rowObj is null) {
                 ReportUnrecognizedSectionStatement(
-                    admitted: "'table', 'slot', and 'row' declarations",
+                    admitted: "'table', 'slot', 'pile', 'grid', and 'row' declarations",
                     scope: rowScope,
                     section: "state.world",
                     stmt: stmt
@@ -127,6 +139,12 @@ public static partial class WorldDocumentEmitter {
             );
             worldArr.AppendNode(item: rowObj);
         }
+
+        ValidateStateCrossReferences(
+            pending: pendingReferences,
+            scope: scope,
+            worldArr: worldArr
+        );
     }
     private static JsonObject LowerStateTableDeclaration(StateTableDeclarationNode table, DocumentScope scope) {
         ValidateStateRowName(
@@ -145,9 +163,6 @@ public static partial class WorldDocumentEmitter {
         var rowObj = new JsonObject {
             ["name"] = table.Name,
             ["kind"] = table.Kind,
-            // A table always declares its own domain, so an empty or single-cell table is never inferred to be a
-            // slot — see the syntax contract's "Defaults" section.
-            ["domain"] = new JsonObject { ["$type"] = "keys" },
         };
 
         var cellsArr = new JsonArray();
@@ -266,6 +281,15 @@ public static partial class WorldDocumentEmitter {
             );
         }
 
+        // Cells or a capacity already infer a keyed row; only a table with neither needs its domain spelled, or it
+        // would be read back as a slot.
+        if (
+            (cellsArr.Count == 0) &&
+            !rowObj.ContainsKey(propertyName: "capacity")
+        ) {
+            rowObj["domain"] = new JsonObject { ["$type"] = "keys" };
+        }
+
         return rowObj;
     }
     private static JsonObject LowerStateSlotDeclaration(StateSlotDeclarationNode slot, DocumentScope scope) {
@@ -306,6 +330,956 @@ public static partial class WorldDocumentEmitter {
         );
 
         return rowObj;
+    }
+    // A cross-row reference a `pile`/`grid` declaration cannot resolve at its own point in `state.world` — the
+    // referenced row may be declared earlier or later in the same block. Collected while lowering each declaration
+    // and settled once by `ValidateStateCrossReferences` after every row in the block has its own JSON object, so
+    // reference order never matters.
+    private enum PendingStateReferenceKind {
+        PileTokenDomain,
+        GridPositions,
+        GridInverse,
+    }
+    private sealed record PendingStateReference(PendingStateReferenceKind Kind, SourceSpan Span, string OwnRowName, string RowName, string? SecondaryRowName = null, int? Capacity = null);
+
+    private static JsonObject LowerStatePileDeclaration(StatePileDeclarationNode pile, DocumentScope scope, List<PendingStateReference> pending) {
+        ValidateStateRowName(
+            kind: "pile",
+            name: pile.Name,
+            scope: scope,
+            span: pile.Span
+        );
+
+        var rowObj = new JsonObject {
+            ["name"] = pile.Name,
+            ["kind"] = nameof(Puck.State.CellKind.Bool),
+            ["domain"] = new JsonObject { ["$type"] = "keysOf", ["row"] = pile.TokenRow, ["ordered"] = true },
+        };
+
+        var cellsArr = new JsonArray();
+        var seenKeys = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var token in pile.Tokens) {
+            if (!seenKeys.Add(item: token.Key)) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationDuplicateToken,
+                    message: $"pile '{pile.Name}' declares token '{token.Key}' more than once",
+                    span: token.Span
+                );
+
+                continue;
+            }
+            if (token.Key.StartsWith(value: '$')) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationReservedKey,
+                    message: $"pile '{pile.Name}' token '{token.Key}' carries the reserved '$' prefix — reserved keys are engine-minted",
+                    span: token.Span
+                );
+            }
+
+            cellsArr.Add(item: new JsonObject { ["key"] = token.Key, ["value"] = true });
+        }
+
+        // A pile's body is its cells, so an empty body lowers to an empty cells array rather than none.
+        rowObj["cells"] = cellsArr;
+
+        int? capacity = null;
+        var sawCapacity = false;
+
+        foreach (var modifier in pile.Modifiers) {
+            if (modifier.Name != "capacity") {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationUnknownModifier,
+                    message: $"'{modifier.Name}' is not a modifier 'pile {pile.Name}' admits — expected 'capacity'",
+                    span: modifier.Span
+                );
+
+                continue;
+            }
+            if (sawCapacity) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationBehaviorConflict,
+                    message: $"pile '{pile.Name}' declares 'capacity' more than once",
+                    span: modifier.Span
+                );
+
+                continue;
+            }
+
+            sawCapacity = true;
+
+            var capNode = LowerStateCapacityModifier(
+                modifier: modifier,
+                rowName: pile.Name,
+                scope: scope
+            );
+
+            rowObj["capacity"] = capNode;
+            capacity = (((capNode is JsonValue capVal) && capVal.TryGetValue<int>(value: out var cap))
+                ? cap
+                : null
+            );
+        }
+
+        if (
+            (capacity is { } declaredCapacity) &&
+            (declaredCapacity < cellsArr.Count)
+        ) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationCapacityTooSmall,
+                message: $"pile '{pile.Name}' declares capacity {declaredCapacity} smaller than its {cellsArr.Count} authored tokens",
+                span: pile.Span
+            );
+        }
+
+        pending.Add(item: new PendingStateReference(
+            Capacity: capacity,
+            Kind: PendingStateReferenceKind.PileTokenDomain,
+            OwnRowName: pile.Name,
+            RowName: pile.TokenRow,
+            Span: pile.Span
+        ));
+
+        return rowObj;
+    }
+    private static readonly HashSet<string> GridModifierNames = new(comparer: StringComparer.Ordinal) { "dimensions", "wrap", "cellSize", "origin", "band", "empty", "positions", "inverse", "bounds" };
+    private static readonly HashSet<string> GridWrapNames = new(comparer: StringComparer.Ordinal) { "None", "X", "Y", "Both" };
+
+    private static JsonObject LowerStateGridDeclaration(StateGridDeclarationNode grid, DocumentScope scope, JsonObject stateObj, List<PendingStateReference> pending) {
+        ValidateStateRowName(
+            kind: "grid",
+            name: grid.Name,
+            scope: scope,
+            span: grid.Span
+        );
+
+        if (grid.Kind is not ("Int" or "Bool")) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationKindNotAdmitted,
+                message: $"'grid {grid.Name}' names kind '{grid.Kind}' — a grid admits only Int or Bool cells",
+                span: grid.Span
+            );
+        }
+
+        long width = 0;
+        long depth = 0;
+        var sawDimensions = false;
+        var wrap = "None";
+        var cellSize = 1.0;
+        var originX = 0.0;
+        var originY = 0.0;
+        var originZ = 0.0;
+        var band = 0.0;
+        var emptyValue = 0L;
+        string? positionsRow = null;
+        var positionsSpan = grid.Span;
+        string? inverseTokens = null;
+        string? inverseCodes = null;
+        var inverseSpan = grid.Span;
+        var sawWrap = false;
+        var sawCellSize = false;
+        var sawOrigin = false;
+        var sawBand = false;
+        var sawEmpty = false;
+        var sawPositions = false;
+        var sawInverse = false;
+        var sawBounds = false;
+        var rowObj = new JsonObject {
+            ["name"] = grid.Name,
+            ["kind"] = grid.Kind,
+        };
+
+        foreach (var modifier in grid.Modifiers) {
+            switch (modifier.Name) {
+                case "dimensions":
+                    if (sawDimensions) {
+                        ReportGridModifierRepeated(
+                            grid: grid,
+                            modifier: modifier,
+                            scope: scope
+                        );
+
+                        break;
+                    }
+
+                    sawDimensions = true;
+
+                    ExpressionNode? widthExpr = null;
+                    ExpressionNode? depthExpr = null;
+
+                    foreach (var arg in modifier.Arguments) {
+                        switch (arg.Name) {
+                            case "width":
+                                widthExpr = arg.Value;
+                                break;
+                            case "depth":
+                                depthExpr = arg.Value;
+                                break;
+                            default:
+                                scope.Diagnostics.ReportError(
+                                    code: PuckDiagnosticCodes.StateDeclarationUnknownModifier,
+                                    message: $"'dimensions' on 'grid {grid.Name}' admits only 'width' and 'depth' — not '{(arg.Name ?? "a positional argument")}'",
+                                    span: arg.Span
+                                );
+
+                                break;
+                        }
+                    }
+                    if (
+                        (widthExpr is null) ||
+                        !TryResolveStatePositiveWholeNumber(
+                        expr: widthExpr,
+                        scope: scope,
+                        value: out width
+                    )
+                    ) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                            message: $"'dimensions' on 'grid {grid.Name}' requires a positive whole-number 'width'",
+                            span: modifier.Span
+                        );
+                    }
+                    if (
+                        (depthExpr is null) ||
+                        !TryResolveStatePositiveWholeNumber(
+                        expr: depthExpr,
+                        scope: scope,
+                        value: out depth
+                    )
+                    ) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                            message: $"'dimensions' on 'grid {grid.Name}' requires a positive whole-number 'depth'",
+                            span: modifier.Span
+                        );
+                    }
+
+                    break;
+                case "wrap":
+                    if (sawWrap) {
+                        ReportGridModifierRepeated(
+                            grid: grid,
+                            modifier: modifier,
+                            scope: scope
+                        );
+
+                        break;
+                    }
+
+                    sawWrap = true;
+
+                    if (
+                        (modifier.Arguments.Count == 1) &&
+                        (modifier.Arguments[0].Name is null) &&
+                        (modifier.Arguments[0].Value is IdentifierExpressionNode { Name: { } wrapName }) &&
+                        GridWrapNames.Contains(item: wrapName)
+                    ) {
+                        wrap = wrapName;
+                    } else {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                            message: $"'wrap' on 'grid {grid.Name}' takes one of 'None', 'X', 'Y', or 'Both'",
+                            span: modifier.Span
+                        );
+                    }
+
+                    break;
+                case "cellSize":
+                    if (sawCellSize) {
+                        ReportGridModifierRepeated(
+                            grid: grid,
+                            modifier: modifier,
+                            scope: scope
+                        );
+
+                        break;
+                    }
+
+                    sawCellSize = true;
+
+                    if (
+                        (modifier.Arguments.Count != 1) ||
+                        (modifier.Arguments[0].Name is not null) ||
+                        !TryResolveStateFloat(
+                        expr: modifier.Arguments[0].Value,
+                        scope: scope,
+                        value: out cellSize
+                    ) ||
+                        (cellSize <= 0.0)
+                    ) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                            message: $"'cellSize' on 'grid {grid.Name}' takes one positive number",
+                            span: modifier.Span
+                        );
+                    }
+
+                    break;
+                case "origin":
+                    if (sawOrigin) {
+                        ReportGridModifierRepeated(
+                            grid: grid,
+                            modifier: modifier,
+                            scope: scope
+                        );
+
+                        break;
+                    }
+
+                    sawOrigin = true;
+
+                    if (
+                        (modifier.Arguments.Count != 3) ||
+                        modifier.Arguments.Any(predicate: a => (a.Name is not null)) ||
+                        !TryResolveStateFloat(
+                        expr: modifier.Arguments[0].Value,
+                        scope: scope,
+                        value: out originX
+                    ) ||
+                        !TryResolveStateFloat(
+                        expr: modifier.Arguments[1].Value,
+                        scope: scope,
+                        value: out originY
+                    ) ||
+                        !TryResolveStateFloat(
+                        expr: modifier.Arguments[2].Value,
+                        scope: scope,
+                        value: out originZ
+                    )
+                    ) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                            message: $"'origin' on 'grid {grid.Name}' takes exactly three numbers (x, y, z)",
+                            span: modifier.Span
+                        );
+                    }
+
+                    break;
+                case "band":
+                    if (sawBand) {
+                        ReportGridModifierRepeated(
+                            grid: grid,
+                            modifier: modifier,
+                            scope: scope
+                        );
+
+                        break;
+                    }
+
+                    sawBand = true;
+
+                    if (
+                        (modifier.Arguments.Count != 1) ||
+                        (modifier.Arguments[0].Name is not null) ||
+                        !TryResolveStateFloat(
+                        expr: modifier.Arguments[0].Value,
+                        scope: scope,
+                        value: out band
+                    )
+                    ) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                            message: $"'band' on 'grid {grid.Name}' takes one number",
+                            span: modifier.Span
+                        );
+                    }
+
+                    break;
+                case "empty":
+                    if (sawEmpty) {
+                        ReportGridModifierRepeated(
+                            grid: grid,
+                            modifier: modifier,
+                            scope: scope
+                        );
+
+                        break;
+                    }
+
+                    sawEmpty = true;
+
+                    if (
+                        (modifier.Arguments.Count == 1) &&
+                        (modifier.Arguments[0].Name is null)
+                    ) {
+                        emptyValue = LowerStateBoardEmptyValue(
+                            context: $"'grid {grid.Name}' empty",
+                            expr: modifier.Arguments[0].Value,
+                            kind: grid.Kind,
+                            scope: scope
+                        );
+                    } else {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                            message: $"'empty' on 'grid {grid.Name}' takes one value of the grid's own kind",
+                            span: modifier.Span
+                        );
+                    }
+
+                    break;
+                case "positions":
+                    if (sawPositions) {
+                        ReportGridModifierRepeated(
+                            grid: grid,
+                            modifier: modifier,
+                            scope: scope
+                        );
+
+                        break;
+                    }
+
+                    sawPositions = true;
+
+                    if (
+                        (modifier.Arguments.Count == 1) &&
+                        (modifier.Arguments[0].Name is null) &&
+                        (modifier.Arguments[0].Value is IdentifierExpressionNode { Name: { } positionsName })
+                    ) {
+                        positionsRow = positionsName;
+                        positionsSpan = modifier.Span;
+                    } else {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                            message: $"'positions' on 'grid {grid.Name}' takes one row name",
+                            span: modifier.Span
+                        );
+                    }
+
+                    break;
+                case "inverse":
+                    if (sawInverse) {
+                        ReportGridModifierRepeated(
+                            grid: grid,
+                            modifier: modifier,
+                            scope: scope
+                        );
+
+                        break;
+                    }
+
+                    sawInverse = true;
+                    inverseSpan = modifier.Span;
+
+                    foreach (var arg in modifier.Arguments) {
+                        switch (arg.Name) {
+                            case "tokens" when (arg.Value is IdentifierExpressionNode { Name: { } tokensName }):
+                                inverseTokens = tokensName;
+                                break;
+                            case "codes" when (arg.Value is IdentifierExpressionNode { Name: { } codesName }):
+                                inverseCodes = codesName;
+                                break;
+                            default:
+                                scope.Diagnostics.ReportError(
+                                    code: PuckDiagnosticCodes.StateDeclarationUnknownModifier,
+                                    message: $"'inverse' on 'grid {grid.Name}' admits only row-name arguments 'tokens' and 'codes'",
+                                    span: arg.Span
+                                );
+
+                                break;
+                        }
+                    }
+                    if (
+                        (inverseTokens is null) ||
+                        (inverseCodes is null)
+                    ) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                            message: $"'inverse' on 'grid {grid.Name}' requires both 'tokens' and 'codes'",
+                            span: modifier.Span
+                        );
+                    }
+
+                    break;
+                case "bounds":
+                    if (sawBounds) {
+                        ReportGridModifierRepeated(
+                            grid: grid,
+                            modifier: modifier,
+                            scope: scope
+                        );
+
+                        break;
+                    }
+                    if (!AdmitsBoundsOrAdvance(kind: grid.Kind)) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted,
+                            message: $"'bounds' is only legal on an Int grid — 'grid {grid.Name}' is {grid.Kind}",
+                            span: modifier.Span
+                        );
+
+                        break;
+                    }
+
+                    sawBounds = true;
+
+                    LowerStateBoundsModifier(
+                        kind: grid.Kind,
+                        modifier: modifier,
+                        rowName: grid.Name,
+                        rowObj: rowObj,
+                        scope: scope
+                    );
+
+                    break;
+                default:
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.StateDeclarationUnknownModifier,
+                        message: $"'{modifier.Name}' is not a modifier 'grid {grid.Name}' admits — expected {string.Join(separator: ", ", values: GridModifierNames.Order(comparer: StringComparer.Ordinal))}",
+                        span: modifier.Span
+                    );
+
+                    break;
+            }
+        }
+
+        if (!sawDimensions) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                message: $"'grid {grid.Name}' requires 'dimensions(width:, depth:)'",
+                span: grid.Span
+            );
+        }
+
+        var domainObj = new JsonObject { ["$type"] = "cellsOf", ["topology"] = grid.Name };
+
+        if (emptyValue != 0L) {
+            domainObj["empty"] = JsonValue.Create(value: emptyValue);
+        }
+
+        rowObj["domain"] = domainObj;
+
+        var cellsArr = new JsonArray();
+        var seenKeys = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var cellCeiling = ((width > 0) && (depth > 0))
+            ? (width * depth)
+            : long.MaxValue;
+
+        foreach (var cell in grid.Cells) {
+            if (!seenKeys.Add(item: cell.Key)) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationDuplicateToken,
+                    message: $"grid '{grid.Name}' declares cell '{cell.Key}' more than once",
+                    span: cell.Span
+                );
+
+                continue;
+            }
+            if (
+                !long.TryParse(
+                s: cell.Key,
+                result: out var ordinal
+            ) ||
+                (ordinal < 0) ||
+                (ordinal >= cellCeiling)
+            ) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationInvalidCellReference,
+                    message: $"grid '{grid.Name}' cell '{cell.Key}' is not a whole-number topology cell ordinal inside 0..{(cellCeiling - 1)}",
+                    span: cell.Span
+                );
+
+                continue;
+            }
+            if (cell.Modifiers.Count > 0) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted,
+                    message: $"grid '{grid.Name}' cell '{cell.Key}' admits no modifier — a board cell is a literal value",
+                    span: cell.Modifiers[0].Span
+                );
+            }
+
+            cellsArr.Add(item: new JsonObject {
+                ["key"] = cell.Key,
+                ["value"] = LowerStateScalarValue(
+                    context: $"grid '{grid.Name}' cell '{cell.Key}'",
+                    expr: cell.Value,
+                    kind: grid.Kind,
+                    scope: scope
+                ),
+            });
+        }
+
+        if (cellsArr.Count > 0) {
+            if (sawInverse) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.StateDeclarationInverseWithAuthoredCells,
+                    message: $"grid '{grid.Name}' combines 'inverse(...)' with an authored cell body — a derived board's cells come from its tokens/codes rows alone",
+                    span: grid.Span
+                );
+            } else {
+                rowObj["cells"] = cellsArr;
+            }
+        }
+
+        if (sawInverse && (inverseTokens is not null) && (inverseCodes is not null)) {
+            rowObj["inverse"] = new JsonObject { ["tokens"] = inverseTokens, ["codes"] = inverseCodes };
+
+            pending.Add(item: new PendingStateReference(
+                Kind: PendingStateReferenceKind.GridInverse,
+                OwnRowName: grid.Name,
+                RowName: inverseTokens,
+                SecondaryRowName: inverseCodes,
+                Span: inverseSpan
+            ));
+        }
+        if (sawPositions && (positionsRow is not null)) {
+            pending.Add(item: new PendingStateReference(
+                Kind: PendingStateReferenceKind.GridPositions,
+                OwnRowName: grid.Name,
+                RowName: positionsRow,
+                Span: positionsSpan
+            ));
+        }
+
+        var lattices = ((stateObj["lattices"] as JsonArray) ?? (JsonArray)(stateObj["lattices"] = new JsonArray()));
+        var duplicateTopology = false;
+
+        foreach (var existingTopology in lattices) {
+            if (
+                (existingTopology is JsonObject existingObj) &&
+                (existingObj["name"] is JsonValue existingNameVal) &&
+                existingNameVal.TryGetValue<string>(value: out var existingName) &&
+                (existingName == grid.Name)
+            ) {
+                duplicateTopology = true;
+
+                break;
+            }
+        }
+
+        if (duplicateTopology) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationDuplicateTopologyName,
+                message: $"'state.lattices' already declares a topology named '{grid.Name}'",
+                span: grid.Span
+            );
+        } else {
+            var topologyObj = new JsonObject {
+                ["$type"] = "grid",
+                ["name"] = grid.Name,
+                ["origin"] = new JsonArray { CreateNumberNode(value: originX), CreateNumberNode(value: originY), CreateNumberNode(value: originZ) },
+                ["cellSize"] = JsonValue.Create(value: cellSize),
+                ["width"] = JsonValue.Create(value: width),
+                ["depth"] = JsonValue.Create(value: depth),
+            };
+
+            if (wrap != "None") {
+                topologyObj["wrap"] = wrap;
+            }
+            if (band != 0.0) {
+                topologyObj["band"] = JsonValue.Create(value: band);
+            }
+
+            lattices.Add(item: topologyObj);
+        }
+
+        return rowObj;
+    }
+    // A board's `domain.empty` is a raw `long` on the wire (`StateDomain.CellsOf.Empty`) regardless of the row's
+    // own `Kind` — unlike a cell's own `value`, it carries no hand-rolled per-kind spelling, so a Bool grid's
+    // `true`/`false` literal still lowers to the numeric 1/0 the field's C# type requires.
+    private static long LowerStateBoardEmptyValue(ExpressionNode expr, string context, string kind, DocumentScope scope) {
+        var literal = ResolveStateLiteral(
+            expr: expr,
+            scope: scope
+        );
+
+        if (
+            (kind == "Bool") &&
+            (literal is LiteralExpressionNode { Unit: null, Value: bool b })
+        ) {
+            return (b ? 1L : 0L);
+        }
+        if (literal is LiteralExpressionNode { Unit: null, Value: long l }) {
+            return l;
+        }
+
+        scope.Diagnostics.ReportError(
+            code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+            message: $"{context} must be {((kind == "Bool") ? "'true' or 'false'" : "a whole number")} for a {kind} grid",
+            span: expr.Span
+        );
+
+        return 0L;
+    }
+    // Declared as `JsonNode` (not the `JsonValue?` `JsonValue.Create` itself returns) so a `new JsonArray { ... }`
+    // collection initializer resolves to `JsonArray.Add(JsonNode?)` rather than its generic `Add<T>(T)` overload —
+    // an exact-type generic match otherwise wins overload resolution over the non-generic one, and that overload
+    // carries the trim/AOT warnings `Puck.World.Transpiler`'s Native AOT-compatible LSP build treats as errors.
+    private static JsonNode CreateNumberNode(double value) => JsonValue.Create(value: value)!;
+    private static void ReportGridModifierRepeated(StateGridDeclarationNode grid, StateModifierNode modifier, DocumentScope scope) {
+        scope.Diagnostics.ReportError(
+            code: PuckDiagnosticCodes.StateDeclarationBehaviorConflict,
+            message: $"'grid {grid.Name}' declares '{modifier.Name}' more than once",
+            span: modifier.Span
+        );
+    }
+    private static bool TryResolveStatePositiveWholeNumber(ExpressionNode expr, DocumentScope scope, out long value) {
+        if (
+            TryResolveStateWholeNumber(
+            expr: expr,
+            scope: scope,
+            value: out value
+        ) &&
+            (value > 0)
+        ) {
+            return true;
+        }
+
+        value = 0;
+
+        return false;
+    }
+    private static bool TryResolveStateWholeNumber(ExpressionNode expr, DocumentScope scope, out long value) {
+        var literal = ResolveStateLiteral(
+            expr: expr,
+            scope: scope
+        );
+
+        switch (literal) {
+            case LiteralExpressionNode { Unit: null, Value: long l }:
+                value = l;
+
+                return true;
+            case LiteralExpressionNode { Unit: null, Value: ulong ul } when (ul <= long.MaxValue):
+                value = ((long)ul);
+
+                return true;
+            default:
+                value = 0;
+
+                return false;
+        }
+    }
+    private static bool TryResolveStateFloat(ExpressionNode expr, DocumentScope scope, out double value) {
+        var literal = ResolveStateLiteral(
+            expr: expr,
+            scope: scope
+        );
+
+        switch (literal) {
+            case LiteralExpressionNode { Unit: null, Value: long l }:
+                value = l;
+
+                return true;
+            case LiteralExpressionNode { Unit: null, Value: ulong ul }:
+                value = ul;
+
+                return true;
+            case LiteralExpressionNode { Unit: null, Value: double d }:
+                value = d;
+
+                return true;
+            default:
+                value = 0.0;
+
+                return false;
+        }
+    }
+    // A pile's `of` and a grid's `positions`/`inverse` name another `state.world` row that may be declared earlier
+    // or later in the same block — settled once every row has its own JSON object, so declaration order never
+    // matters. Mutates the referenced row's own object in place for `positions` (adding `valuesFrom`); a grid's
+    // own `inverse` member is already set at its declaration site and is only checked, not written, here.
+    private static void ValidateStateCrossReferences(List<PendingStateReference> pending, JsonArray worldArr, DocumentScope scope) {
+        if (pending.Count == 0) {
+            return;
+        }
+
+        var byName = new Dictionary<string, JsonObject>(comparer: StringComparer.Ordinal);
+
+        foreach (var rowNode in worldArr) {
+            if (
+                (rowNode is JsonObject rowObj) &&
+                (rowObj["name"] is JsonValue nameVal) &&
+                nameVal.TryGetValue<string>(value: out var name)
+            ) {
+                byName[name] = rowObj;
+            }
+        }
+
+        foreach (var reference in pending) {
+            switch (reference.Kind) {
+                case PendingStateReferenceKind.PileTokenDomain:
+                    ValidatePileTokenDomainReference(
+                        byName: byName,
+                        reference: reference,
+                        scope: scope
+                    );
+
+                    break;
+                case PendingStateReferenceKind.GridPositions:
+                    ValidateGridPositionsReference(
+                        byName: byName,
+                        reference: reference,
+                        scope: scope
+                    );
+
+                    break;
+                case PendingStateReferenceKind.GridInverse:
+                    ValidateGridInverseReference(
+                        byName: byName,
+                        reference: reference,
+                        scope: scope
+                    );
+
+                    break;
+            }
+        }
+    }
+    private static bool IsRowKindInt(JsonObject row) => ((row["kind"] is JsonValue kindVal) && kindVal.TryGetValue<string>(value: out var kind) && (kind == "Int"));
+    private static bool IsPlainTokenDomainRow(JsonObject row) {
+        if (row["domain"] is JsonObject domainObj) {
+            return (
+                (domainObj["$type"] is JsonValue typeVal) &&
+                typeVal.TryGetValue<string>(value: out var type) &&
+                (type == "keys")
+            );
+        }
+
+        // Undeclared domain infers Keys exactly when the row carries a capacity or more than one cell, or one
+        // cell under an author-chosen key — StateRow.InferDomain's own rule, restated over the row's raw JSON.
+        var hasCapacity = row.ContainsKey(propertyName: "capacity");
+        var cells = (row["cells"] as JsonArray);
+
+        if (hasCapacity || (cells is { Count: > 1 })) {
+            return true;
+        }
+
+        return ((cells is { Count: 1 }) && (((cells[0] as JsonObject)?["key"]?.ToString()) != "$value"));
+    }
+    private static void ValidatePileTokenDomainReference(PendingStateReference reference, IReadOnlyDictionary<string, JsonObject> byName, DocumentScope scope) {
+        if (!byName.TryGetValue(
+            key: reference.RowName,
+            value: out var domainRow
+        )) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
+                message: $"pile '{reference.OwnRowName}' names no row '{reference.RowName}'",
+                span: reference.Span
+            );
+
+            return;
+        }
+        if (!IsPlainTokenDomainRow(row: domainRow)) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
+                message: $"pile '{reference.OwnRowName}' names '{reference.RowName}', which is not a plain token-domain row",
+                span: reference.Span
+            );
+
+            return;
+        }
+        if (reference.Capacity is not { } capacity) {
+            return;
+        }
+
+        // A table's declared cells are only its initial population — more keys are legal up to `capacity`, or
+        // unbounded (StateCapacity.MaxCellsPerRow) when no capacity is declared — so only a declared capacity is a
+        // real ceiling here; the row's current cell count is never one, and checking against it would refuse a
+        // capacity this table is free to grow into.
+        var domainCount = (((domainRow["capacity"] is JsonValue capVal) && capVal.TryGetValue<int>(value: out var domainCapacity))
+            ? domainCapacity
+            : ((int?)null)
+        );
+
+        if ((domainCount is { } count) && (capacity > count)) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationCapacityExceedsDomain,
+                message: $"pile '{reference.OwnRowName}' declares capacity {capacity} greater than its token domain '{reference.RowName}' provides ({count})",
+                span: reference.Span
+            );
+        }
+    }
+    private static void ValidateGridPositionsReference(PendingStateReference reference, IReadOnlyDictionary<string, JsonObject> byName, DocumentScope scope) {
+        if (!byName.TryGetValue(
+            key: reference.RowName,
+            value: out var positionsRow
+        )) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
+                message: $"grid '{reference.OwnRowName}' positions names no row '{reference.RowName}'",
+                span: reference.Span
+            );
+
+            return;
+        }
+
+        var domainType = ((positionsRow["domain"] as JsonObject)?["$type"] as JsonValue);
+
+        if (
+            !IsRowKindInt(row: positionsRow) ||
+            (domainType is null) ||
+            !domainType.TryGetValue<string>(value: out var domainTypeName) ||
+            (domainTypeName != "keysOf")
+        ) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
+                message: $"grid '{reference.OwnRowName}' positions names '{reference.RowName}', which is not an integer keysOf row",
+                span: reference.Span
+            );
+
+            return;
+        }
+
+        positionsRow["valuesFrom"] = reference.OwnRowName;
+    }
+    private static void ValidateGridInverseReference(PendingStateReference reference, IReadOnlyDictionary<string, JsonObject> byName, DocumentScope scope) {
+        if (!byName.TryGetValue(
+            key: reference.RowName,
+            value: out var tokensRow
+        )) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
+                message: $"grid '{reference.OwnRowName}' inverse.tokens names no row '{reference.RowName}'",
+                span: reference.Span
+            );
+
+            return;
+        }
+        if (!byName.TryGetValue(
+            key: reference.SecondaryRowName!,
+            value: out var codesRow
+        )) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationUnknownReference,
+                message: $"grid '{reference.OwnRowName}' inverse.codes names no row '{reference.SecondaryRowName}'",
+                span: reference.Span
+            );
+
+            return;
+        }
+        if (
+            !IsRowKindInt(row: tokensRow) ||
+            !IsPlainTokenDomainRow(row: tokensRow)
+        ) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
+                message: $"grid '{reference.OwnRowName}' inverse.tokens '{reference.RowName}' names no keyed integer row",
+                span: reference.Span
+            );
+        }
+        if (!IsRowKindInt(row: codesRow)) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
+                message: $"grid '{reference.OwnRowName}' inverse.codes '{reference.SecondaryRowName}' names no integer row",
+                span: reference.Span
+            );
+        }
+
+        var tokenCells = ((tokensRow["cells"] as JsonArray) ?? []);
+        var codeCells = ((codesRow["cells"] as JsonArray) ?? []);
+        var sameShape = (tokenCells.Count == codeCells.Count);
+
+        for (var index = 0; (sameShape && (index < tokenCells.Count)); index++) {
+            sameShape = ((((tokenCells[index] as JsonObject)?["key"])?.ToString()) == (((codeCells[index] as JsonObject)?["key"])?.ToString()));
+        }
+        if (!sameShape) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationReferenceShapeMismatch,
+                message: $"grid '{reference.OwnRowName}' inverse.codes '{reference.SecondaryRowName}' must carry the same keys, in the same order, as inverse.tokens '{reference.RowName}'",
+                span: reference.Span
+            );
+        }
     }
     private static void ValidateStateRowName(string kind, string name, DocumentScope scope, SourceSpan span) {
         if (name.StartsWith(value: '$')) {
@@ -437,7 +1411,10 @@ public static partial class WorldDocumentEmitter {
         if (
             (modifier.Arguments.Count == 1) &&
             (modifier.Arguments[0].Name is null) &&
-            (modifier.Arguments[0].Value is LiteralExpressionNode { Unit: null, Value: long capacity }) &&
+            (ResolveStateLiteral(
+                expr: modifier.Arguments[0].Value,
+                scope: scope
+            ) is LiteralExpressionNode { Unit: null, Value: long capacity }) &&
             (capacity > 0) &&
             (capacity <= int.MaxValue)
         ) {
@@ -546,7 +1523,10 @@ public static partial class WorldDocumentEmitter {
 
         if (!TryReduceRate(
             denominator: out var denominator,
-            expr: rateExpr,
+            expr: ResolveStateLiteral(
+                expr: rateExpr,
+                scope: scope
+            ),
             numerator: out var numerator
         )) {
             scope.Diagnostics.ReportError(
@@ -566,7 +1546,7 @@ public static partial class WorldDocumentEmitter {
             (modifier.Arguments[0].Name is null) &&
             (modifier.Arguments[0].Value is IdentifierExpressionNode { Name: "none" })
         ) {
-            cellObj["behavior"] = "none";
+            cellObj["behavior"] = nameof(Puck.State.StateCellBehavior.None);
 
             return true;
         }
@@ -582,12 +1562,60 @@ public static partial class WorldDocumentEmitter {
     // Converts an authored default/bound literal into the exact JSON spelling `StateRowJsonConverter` reads back
     // for the row's kind: a plain number for Int, a 0/1 boolean for Bool, a plain string for Text, and — Fixed's own
     // convention throughout the engine — a decimal STRING (never raw Q48.16 bits) for Fixed.
-    private static JsonNode LowerStateScalarValue(ExpressionNode expr, string kind, string context, DocumentScope scope) => kind switch {
-        "Bool" => LowerStateBoolValue(context: context, expr: expr, scope: scope),
-        "Text" => LowerStateTextValue(context: context, expr: expr, scope: scope),
-        "Fixed" => LowerStateFixedValue(context: context, expr: expr, scope: scope),
-        _ => LowerStateIntValue(context: context, expr: expr, scope: scope),
-    };
+    // A declaration value or modifier argument may be any compile-time expression, a `let` constant included: it is
+    // evaluated once and read back as the literal it produces, so every literal rule below applies unchanged.
+    private static ExpressionNode ResolveStateLiteral(ExpressionNode expr, DocumentScope scope) {
+        if (expr is LiteralExpressionNode) {
+            return expr;
+        }
+        if (DocumentLowering.LowerValue(
+            expr: expr,
+            scope: scope
+        ) is not JsonValue lowered) {
+            return expr;
+        }
+
+        object? value = null;
+
+        if (lowered.TryGetValue<long>(value: out var whole)) {
+            value = whole;
+        } else if (lowered.TryGetValue<bool>(value: out var flag)) {
+            value = flag;
+        } else if (lowered.TryGetValue<string>(value: out var text)) {
+            value = text;
+        } else if (lowered.TryGetValue<decimal>(value: out var exact)) {
+            value = (((exact == decimal.Truncate(d: exact)) && (exact >= long.MinValue) && (exact <= long.MaxValue))
+                ? ((object)((long)exact))
+                : ((double)exact)
+            );
+        } else if (lowered.TryGetValue<double>(value: out var real)) {
+            value = real;
+        }
+
+        return ((value is null)
+            ? expr
+            : new LiteralExpressionNode(
+                Column: expr.Column,
+                Length: expr.Length,
+                Line: expr.Line,
+                Offset: expr.Offset,
+                Value: value
+            )
+        );
+    }
+    private static JsonNode LowerStateScalarValue(ExpressionNode expr, string kind, string context, DocumentScope scope) {
+        var literal = ResolveStateLiteral(
+            expr: expr,
+            scope: scope
+        );
+
+        return kind switch {
+            "Bool" => LowerStateBoolValue(context: context, expr: literal, scope: scope),
+            "Text" => LowerStateTextValue(context: context, expr: literal, scope: scope),
+            "Fixed" => LowerStateFixedValue(context: context, expr: literal, scope: scope),
+            _ => LowerStateIntValue(context: context, expr: literal, scope: scope),
+        };
+    }
     private static JsonNode LowerStateIntValue(ExpressionNode expr, string context, DocumentScope scope) {
         if (expr is LiteralExpressionNode { Unit: null, Value: long l }) {
             return JsonValue.Create(value: l)!;
@@ -678,14 +1706,17 @@ public static partial class WorldDocumentEmitter {
 
         return true;
     }
-    // A decimal `perSecond` rate reduces to an exact fraction only through decimal's own base-10 arithmetic — a
-    // double's binary representation cannot be trusted to carry the author's intended digits, so this reads the
-    // literal's shortest round-trip decimal text and reduces THAT exactly, never the double's raw bit pattern.
+    // A decimal `perSecond` rate reduces to an exact fraction from the author's own digits, never from a double's
+    // raw bits: a directly authored literal carries its exact source text on RawText (set by the lexer before it
+    // ever rounds that text into a double). Only a value with none — an identifier or expression the lowering
+    // pipeline already folded through `double` arithmetic before this reduction ever sees it — falls back to that
+    // double's own shortest round-trip text, since no more precise source exists once the value has actually been
+    // computed in `double`.
     private static bool TryReduceRate(ExpressionNode expr, out long numerator, out long denominator) {
         numerator = 0L;
         denominator = 1L;
 
-        if (expr is not LiteralExpressionNode { Unit: null, Value: var raw }) {
+        if (expr is not LiteralExpressionNode { Unit: null, Value: var raw } literal) {
             return false;
         }
 
@@ -702,48 +1733,102 @@ public static partial class WorldDocumentEmitter {
                 return true;
             case double d:
                 return TryReduceDecimalRate(
-                    d: d,
                     denominator: out denominator,
-                    numerator: out numerator
+                    numerator: out numerator,
+                    text: literal.RawText ?? d.ToString(format: "R", provider: CultureInfo.InvariantCulture)
                 );
             default:
                 return false;
         }
     }
-    private static bool TryReduceDecimalRate(double d, out long numerator, out long denominator) {
+    // Parses `text` (a sign, digits, an optional '.', and an optional exponent — exactly what the lexer or
+    // decimal.ToString can produce) into an exact unscaled BigInteger and a base-10 scale with no intermediate
+    // double or decimal, so a rate with more significant digits than either type holds still reduces from the
+    // author's own digits instead of silently rounding.
+    private static bool TryParseExactDecimalText(string text, out BigInteger unscaled, out int scale) {
+        unscaled = BigInteger.Zero;
+        scale = 0;
+
+        var mantissa = text;
+        var negative = false;
+
+        if ((mantissa.Length > 0) && (mantissa[0] is '+' or '-')) {
+            negative = (mantissa[0] == '-');
+            mantissa = mantissa[1..];
+        }
+
+        var exponent = 0;
+        var exponentIndex = mantissa.IndexOfAny(['e', 'E']);
+
+        if (exponentIndex >= 0) {
+            if (!int.TryParse(
+                provider: CultureInfo.InvariantCulture,
+                result: out exponent,
+                s: mantissa[(exponentIndex + 1)..],
+                style: NumberStyles.AllowLeadingSign
+            )) {
+                return false;
+            }
+
+            mantissa = mantissa[..exponentIndex];
+        }
+
+        var pointIndex = mantissa.IndexOf('.');
+        var digits = ((pointIndex < 0) ? mantissa : (mantissa[..pointIndex] + mantissa[(pointIndex + 1)..]));
+        var fractionLength = ((pointIndex < 0) ? 0 : (mantissa.Length - pointIndex - 1));
+
+        if (digits.Length == 0) {
+            return false;
+        }
+        foreach (var c in digits) {
+            if (!char.IsAsciiDigit(c)) {
+                return false;
+            }
+        }
+
+        unscaled = BigInteger.Parse(
+            provider: CultureInfo.InvariantCulture,
+            value: digits
+        );
+        scale = (fractionLength - exponent);
+
+        if (scale < 0) {
+            unscaled *= BigInteger.Pow(
+                exponent: -scale,
+                value: 10
+            );
+            scale = 0;
+        }
+        if (negative) {
+            unscaled = -unscaled;
+        }
+
+        return true;
+    }
+    private static bool TryReduceDecimalRate(string text, out long numerator, out long denominator) {
         numerator = 0L;
         denominator = 1L;
 
-        var text = d.ToString(format: "R", provider: CultureInfo.InvariantCulture);
-
-        if (!decimal.TryParse(
-            provider: CultureInfo.InvariantCulture,
-            result: out var value,
-            s: text,
-            style: NumberStyles.Float
+        if (!TryParseExactDecimalText(
+            scale: out var scale,
+            text: text,
+            unscaled: out var unscaled
         )) {
             return false;
         }
 
-        var bits = decimal.GetBits(d: value);
-        var scale = (bits[3] >> 16) & 0x7F;
-        var negative = ((bits[3] & unchecked((int)0x80000000)) != 0);
-        var unscaled = (((BigInteger)((uint)bits[2])) << 64) | (((BigInteger)((uint)bits[1])) << 32) | ((uint)bits[0]);
         var scaledDenominator = BigInteger.Pow(
             exponent: scale,
             value: 10
         );
         var gcd = BigInteger.GreatestCommonDivisor(
-            left: unscaled,
+            left: BigInteger.Abs(value: unscaled),
             right: scaledDenominator
         );
 
         if (gcd > BigInteger.Zero) {
             unscaled /= gcd;
             scaledDenominator /= gcd;
-        }
-        if (negative) {
-            unscaled = -unscaled;
         }
         if (
             (unscaled < long.MinValue) ||

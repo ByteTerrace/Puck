@@ -62,6 +62,164 @@ public sealed class ExpressionSpellingLawTests {
             expectedSubstring: expected
         );
     }
+    // row.key and row[key] must parse to the identical token: dot access is syntax over the same ValueToken.State,
+    // never a second representation.
+    [Fact]
+    public void ADottedReadParsesToTheIdenticalTokenAsItsBracketForm() {
+        Assert.Equal(
+            Parse(text: "vitals[mana]"),
+            Parse(text: "vitals.mana")
+        );
+        Assert.Equal(
+            [S(
+                    key: "mana",
+                    name: "vitals"
+                )],
+            Parse(text: "vitals.mana")
+        );
+    }
+    // A decimal literal's own dot is never mistaken for dot access: the lexer decides name-vs-number from the
+    // first character alone, so "0.25" is one constant token regardless of what follows.
+    [Fact]
+    public void ADecimalLiteralsDotIsUnaffectedByDotAccess() {
+        Assert.Equal(
+            [C(value: 0.25m)],
+            Parse(text: "0.25")
+        );
+        Assert.Equal(
+            [S("a"), C(value: 0.25m), new ValueToken.Add()],
+            Parse(text: "a + 0.25")
+        );
+    }
+    // A reserved ($) name keeps every dotted segment it carries — the dot-access split never applies to it, even
+    // when it is used as the row half of what would otherwise be a dotted read.
+    [Fact]
+    public void AReservedNameKeepsItsDottedSegmentsUnchanged() {
+        Assert.Equal(
+            [S("$bind:x.y")],
+            Parse(text: "$bind:x.y")
+        );
+        Assert.Equal(
+            "$bind:x.y",
+            ExpressionSpelling.Print(tokens: [S("$bind:x.y")])
+        );
+    }
+    // A backquoted name is never split at a dot, even one carrying a literal dot character.
+    [Fact]
+    public void ABackquotedNameIsNeverSplitAtADot() {
+        Assert.Equal(
+            [S("seat.one")],
+            Parse(text: "`seat.one`")
+        );
+        Assert.Equal(
+            "`seat.one`",
+            ExpressionSpelling.Print(tokens: [S("seat.one")])
+        );
+    }
+    // The key half of a dotted read may be a numeric key, exactly as bracket form admits one.
+    [Fact]
+    public void ADottedReadAdmitsANumericKeyTheSameAsBracketForm() {
+        Assert.Equal(
+            Parse(text: "board[5]"),
+            Parse(text: "board.5")
+        );
+        Assert.Equal(
+            [S(
+                    key: "5",
+                    name: "board"
+                )],
+            Parse(text: "board.5")
+        );
+    }
+    // A trailing dot is refused by name — a dotted read is "row.key", and a dot with nothing after it is a parse
+    // error naming the fix rather than a name that happens to end in a period.
+    [Fact]
+    public void ATrailingDotIsRefusedByName() {
+        Assert.False(condition: ExpressionSpelling.TryParse(
+            error: out var error,
+            text: "vitals.",
+            tokens: out _
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "ends with a dot"
+        );
+    }
+    // More than one dot is refused by name, naming the bracket-form fix — a dotted read admits exactly one dot.
+    [Fact]
+    public void MoreThanOneDotIsRefusedByNameNamingTheBracketFix() {
+        Assert.False(condition: ExpressionSpelling.TryParse(
+            error: out var error,
+            text: "vitals.mana.max",
+            tokens: out _
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "more than one dot"
+        );
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "vitals[mana.max]"
+        );
+    }
+    // A dynamic key wearing dot syntax ("row.$each") is refused by name — a literal key alone may spell as a dot;
+    // a dynamic key still needs bracket form.
+    [Fact]
+    public void ADottedKeyThatIsItselfReservedIsRefusedByNameNamingBracketForm() {
+        Assert.False(condition: ExpressionSpelling.TryParse(
+            error: out var error,
+            text: "hp.$each",
+            tokens: out _
+        ));
+        Assert.Contains(
+            actualString: error,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "hp[$each]"
+        );
+    }
+    // ExpressionSpelling.Print always emits bracket form, even when the tokens were parsed from a dotted spelling —
+    // there is exactly one canonical PRINTED form, though two admitted PARSED ones.
+    [Fact]
+    public void PrintAlwaysEmitsBracketFormForADottedRead() {
+        var tokens = Parse(text: "vitals.mana");
+
+        Assert.Equal(
+            "vitals[mana]",
+            ExpressionSpelling.Print(tokens: tokens)
+        );
+    }
+    // ExpressionSpelling.TrySplitDottedName is the same one-dot split ParsePrimary performs, exposed for a caller
+    // (import renaming) that rewrites text rather than compiling it. Excluding a reserved or backquoted name is
+    // documented as the CALLER's own job — this API splits whatever candidate name it is given.
+    [Fact]
+    public void TrySplitDottedNameSplitsTheSameWayParsingDoes() {
+        Assert.True(condition: ExpressionSpelling.TrySplitDottedName(
+            key: out var key,
+            name: "vitals.mana",
+            row: out var row
+        ));
+        Assert.Equal(
+            "vitals",
+            row
+        );
+        Assert.Equal(
+            "mana",
+            key
+        );
+        Assert.False(condition: ExpressionSpelling.TrySplitDottedName(
+            key: out _,
+            name: "plain",
+            row: out _
+        ));
+        Assert.False(condition: ExpressionSpelling.TrySplitDottedName(
+            key: out _,
+            name: "trailing.",
+            row: out _
+        ));
+    }
     [Fact]
     public void EveryContextFreeTokenHasOneRoundTrippingSpellingAndCompiles() {
         var context = new RuleCompileContext(

@@ -219,6 +219,8 @@ internal static class PuckHoverInfo {
         StateTableDeclarationNode table => [.. table.Modifiers, .. table.Cells],
         StateSlotDeclarationNode { Value: { } slotValue } slot => [.. slot.Modifiers, slotValue],
         StateSlotDeclarationNode slot => slot.Modifiers,
+        StatePileDeclarationNode pile => pile.Modifiers,
+        StateGridDeclarationNode grid => [.. grid.Modifiers, .. grid.Cells],
         StateCellEntryNode cell => [cell.Value, .. cell.Modifiers],
         StateModifierNode modifier => modifier.Arguments,
         LambdaExpressionNode lambda => [lambda.Body],

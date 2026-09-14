@@ -254,6 +254,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         m_bindings.GetRoutedState(
             definition: out var definition,
             slot: slot,
+            engineTick: out _,
             tick: out _
         );
 
@@ -399,6 +400,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         m_bindings.GetRoutedState(
             definition: out var definition,
             slot: slot,
+            engineTick: out var engineTick,
             tick: out var tick
         );
 
@@ -413,10 +415,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             rowName: rowName,
             text: out var text,
             tick: tick,
-            // GetRoutedState carries no per-seat engine-tick coordinate (each seat may route to a different
-            // authority); the routed tick doubles as the engine-tick coordinate here, and a hub label is
-            // presentation only, never authoritative simulation state.
-            engineTick: tick
+            engineTick: engineTick
         ))
             ? text
             : null
@@ -433,6 +432,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         m_bindings.GetRoutedState(
             definition: out var definition,
             slot: slot,
+            engineTick: out var engineTick,
             tick: out var tick
         );
 
@@ -447,9 +447,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             rowName: rowName,
             text: out var text,
             tick: tick,
-            // See HubLabel: GetRoutedState carries no per-seat engine-tick coordinate, and a sector label is
-            // presentation only.
-            engineTick: tick
+            engineTick: engineTick
         ))
             ? text
             : null

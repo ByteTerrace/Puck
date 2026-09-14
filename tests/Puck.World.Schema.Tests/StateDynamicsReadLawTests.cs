@@ -40,6 +40,23 @@ public sealed class StateDynamicsReadLawTests {
             )],
         Dynamics: new StateDynamics(Row: dynamicsRow)
     );
+    // A cell carrying a dynamics trait and an authored clock starts its follower at the clock's own Y0/V0, not at
+    // its stored value — the only way to displace the follower from its target for a law that must observe it move.
+    private static WorldStateRow EasingRowWithClock(string dynamicsRow, long y0, long v0) => new(
+        Name: CellName.Parse(candidate: "gauge"),
+        Kind: CellKind.Int,
+        Min: 0,
+        Max: 1000,
+        Cells: [new StateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: 300,
+                Clock: new StateCellClock(
+                    Y0: y0,
+                    V0: v0
+                )
+            )],
+        Dynamics: new StateDynamics(Row: dynamicsRow)
+    );
     private static WorldStateRow PlainRow() => new(
         Name: CellName.Parse(candidate: "gauge"),
         Kind: CellKind.Int,
@@ -83,8 +100,10 @@ public sealed class StateDynamicsReadLawTests {
             userMessage: "the final sampled tick did not reach the settled truth."
         );
     }
+    // A cell carrying no clock reads at rest — its follower starts at its own stored value, not at zero — so its
+    // eased value at the epoch is exactly the cell's own stored truth.
     [Fact]
-    public void TryReadEased_AtTheEpoch_ReadsExactlyY0() {
+    public void TryReadEased_AtTheEpochWithNoClock_ReadsTheCellsOwnStoredValue() {
         var definition = BuildDefinition(row: EasingRow(dynamicsRow: Critical.Name));
 
         Assert.True(condition: WorldStateReader.TryReadEased(
@@ -99,17 +118,21 @@ public sealed class StateDynamicsReadLawTests {
         ));
         Assert.Equal(
             actual: raw,
-            expected: 0L
+            expected: 300L
         );
     }
     // ζ = 0: an undamped free oscillation from rest never settles and rings forever — a discriminating control
-    // against the critically-damped law above, whose whole point is that it DOES settle. From y0 = 0 chasing a
-    // target of 300, the closed form is EXACT: y(t) = 300·(1 − cos(ωt)), ω = 2π rad/s at f = 1 Hz — a full trough at
-    // t = 0, a peak at t = 0.5s (tick 120), and back to the trough at t = 1.0s (tick 240, one full period later),
-    // bounded to [0, 600] throughout rather than diverging.
+    // against the critically-damped law above, whose whole point is that it DOES settle. From an authored y0 = 0
+    // chasing a target of 300, the closed form is EXACT: y(t) = 300·(1 − cos(ωt)), ω = 2π rad/s at f = 1 Hz — a full
+    // trough at t = 0, a peak at t = 0.5s (tick 120), and back to the trough at t = 1.0s (tick 240, one full period
+    // later), bounded to [0, 600] throughout rather than diverging.
     [Fact]
     public void TryReadEased_AtZeroDamping_RingsInABoundedOscillation() {
-        var definition = BuildDefinition(row: EasingRow(dynamicsRow: Ringing.Name));
+        var definition = BuildDefinition(row: EasingRowWithClock(
+            dynamicsRow: Ringing.Name,
+            v0: 0L,
+            y0: 0L
+        ));
 
         Assert.True(condition: WorldStateReader.TryReadEased(
             definition: definition,

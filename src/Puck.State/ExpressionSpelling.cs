@@ -20,7 +20,8 @@ namespace Puck.State;
 /// <c>boardShift(mask, topology, direction)</c>, <c>boardImage(mask, topology, element)</c>, and
 /// <c>select(condition, whenTrue, whenFalse)</c>.</item>
 /// <item>A state read is its row name, keyed as <c>row[key]</c> or, for a literal key, <c>row.key</c> — one dot,
-/// on an unreserved, unquoted name; more than one dot is a parse error naming the fix. A bare name starts with a
+/// on an unreserved, unquoted name; more than one dot, or a key half that is itself reserved (<c>row.$each</c>), is
+/// a parse error naming the fix — a dynamic key admits bracket form only. A bare name starts with a
 /// letter, <c>_</c>, or <c>$</c> and continues with letters, digits, <c>_</c>, <c>$</c>, and <c>.</c>; a reserved
 /// channel (one starting with <c>$</c>) keeps every dotted segment it carries — the dot-access split never applies
 /// there — and may also carry <c>:</c> between name characters and a signed segment after a colon, so
@@ -73,9 +74,12 @@ public static class ExpressionSpelling {
         (((index + 1) < text.Length) && (text[index] == '-') && char.IsAsciiDigit(c: text[(index + 1)]));
     // Dot access's one rule: an unreserved name splits at its FIRST dot into a row and a literal key, and admits no
     // second one. The reserved ($) exclusion is the caller's job (ParsePrimary checks it before calling; a public
-    // caller rewriting text, not compiling it, does the same). False with `error` empty means "no dot to split";
-    // false with `error` set names the fix for a dot the name carries but cannot split on (trailing, or more than
-    // one) — the parser turns that into a diagnostic, a text rewriter leaves the name untouched.
+    // caller rewriting text, not compiling it, does the same) — but that exclusion only covers a name whose ROW half
+    // starts with '$' ("$each" itself never reaches here). A key half starting with '$' ("row.$each") is a dynamic
+    // key wearing dot syntax, not a literal one, and is refused the same as a trailing or repeated dot: bracket form
+    // ("row[$each]") is the only spelling for a dynamic key. False with `error` empty means "no dot to split"; false
+    // with `error` set names the fix for a dot the name carries but cannot split on (trailing, more than one, or a
+    // reserved key) — the parser turns that into a diagnostic, a text rewriter leaves the name untouched.
     private static bool TrySplitDot(string name, out string row, out string key, out string? error) {
         row = name;
         key = string.Empty;
@@ -95,6 +99,11 @@ public static class ExpressionSpelling {
         }
         if (rest.Contains(value: '.')) {
             error = $"'{name}' carries more than one dot; a dotted read admits exactly one — write '{name[..dot]}[{rest}]' to key by the rest";
+
+            return false;
+        }
+        if (rest.StartsWith(value: '$')) {
+            error = $"'{name}' keys by a reserved token, not a literal; a dynamic key needs bracket form — write '{name[..dot]}[{rest}]'";
 
             return false;
         }
@@ -258,10 +267,16 @@ public static class ExpressionSpelling {
         return result;
     }
     private static string QuoteName(string name) =>
-        (IsBareName(name: name)
-            ? name
-            : $"`{name}`"
-        );
+        (RowNameNeedsBackquoteForDotSafety(name: name)
+            ? $"`{name}`"
+            : (IsBareName(name: name)
+                ? name
+                : $"`{name}`"
+        ));
+    // A row name printed bare re-parses through ParsePrimary's own dot-access split, not through ParseKey (which
+    // never splits): an unreserved name carrying a literal dot must print backquoted, or its printed form would
+    // re-parse as a dotted read of a different row entirely, rather than the one whole name it started as.
+    private static bool RowNameNeedsBackquoteForDotSafety(string name) => (!name.StartsWith(value: '$') && name.Contains(value: '.'));
     // "$table:t[:column]:<key>" splits before its key: a "$"-spelled key ("$bind:x", "$cell:r:k", "$each") at the
     // last ":$", else the last colon.
     private static bool TrySplitTableKey(string name, out string table, out string key) {
