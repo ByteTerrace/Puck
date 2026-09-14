@@ -8,17 +8,48 @@ namespace Puck.State;
 internal static class PrivateDraw {
     internal static uint Sample(ClosedBitset256 secret, ulong seed, ulong stream, long cursor) {
         Span<byte> key = stackalloc byte[32];
-        BinaryPrimitives.WriteUInt64LittleEndian(key, secret.Word0);
-        BinaryPrimitives.WriteUInt64LittleEndian(key[8..], secret.Word1);
-        BinaryPrimitives.WriteUInt64LittleEndian(key[16..], secret.Word2);
-        BinaryPrimitives.WriteUInt64LittleEndian(key[24..], secret.Word3);
+
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            destination: key,
+            value: secret.Word0
+        );
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            destination: key[8..],
+            value: secret.Word1
+        );
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            destination: key[16..],
+            value: secret.Word2
+        );
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            destination: key[24..],
+            value: secret.Word3
+        );
         Span<byte> message = stackalloc byte[32];
-        BinaryPrimitives.WriteUInt64LittleEndian(message, 0x3156455441564950UL);
-        BinaryPrimitives.WriteUInt64LittleEndian(message[8..], seed);
-        BinaryPrimitives.WriteUInt64LittleEndian(message[16..], stream);
-        BinaryPrimitives.WriteInt64LittleEndian(message[24..], cursor);
+
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            destination: message,
+            value: 0x3156455441564950UL
+        );
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            destination: message[8..],
+            value: seed
+        );
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            destination: message[16..],
+            value: stream
+        );
+        BinaryPrimitives.WriteInt64LittleEndian(
+            destination: message[24..],
+            value: cursor
+        );
         Span<byte> output = stackalloc byte[32];
-        HMACSHA256.HashData(key, message, output);
-        return BinaryPrimitives.ReadUInt32LittleEndian(output);
+
+        HMACSHA256.HashData(
+            destination: output,
+            key: key,
+            source: message
+        );
+        return BinaryPrimitives.ReadUInt32LittleEndian(source: output);
     }
 }

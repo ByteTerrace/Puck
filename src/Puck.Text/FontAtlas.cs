@@ -58,13 +58,13 @@ public sealed class FontAtlas {
         );
     }
 
-    private readonly FontAtlasGlyph[] m_allGlyphs;
+    private readonly System.Collections.ObjectModel.ReadOnlyCollection<FontAtlasGlyph> m_allGlyphs;
     private readonly Dictionary<int, FontAtlasGlyph> m_glyphs;
     private readonly Dictionary<int, FontAtlasGlyph> m_glyphsById;
     private readonly Dictionary<long, float> m_kerningAdjustments;
-    private readonly FontKerningPair[] m_kerningPairs;
+    private readonly System.Collections.ObjectModel.ReadOnlyCollection<FontKerningPair> m_kerningPairs;
 
-    /// <summary>Gets the width, in em units, of the signed-distance band encoded around glyph edges, or the generator's nominal range for mask atlases. See <see cref="MtsdfSampling.ComputeUnitRange(FontAtlas)"/>.</summary>
+    /// <summary>Gets the width, in atlas pixels, of the signed-distance band encoded around glyph edges, or the generator's nominal range for mask atlases. See <see cref="MtsdfSampling.ComputeUnitRange(FontAtlas)"/>.</summary>
     public float DistanceRange { get; }
     /// <summary>Gets every glyph contained in the atlas, including glyph-ID-only entries with no direct Unicode mapping.</summary>
     public IReadOnlyCollection<FontAtlasGlyph> Glyphs => m_allGlyphs;
@@ -89,7 +89,7 @@ public sealed class FontAtlas {
     /// <param name="kind">The encoding used by the atlas image.</param>
     /// <param name="imagePath">The path or identifier of the atlas image. Must not be <see langword="null"/>, empty, or whitespace.</param>
     /// <param name="size">The em size, in pixels, at which the atlas was rasterized. Must be greater than zero.</param>
-    /// <param name="distanceRange">The width, in em units, of the encoded signed-distance band.</param>
+    /// <param name="distanceRange">The width, in atlas pixels, of the encoded signed-distance band.</param>
     /// <param name="width">The width of the atlas image, in texels. Must be greater than zero.</param>
     /// <param name="height">The height of the atlas image, in texels. Must be greater than zero.</param>
     /// <param name="metrics">The font-wide vertical metrics.</param>
@@ -142,8 +142,8 @@ public sealed class FontAtlas {
         ArgumentNullException.ThrowIfNull(glyphs);
         ArgumentNullException.ThrowIfNull(kerningPairs);
 
-        m_allGlyphs = [.. glyphs];
-        m_kerningPairs = [.. kerningPairs];
+        m_allGlyphs = Array.AsReadOnly(array: glyphs.ToArray());
+        m_kerningPairs = Array.AsReadOnly(array: kerningPairs.ToArray());
 
         Kind = kind;
         ImagePath = imagePath;

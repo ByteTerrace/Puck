@@ -16,7 +16,7 @@ public static partial class WorldDefinitionValidator {
 
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        for (var index = 0; index < rows.Count; index++) {
+        for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
 
             if (row is null) {
@@ -24,7 +24,11 @@ public static partial class WorldDefinitionValidator {
 
                 return;
             }
-            if (!SafeName.TryParse(candidate: row.Name, name: out _, reason: out var nameReason)) {
+            if (!SafeName.TryParse(
+                candidate: row.Name,
+                name: out _,
+                reason: out var nameReason
+            )) {
                 errors.Add(item: $"search[{index}] name: {nameReason}");
 
                 return;
@@ -36,7 +40,21 @@ public static partial class WorldDefinitionValidator {
             }
 
             foreach (var (output, label) in new[] { (row.Legal, "legal"), (row.Counts, "counts"), (row.Reach, "reach"), (row.Best, "best") }) {
-                if ((output is not null) && (string.Equals(a: output, b: row.Tokens, comparisonType: StringComparison.Ordinal) || string.Equals(a: output, b: row.Board, comparisonType: StringComparison.Ordinal) || (row.Zones?.Contains(value: output, comparer: StringComparer.Ordinal) ?? false))) {
+                if (
+                    (output is not null) &&
+                    (string.Equals(
+                    a: output,
+                    b: row.Tokens,
+                    comparisonType: StringComparison.Ordinal
+                ) || string.Equals(
+                    a: output,
+                    b: row.Board,
+                    comparisonType: StringComparison.Ordinal
+                ) || (row.Zones?.Contains(
+                    value: output,
+                    comparer: StringComparer.Ordinal
+                ) ?? false))
+                ) {
                     errors.Add(item: $"search '{row.Name}' {label} '{output}' is one of the rows the job searches over; an output row is never an input.");
 
                     return;
@@ -44,7 +62,13 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        if (!WorldSearchCompilation.TryPlanAll(definition: definition, rules: rules, plans: out _, judge: out _, reason: out var reason)) {
+        if (!WorldSearchCompilation.TryPlanAll(
+            definition: definition,
+            judge: out _,
+            plans: out _,
+            reason: out var reason,
+            rules: rules
+        )) {
             errors.Add(item: $"{reason}.");
         }
     }

@@ -18,18 +18,18 @@ public sealed class MasterClock {
     public MasterClock(TickResolution resolution) =>
         Resolution = resolution;
 
-    /// <summary>Gets the sub-cycle resolution that quantizes every advance.</summary>
-    public TickResolution Resolution { get; }
-    /// <summary>Gets the current instant on the master timeline.</summary>
-    public Tick Now {
-        [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-        get => new(Value: m_now);
-    }
     /// <summary>Gets the number of whole T-cycles (LCD dots) elapsed since the clock started.</summary>
     public ulong CycleCount {
         [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
         get => (m_now.Value >> UFixedQ4816.FractionBitCount);
     }
+    /// <summary>Gets the current instant on the master timeline.</summary>
+    public Tick Now {
+        [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+        get => new(Value: m_now);
+    }
+    /// <summary>Gets the sub-cycle resolution that quantizes every advance.</summary>
+    public TickResolution Resolution { get; }
     /// <summary>Gets the number of whole fundamental ticks elapsed since the clock started, at <see cref="Resolution"/>.</summary>
     public ulong TickCount =>
         Now.ToQuanta(resolution: Resolution);

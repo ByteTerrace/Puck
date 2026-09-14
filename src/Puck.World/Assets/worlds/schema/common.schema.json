@@ -57,64 +57,454 @@
       "additionalProperties": false,
       "title": "WorldQualityPreset"
     },
-    "WorldRenderSun": {
-      "description": "One directional sun. Every field is optional individually \u2014 absent resolves to SdfFrame\u0027s pinned default for that field.",
+    "WorldRenderLightDirectional": {
+      "description": "A Lambert directional light.",
+      "properties": {
+        "$type": {
+          "const": "directional"
+        },
+        "direction": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.",
+          "default": null
+        },
+        "color": {
+          "description": "The light\u0027s linear colour.",
+          "default": null,
+          "title": "BindableColor",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight": {
+          "description": "The diffuse weight. Absent is the pinned sun weight.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "angularRadius": {
+          "description": "The light\u0027s angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "shadows": {
+          "description": "Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightDirectional"
+    },
+    "WorldRenderLightHemisphere": {
+      "description": "A hemisphere ambient: a floor plus a gradient on the surface normal\u0027s Y (sky above, darker below), scaled by ambient occlusion.",
+      "properties": {
+        "$type": {
+          "const": "hemisphere"
+        },
+        "color": {
+          "description": "The ambient\u0027s linear colour.",
+          "default": null,
+          "title": "BindableColor",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base": {
+          "description": "The floor. Absent is the pinned ambient floor.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "gradient": {
+          "description": "The hemisphere gradient. Absent is the pinned gradient.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightHemisphere"
+    },
+    "WorldRenderLightRim": {
+      "description": "A view-dependent silhouette brighten: weight \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
+      "properties": {
+        "$type": {
+          "const": "rim"
+        },
+        "color": {
+          "description": "The rim\u0027s linear colour.",
+          "default": null,
+          "title": "BindableColor",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight": {
+          "description": "The strength. Absent is zero, which adds nothing.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "power": {
+          "description": "The falloff exponent \u2014 larger confines the highlight nearer the silhouette. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightRim"
+    },
+    "WorldAnchorEntity": {
+      "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
+      "properties": {
+        "$type": {
+          "const": "entity"
+        },
+        "index": {
+          "description": "The 0-based entity index, bounded by the world\u0027s authored population capacity.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "additionalProperties": false,
+      "title": "WorldAnchorEntity"
+    },
+    "WorldAnchorEntityPart": {
+      "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
+      "properties": {
+        "$type": {
+          "const": "entityPart"
+        },
+        "index": {
+          "description": "The 0-based entity index.",
+          "type": "integer"
+        },
+        "partId": {
+          "description": "The ordinal, case-sensitive part identifier published by the entity\u0027s active look.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "partId"
+      ],
+      "additionalProperties": false,
+      "title": "WorldAnchorEntityPart"
+    },
+    "WorldAnchorPlacement": {
+      "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
+      "properties": {
+        "$type": {
+          "const": "placement"
+        },
+        "placementId": {
+          "description": "The referenced Id (must resolve).",
+          "type": "string"
+        },
+        "shapeId": {
+          "description": "The referenced creation\u0027s ShapeDocument.Id to ride, or null for the placement\u0027s own stamped root transform.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "placementId",
+        "shapeId"
+      ],
+      "additionalProperties": false,
+      "title": "WorldAnchorPlacement"
+    },
+    "Int32List": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "integer"
+      }
+    },
+    "WorldAnchorGroup": {
+      "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+      "properties": {
+        "$type": {
+          "const": "group"
+        },
+        "indices": {
+          "$ref": "#/$defs/Int32List",
+          "description": "The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated against the authored population capacity."
+        },
+        "smoothRate": {
+          "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "indices",
+        "smoothRate"
+      ],
+      "additionalProperties": false,
+      "title": "WorldAnchorGroup"
+    },
+    "WorldAnchorSeat": {
+      "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
+      "properties": {
+        "$type": {
+          "const": "seat"
+        },
+        "number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "partId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldAnchorSeat"
+    },
+    "WorldAnchorRecentSpeaker": {
+      "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
+      "properties": {
+        "$type": {
+          "const": "recentSpeaker"
+        },
+        "partId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldAnchorRecentSpeaker"
+    },
+    "WorldAnchor": {
+      "description": "WHERE a placeable thing rides \u2014 the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.",
       "type": [
         "object",
         "null"
       ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldAnchorEntity"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorEntityPart"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorPlacement"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorGroup"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorSeat"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorRecentSpeaker"
+        }
+      ],
+      "title": "WorldAnchor"
+    },
+    "WorldRenderLightPoint": {
+      "description": "A point light with inverse-square falloff and a soft core: intensity = weight / (1 \u002B (distance / radius)^2). No shadow march in v1 \u2014 a point light never occludes and is never occluded.",
       "properties": {
-        "direction": {
+        "$type": {
+          "const": "point"
+        },
+        "position": {
           "$ref": "#/$defs/DocumentVector3",
-          "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload).",
+          "description": "The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.",
+          "default": null
+        },
+        "radius": {
+          "description": "The falloff radius. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/WorldAnchor",
+          "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
+          "default": null
+        },
+        "color": {
+          "description": "The light\u0027s linear colour.",
+          "default": null,
+          "title": "BindableColor",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight": {
+          "description": "The strength. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightPoint"
+    },
+    "WorldRenderLightOccluder": {
+      "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.",
+      "properties": {
+        "$type": {
+          "const": "occluder"
+        },
+        "position": {
+          "$ref": "#/$defs/DocumentVector3",
+          "default": null
+        },
+        "radius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/WorldAnchor",
           "default": null
         },
         "weight": {
-          "description": "The sun\u0027s diffuse weight.",
           "type": [
             "number",
             "null"
           ],
           "default": null
-        },
-        "color": {
-          "description": "The sun\u0027s linear color \u2014 a #RRGGBB/#RRGGBBAA literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding naming a Text cell that holds one (alpha is ignored; the render path is opaque).",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
         }
       },
       "additionalProperties": false,
-      "title": "WorldRenderSun"
+      "title": "WorldRenderLightOccluder"
     },
-    "WorldRenderAmbient": {
-      "description": "The ambient (hemisphere) term. Every field is optional individually \u2014 absent resolves to SdfFrame\u0027s pinned default for that field.",
+    "WorldRenderLight": {
+      "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldRenderLightDirectional"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderLightHemisphere"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderLightRim"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderLightPoint"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderLightOccluder"
+        }
+      ],
+      "title": "WorldRenderLight"
+    },
+    "WorldRenderLightList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldRenderLight"
+      }
+    },
+    "WorldRenderCurvature": {
+      "description": "The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures at each hit. Every field is optional individually \u2014 absent resolves to the engine\u0027s pinned default. The three gains share one runtime gate: while all of them are zero the renderer skips the extra field tap the curvature normal needs, so an unauthored world pays nothing.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "base": {
-          "description": "The ambient floor.",
+        "cavity": {
+          "description": "How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.",
           "type": [
             "number",
             "null"
           ],
           "default": null
         },
-        "hemisphere": {
-          "description": "The hemisphere gradient, scaling surface normal Y.",
+        "rim": {
+          "description": "How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.",
           "type": [
             "number",
             "null"
           ],
           "default": null
         },
-        "color": {
-          "description": "The ambient linear color \u2014 BindableColor\u0027s grammar, on the same terms as Color.",
+        "ink": {
+          "description": "The ink outline\u0027s strength where the curvature magnitude spikes. Zero draws none.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "inkLow": {
+          "description": "The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "inkHigh": {
+          "description": "The curvature magnitude at which the outline saturates.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "inkColor": {
+          "description": "BindableColor\u0027s grammar: the outline colour.",
           "default": null,
           "title": "BindableColor",
           "type": [
@@ -124,51 +514,129 @@
         }
       },
       "additionalProperties": false,
-      "title": "WorldRenderAmbient"
+      "title": "WorldRenderCurvature"
     },
     "WorldRenderLighting": {
-      "description": "The scene\u0027s directional sun and ambient term \u2014 threads unchanged into the engine\u0027s existing per-frame lighting fields (SdfFrame.SunDirection/SunWeight/SunColor/AmbientBase/ AmbientHemisphere/AmbientColor). Every field, at every level, is optional individually \u2014 an absent one resolves to SdfFrame\u0027s pinned default for that field, so an unauthored section, or a partially authored one, renders exactly as a world that declares neither.",
+      "description": "The lit path\u0027s lights and stylization as world data. Absent renders the pinned sun and hemisphere an unauthored world always had; present, the list IS the lights \u2014 an authored list without a hemisphere has no ambient. Every field of every light is optional individually and resolves to the engine\u0027s pinned default for its kind.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "sun": {
-          "$ref": "#/$defs/WorldRenderSun",
-          "description": "The directional sun.",
+        "lights": {
+          "$ref": "#/$defs/WorldRenderLightList",
+          "description": "The lights, at most SdfEnvironment.MaxLights, in slot order (a render.cycle key moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
           "default": null
         },
-        "ambient": {
-          "$ref": "#/$defs/WorldRenderAmbient",
-          "description": "The ambient (hemisphere) term.",
+        "curvature": {
+          "$ref": "#/$defs/WorldRenderCurvature",
+          "description": "The stylized curvature enrichment \u2014 cavity darkening, curvature rim light, and an ink outline. Optional; absent (and all-zero) shades exactly as a world that declares none.",
           "default": null
         }
       },
       "additionalProperties": false,
       "title": "WorldRenderLighting"
     },
-    "WorldRenderSkySun": {
-      "description": "The visible sun disc \u2014 an additive highlight about the lighting sun\u0027s direction.",
+    "WorldRenderSkyStop": {
+      "description": "One gradient stop.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "discRadians": {
-          "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Controls the falloff sharpness: a smaller disc reads sharper.",
-          "type": "number"
+        "elevation": {
+          "description": "The direction\u0027s Y component this stop sits at, in [\u22121, 1].",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
-        "intensity": {
-          "description": "The disc\u0027s peak additive brightness.",
-          "type": "number"
+        "color": {
+          "description": "BindableColor\u0027s grammar: the colour at this elevation. Absent (in a cycle key) keeps the previous key\u0027s colour.",
+          "default": null,
+          "title": "BindableColor",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "required": [
-        "discRadians",
-        "intensity"
-      ],
       "additionalProperties": false,
-      "title": "WorldRenderSkySun"
+      "title": "WorldRenderSkyStop"
+    },
+    "WorldRenderSkyLayerGradient": {
+      "description": "The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.",
+      "properties": {
+        "$type": {
+          "const": "gradient"
+        },
+        "stops": {
+          "description": "Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation. A render.cycle key moves a stop by its index and may not add or remove one.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldRenderSkyStop"
+          },
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerGradient"
+    },
+    "WorldRenderSkyLayerFog": {
+      "description": "The exponential distance fog fading toward the sky gradient.",
+      "properties": {
+        "$type": {
+          "const": "fog"
+        },
+        "density": {
+          "description": "The density per world unit. Absent is the pinned density.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerFog"
+    },
+    "WorldRenderSkyLayerSunDisc": {
+      "description": "The visible sun disc \u2014 an additive highlight about one directional light\u0027s direction.",
+      "properties": {
+        "$type": {
+          "const": "sunDisc"
+        },
+        "light": {
+          "description": "The Lights slot of a directional light. Absent is the shadow light, or the first directional when none shadows.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "radius": {
+          "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "intensity": {
+          "description": "The peak additive brightness. Absent is zero, which draws nothing.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerSunDisc"
     },
     "WorldRenderSkyTwinkle": {
       "description": "Scintillation: a hash-chosen share of the stars dip and recover on the simulation clock, each at its own harmonic and phase of one authored rate, so no two twinkle in step. Presentation-only, keyed on the tick.",
@@ -179,43 +647,61 @@
       "properties": {
         "share": {
           "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "depth": {
-          "description": "How far a twinkling star dips below its steady brightness, in [0, 1]: 0 holds steady, 1 dips to black.",
-          "type": "number"
+          "description": "How far a twinkling star dips below its steady brightness, in [0, 1].",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "rate": {
-          "description": "The fundamental scintillation rate in hertz; each star twinkles at a small harmonic of it.",
-          "type": "number"
+          "description": "The fundamental scintillation rate in hertz.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         }
       },
-      "required": [
-        "share",
-        "depth",
-        "rate"
-      ],
       "additionalProperties": false,
       "title": "WorldRenderSkyTwinkle"
     },
-    "WorldRenderSkyStars": {
-      "description": "The procedural star field: a deterministic per-cell hash over an octahedral sky projection. No texture, no session state \u2014 the identical density/seed always draws the identical field.",
-      "type": [
-        "object",
-        "null"
-      ],
+    "WorldRenderSkyLayerStars": {
+      "description": "The procedural star field: a deterministic per-cell hash over an octahedral sky projection.",
       "properties": {
+        "$type": {
+          "const": "stars"
+        },
         "density": {
-          "description": "The star grid\u0027s cell count per octahedral axis. A higher value packs more, smaller stars.",
-          "type": "number"
+          "description": "The star grid\u0027s cell count per octahedral axis. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "brightness": {
-          "description": "The peak per-star brightness.",
-          "type": "number"
+          "description": "The peak per-star brightness. Absent is zero, which draws nothing.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "seed": {
-          "description": "The hash seed folded into every cell \u2014 a different seed reshuffles the field.",
-          "type": "integer"
+          "description": "The hash seed folded into every cell.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
         },
         "twinkle": {
           "$ref": "#/$defs/WorldRenderSkyTwinkle",
@@ -223,13 +709,8 @@
           "default": null
         }
       },
-      "required": [
-        "density",
-        "brightness",
-        "seed"
-      ],
       "additionalProperties": false,
-      "title": "WorldRenderSkyStars"
+      "title": "WorldRenderSkyLayerStars"
     },
     "DocumentVector2": {
       "title": "DocumentVector2",
@@ -249,31 +730,46 @@
         }
       ]
     },
-    "WorldRenderSkyClouds": {
-      "description": "The procedural cloud layer: a deterministic hashed-lattice noise (warped, four octaves) on a plane above the camera, thresholded by coverage, drawn over the gradient, sun disc and stars and fading into the horizon. No texture, no session state \u2014 the identical settings and seed always draw the identical layer at the identical tick.",
-      "type": [
-        "object",
-        "null"
-      ],
+    "WorldRenderSkyLayerClouds": {
+      "description": "The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.",
       "properties": {
+        "$type": {
+          "const": "clouds"
+        },
         "coverage": {
-          "description": "The fraction of the sky the layer covers, in [0, 1]. Zero draws none.",
-          "type": "number"
+          "description": "The fraction of the sky the layer covers, in [0, 1]. Absent is zero.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "softness": {
-          "description": "The width of a cloud\u0027s edge, in (0, 1]: small is hard-edged cumulus, large is a diffuse haze.",
-          "type": "number"
+          "description": "The width of a cloud\u0027s edge, in (0, 1]. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "scale": {
-          "description": "The size of one cloud cell in layer units (the layer sits at unit height, so a scale of 1 spans about 45\u00B0 overhead). Larger is broader clouds.",
-          "type": "number"
+          "description": "The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "seed": {
-          "description": "The hash seed folded into the lattice \u2014 a different seed reshapes the layer.",
-          "type": "integer"
+          "description": "The hash seed folded into the lattice.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
         },
         "color": {
-          "description": "BindableColor\u0027s grammar: the cloud colour. Optional; absent is white.",
+          "description": "BindableColor\u0027s grammar: the cloud colour. Absent is white.",
           "default": null,
           "title": "BindableColor",
           "type": [
@@ -283,11 +779,11 @@
         },
         "drift": {
           "$ref": "#/$defs/DocumentVector2",
-          "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Optional; absent holds still.",
+          "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.",
           "default": null
         },
         "spin": {
-          "description": "The layer\u0027s rotation about the zenith in radians per second \u2014 the planetary-scale turning a rotating frame gives a broad flow; positive is counter-clockwise seen from below. Optional; absent is none.",
+          "description": "The layer\u0027s rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.",
           "type": [
             "number",
             "null"
@@ -295,7 +791,7 @@
           "default": null
         },
         "curl": {
-          "description": "The Coriolis twist: how far, in radians, the layer is wound about the zenith at 45\u00B0 elevation, the winding falling off toward the horizon and the zenith so bands spiral in rather than shear apart. Positive winds counter-clockwise. Optional; absent is none.",
+          "description": "The Coriolis twist in radians at 45\u00B0 elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.",
           "type": [
             "number",
             "null"
@@ -304,74 +800,60 @@
         },
         "shear": {
           "$ref": "#/$defs/DocumentVector2",
-          "description": "The wind of the SHAPING field relative to the cloud field, in layer units per second: the two slide past each other, so clouds boil and re-form as they drift rather than glide as a fixed picture. Optional; absent holds their shapes.",
+          "description": "The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.",
           "default": null
         }
       },
-      "required": [
-        "coverage",
-        "softness",
-        "scale",
-        "seed"
-      ],
       "additionalProperties": false,
-      "title": "WorldRenderSkyClouds"
+      "title": "WorldRenderSkyLayerClouds"
+    },
+    "WorldRenderSkyLayer": {
+      "description": "One sky layer. The $type string is the JSON discriminator.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerGradient"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerFog"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerSunDisc"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerStars"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerClouds"
+        }
+      ],
+      "title": "WorldRenderSkyLayer"
+    },
+    "WorldRenderSkyLayerList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldRenderSkyLayer"
+      }
     },
     "WorldRenderSky": {
-      "description": "The procedural sky \u2014 a three-stop gradient, sun disc, star field, and distance fog, authored as world data. Absent is a hard gate: every existing world renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed, until it authors one.",
+      "description": "The procedural sky as an ordered stack of layers. Absent is a hard gate: the world renders the pinned two-stop gradient and fog density, as before this section existed. The layers composite in a fixed order \u2014 gradient, stars, sun disc, clouds \u2014 whatever order they are authored in; fog is read every frame on its own. A layer kind appears at most once.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "zenith": {
-          "description": "BindableColor\u0027s grammar: the straight-up sky color. Optional; absent takes the pinned zenith.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "horizon": {
-          "description": "BindableColor\u0027s grammar: the horizon-band color (the gradient\u0027s middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "ground": {
-          "description": "BindableColor\u0027s grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "fogDensity": {
-          "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "sun": {
-          "$ref": "#/$defs/WorldRenderSkySun",
-          "description": "The visible sun disc, drawn about the lighting sun\u0027s direction. Optional; absent draws no disc.",
-          "default": null
-        },
-        "stars": {
-          "$ref": "#/$defs/WorldRenderSkyStars",
-          "description": "The procedural star field. Optional; absent draws no stars.",
-          "default": null
-        },
-        "clouds": {
-          "$ref": "#/$defs/WorldRenderSkyClouds",
-          "description": "The procedural cloud layer. Optional; absent draws no clouds.",
+        "layers": {
+          "$ref": "#/$defs/WorldRenderSkyLayerList",
+          "description": "The layers.",
           "default": null
         }
       },
@@ -410,60 +892,24 @@
       "additionalProperties": false,
       "title": "WorldScreenSourceTestPattern"
     },
-    "WorldMachineCable": {
-      "description": "One machine\u0027s cable-port declaration \u2014 the machine-tier home of cable linking. A cable is the SET of declared machine sources naming the same cable name, derived by MachineCableGroups; no port ever points at another port, so reciprocity holds by construction and a one-port cable is a validation refusal rather than a dangling half-pair.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "name": {
-          "description": "The cable\u0027s stable kebab-case name, shared by every plugged port.",
-          "type": "string"
-        },
-        "position": {
-          "description": "This machine\u0027s 0-based place in cable order \u2014 contiguous across the cable\u0027s ports (validated), and what decides the linking engine\u0027s deterministic player order.",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "name",
-        "position"
-      ],
-      "additionalProperties": false,
-      "title": "WorldMachineCable"
-    },
     "WorldScreenSourceMachine": {
-      "description": "An arbitrary deterministic machine\u0027s unresampled framebuffer \u2014 resolved against a registered IScreenMachineEngine by Engine id. The world never names a concrete machine: the engine owns its Options vocabulary (a GamingBrick reads a dmg/cgb/agb model \u002B a dmgspeed pin).",
+      "description": "A named machine output. The source is a consumer reference only: the named machine is prepared, advanced, and retired by the world\u0027s machine host independently of every display that samples it.",
       "properties": {
         "$type": {
           "const": "machine"
         },
-        "engine": {
-          "description": "The screen-machine engine id (e.g. gaming-brick).",
+        "instance": {
+          "description": "The declared Name instance.",
           "type": "string"
         },
-        "contentPath": {
-          "description": "The content the machine boots, resolved against the document\u0027s own directory: a ROM image, or \u2014 when the path ends in CartridgeDocumentSuffix \u2014 an authored puck.cartridge.v1 document the host compiles through the engine\u0027s own forge at bind (Puck.World.WorldScreenMachineEngines.CartridgeCompilers), booting the compiled bytes exactly as it boots a ROM file; the source\u0027s canonical hash and the compiled image\u0027s hash ride the slot beside the file\u0027s own content pin, and screen.state echoes them. A cartridge path on an engine that compiles none refuses at validation by name; a document the forge refuses faults the bind with the forge\u0027s own message. Empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
+        "output": {
+          "description": "The provider video output name exposed by that instance.",
           "type": "string"
-        },
-        "options": {
-          "description": "The engine-specific options string, or null for the engine\u0027s defaults.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "cable": {
-          "$ref": "#/$defs/WorldMachineCable",
-          "description": "This machine\u0027s cable port (see WorldMachineCable), or null for an unlinked machine. Legal only on a declared screens row\u0027s own source \u2014 a magazine entry or a placement face\u0027s source is refused one (validated), because a cable is a standing physical connection of the machine that owns the slot, not of whatever content happens to rotate through it. Omitted from the wire when null, so every machine source authored before cables existed round-trips unchanged.",
-          "default": null
         }
       },
       "required": [
-        "engine",
-        "contentPath",
-        "options"
+        "instance",
+        "output"
       ],
       "additionalProperties": false,
       "title": "WorldScreenSourceMachine"
@@ -804,7 +1250,7 @@
       "title": "WorldScreenProjection"
     },
     "WorldScreenSourceSession": {
-      "description": "A live rendered view of another world, resolved through a destinations row (docs/vision.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
+      "description": "A live rendered view of another world, resolved through a destinations row (docs/architecture/worlds.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
       "properties": {
         "$type": {
           "const": "session"
@@ -981,142 +1427,6 @@
       ],
       "additionalProperties": false,
       "title": "WorldSolid"
-    },
-    "WorldAnchorEntity": {
-      "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
-      "properties": {
-        "$type": {
-          "const": "entity"
-        },
-        "index": {
-          "description": "The 0-based entity index, bounded by the world\u0027s authored population capacity.",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "index"
-      ],
-      "additionalProperties": false,
-      "title": "WorldAnchorEntity"
-    },
-    "WorldAnchorEntityPart": {
-      "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
-      "properties": {
-        "$type": {
-          "const": "entityPart"
-        },
-        "index": {
-          "description": "The 0-based entity index.",
-          "type": "integer"
-        },
-        "partId": {
-          "description": "The ordinal, case-sensitive part identifier published by the entity\u0027s active look.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "index",
-        "partId"
-      ],
-      "additionalProperties": false,
-      "title": "WorldAnchorEntityPart"
-    },
-    "WorldAnchorPlacement": {
-      "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
-      "properties": {
-        "$type": {
-          "const": "placement"
-        },
-        "placementId": {
-          "description": "The referenced Id (must resolve).",
-          "type": "string"
-        },
-        "shapeId": {
-          "description": "The referenced creation\u0027s ShapeDocument.Id to ride, or null for the placement\u0027s own stamped root transform.",
-          "type": [
-            "integer",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "placementId",
-        "shapeId"
-      ],
-      "additionalProperties": false,
-      "title": "WorldAnchorPlacement"
-    },
-    "Int32List": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": "integer"
-      }
-    },
-    "WorldAnchorGroup": {
-      "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
-      "properties": {
-        "$type": {
-          "const": "group"
-        },
-        "indices": {
-          "$ref": "#/$defs/Int32List",
-          "description": "The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated against the authored population capacity."
-        },
-        "smoothRate": {
-          "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "indices",
-        "smoothRate"
-      ],
-      "additionalProperties": false,
-      "title": "WorldAnchorGroup"
-    },
-    "WorldAnchorSeat": {
-      "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
-      "properties": {
-        "$type": {
-          "const": "seat"
-        },
-        "number": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "default": null
-        },
-        "partId": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldAnchorSeat"
-    },
-    "WorldAnchorRecentSpeaker": {
-      "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
-      "properties": {
-        "$type": {
-          "const": "recentSpeaker"
-        },
-        "partId": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldAnchorRecentSpeaker"
     },
     "WorldCameraSubjectReference": {
       "description": "The program\u0027s externally supplied reference pose \u2014 a named camera\u0027s own WorldAnchor, or a seat rig\u0027s currently perceived body (the seat\u0027s own avatar, or a possessed camera body). Resolved outside the program and handed to it as the SdfAnchor the compiled rig receives every frame.",
@@ -1309,7 +1619,7 @@
       "title": "WorldCameraProgramOpLookAt"
     },
     "WorldCameraProgramOpOrbit": {
-      "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like Fov\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
+      "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like FieldOfView\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
       "properties": {
         "$type": {
           "const": "orbit"
@@ -1356,7 +1666,7 @@
       "title": "WorldCameraProgramOpOrbit"
     },
     "WorldCameraProgramOpPath": {
-      "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B Fov; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
+      "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B FieldOfView; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
       "properties": {
         "$type": {
           "const": "path"
@@ -1441,11 +1751,11 @@
       "additionalProperties": false,
       "title": "WorldCameraProgramOpClampPitch"
     },
-    "WorldCameraProgramOpFov": {
+    "WorldCameraProgramOpFieldOfView": {
       "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
       "properties": {
         "$type": {
-          "const": "fov"
+          "const": "fieldOfView"
         },
         "fieldOfViewRadians": {
           "description": "The field of view.",
@@ -1467,7 +1777,7 @@
         "fieldOfViewRadians"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpFov"
+      "title": "WorldCameraProgramOpFieldOfView"
     },
     "WorldCameraProgramOpBlend": {
       "description": "Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view \u2014 the whole document\u0027s camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.",
@@ -1508,7 +1818,7 @@
       "title": "WorldCameraProgramOpBlend"
     },
     "WorldCameraSelectCase": {
-      "description": "One Select candidate: the program named by Program wins when the op\u0027s key rounds to Value.",
+      "description": "One SelectProgram candidate: the program named by Program wins when the op\u0027s key rounds to Value.",
       "type": [
         "object",
         "null"
@@ -1536,11 +1846,11 @@
         "$ref": "#/$defs/WorldCameraSelectCase"
       }
     },
-    "WorldCameraProgramOpSelect": {
+    "WorldCameraProgramOpSelectProgram": {
       "description": "Evaluates exactly one of several other named programs, chosen by a live key \u2014 the state-driven counterpart of Blend\u0027s two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program\u0027s eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.",
       "properties": {
         "$type": {
-          "const": "select"
+          "const": "selectProgram"
         },
         "key": {
           "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
@@ -1572,7 +1882,7 @@
         "default"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpSelect"
+      "title": "WorldCameraProgramOpSelectProgram"
     },
     "WorldCameraProgramOp": {
       "description": "One instruction in an authored camera program\u0027s ordered op list \u2014 the presentation-side pose algebra bodyMotionPrograms established for sim-side movement, promoted to cameras: an authored rig is an ordered list of these trivial ops rather than a bespoke closed motion/aim union, so a new camera behavior is authored data, never new engine code. This is the AUTHORING vocabulary only: Puck.World.Client.WorldCameraRigCompiler translates it to Puck.SdfVm.Views.SdfCameraOp and resolves each frame\u0027s bindings and subject poses, and Puck.SdfVm.Views.SdfCameraProgramEvaluator \u2014 which parses no document \u2014 walks the result. Floats throughout; presentation carries no fixed-point burden.",
@@ -1606,13 +1916,13 @@
           "$ref": "#/$defs/WorldCameraProgramOpClampPitch"
         },
         {
-          "$ref": "#/$defs/WorldCameraProgramOpFov"
+          "$ref": "#/$defs/WorldCameraProgramOpFieldOfView"
         },
         {
           "$ref": "#/$defs/WorldCameraProgramOpBlend"
         },
         {
-          "$ref": "#/$defs/WorldCameraProgramOpSelect"
+          "$ref": "#/$defs/WorldCameraProgramOpSelectProgram"
         }
       ],
       "title": "WorldCameraProgramOp"
@@ -1717,7 +2027,32 @@
       "additionalProperties": false,
       "title": "WorldCameraProgramOpClampPitchBare"
     },
-    "WorldCameraProgramOpFovNullable": {
+    "WorldCameraProgramOpDynamicsNullable": {
+      "description": "Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "row": {
+          "description": "The referenced dynamics row name; must resolve.",
+          "type": "string"
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpDynamicsBare"
+    },
+    "WorldCameraProgramOpFieldOfViewNullable": {
       "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
       "type": [
         "object",
@@ -1744,7 +2079,7 @@
         "fieldOfViewRadians"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpFovBare"
+      "title": "WorldCameraProgramOpFieldOfViewBare"
     },
     "WorldCameraProgramOpLookAtNullable": {
       "description": "Sets the aim target.",
@@ -1822,7 +2157,7 @@
       "title": "WorldCameraProgramOpOffsetBare"
     },
     "WorldCameraProgramOpOrbitNullable": {
-      "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like Fov\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
+      "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like FieldOfView\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
       "type": [
         "object",
         "null"
@@ -1870,7 +2205,7 @@
       "title": "WorldCameraProgramOpOrbitBare"
     },
     "WorldCameraProgramOpPathNullable": {
-      "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B Fov; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
+      "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B FieldOfView; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
       "type": [
         "object",
         "null"
@@ -1903,32 +2238,7 @@
       "additionalProperties": false,
       "title": "WorldCameraProgramOpPathBare"
     },
-    "WorldCameraProgramOpDynamicsNullable": {
-      "description": "Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "row": {
-          "description": "The referenced dynamics row name; must resolve.",
-          "type": "string"
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "row"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpDynamicsBare"
-    },
-    "WorldCameraProgramOpSelectNullable": {
+    "WorldCameraProgramOpSelectProgramNullable": {
       "description": "Evaluates exactly one of several other named programs, chosen by a live key \u2014 the state-driven counterpart of Blend\u0027s two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program\u0027s eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.",
       "type": [
         "object",
@@ -1965,7 +2275,7 @@
         "default"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpSelectBare"
+      "title": "WorldCameraProgramOpSelectProgramBare"
     },
     "WorldCameraProgram": {
       "description": "An authored camera program \u2014 the ordered op list a rig resolves through every frame.",
@@ -1995,9 +2305,13 @@
           "$ref": "#/$defs/WorldCameraProgramOpClampPitchNullable",
           "description": "Gets the program\u0027s ClampPitch op, or null."
         },
+        "dynamicsOp": {
+          "$ref": "#/$defs/WorldCameraProgramOpDynamicsNullable",
+          "description": "Gets the program\u0027s Dynamics op, or null."
+        },
         "fovOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpFovNullable",
-          "description": "Gets the program\u0027s Fov op, or null."
+          "$ref": "#/$defs/WorldCameraProgramOpFieldOfViewNullable",
+          "description": "Gets the program\u0027s FieldOfView op, or null."
         },
         "lookAtOp": {
           "$ref": "#/$defs/WorldCameraProgramOpLookAtNullable",
@@ -2015,13 +2329,9 @@
           "$ref": "#/$defs/WorldCameraProgramOpPathNullable",
           "description": "Gets the program\u0027s Path op, or null."
         },
-        "dynamicsOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpDynamicsNullable",
-          "description": "Gets the program\u0027s Dynamics op, or null."
-        },
         "selectOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpSelectNullable",
-          "description": "Gets the program\u0027s Select op, or null."
+          "$ref": "#/$defs/WorldCameraProgramOpSelectProgramNullable",
+          "description": "Gets the program\u0027s SelectProgram op, or null."
         }
       },
       "required": [
@@ -2032,7 +2342,7 @@
       "additionalProperties": false,
       "title": "WorldCameraProgram"
     },
-    "WorldAnchor": {
+    "WorldAnchorNonNullable": {
       "description": "WHERE a placeable thing rides \u2014 the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.",
       "type": "object",
       "required": [
@@ -5462,7 +5772,7 @@
       "title": "ActionEffectTransformState"
     },
     "ActionEffectCountdownState": {
-      "description": "Decrements a state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. The destination must be a kind=Int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
+      "description": "Decrements a state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. The destination must be a kind=Int min=0 row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
       "properties": {
         "$type": {
           "const": "countdownState"
@@ -5588,6 +5898,79 @@
       ],
       "additionalProperties": false,
       "title": "ActionEffectTransaction"
+    },
+    "ActionPredicateNonNullable": {
+      "description": "A data-composable gate over named state. A rule fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the ones this library owns, and a document project appends its own derived arms through a RuleVocabulary (see ExtendJson) rather than by editing this list.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ActionPredicateCompareState"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateCompareValue"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateAll"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateAny"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateNot"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateTimerElapsed"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateHeld"
+        }
+      ],
+      "title": "ActionPredicate"
+    },
+    "ActionEffectIf": {
+      "description": "Branches on a predicate: fires Then when it holds, else Else when present. Both branches read the frame at the effect\u0027s own position, so an earlier effect\u0027s same-firing write is visible to the condition exactly as it is to a later effect\u0027s own operand. A condition that fails to evaluate (an arithmetic fault, a missing table key) runs neither branch and is reported the same way a failing top-level effect is; a false condition with no branch that fires is not a failure. An effect inside a branch that itself refuses is refused on the same terms as a top-level effect \u2014 a branch is not a transaction, though a Transaction may appear inside one when this if is not itself inside a transaction.",
+      "properties": {
+        "$type": {
+          "const": "if"
+        },
+        "condition": {
+          "$ref": "#/$defs/ActionPredicateNonNullable",
+          "description": "The gate."
+        },
+        "then": {
+          "description": "The branch fired when Condition holds.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActionEffect"
+          }
+        },
+        "else": {
+          "description": "The branch fired when it does not, or null to fire nothing.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ActionEffect"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "condition",
+        "then"
+      ],
+      "additionalProperties": false,
+      "title": "ActionEffectIf"
     },
     "WorldEffectSetVerticalVelocity": {
       "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge).",
@@ -7267,6 +7650,9 @@
           "$ref": "#/$defs/ActionEffectTransaction"
         },
         {
+          "$ref": "#/$defs/ActionEffectIf"
+        },
+        {
           "$ref": "#/$defs/WorldEffectSetVerticalVelocity"
         },
         {
@@ -7620,18 +8006,23 @@
       "title": "WorldSpeakerSourceNone"
     },
     "WorldSpeakerSourceMachine": {
-      "description": "A live screen-hosted machine\u0027s audio, identified by screen slot \u2014 screen index is machine identity for screen-hosted machines. The validator checks only that the screen row exists, never that its declared source is $type machine (runtime inserts overlay declared sources); no live machine at drain time is silence plus a state echo, never a reject.",
+      "description": "A named machine audio output. The source is a consumer reference only: the named machine host owns preparation, advancement, and the single drain shared by every speaker feed that names this output.",
       "properties": {
         "$type": {
           "const": "machine"
         },
-        "screenIndex": {
-          "description": "The declared Index whose hosted machine feeds this source.",
-          "type": "integer"
+        "instance": {
+          "description": "The declared Name instance.",
+          "type": "string"
+        },
+        "output": {
+          "description": "The provider audio output name exposed by that instance.",
+          "type": "string"
         }
       },
       "required": [
-        "screenIndex"
+        "instance",
+        "output"
       ],
       "additionalProperties": false,
       "title": "WorldSpeakerSourceMachine"
@@ -7757,26 +8148,35 @@
       ]
     },
     "StateAdvance": {
-      "description": "A StateRow\u0027s continuous accumulation trait: the row\u0027s stored cell is a base value, and the read value advances with elapsed ticks at an exact per-tick rational rate from the tick it was last explicitly set (EpochTick). Used for regen, fractional accumulation, a day/night clock \u2014 anything that should move on its own between observations.",
+      "description": "A StateRow\u0027s continuous accumulation trait: the row\u0027s stored cell is a base value, and the read value advances with elapsed engine ticks at an exact per-second rational rate from the engine tick it was last explicitly set (EpochEngineTick). Used for regen, fractional accumulation, a day/night clock \u2014 anything that should move on its own between observations.",
       "type": "object",
       "properties": {
-        "rateNumerator": {
-          "description": "The per-tick rate\u0027s signed numerator, in the row\u0027s own displayed unit (see this type\u0027s remarks). Negative accumulates downward (decay); zero is declared but inert.",
+        "perSecondNumerator": {
+          "description": "The per-second rate\u0027s signed numerator, in the row\u0027s own displayed unit (see this type\u0027s remarks). Negative accumulates downward (decay); zero is declared but inert.",
           "type": "integer"
         },
-        "rateDenominator": {
-          "description": "The per-tick rate\u0027s denominator. Refused at zero or below.",
+        "perSecondDenominator": {
+          "description": "The per-second rate\u0027s denominator. Refused at zero or below.",
           "type": "integer"
-        },
-        "epochTick": {
-          "description": "The server tick the rate starts accumulating from \u2014 the tick the row\u0027s base value was last explicitly set, or the loaded document\u0027s own authored value for a row never set since. A negative value is refused; in practice this can only be violated by an authored boot document, since every live write rebases to the applying tick before validation sees it.",
-          "type": "integer",
-          "default": 0
         }
       },
       "required": [
-        "rateNumerator",
-        "rateDenominator"
+        "perSecondNumerator",
+        "perSecondDenominator"
+      ],
+      "additionalProperties": false
+    },
+    "StateDynamics": {
+      "description": "A StateCell/StateRow\u0027s second-order easing trait: the STORED value stays the TRUTH (what rules, gates, and comparands read), while an eased read (StateReader) computes a second-order follower\u0027s current sample from the carrying cell\u0027s own Y0/ V0 at its EpochTick, chasing the stored value as its target \u2014 the closed-form counterpart to StateAdvance\u0027s linear accumulation, no per-tick work either. An explicit write REBASES: the cell\u0027s clock Y0/V0 become the eased value and velocity computed AT the write\u0027s own tick, and EpochTick becomes that tick \u2014 the same rebase discipline StateAdvance\u0027s own write rule follows, so a retune never jumps.",
+      "type": "object",
+      "properties": {
+        "row": {
+          "description": "The referenced dynamics row name; must resolve.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "row"
       ],
       "additionalProperties": false
     },
@@ -7795,7 +8195,7 @@
       "title": "CycleOutput"
     },
     "StateCycle": {
-      "description": "A row\u0027s or cell\u0027s tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice\u0027s reflection group \u2014 Puck.Maths.SymmetryWord, the lattice\u0027s own thirty-step cycle when no Word is authored \u2014 raised to Power once per step. The generator\u0027s order is the loop\u0027s period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.",
+      "description": "A row\u0027s or cell\u0027s tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice\u0027s reflection group \u2014 Puck.Maths.SymmetryWord, the lattice\u0027s own thirty-step cycle when no Word is authored \u2014 raised to Power once per step. The generator\u0027s order is the loop\u0027s period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute for a fixed epoch/substep pair, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.",
       "type": "object",
       "properties": {
         "word": {
@@ -7823,16 +8223,27 @@
           "description": "The server ticks one step lasts; refused at zero or below.",
           "type": "integer",
           "default": 1
-        },
+        }
+      },
+      "additionalProperties": false
+    },
+    "ShapeNonNullable2": {
+      "type": "object",
+      "properties": {
         "epochTick": {
-          "description": "The server tick the step count is measured from; a tick before it reads as step zero. A negative value is refused.",
-          "type": "integer",
-          "default": 0
+          "type": "integer"
+        },
+        "epochEngineTick": {
+          "type": "integer"
+        },
+        "y0": {
+          "type": "string"
+        },
+        "v0": {
+          "type": "string"
         },
         "substepTicks": {
-          "description": "Elapsed ticks already accumulated toward the next step at EpochTick; must be non-negative and less than TicksPerStep.",
-          "type": "integer",
-          "default": 0
+          "type": "integer"
         }
       },
       "additionalProperties": false

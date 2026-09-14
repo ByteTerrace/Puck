@@ -7,13 +7,13 @@ namespace Puck.World.Server;
 
 /// <summary>Chooses the bounded, deterministic solid-placement subset shared by adjacency contact and rendering.</summary>
 public static class WorldAdjacencyGeometry {
-    /// <summary>The one per-band budget on neighbour SOLIDS both authoritative contact and presentation apply.</summary>
-    public const int MaximumPlacementsPerBand = 8;
     /// <summary>The per-band budget on the neighbour BODIES a border renders — the moving half of the same
     /// reservation <see cref="MaximumPlacementsPerBand"/> bounds for the static half. A capacity constant, not a
     /// world-tunable: it sizes the per-band instance reservation the render composition freezes at construction, and
     /// every world wants the same one.</summary>
     public const int MaximumEntitiesPerBand = 8;
+    /// <summary>The one per-band budget on neighbour SOLIDS both authoritative contact and presentation apply.</summary>
+    public const int MaximumPlacementsPerBand = 8;
 
     /// <summary>One deterministic selection result.</summary>
     public readonly record struct Selection(IReadOnlyList<WorldPlacement> Placements, bool Truncated);
@@ -30,7 +30,10 @@ public static class WorldAdjacencyGeometry {
             }
         }
 
-        var position = WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement);
+        var position = WorldDefinitionRows.ResolvedPosition(
+            definition: definition,
+            placement: placement
+        );
         var reach = (CreationGeometry.Reach(document: creation.Document) * placement.Scale);
 
         seamDistance = (MathF.Abs(x: Vector3.Dot(
@@ -127,7 +130,10 @@ public static class WorldAdjacencyGeometry {
             // (contact and rendering) — a Parent-carrying placement crossing an adjacency band must cross it at its
             // composed frame, never its authored parent-relative one.
             var placement = candidates[index].Placement;
-            var resolved = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+            var resolved = WorldDefinitionRows.ResolvedFrame(
+                definition: definition,
+                placement: placement
+            );
 
             selected.Add(item: (placement with {
                 Position = resolved.Position,

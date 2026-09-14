@@ -1,5 +1,5 @@
 {
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "documentId": "music-conditional-layer-and-embellishment-canary",
   "bodies": {
     "localSeats": 1
@@ -52,7 +52,7 @@
   "bodyMotionPrograms": [
     {
       "name": "grounded",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
@@ -128,7 +128,7 @@
     },
     "seatRig": {
       "name": "seatChase",
-      "version": "puck.camera.v1",
+      "version": "puck.camera.program.v1",
       "operations": [
         {
           "$type": "orbit",
@@ -154,7 +154,7 @@
           "worldAxes": false
         },
         {
-          "$type": "fov",
+          "$type": "fieldOfView",
           "fieldOfViewRadians": 0.9599311
         }
       ]

@@ -75,8 +75,8 @@ public sealed partial class WorldReplayTape {
     private const string Extension = ".puckreplay";
 
     private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost> m_addonHostFactory;
-    private readonly IReadOnlyList<IScreenMachineEngine> m_engines;
-    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
+    private readonly IReadOnlyList<IMachineEngine> m_engines;
+    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldServer m_liveServer;
     private readonly WorldOwnedWorlds m_profiles;
     private readonly LoopbackTransport m_transport;
@@ -137,7 +137,7 @@ public sealed partial class WorldReplayTape {
     /// host that never reaches <see cref="WorldServer.AttachAddons"/> re-drives with no guests and produces a MATCH
     /// that proves nothing.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldReplayTape(WorldServer liveServer, WorldOwnedWorlds profiles, LoopbackTransport transport, IEnumerable<IScreenMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
+    public WorldReplayTape(WorldServer liveServer, WorldOwnedWorlds profiles, LoopbackTransport transport, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
         ArgumentNullException.ThrowIfNull(argument: liveServer);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: transport);
@@ -187,7 +187,8 @@ public sealed partial class WorldReplayTape {
             addonHostFactory: m_addonHostFactory,
             engines: m_engines,
             machineHostFactory: m_machineHostFactory,
-            profiles: m_profiles
+            profiles: m_profiles,
+            documents: m_liveServer.RebuildDocuments
         );
 
         return new WorldReplayVerdict(
@@ -512,8 +513,8 @@ public sealed partial class WorldReplayTape {
                 m_liveServer.Output.Narrate(
                     channel: "replay.tape",
                     text: $"[replay.tape: '{name}' discarded {discardedAuthorityCount} pending authority entr{((discardedAuthorityCount == 1)
-                        ? "y"
-                        : "ies")} and {discardedIntentCount} pending intent submission(s) that never closed onto a tick — recording them would have claimed they ran on a tick they did not]"
+                    ? "y"
+                    : "ies")} and {discardedIntentCount} pending intent submission(s) that never closed onto a tick — recording them would have claimed they ran on a tick they did not]"
                 );
             }
         }
@@ -631,7 +632,7 @@ public sealed partial class WorldReplayTape {
         }
 
         if (m_liveServer.AnyScreenOpEverApplied) {
-            refusal = "a screen op (insert/eject/select/options/link/unlink) has already applied this session — screen ops are not document mutations, so the recording's own definition snapshot cannot capture whichever one already landed, and offline replay reconstructs a FRESH WorldMachineHost from that snapshot alone; a pre-record insert/select can leave the live session running a machine replay never even creates, and the population hash covers no machine state to catch it; record from a fresh boot, before any screen op applies";
+            refusal = "a screen or machine operation has already reached runtime execution this session; the current replay format cannot reconstruct its prior hardware state from the definition alone; record from a fresh boot before any operation executes";
             return false;
         }
 
@@ -652,6 +653,7 @@ public sealed partial class WorldReplayTape {
 
         return true;
     }
+
     // Attaches every capture tap over fresh per-tick accumulators — the record half of arming, shared by
     // TryBeginRecording and a fork's handover (which arrives with its prefix already in m_ticks/m_liveHashes).
     private void AttachTaps() {
@@ -691,7 +693,11 @@ public sealed partial class WorldReplayTape {
             // the identical FIFO order — both ultimately driven by the one m_pending queue every mutation kind
             // shares — so the Nth open entry always answers the Nth outcome, even across several mutations pending
             // in the same tick.
-            if (m_openMutationEntryIndices.TryDequeue(result: out var index) && (index < m_currentAuthority.Count) && (m_currentAuthority[index] is WorldReplayEntry.Mutation pending)) {
+            if (
+                m_openMutationEntryIndices.TryDequeue(result: out var index) &&
+                (index < m_currentAuthority.Count) &&
+                (m_currentAuthority[index] is WorldReplayEntry.Mutation pending)
+            ) {
                 m_currentAuthority[index] = (pending with { Outcome = applied });
             }
         };
@@ -735,6 +741,7 @@ public sealed partial class WorldReplayTape {
             }
         };
     }
+
     /// <summary>Loads a saved recording, rehydrates a fresh world from it, re-drives the recorded server-input stream,
     /// and compares the replayed tail hash against the recorded one — the offline verification, run synchronously so the
     /// verdict is readable the instant it returns. Never touches the live session.</summary>

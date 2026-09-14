@@ -855,21 +855,46 @@ public readonly record struct CompiledDiscreteMeasure64 {
                 ? ulong.MaxValue
                 : ((offsetEstimate <= 0.0)
                     ? 0UL
-                    : ((ulong)offsetEstimate)));
+                    : ((ulong)offsetEstimate)
+            ));
             var low = center;
             var top = center;
             var step = 1UL;
 
-            while ((low > 0UL) && (Multiply(left: (lower + low), right: (lower + low)) > this)) {
-                low = ((low > step) ? (low - step) : 0UL);
-                step = ((step < (1UL << 62)) ? (step << 1) : step);
+            while (
+                (low > 0UL) &&
+                (Multiply(
+                left: (lower + low),
+                right: (lower + low)
+            ) > this)
+            ) {
+                low = ((low > step)
+                    ? (low - step)
+                    : 0UL
+                );
+                step = ((step < (1UL << 62))
+                    ? (step << 1)
+                    : step
+                );
             }
 
             step = 1UL;
 
-            while ((top < ulong.MaxValue) && (Multiply(left: (lower + top), right: (lower + top)) <= this)) {
-                top = ((top < (ulong.MaxValue - step)) ? (top + step) : ulong.MaxValue);
-                step = ((step < (1UL << 62)) ? (step << 1) : step);
+            while (
+                (top < ulong.MaxValue) &&
+                (Multiply(
+                left: (lower + top),
+                right: (lower + top)
+            ) <= this)
+            ) {
+                top = ((top < (ulong.MaxValue - step))
+                    ? (top + step)
+                    : ulong.MaxValue
+                );
+                step = ((step < (1UL << 62))
+                    ? (step << 1)
+                    : step
+                );
             }
 
             // Invariant: (lower + low)² ≤ value (or low is zero) and (lower + top)² > value (or top is the ceiling
@@ -877,7 +902,10 @@ public readonly record struct CompiledDiscreteMeasure64 {
             while (low < top) {
                 var middle = ((low + ((top - low) >> 1)) + 1UL);
 
-                if (Multiply(left: (lower + middle), right: (lower + middle)) <= this) {
+                if (Multiply(
+                    left: (lower + middle),
+                    right: (lower + middle)
+                ) <= this) {
                     low = middle;
                 } else {
                     top = (middle - 1UL);

@@ -13,19 +13,62 @@ namespace Puck.Vulkan;
 /// occupancy cliff). The query entry points resolve to null unless the device enabled the
 /// extension, so every method degrades to a safe no-op. Diagnostic-only.</summary>
 public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineStatisticsApi {
-    // Values verified against the Vulkan SDK 1.4 header (vulkan_core.h).
-    private const uint StructureTypePipelineInfoKhr = 1000269001;
     private const int MaxDescriptionSize = 256;
     private const uint StructureTypePipelineExecutableInfoKhr = 1000269003;
     private const uint StructureTypePipelineExecutablePropertiesKhr = 1000269002;
     private const uint StructureTypePipelineExecutableStatisticKhr = 1000269004;
+    // Values verified against the Vulkan SDK 1.4 header (vulkan_core.h).
+    private const uint StructureTypePipelineInfoKhr = 1000269001;
+
+    private readonly ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
     private struct DevicePointers {
         public delegate* unmanaged[Cdecl]<nint, VkPipelineInfoKhr*, uint*, VkPipelineExecutablePropertiesKhr*, VkResult> GetPipelineExecutableProperties;
         public delegate* unmanaged[Cdecl]<nint, VkPipelineExecutableInfoKhr*, uint*, VkPipelineExecutableStatisticKhr*, VkResult> GetPipelineExecutableStatistics;
     }
 
-    private readonly ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
+    // VkPipelineExecutableStatisticValueKHR is an 8-byte union; the format selects how the
+    // raw bits are read (0 = bool32, 1 = int64, 2 = uint64, 3 = float64).
+    private static string FormatStatisticValue(uint format, ulong rawValue) {
+        return format switch {
+            0 => ((0 != rawValue)
+            ? "true"
+            : "false"),
+            1 => ((long)rawValue).ToString(provider: CultureInfo.InvariantCulture),
+            2 => rawValue.ToString(provider: CultureInfo.InvariantCulture),
+            3 => BitConverter.Int64BitsToDouble(value: ((long)rawValue)).ToString(
+            format: "0.###",
+            provider: CultureInfo.InvariantCulture
+        ),
+            _ => rawValue.ToString(provider: CultureInfo.InvariantCulture)
+        };
+    }
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                GetPipelineExecutableProperties = ((delegate* unmanaged[Cdecl]<nint, VkPipelineInfoKhr*, uint*, VkPipelineExecutablePropertiesKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkGetPipelineExecutablePropertiesKHR"u8
+            )),
+                GetPipelineExecutableStatistics = ((delegate* unmanaged[Cdecl]<nint, VkPipelineExecutableInfoKhr*, uint*, VkPipelineExecutableStatisticKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkGetPipelineExecutableStatisticsKHR"u8
+            )),
+            }
+        );
+    }
+    private static string ReadFixedUtf8(byte* namePointer) {
+        var span = new ReadOnlySpan<byte>(
+            length: MaxDescriptionSize,
+            pointer: namePointer
+        );
+        var terminator = span.IndexOf(value: ((byte)0));
+
+        return Encoding.UTF8.GetString(bytes: span[..((terminator < 0)
+            ? MaxDescriptionSize
+            : terminator)]);
+    }
 
     /// <inheritdoc/>
     public bool IsSupported(nint deviceHandle) {
@@ -66,11 +109,11 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
 
         if (
             (VkResult.Success != pointers.GetPipelineExecutableProperties(
-                deviceHandle,
-                &pipelineInfo,
-                &executableCount,
-                ((VkPipelineExecutablePropertiesKhr*)null)
-            )) ||
+            deviceHandle,
+            &pipelineInfo,
+            &executableCount,
+            ((VkPipelineExecutablePropertiesKhr*)null)
+        )) ||
             (0 == executableCount)
         ) {
             return [];
@@ -110,11 +153,11 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
 
                 if (
                     (VkResult.Success != pointers.GetPipelineExecutableStatistics(
-                        deviceHandle,
-                        &executableInfo,
-                        &statisticCount,
-                        ((VkPipelineExecutableStatisticKhr*)null)
-                    )) ||
+                    deviceHandle,
+                    &executableInfo,
+                    &statisticCount,
+                    ((VkPipelineExecutableStatisticKhr*)null)
+                )) ||
                     (0 == statisticCount)
                 ) {
                     continue;
@@ -157,42 +200,5 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
         }
 
         return results;
-    }
-
-    private static string ReadFixedUtf8(byte* namePointer) {
-        var span = new ReadOnlySpan<byte>(
-            length: MaxDescriptionSize,
-            pointer: namePointer
-        );
-        var terminator = span.IndexOf(value: ((byte)0));
-
-        return Encoding.UTF8.GetString(bytes: span[..((terminator < 0)
-            ? MaxDescriptionSize
-            : terminator)]);
-    }
-    // VkPipelineExecutableStatisticValueKHR is an 8-byte union; the format selects how the
-    // raw bits are read (0 = bool32, 1 = int64, 2 = uint64, 3 = float64).
-    private static string FormatStatisticValue(uint format, ulong rawValue) {
-        return format switch {
-            0 => ((0 != rawValue)
-                ? "true"
-                : "false"),
-            1 => ((long)rawValue).ToString(provider: CultureInfo.InvariantCulture),
-            2 => rawValue.ToString(provider: CultureInfo.InvariantCulture),
-            3 => BitConverter.Int64BitsToDouble(value: ((long)rawValue)).ToString(
-                format: "0.###",
-                provider: CultureInfo.InvariantCulture
-            ),
-            _ => rawValue.ToString(provider: CultureInfo.InvariantCulture)
-        };
-    }
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                GetPipelineExecutableProperties = ((delegate* unmanaged[Cdecl]<nint, VkPipelineInfoKhr*, uint*, VkPipelineExecutablePropertiesKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkGetPipelineExecutablePropertiesKHR"u8)),
-                GetPipelineExecutableStatistics = ((delegate* unmanaged[Cdecl]<nint, VkPipelineExecutableInfoKhr*, uint*, VkPipelineExecutableStatisticKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkGetPipelineExecutableStatisticsKHR"u8)),
-            }
-        );
     }
 }

@@ -5,7 +5,7 @@ namespace Puck.World;
 
 /// <summary>
 /// One running copy of a world's simulation in this process — an <i>instance</i> in the plan of record's own words
-/// (docs/vision.md, "The words"): a world is the only first-class noun, and an instance is a running copy of
+/// (docs/architecture/worlds.md, "Terms"): a world is the only first-class noun, and an instance is a running copy of
 /// one. Every instance a host runs is an entry of this type, including a desktop's boot world, so the read-back
 /// surface carries one kind of row rather than a privileged world plus a lesser class beside it.
 /// </summary>
@@ -55,6 +55,13 @@ public sealed class WorldInstance : IDisposable {
         m_ownedNetwork = ownedNetwork;
     }
 
+    /// <summary>Whether this row was admitted from a checkpoint restore and is held pending its adjacency mirrors —
+    /// distinct from <see cref="IsPaused"/>, which is an operator lever a script can flip on a row that is otherwise
+    /// stepping normally. A held row's door is not started (readiness is a promise to step) and
+    /// <see cref="WorldInstanceHost.StepInstances"/> skips it entirely rather than banking ticks it will never spend.
+    /// Set by the admitting caller at restore time; cleared by <see cref="WorldInstanceHost"/> the first master
+    /// boundary at which every adjacency handle is either primed or unavailable by name.</summary>
+    public bool AwaitingMirrors { get; set; }
     /// <summary>The number of fixed ticks this instance has completed since it started — derived from its own server
     /// (<see cref="Server.WorldServer.NextInputTick"/>, whose one writer is that server's <c>Step</c>) rather than
     /// counted a second time here, so the step cursor and the read-back can never disagree. An instance started
@@ -65,9 +72,6 @@ public sealed class WorldInstance : IDisposable {
     /// <summary>This row's per-activation socket door, or <see langword="null"/> for a row nothing outside its own
     /// process reaches directly (a desktop's non-boot local instance).</summary>
     public WorldPeerHost? Door { get; set; }
-    /// <summary>The listener configuration for this activation; defaults to the server document. A hosting
-    /// composition may supply its current endpoint independently of an older recovered checkpoint.</summary>
-    public string? ListenEndpoint { get; init; }
     /// <summary>This instance's own exact engine-tick elapsed clock, accumulated additively one step width at a
     /// time rather than re-derived as <c>(tick + 1) * stepWidth</c> — the identical
     /// discontinuity <c>Puck.Launcher.FixedStepPump</c>'s own <c>m_elapsedTicks</c> field exists to avoid: a product
@@ -88,15 +92,11 @@ public sealed class WorldInstance : IDisposable {
     /// <see cref="ScheduleAccumulatorTicks"/> already holds (no skew). Default <see langword="false"/>: an instance
     /// runs the instant it is admitted, exactly as before this lever existed.</summary>
     public bool IsPaused { get; set; }
-    /// <summary>Whether this row was admitted from a checkpoint restore and is held pending its adjacency mirrors —
-    /// distinct from <see cref="IsPaused"/>, which is an operator lever a script can flip on a row that is otherwise
-    /// stepping normally. A held row's door is not started (readiness is a promise to step) and
-    /// <see cref="WorldInstanceHost.StepInstances"/> skips it entirely rather than banking ticks it will never spend.
-    /// Set by the admitting caller at restore time; cleared by <see cref="WorldInstanceHost"/> the first master
-    /// boundary at which every adjacency handle is either primed or unavailable by name.</summary>
-    public bool AwaitingMirrors { get; set; }
     /// <summary>This instance's own transport — see this type's constructor remarks.</summary>
     public IServerLink Link { get; }
+    /// <summary>The listener configuration for this activation; defaults to the server document. A hosting
+    /// composition may supply its current endpoint independently of an older recovered checkpoint.</summary>
+    public string? ListenEndpoint { get; init; }
     /// <summary>The console-facing instance name.</summary>
     public string Name { get; }
     /// <summary>This row's own next transfer id counter — advances by exactly one per transfer this row
@@ -107,16 +107,6 @@ public sealed class WorldInstance : IDisposable {
     /// <summary>The machine host this instance owns and disposes, or <see langword="null"/> when the container
     /// owns it.</summary>
     public IWorldMachineHost? OwnedMachines { get; }
-
-    /// <summary>This instance's portal-crossing edge state, read and written by <see cref="WorldInstanceHost"/>'s
-    /// diegetic boundary scan. Scoped to this instance object — a name reused after
-    /// <see cref="WorldInstanceHost.TryStop"/> starts a brand-new instance with a brand-new latch rather than
-    /// inheriting a departed instance's occupancy, exactly like every other per-instance table here.</summary>
-    public WorldPortalOccupancy PortalOccupancy { get; } = new();
-    /// <summary>Called with this row's own completed tick count after every step — a console wait gate's tick clock
-    /// on the desktop, a no-op for a row nothing is waiting on.</summary>
-    public Action<ulong> PublishTick { get; set; } = static _ => { };
-
     /// <summary>Engine ticks banked toward this instance's own next step against the host's master timeline (see
     /// <see cref="WorldInstanceHost.StepInstances"/>) — this instance's own per-instance accumulator, so an
     /// instance running faster than the master cadence steps more than once per master tick and one running slower
@@ -131,6 +121,15 @@ public sealed class WorldInstance : IDisposable {
     /// <summary>This row's own replay tape, or <see langword="null"/> for a row nothing records (every row but a
     /// desktop's boot instance today).</summary>
     public WorldReplayTape? Tape { get; set; }
+
+    /// <summary>This instance's portal-crossing edge state, read and written by <see cref="WorldInstanceHost"/>'s
+    /// diegetic boundary scan. Scoped to this instance object — a name reused after
+    /// <see cref="WorldInstanceHost.TryStop"/> starts a brand-new instance with a brand-new latch rather than
+    /// inheriting a departed instance's occupancy, exactly like every other per-instance table here.</summary>
+    public WorldPortalOccupancy PortalOccupancy { get; } = new();
+    /// <summary>Called with this row's own completed tick count after every step — a console wait gate's tick clock
+    /// on the desktop, a no-op for a row nothing is waiting on.</summary>
+    public Action<ulong> PublishTick { get; set; } = static _ => { };
 
     /// <summary>Disposes what this instance owns. A no-op for a boot instance, whose machine host belongs to the
     /// container and outlives any retirement of the entry.</summary>

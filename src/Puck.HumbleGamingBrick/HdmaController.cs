@@ -21,16 +21,16 @@ namespace Puck.HumbleGamingBrick;
 public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     private const int BlockSize = 0x10;
     private const int HBlankMode = 0;
-    // The unit steps once per two dots: a step is one byte moved (or one start-up/wind-down phase). Two CPU T-cycles
-    // per step at normal speed, four at double speed (the CPU T-cycle is half a dot there).
-    private const int StepTCyclesNormal = 2;
-    private const int StepTCyclesDouble = 4;
     // The transfer state machine, mirroring the hardware's start-up latency: a requested transfer burns one setup
     // step in Requested before bytes move; an HBlank transfer parks in Paused between blocks.
     private const byte StateNone = 0;
     private const byte StatePaused = 3;
     private const byte StateRequested = 1;
     private const byte StateTransferring = 2;
+    private const int StepTCyclesDouble = 4;
+    // The unit steps once per two dots: a step is one byte moved (or one start-up/wind-down phase). Two CPU T-cycles
+    // per step at normal speed, four at double speed (the CPU T-cycle is half a dot there).
+    private const int StepTCyclesNormal = 2;
 
     private readonly ICartridgeSlot m_cartridgeSlot;
     private readonly IKey1 m_key1;
@@ -78,186 +78,53 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
-
+    /// <inheritdoc/>
+    public bool IsCpuStalled =>
+        (((m_state != StateNone) && (m_state != StatePaused)) || m_active);
+    /// <summary>Gets a value indicating whether ticks can be absorbed whatever the display does: no transfer exists at
+    /// all, so a horizontal-blank edge inside the stretch would change nothing but the sampled mode.</summary>
+    public bool IsIdle =>
+        ((m_state == StateNone) && !m_windDownPending && !m_active);
     /// <summary>Gets a value indicating whether ticks can be absorbed as plain step-counter arithmetic: no transfer
     /// is requested or moving, no wind-down is pending, and the last sampled display mode is the current one, so no
     /// horizontal-blank edge is waiting to be seen.</summary>
     public bool IsQuiet =>
         (((m_state == StateNone) || (m_state == StatePaused)) && !m_windDownPending && !m_active && (m_previousMode == m_ppu.Mode));
-    /// <summary>Gets a value indicating whether ticks can be absorbed whatever the display does: no transfer exists at
-    /// all, so a horizontal-blank edge inside the stretch would change nothing but the sampled mode.</summary>
-    public bool IsIdle =>
-        ((m_state == StateNone) && !m_windDownPending && !m_active);
-    /// <summary>Samples the display mode the way a tick does: the mode before the display's own step on the same
-    /// cycle. The absorbing caller takes it before the last display dot of a stretch.</summary>
-    public void SampleMode() =>
-        m_previousMode = m_ppu.Mode;
-    /// <summary>Absorbs <paramref name="cycles"/> T-cycles while <see cref="IsQuiet"/>, or while <see cref="IsIdle"/>
-    /// and the display has been ticked through them with <see cref="SampleMode"/> taken before its last dot.</summary>
-    /// <param name="cycles">The T-cycles to absorb.</param>
-    public void Skip(int cycles) {
-        if (
-            m_key1.IsStopped ||
-            m_key1.IsHdmaBlocked
-        ) {
-            return;
-        }
-
-        var step = (m_key1.IsDoubleSpeed
-            ? StepTCyclesDouble
-            : StepTCyclesNormal);
-
-        m_stepCounter = ((m_stepCounter + cycles) % step);
-    }
-    /// <inheritdoc/>
-    public bool IsCpuStalled =>
-        (((m_state != StateNone) && (m_state != StatePaused)) || m_active);
     /// <inheritdoc/>
     public bool IsTransferLocked =>
         (m_stallAcknowledged || m_active);
 
-    /// <inheritdoc/>
-    public void AcknowledgeStall() {
-        m_stallAcknowledged = true;
-    }
-    /// <inheritdoc/>
-    public void OnCpuHalted() {
-        m_allowWakeArm = (m_ppu.Mode != HBlankMode);
-        m_cpuHalted = true;
-    }
-    /// <inheritdoc/>
-    public void OnCpuWoke() {
-        m_cpuHalted = false;
+    private ushort DestinationAddress() =>
+        ((ushort)(MemoryMap.VideoRamStart | ((m_destinationHigh & 0x1F) << 8) | m_destinationLow));
+    private ushort SourceAddress() =>
+        ((ushort)((m_sourceHigh << 8) | m_sourceLow));
+    private void StartOrStop(byte control) {
+        var hblankMode = ((control & 0x80) != 0);
 
-        if (
-            (m_state == StatePaused) &&
-            m_allowWakeArm &&
-            (m_ppu.Mode == HBlankMode)
-        ) {
-            m_state = StateRequested;
-        }
-    }
-    /// <inheritdoc/>
-    public void Tick() {
-        // An HBlank transfer wakes on the entry edge into mode 0. The edge is tracked every tick so pausing the unit
-        // (stop mode, the speed switch's block window) cannot fabricate an edge on resume. A halted CPU keeps the unit
-        // parked through the edge — whether the wake may start it instead is decided by the halt-entry mode.
-        var mode = m_ppu.Mode;
-        var enteredHBlank = ((mode == HBlankMode) && (m_previousMode != HBlankMode));
+        m_chunks = ((byte)(control & 0x7F));
+        m_remainingBytes = ((ushort)(BlockSize * (m_chunks + 1)));
 
-        m_previousMode = mode;
+        if (m_state != StateNone) {
+            // Bit 7 clear stops an in-flight HBlank transfer; a bit-7-set write while live is ignored.
+            if (!hblankMode) {
+                m_state = StateNone;
+                m_stallAcknowledged = false;
+            }
 
-        if (
-            m_key1.IsStopped ||
-            m_key1.IsHdmaBlocked
-        ) {
             return;
         }
 
-        if (
-            (m_state == StatePaused) &&
-            enteredHBlank &&
-            !m_cpuHalted
-        ) {
+        if (hblankMode) {
+            m_hblankMode = true;
+            m_state = ((m_ppu.Mode == HBlankMode)
+                ? StateRequested
+                : StatePaused
+            );
+        } else {
+            m_hblankMode = false;
             m_state = StateRequested;
         }
-
-        if (++m_stepCounter < (m_key1.IsDoubleSpeed
-            ? StepTCyclesDouble
-            : StepTCyclesNormal)) {
-            return;
-        }
-
-        m_stepCounter = 0;
-
-        Step();
     }
-    /// <inheritdoc/>
-    public byte ReadRegister(ushort address) {
-        if (address != MemoryMap.HdmaControl) {
-            return 0xFF; // HDMA1–HDMA4 are write-only.
-        }
-
-        // Bit 7 is clear while a transfer is live (including parked between HBlank blocks); the low bits are the
-        // remaining block count minus one. A completed transfer reads 0xFF, a stopped one 0x80 | remaining.
-        return ((byte)(((m_state != StateNone)
-            ? 0x00
-            : 0x80) | (m_chunks & 0x7F)));
-    }
-    /// <inheritdoc/>
-    public void WriteRegister(ushort address, byte value) {
-        switch (address) {
-            case MemoryMap.HdmaSourceHigh:
-                m_sourceHigh = value;
-
-                break;
-            case MemoryMap.HdmaSourceLow:
-                m_sourceLow = ((byte)(value & 0xF0));
-                m_sourceCursor = 0;
-
-                break;
-            case MemoryMap.HdmaDestinationHigh:
-                m_destinationHigh = value;
-
-                break;
-            case MemoryMap.HdmaDestinationLow:
-                m_destinationLow = ((byte)(value & 0xF0));
-                m_destinationCursor = 0;
-
-                break;
-            default:
-                StartOrStop(control: value);
-
-                break;
-        }
-    }
-    /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteBoolean(value: m_active);
-        writer.WriteBoolean(value: m_allowWakeArm);
-        writer.WriteByte(value: m_chunks);
-        writer.WriteBoolean(value: m_cpuHalted);
-        writer.WriteUInt16(value: m_destinationCursor);
-        writer.WriteByte(value: m_destinationHigh);
-        writer.WriteByte(value: m_destinationLow);
-        writer.WriteBoolean(value: m_hblankMode);
-        writer.WriteInt32(value: m_previousMode);
-        writer.WriteUInt16(value: m_remainingBytes);
-        writer.WriteUInt16(value: m_sourceCursor);
-        writer.WriteByte(value: m_sourceHigh);
-        writer.WriteByte(value: m_sourceLow);
-        writer.WriteBoolean(value: m_stallAcknowledged);
-        writer.WriteByte(value: m_state);
-        writer.WriteInt32(value: m_stepCounter);
-        writer.WriteBoolean(value: m_windDownPending);
-    }
-    /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_active = reader.ReadBoolean();
-        m_allowWakeArm = reader.ReadBoolean();
-        m_chunks = reader.ReadByte();
-        m_cpuHalted = reader.ReadBoolean();
-        m_destinationCursor = reader.ReadUInt16();
-        m_destinationHigh = reader.ReadByte();
-        m_destinationLow = reader.ReadByte();
-        m_hblankMode = reader.ReadBoolean();
-        m_previousMode = reader.ReadInt32();
-        m_remainingBytes = reader.ReadUInt16();
-        m_sourceCursor = reader.ReadUInt16();
-        m_sourceHigh = reader.ReadByte();
-        m_sourceLow = reader.ReadByte();
-        m_stallAcknowledged = reader.ReadBoolean();
-        m_state = reader.ReadByte();
-        m_stepCounter = reader.ReadInt32();
-        m_windDownPending = reader.ReadBoolean();
-
-        // The state byte drives a switch with no default arm, so a value outside the four it can hold would run the
-        // unit off its own state machine rather than faulting.
-        if (m_state > StatePaused) {
-            throw new InvalidDataException(message: $"The video-RAM transfer unit's restored state byte is {m_state}, outside the {StateNone}-{StatePaused} range it can hold.");
-        }
-    }
-
     // One two-dot step of the unit: wait for the CPU's freeze acknowledgment, move one byte, or wind down. The unit
     // holds in Requested until the CPU acknowledges the freeze, so a pending interrupt's dispatch runs to completion
     // first and the lead-in is measured from the CPU's own yield point — hardware only freezes the CPU at its next
@@ -295,10 +162,11 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
         var value = (invalidSource
             ? (byte)0xFF
             : DmaSource.Read(
-            address: source,
-            cartridgeSlot: m_cartridgeSlot,
-            memory: m_memory
-        ));
+                address: source,
+                cartridgeSlot: m_cartridgeSlot,
+                memory: m_memory
+            )
+        );
         var destination = ((ushort)(MemoryMap.VideoRamStart | ((DestinationAddress() + m_destinationCursor) & 0x1FFF)));
 
         m_memory.WriteVideoRam(
@@ -334,34 +202,168 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
             m_windDownPending = true;
         }
     }
-    private void StartOrStop(byte control) {
-        var hblankMode = ((control & 0x80) != 0);
 
-        m_chunks = ((byte)(control & 0x7F));
-        m_remainingBytes = ((ushort)(BlockSize * (m_chunks + 1)));
+    /// <inheritdoc/>
+    public void AcknowledgeStall() {
+        m_stallAcknowledged = true;
+    }
+    /// <inheritdoc/>
+    public void LoadState(StateReader reader) {
+        m_active = reader.ReadBoolean();
+        m_allowWakeArm = reader.ReadBoolean();
+        m_chunks = reader.ReadByte();
+        m_cpuHalted = reader.ReadBoolean();
+        m_destinationCursor = reader.ReadUInt16();
+        m_destinationHigh = reader.ReadByte();
+        m_destinationLow = reader.ReadByte();
+        m_hblankMode = reader.ReadBoolean();
+        m_previousMode = reader.ReadInt32();
+        m_remainingBytes = reader.ReadUInt16();
+        m_sourceCursor = reader.ReadUInt16();
+        m_sourceHigh = reader.ReadByte();
+        m_sourceLow = reader.ReadByte();
+        m_stallAcknowledged = reader.ReadBoolean();
+        m_state = reader.ReadByte();
+        m_stepCounter = reader.ReadInt32();
+        m_windDownPending = reader.ReadBoolean();
 
-        if (m_state != StateNone) {
-            // Bit 7 clear stops an in-flight HBlank transfer; a bit-7-set write while live is ignored.
-            if (!hblankMode) {
-                m_state = StateNone;
-                m_stallAcknowledged = false;
-            }
-
-            return;
+        // The state byte drives a switch with no default arm, so a value outside the four it can hold would run the
+        // unit off its own state machine rather than faulting.
+        if (m_state > StatePaused) {
+            throw new InvalidDataException(message: $"The video-RAM transfer unit's restored state byte is {m_state}, outside the {StateNone}-{StatePaused} range it can hold.");
         }
+    }
+    /// <inheritdoc/>
+    public void OnCpuHalted() {
+        m_allowWakeArm = (m_ppu.Mode != HBlankMode);
+        m_cpuHalted = true;
+    }
+    /// <inheritdoc/>
+    public void OnCpuWoke() {
+        m_cpuHalted = false;
 
-        if (hblankMode) {
-            m_hblankMode = true;
-            m_state = ((m_ppu.Mode == HBlankMode)
-                ? StateRequested
-                : StatePaused);
-        } else {
-            m_hblankMode = false;
+        if (
+            (m_state == StatePaused) &&
+            m_allowWakeArm &&
+            (m_ppu.Mode == HBlankMode)
+        ) {
             m_state = StateRequested;
         }
     }
-    private ushort SourceAddress() =>
-        ((ushort)((m_sourceHigh << 8) | m_sourceLow));
-    private ushort DestinationAddress() =>
-        ((ushort)(MemoryMap.VideoRamStart | ((m_destinationHigh & 0x1F) << 8) | m_destinationLow));
+    /// <inheritdoc/>
+    public byte ReadRegister(ushort address) {
+        if (address != MemoryMap.HdmaControl) {
+            return 0xFF; // HDMA1–HDMA4 are write-only.
+        }
+
+        // Bit 7 is clear while a transfer is live (including parked between HBlank blocks); the low bits are the
+        // remaining block count minus one. A completed transfer reads 0xFF, a stopped one 0x80 | remaining.
+        return ((byte)(((m_state != StateNone)
+            ? 0x00
+            : 0x80) | (m_chunks & 0x7F)));
+    }
+    /// <summary>Samples the display mode the way a tick does: the mode before the display's own step on the same
+    /// cycle. The absorbing caller takes it before the last display dot of a stretch.</summary>
+    public void SampleMode() =>
+        m_previousMode = m_ppu.Mode;
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        writer.WriteBoolean(value: m_active);
+        writer.WriteBoolean(value: m_allowWakeArm);
+        writer.WriteByte(value: m_chunks);
+        writer.WriteBoolean(value: m_cpuHalted);
+        writer.WriteUInt16(value: m_destinationCursor);
+        writer.WriteByte(value: m_destinationHigh);
+        writer.WriteByte(value: m_destinationLow);
+        writer.WriteBoolean(value: m_hblankMode);
+        writer.WriteInt32(value: m_previousMode);
+        writer.WriteUInt16(value: m_remainingBytes);
+        writer.WriteUInt16(value: m_sourceCursor);
+        writer.WriteByte(value: m_sourceHigh);
+        writer.WriteByte(value: m_sourceLow);
+        writer.WriteBoolean(value: m_stallAcknowledged);
+        writer.WriteByte(value: m_state);
+        writer.WriteInt32(value: m_stepCounter);
+        writer.WriteBoolean(value: m_windDownPending);
+    }
+    /// <summary>Absorbs <paramref name="cycles"/> T-cycles while <see cref="IsQuiet"/>, or while <see cref="IsIdle"/>
+    /// and the display has been ticked through them with <see cref="SampleMode"/> taken before its last dot.</summary>
+    /// <param name="cycles">The T-cycles to absorb.</param>
+    public void Skip(int cycles) {
+        if (
+            m_key1.IsStopped ||
+            m_key1.IsHdmaBlocked
+        ) {
+            return;
+        }
+
+        var step = (m_key1.IsDoubleSpeed
+            ? StepTCyclesDouble
+            : StepTCyclesNormal
+        );
+
+        m_stepCounter = ((m_stepCounter + cycles) % step);
+    }
+    /// <inheritdoc/>
+    public void Tick() {
+        // An HBlank transfer wakes on the entry edge into mode 0. The edge is tracked every tick so pausing the unit
+        // (stop mode, the speed switch's block window) cannot fabricate an edge on resume. A halted CPU keeps the unit
+        // parked through the edge — whether the wake may start it instead is decided by the halt-entry mode.
+        var mode = m_ppu.Mode;
+        var enteredHBlank = ((mode == HBlankMode) && (m_previousMode != HBlankMode));
+
+        m_previousMode = mode;
+
+        if (
+            m_key1.IsStopped ||
+            m_key1.IsHdmaBlocked
+        ) {
+            return;
+        }
+
+        if (
+            (m_state == StatePaused) &&
+            enteredHBlank &&
+            !m_cpuHalted
+        ) {
+            m_state = StateRequested;
+        }
+
+        if (++m_stepCounter < (m_key1.IsDoubleSpeed
+            ? StepTCyclesDouble
+            : StepTCyclesNormal)) {
+            return;
+        }
+
+        m_stepCounter = 0;
+
+        Step();
+    }
+    /// <inheritdoc/>
+    public void WriteRegister(ushort address, byte value) {
+        switch (address) {
+            case MemoryMap.HdmaSourceHigh:
+                m_sourceHigh = value;
+
+                break;
+            case MemoryMap.HdmaSourceLow:
+                m_sourceLow = ((byte)(value & 0xF0));
+                m_sourceCursor = 0;
+
+                break;
+            case MemoryMap.HdmaDestinationHigh:
+                m_destinationHigh = value;
+
+                break;
+            case MemoryMap.HdmaDestinationLow:
+                m_destinationLow = ((byte)(value & 0xF0));
+                m_destinationCursor = 0;
+
+                break;
+            default:
+                StartOrStop(control: value);
+
+                break;
+        }
+    }
 }

@@ -1,6 +1,6 @@
 // Stage 2 of the two-stage SDF world compositor: the SOURCE-AGNOSTIC compositor. It places each viewport's source
 // texture — an SDF view rendered by Stage 1 OR a child node's output, bound uniformly into the same array slot —
-// into its screen region by a 1:1 copy (the source is rect-sized, so no scaling is needed). VIEWPORTS as data: the
+// into its screen region. Child images use their actual extent, allowing one source in differently sized regions. The
 // regions drive the layout; the compositor neither knows nor cares what produced each source. One invocation per
 // output pixel over an 8x8 workgroup.
 //
@@ -11,7 +11,8 @@
 
 struct CompositeParams2 {
     uint2 imageExtent;     // output image size in pixels
-    uint viewportCount;    // 4 bytes of implicit HLSL cbuffer padding follow, to the next float4's 16-byte alignment
+    uint viewportCount;
+    uint childMask;        // child sources use their image dimensions; SDF sources retain the valid render-scale region
     float4 rects[5];       // per viewport: xy = normalized origin, zw = normalized size (of the output image)
     // Per-view render-scale numerators q (1..255; 255 = native), 8 bits each: view v's q = (scaleQPacked[v / 4] >>
     // ((v % 4) * 8)) & 0xFF. Mirrors ViewportData.renderScale.x (Stage 1 renders at worldRenderDims(rectDims, q));
@@ -70,17 +71,18 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             uint q = ((params.scaleQPacked[v / 4u] >> ((v % 4u) * 8u)) & 0xFFu);
             uint sharpnessQ = ((params.sharpnessQPacked[v / 4u] >> ((v % 4u) * 8u)) & 0xFFu);
 
-            if (q >= 255u) {
-                // NATIVE (q = 255): the exact-copy path, byte-identical to the pre-render-scale kernel. Every source
-                // pixel is real content — a beam-culled SDF tile holds the sky pre-pass's sky, a live tile holds
-                // Stage 1's render, and a child viewport's slot holds the hosted surface — so this is a plain copy.
+            uint2 rectDims = max((uint2)(r.zw * float2(params.imageExtent)), uint2(1u, 1u));
+            uint2 renderDims = max((((rectDims * q) + 127u) / 255u), uint2(1u, 1u));
+            if ((params.childMask & (1u << v)) != 0u) {
+                sources[v].GetDimensions(renderDims.x, renderDims.y);
+            }
+
+            if (all(renderDims == rectDims)) {
+                // Preserve the exact-copy path for native SDF views and equally sized child surfaces.
                 color = sources[v][localPixel].rgb;
             } else {
-                // REDUCED render (q < 255): Stage 1 rendered this view at worldRenderDims (the same integer derivation
-                // — KEEP IN SYNC with sdf-world.hlsli's helper); upsample the reduced source over the full region with
-                // an explicit reconstruction filter (formatted loads carry no sampler).
-                uint2 rectDims = max((uint2)(r.zw * float2(params.imageExtent)), uint2(1u, 1u));
-                uint2 renderDims = max((((rectDims * q) + 127u) / 255u), uint2(1u, 1u));
+                // SDF valid dimensions match worldRenderDims; child dimensions come from the image itself.
+                // Reconstruct the source over this region with formatted loads, without a sampler.
                 float2 sourcePos = ((((float2(localPixel) + 0.5) * float2(renderDims)) / float2(rectDims)) - 0.5);
                 float2 clamped = clamp(sourcePos, float2(0.0, 0.0), (float2(renderDims) - 1.0));
                 uint2 p0 = (uint2)clamped;

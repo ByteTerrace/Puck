@@ -69,32 +69,6 @@ file sealed class ServeThenBlockStream(byte[] bytes) : Stream {
 /// body is read.
 /// </summary>
 public sealed class FrameLawTests {
-    /// <summary>Two coalesced frames still decode separately when the stream returns one byte at a time.</summary>
-    [Fact]
-    public async Task FragmentedCoalescedFramesRetainKindsAndExactPayloads() {
-        var token = TestContext.Current.CancellationToken;
-        using var encoded = new MemoryStream();
-        await WireFrame.WriteAsync(encoded, 1, "{\"text\":\"a\\nb\\tç\"}"u8.ToArray(), token);
-        await WireFrame.WriteAsync(encoded, 2, "{}"u8.ToArray(), token);
-        using var fragmented = new FragmentStream(encoded.ToArray());
-        var first = await WireFrame.ReadAsync(fragmented, 100, token);
-        Assert.True(first.Ok);
-        Assert.Equal(1, first.Kind);
-        Assert.Equal("{\"text\":\"a\\nb\\tç\"}"u8.ToArray(), first.Body.ToArray());
-        var second = await WireFrame.ReadAsync(fragmented, 100, token);
-        Assert.True(second.Ok);
-        Assert.Equal(2, second.Kind);
-        Assert.Equal("{}"u8.ToArray(), second.Body.ToArray());
-        Assert.Equal(WireRefusal.ConnectionClosed, (await WireFrame.ReadAsync(fragmented, 100, token)).Failure.Refusal);
-    }
-
-    private sealed class FragmentStream(byte[] bytes) : MemoryStream(bytes) {
-        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
-            base.ReadAsync(buffer[..Math.Min(1, buffer.Length)], cancellationToken);
-    }
-
-    private const byte Kind = 0x2A;
-
     /// <summary>Builds <c>[u32 declared][rest…]</c> with a prefix that need not agree with what follows it.</summary>
     private static byte[] Declaring(uint following, byte[] rest) {
         var wire = new byte[checked((sizeof(uint) + rest.Length))];
@@ -116,6 +90,64 @@ public sealed class FrameLawTests {
         stream: new MemoryStream(buffer: wire)
     );
 
+    /// <summary>Two coalesced frames still decode separately when the stream returns one byte at a time.</summary>
+    [Fact]
+    public async Task FragmentedCoalescedFramesRetainKindsAndExactPayloads() {
+        var token = TestContext.Current.CancellationToken;
+        using var encoded = new MemoryStream();
+
+        await WireFrame.WriteAsync(
+            encoded,
+            1,
+            "{\"text\":\"a\\nb\\tç\"}"u8.ToArray(),
+            token
+        );
+        await WireFrame.WriteAsync(
+            encoded,
+            2,
+            "{}"u8.ToArray(),
+            token
+        );
+        using var fragmented = new FragmentStream(bytes: encoded.ToArray());
+        var first = await WireFrame.ReadAsync(
+            ct: token,
+            maxFrameBytes: 100,
+            stream: fragmented
+        );
+
+        Assert.True(condition: first.Ok);
+        Assert.Equal(
+            1,
+            first.Kind
+        );
+        Assert.Equal(
+            "{\"text\":\"a\\nb\\tç\"}"u8.ToArray(),
+            first.Body.ToArray()
+        );
+        var second = await WireFrame.ReadAsync(
+            ct: token,
+            maxFrameBytes: 100,
+            stream: fragmented
+        );
+
+        Assert.True(condition: second.Ok);
+        Assert.Equal(
+            2,
+            second.Kind
+        );
+        Assert.Equal(
+            "{}"u8.ToArray(),
+            second.Body.ToArray()
+        );
+        Assert.Equal(
+            WireRefusal.ConnectionClosed,
+            (await WireFrame.ReadAsync(
+                ct: token,
+                maxFrameBytes: 100,
+                stream: fragmented
+            )).Failure.Refusal
+        );
+    }
     /// <summary>The control: a joined frame splits back to the same kind and payload, and the payload span is a
     /// window onto the frame rather than a copy of it.</summary>
     [Fact]
@@ -153,121 +185,6 @@ public sealed class FrameLawTests {
             actual: split.ToArray()
         );
         Assert.True(condition: split.Overlaps(other: frame));
-    }
-    /// <summary>A buffer shorter than the five-byte prefix cannot carry a kind, so it is refused by name before the
-    /// length is even read.</summary>
-    [Theory]
-    [InlineData(0)]
-    [InlineData(4)]
-    public void TrySplit_ShorterThanThePrefix_RefusesFrameLengthInvalid(int length) {
-        var frame = new byte[length];
-
-        Assert.False(condition: FrameCodec.TrySplit(
-            failure: out var failure,
-            frame: frame,
-            kind: out _,
-            maxPayloadBytes: 64,
-            payload: out _
-        ));
-        Assert.Equal(
-            expected: WireRefusal.FrameLengthInvalid,
-            actual: failure.Refusal
-        );
-    }
-    /// <summary>A prefix that disagrees with the bytes actually carried — declaring fewer, more, or none at all — is
-    /// refused: a complete buffer must be exactly the frame its prefix declares.</summary>
-    [Theory]
-    [InlineData(0u)]
-    [InlineData(2u)]
-    [InlineData(4u)]
-    public void TrySplit_PrefixDisagreesWithTheBuffer_RefusesFrameLengthInvalid(uint declared) {
-        // The buffer carries three following bytes: the kind and two payload bytes.
-        var frame = Declaring(
-            following: declared,
-            rest: [Kind, 0xAA, 0xBB]
-        );
-
-        Assert.False(condition: FrameCodec.TrySplit(
-            failure: out var failure,
-            frame: frame,
-            kind: out _,
-            maxPayloadBytes: 64,
-            payload: out _
-        ));
-        Assert.Equal(
-            expected: WireRefusal.FrameLengthInvalid,
-            actual: failure.Refusal
-        );
-    }
-    /// <summary>A well-formed frame whose payload is one byte over the caller's cap is refused as too large, while
-    /// the same frame under a cap one byte wider splits. Falsifier: dropping the cap check admits both.</summary>
-    [Fact]
-    public void TrySplit_PayloadOverTheCallersCap_RefusesPayloadTooLarge() {
-        var payload = new byte[9];
-        var frame = FrameCodec.Join(
-            kind: Kind,
-            payload: payload
-        );
-
-        Assert.False(condition: FrameCodec.TrySplit(
-            failure: out var failure,
-            frame: frame,
-            kind: out _,
-            maxPayloadBytes: 8,
-            payload: out _
-        ));
-        Assert.Equal(
-            expected: WireRefusal.PayloadTooLarge,
-            actual: failure.Refusal
-        );
-        Assert.True(condition: FrameCodec.TrySplit(
-            failure: out _,
-            frame: frame,
-            kind: out _,
-            maxPayloadBytes: 9,
-            payload: out _
-        ));
-    }
-    /// <summary>A peer that closes before the four-byte prefix completes — whether it sent nothing or only part of
-    /// it — is a clean close: <see cref="WireRefusal.ConnectionClosed"/>, narrated as before any frame.</summary>
-    [Theory]
-    [InlineData(0)]
-    [InlineData(3)]
-    public async Task ReadAsync_EofBeforeThePrefixCompletes_RefusesConnectionClosed(int bytesSent) {
-        var read = await ReadAsync(wire: new byte[bytesSent]);
-
-        Assert.False(condition: read.Ok);
-        Assert.Equal(
-            expected: WireRefusal.ConnectionClosed,
-            actual: read.Failure.Refusal
-        );
-        Assert.Contains(
-            actualString: read.Failure.Detail,
-            expectedSubstring: "before a frame prefix arrived",
-            comparisonType: StringComparison.Ordinal
-        );
-        Assert.True(condition: read.Body.IsEmpty);
-    }
-    /// <summary>A peer that closes after declaring a length but before delivering it is still
-    /// <see cref="WireRefusal.ConnectionClosed"/>, but narrated as inside a frame — the caller can tell a truncated
-    /// frame from a quiet close.</summary>
-    [Fact]
-    public async Task ReadAsync_EofInsideTheBody_RefusesConnectionClosed() {
-        var read = await ReadAsync(wire: Declaring(
-            following: 3,
-            rest: [Kind, 0xAA]
-        ));
-
-        Assert.False(condition: read.Ok);
-        Assert.Equal(
-            expected: WireRefusal.ConnectionClosed,
-            actual: read.Failure.Refusal
-        );
-        Assert.Contains(
-            actualString: read.Failure.Detail,
-            expectedSubstring: "inside a 3-byte frame",
-            comparisonType: StringComparison.Ordinal
-        );
     }
     /// <summary>A declared length one past the cap is refused by name with only the prefix consumed — the body is
     /// neither allocated nor read, so a peer cannot make this side buffer more than the cap. The same bytes with a
@@ -320,19 +237,45 @@ public sealed class FrameLawTests {
             actual: admitted.Body.Length
         );
     }
-    /// <summary>A prefix declaring zero following bytes has no room for a kind, so it is refused as an invalid
-    /// length rather than read as an empty frame.</summary>
+    /// <summary>A peer that closes before the four-byte prefix completes — whether it sent nothing or only part of
+    /// it — is a clean close: <see cref="WireRefusal.ConnectionClosed"/>, narrated as before any frame.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    public async Task ReadAsync_EofBeforeThePrefixCompletes_RefusesConnectionClosed(int bytesSent) {
+        var read = await ReadAsync(wire: new byte[bytesSent]);
+
+        Assert.False(condition: read.Ok);
+        Assert.Equal(
+            expected: WireRefusal.ConnectionClosed,
+            actual: read.Failure.Refusal
+        );
+        Assert.Contains(
+            actualString: read.Failure.Detail,
+            expectedSubstring: "before a frame prefix arrived",
+            comparisonType: StringComparison.Ordinal
+        );
+        Assert.True(condition: read.Body.IsEmpty);
+    }
+    /// <summary>A peer that closes after declaring a length but before delivering it is still
+    /// <see cref="WireRefusal.ConnectionClosed"/>, but narrated as inside a frame — the caller can tell a truncated
+    /// frame from a quiet close.</summary>
     [Fact]
-    public async Task ReadAsync_ZeroDeclaredLength_RefusesFrameLengthInvalid() {
+    public async Task ReadAsync_EofInsideTheBody_RefusesConnectionClosed() {
         var read = await ReadAsync(wire: Declaring(
-            following: 0,
-            rest: []
+            following: 3,
+            rest: [Kind, 0xAA]
         ));
 
         Assert.False(condition: read.Ok);
         Assert.Equal(
-            expected: WireRefusal.FrameLengthInvalid,
+            expected: WireRefusal.ConnectionClosed,
             actual: read.Failure.Refusal
+        );
+        Assert.Contains(
+            actualString: read.Failure.Detail,
+            expectedSubstring: "inside a 3-byte frame",
+            comparisonType: StringComparison.Ordinal
         );
     }
     /// <summary>The sliced-scratch law. The smallest frame is five bytes — the prefix and a kind — and a socket that
@@ -366,6 +309,95 @@ public sealed class FrameLawTests {
         Assert.Equal(
             expected: sizeof(uint),
             actual: stream.FirstRequestLength
+        );
+    }
+    /// <summary>A prefix declaring zero following bytes has no room for a kind, so it is refused as an invalid
+    /// length rather than read as an empty frame.</summary>
+    [Fact]
+    public async Task ReadAsync_ZeroDeclaredLength_RefusesFrameLengthInvalid() {
+        var read = await ReadAsync(wire: Declaring(
+            following: 0,
+            rest: []
+        ));
+
+        Assert.False(condition: read.Ok);
+        Assert.Equal(
+            expected: WireRefusal.FrameLengthInvalid,
+            actual: read.Failure.Refusal
+        );
+    }
+    /// <summary>A well-formed frame whose payload is one byte over the caller's cap is refused as too large, while
+    /// the same frame under a cap one byte wider splits. Falsifier: dropping the cap check admits both.</summary>
+    [Fact]
+    public void TrySplit_PayloadOverTheCallersCap_RefusesPayloadTooLarge() {
+        var payload = new byte[9];
+        var frame = FrameCodec.Join(
+            kind: Kind,
+            payload: payload
+        );
+
+        Assert.False(condition: FrameCodec.TrySplit(
+            failure: out var failure,
+            frame: frame,
+            kind: out _,
+            maxPayloadBytes: 8,
+            payload: out _
+        ));
+        Assert.Equal(
+            expected: WireRefusal.PayloadTooLarge,
+            actual: failure.Refusal
+        );
+        Assert.True(condition: FrameCodec.TrySplit(
+            failure: out _,
+            frame: frame,
+            kind: out _,
+            maxPayloadBytes: 9,
+            payload: out _
+        ));
+    }
+    /// <summary>A prefix that disagrees with the bytes actually carried — declaring fewer, more, or none at all — is
+    /// refused: a complete buffer must be exactly the frame its prefix declares.</summary>
+    [Theory]
+    [InlineData(0u)]
+    [InlineData(2u)]
+    [InlineData(4u)]
+    public void TrySplit_PrefixDisagreesWithTheBuffer_RefusesFrameLengthInvalid(uint declared) {
+        // The buffer carries three following bytes: the kind and two payload bytes.
+        var frame = Declaring(
+            following: declared,
+            rest: [Kind, 0xAA, 0xBB]
+        );
+
+        Assert.False(condition: FrameCodec.TrySplit(
+            failure: out var failure,
+            frame: frame,
+            kind: out _,
+            maxPayloadBytes: 64,
+            payload: out _
+        ));
+        Assert.Equal(
+            expected: WireRefusal.FrameLengthInvalid,
+            actual: failure.Refusal
+        );
+    }
+    /// <summary>A buffer shorter than the five-byte prefix cannot carry a kind, so it is refused by name before the
+    /// length is even read.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    public void TrySplit_ShorterThanThePrefix_RefusesFrameLengthInvalid(int length) {
+        var frame = new byte[length];
+
+        Assert.False(condition: FrameCodec.TrySplit(
+            failure: out var failure,
+            frame: frame,
+            kind: out _,
+            maxPayloadBytes: 64,
+            payload: out _
+        ));
+        Assert.Equal(
+            expected: WireRefusal.FrameLengthInvalid,
+            actual: failure.Refusal
         );
     }
     /// <summary>A written frame is exactly the bytes <see cref="FrameCodec.Join"/> produces, and reading it back
@@ -427,4 +459,17 @@ public sealed class FrameLawTests {
             actual: segment.Array.Length
         );
     }
+
+    private sealed class FragmentStream(byte[] bytes) : MemoryStream(bytes) {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            base.ReadAsync(
+                buffer: buffer[..Math.Min(
+                    val1: 1,
+                    val2: buffer.Length
+                )],
+                cancellationToken: cancellationToken
+            );
+    }
+
+    private const byte Kind = 0x2A;
 }

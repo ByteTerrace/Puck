@@ -18,7 +18,7 @@ internal static partial class Subjects {
     private static readonly ulong[] PcgDistancePowerLadder = [
         0UL, 1UL, 2UL, 4UL, 8UL, 16UL, 1024UL, 65536UL,
         (1UL << 20), (1UL << 32), (1UL << 40), (1UL << 48), (1UL << 56), (1UL << 62), (1UL << 63),
-        unchecked(0UL - 1UL),
+        unchecked((0UL - 1UL)),
     ];
 
     /// <summary>Pcg32Extended's opening draws at three published table sizes against pcg-cpp's own test output.</summary>
@@ -29,9 +29,9 @@ internal static partial class Subjects {
             (64, PcgExtendedK64Published),
         }) {
             var generator = Pcg32Extended.Create(
+                k: k,
                 state: 42UL,
-                stream: 54UL,
-                k: k
+                stream: 54UL
             );
 
             for (var index = 0; (index < expected.Length); ++index) {
@@ -48,9 +48,9 @@ internal static partial class Subjects {
     public static string? PcgExtendedBaseEquivalence() {
         foreach (var k in new[] { 2, 64, 1024 }) {
             var generator = Pcg32Extended.Create(
+                k: k,
                 state: 7UL,
-                stream: 3UL,
-                k: k
+                stream: 3UL
             );
 
             generator.SetExtension(words: new uint[k]);
@@ -75,17 +75,17 @@ internal static partial class Subjects {
     /// <summary>Setting each visited slot to <c>wanted ^ base</c> ahead of time makes the next <c>k</c> draws exactly
     /// the wanted values, and the draw past that window resumes the ordinary base-XOR-extension rule.</summary>
     public static string? PcgExtendedChosenOutputs() {
-        const int k = 8;
+        const int K = 8;
         var original = Pcg32Extended.Create(
+            k: K,
             state: 11UL,
-            stream: 5UL,
-            k: k
+            stream: 5UL
         );
         var probe = original.Clone();
-        var indices = new int[k];
+        var indices = new int[K];
 
-        for (var index = 0; (index < k); ++index) {
-            indices[index] = ((int)(probe.State & ((ulong)(k - 1))));
+        for (var index = 0; (index < K); ++index) {
+            indices[index] = ((int)(probe.State & ((ulong)(K - 1))));
             _ = probe.NextUInt32();
         }
 
@@ -94,9 +94,9 @@ internal static partial class Subjects {
             multiplier: original.Multiplier,
             state: original.State
         );
-        var baseDraws = new uint[k];
+        var baseDraws = new uint[K];
 
-        for (var index = 0; (index < k); ++index) {
+        for (var index = 0; (index < K); ++index) {
             baseDraws[index] = baseProbe.NextUInt32();
         }
 
@@ -104,9 +104,9 @@ internal static partial class Subjects {
             state: 991UL,
             stream: 13UL
         );
-        var wanted = new uint[k];
+        var wanted = new uint[K];
 
-        for (var index = 0; (index < k); ++index) {
+        for (var index = 0; (index < K); ++index) {
             wanted[index] = chooser.NextUInt32();
 
             original.SetExtension(
@@ -115,13 +115,13 @@ internal static partial class Subjects {
             );
         }
 
-        for (var index = 0; (index < k); ++index) {
+        for (var index = 0; (index < K); ++index) {
             var drawn = original.NextUInt32();
 
             if (drawn != wanted[index]) { return $"draw {index} is 0x{drawn:X8}, not the chosen 0x{wanted[index]:X8}"; }
         }
 
-        var nextIndex = ((int)(original.State & ((ulong)(k - 1))));
+        var nextIndex = ((int)(original.State & ((ulong)(K - 1))));
         var expectedNextExtension = original.GetExtension(index: nextIndex);
         var expectedNextBase = Pcg32XshRr.FromRawBits(
             increment: original.Increment,
@@ -139,17 +139,17 @@ internal static partial class Subjects {
     public static string? PcgExtendedAdvanceAgreesWithDrawing() {
         foreach (var count in PcgExtendedAdvanceLadder) {
             var advanced = Pcg32Extended.Create(
+                k: 2,
                 state: 7UL,
-                stream: 3UL,
-                k: 2
+                stream: 3UL
             );
 
             advanced.Advance(count: count);
 
             var walked = Pcg32Extended.Create(
+                k: 2,
                 state: 7UL,
-                stream: 3UL,
-                k: 2
+                stream: 3UL
             );
 
             for (var step = 0UL; (step < count); ++step) {
@@ -170,14 +170,14 @@ internal static partial class Subjects {
     /// properties agree with the wrapped base generator and with <see cref="Pcg32Extended.GetExtension(int)"/>.</summary>
     public static string? PcgExtendedDelegationAndRefusals() {
         var fractions = Pcg32Extended.Create(
+            k: 4,
             state: 5UL,
-            stream: 5UL,
-            k: 4
+            stream: 5UL
         );
         var raws = Pcg32Extended.Create(
+            k: 4,
             state: 5UL,
-            stream: 5UL,
-            k: 4
+            stream: 5UL
         );
 
         for (var index = 0; (index < 256); ++index) {
@@ -193,14 +193,14 @@ internal static partial class Subjects {
         }
 
         var bounded = Pcg32Extended.Create(
+            k: 4,
             state: 17UL,
-            stream: 1UL,
-            k: 4
+            stream: 1UL
         );
         var twin = Pcg32Extended.Create(
+            k: 4,
             state: 17UL,
-            stream: 1UL,
-            k: 4
+            stream: 1UL
         );
 
         if (bounded.NextUInt32(
@@ -219,14 +219,14 @@ internal static partial class Subjects {
 
         for (var index = 0; (index < 64); ++index) {
             var ordered = Pcg32Extended.Create(
+                k: 4,
                 state: ((ulong)index),
-                stream: 9UL,
-                k: 4
+                stream: 9UL
             );
             var swapped = Pcg32Extended.Create(
+                k: 4,
                 state: ((ulong)index),
-                stream: 9UL,
-                k: 4
+                stream: 9UL
             );
             var low = ordered.NextUInt32(
                 maximum: 40000U,
@@ -245,30 +245,58 @@ internal static partial class Subjects {
         }
 
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
-            action: () => Pcg32Extended.Create(state: 0UL, stream: 0UL, k: 0),
+            action: () => Pcg32Extended.Create(
+                k: 0,
+                state: 0UL,
+                stream: 0UL
+            ),
             paramName: "k"
         )) { return "k=0 was accepted"; }
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
-            action: () => Pcg32Extended.Create(state: 0UL, stream: 0UL, k: 3),
+            action: () => Pcg32Extended.Create(
+                k: 3,
+                state: 0UL,
+                stream: 0UL
+            ),
             paramName: "k"
         )) { return "a non-power-of-two k was accepted"; }
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
-            action: () => Pcg32Extended.Create(state: 0UL, stream: 0UL, k: 2048),
+            action: () => Pcg32Extended.Create(
+                k: 2048,
+                state: 0UL,
+                stream: 0UL
+            ),
             paramName: "k"
         )) { return "k above 1024 was accepted"; }
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
-            action: () => Pcg32Extended.Create(state: 0UL, stream: (Pcg32XshRr.MaxStream + 1UL), k: 4),
+            action: () => Pcg32Extended.Create(
+                k: 4,
+                state: 0UL,
+                stream: (Pcg32XshRr.MaxStream + 1UL)
+            ),
             paramName: "stream"
         )) { return "a stream above MaxStream was accepted"; }
 
-        _ = Pcg32Extended.Create(state: 0UL, stream: 0UL, k: 2);
-        _ = Pcg32Extended.Create(state: 0UL, stream: 0UL, k: 1024);
-        _ = Pcg32Extended.Create(state: 0UL, stream: Pcg32XshRr.MaxStream, k: 4);
+        _ = Pcg32Extended.Create(
+            k: 2,
+            state: 0UL,
+            stream: 0UL
+        );
+        _ = Pcg32Extended.Create(
+            k: 1024,
+            state: 0UL,
+            stream: 0UL
+        );
+        _ = Pcg32Extended.Create(
+            k: 4,
+            state: 0UL,
+            stream: Pcg32XshRr.MaxStream
+        );
 
         var indexed = Pcg32Extended.Create(
+            k: 4,
             state: 0UL,
-            stream: 0UL,
-            k: 4
+            stream: 0UL
         );
 
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
@@ -280,11 +308,17 @@ internal static partial class Subjects {
             paramName: "index"
         )) { return "GetExtension(k) was accepted"; }
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
-            action: () => indexed.SetExtension(index: -1, word: 0U),
+            action: () => indexed.SetExtension(
+                index: -1,
+                word: 0U
+            ),
             paramName: "index"
         )) { return "SetExtension(-1, _) was accepted"; }
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
-            action: () => indexed.SetExtension(index: 4, word: 0U),
+            action: () => indexed.SetExtension(
+                index: 4,
+                word: 0U
+            ),
             paramName: "index"
         )) { return "SetExtension(k, _) was accepted"; }
         if (!ThrowsExactly<ArgumentException>(
@@ -297,9 +331,9 @@ internal static partial class Subjects {
         )) { return "SetExtension with a long span was accepted"; }
 
         var wrapped = Pcg32Extended.Create(
+            k: 4,
             state: 321UL,
-            stream: 8UL,
-            k: 4
+            stream: 8UL
         );
 
         for (var index = 0; (index < 5); ++index) {
@@ -317,7 +351,10 @@ internal static partial class Subjects {
             if (extension[index] != wrapped.GetExtension(index: index)) { return $"Extension[{index}] disagrees with GetExtension"; }
         }
 
-        wrapped.SetExtension(index: 1, word: 0xABCDEF01U);
+        wrapped.SetExtension(
+            index: 1,
+            word: 0xABCDEF01U
+        );
 
         if (wrapped.GetExtension(index: 1) != 0xABCDEF01U) { return "SetExtension did not take"; }
         if (wrapped.Extension[1] != 0xABCDEF01U) { return "Extension did not reflect SetExtension"; }
@@ -330,27 +367,27 @@ internal static partial class Subjects {
     /// <see cref="Pcg32Extended.Create(ulong, ulong, int)"/>'s already-self-seeded one — lands the next k draws on the
     /// wanted values in order; plus the table-length refusal ladder.</summary>
     public static string? PcgExtendedCreateWithTable() {
-        const int k = 8;
-        const ulong state = 4001UL;
-        const ulong stream = 17UL;
+        const int K = 8;
+        const ulong State = 4001UL;
+        const ulong Stream = 17UL;
         var seeder = Pcg32XshRr.Create(
-            state: state,
-            stream: stream
+            state: State,
+            stream: Stream
         );
-        var table = new uint[k];
+        var table = new uint[K];
 
-        for (var index = 0; (index < k); ++index) {
+        for (var index = 0; (index < K); ++index) {
             table[index] = seeder.NextUInt32();
         }
 
         var withTable = Pcg32Extended.CreateWithTable(
-            state: state,
-            stream: stream,
+            state: State,
+            stream: Stream,
             table: table
         );
         var freshBase = Pcg32XshRr.Create(
-            state: state,
-            stream: stream
+            state: State,
+            stream: Stream
         );
 
         if (withTable.State != freshBase.State) { return "CreateWithTable's base State does not match a fresh Pcg32XshRr.Create at the same seed and stream"; }
@@ -359,9 +396,9 @@ internal static partial class Subjects {
 
         var extension = withTable.Extension;
 
-        if (extension.Length != k) { return $"Extension has length {extension.Length}, not k={k}"; }
+        if (extension.Length != K) { return $"Extension has length {extension.Length}, not k={K}"; }
 
-        for (var index = 0; (index < k); ++index) {
+        for (var index = 0; (index < K); ++index) {
             if (extension[index] != table[index]) { return $"Extension[{index}] is 0x{extension[index]:X8}, not the authored 0x{table[index]:X8}"; }
         }
 
@@ -369,18 +406,18 @@ internal static partial class Subjects {
         // clean Pcg32XshRr.Create(state, stream) produces at each of the first k steps, install wanted XOR base at
         // each, and confirm the constructed generator's own next k draws equal the wanted values in order.
         var indexProbe = Pcg32XshRr.Create(
-            state: state,
-            stream: stream
+            state: State,
+            stream: Stream
         );
         var baseProbe = Pcg32XshRr.Create(
-            state: state,
-            stream: stream
+            state: State,
+            stream: Stream
         );
-        var indices = new int[k];
-        var baseDraws = new uint[k];
+        var indices = new int[K];
+        var baseDraws = new uint[K];
 
-        for (var index = 0; (index < k); ++index) {
-            indices[index] = ((int)(indexProbe.State & ((ulong)(k - 1))));
+        for (var index = 0; (index < K); ++index) {
+            indices[index] = ((int)(indexProbe.State & ((ulong)(K - 1))));
             _ = indexProbe.NextUInt32();
             baseDraws[index] = baseProbe.NextUInt32();
         }
@@ -389,36 +426,48 @@ internal static partial class Subjects {
             state: 990UL,
             stream: 21UL
         );
-        var wanted = new uint[k];
-        var chosenTable = new uint[k];
+        var wanted = new uint[K];
+        var chosenTable = new uint[K];
 
-        for (var index = 0; (index < k); ++index) {
+        for (var index = 0; (index < K); ++index) {
             wanted[index] = chooser.NextUInt32();
             chosenTable[indices[index]] = unchecked(wanted[index] ^ baseDraws[index]);
         }
 
         var chosen = Pcg32Extended.CreateWithTable(
-            state: state,
-            stream: stream,
+            state: State,
+            stream: Stream,
             table: chosenTable
         );
 
-        for (var index = 0; (index < k); ++index) {
+        for (var index = 0; (index < K); ++index) {
             var drawn = chosen.NextUInt32();
 
             if (drawn != wanted[index]) { return $"draw {index} is 0x{drawn:X8}, not the chosen 0x{wanted[index]:X8}"; }
         }
 
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
-            action: () => Pcg32Extended.CreateWithTable(state: 0UL, stream: 0UL, table: new uint[3]),
+            action: () => Pcg32Extended.CreateWithTable(
+                state: 0UL,
+                stream: 0UL,
+                table: new uint[3]
+            ),
             paramName: "table"
         )) { return "a non-power-of-two table length was accepted"; }
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
-            action: () => Pcg32Extended.CreateWithTable(state: 0UL, stream: 0UL, table: new uint[2048]),
+            action: () => Pcg32Extended.CreateWithTable(
+                state: 0UL,
+                stream: 0UL,
+                table: new uint[2048]
+            ),
             paramName: "table"
         )) { return "a table length above 1024 was accepted"; }
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
-            action: () => Pcg32Extended.CreateWithTable(state: 0UL, stream: (Pcg32XshRr.MaxStream + 1UL), table: new uint[4]),
+            action: () => Pcg32Extended.CreateWithTable(
+                state: 0UL,
+                stream: (Pcg32XshRr.MaxStream + 1UL),
+                table: new uint[4]
+            ),
             paramName: "stream"
         )) { return "a stream above MaxStream was accepted"; }
 
@@ -465,7 +514,7 @@ internal static partial class Subjects {
 
         for (var trial = 0; (trial < 2000); ++trial) {
             var seed = driver.NextUInt32();
-            var n = ((((ulong)driver.NextUInt32()) << 32) | driver.NextUInt32());
+            var n = (((ulong)driver.NextUInt32()) << 32) | driver.NextUInt32();
             var start = Pcg32XshRr.Create(
                 state: seed,
                 stream: 21UL
@@ -519,10 +568,10 @@ internal static partial class Subjects {
 
         for (var trial = 0; (trial < 5000); ++trial) {
             var output = driver.NextUInt32();
-            var lowBits = ((((ulong)driver.NextUInt32()) << 32) | driver.NextUInt32());
+            var lowBits = (((ulong)driver.NextUInt32()) << 32) | driver.NextUInt32();
             var preimage = Pcg32XshRr.Preimage(
-                output: output,
-                lowBits: lowBits
+                lowBits: lowBits,
+                output: output
             );
 
             if (preimage.NextUInt32() != output) { return $"trial {trial}: Preimage's next draw did not equal the requested output"; }
@@ -546,11 +595,21 @@ internal static partial class Subjects {
         }
 
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
-            action: () => Pcg32XshRr.Seeking(stream: (Pcg32XshRr.MaxStream + 1UL), drawIndex: 0UL, output: 0U, lowBits: 0UL),
+            action: () => Pcg32XshRr.Seeking(
+                drawIndex: 0UL,
+                lowBits: 0UL,
+                output: 0U,
+                stream: (Pcg32XshRr.MaxStream + 1UL)
+            ),
             paramName: "stream"
         )) { return "a stream above MaxStream was accepted"; }
 
-        _ = Pcg32XshRr.Seeking(stream: Pcg32XshRr.MaxStream, drawIndex: 0UL, output: 0U, lowBits: 0UL);
+        _ = Pcg32XshRr.Seeking(
+            drawIndex: 0UL,
+            lowBits: 0UL,
+            output: 0U,
+            stream: Pcg32XshRr.MaxStream
+        );
 
         return null;
     }

@@ -6,43 +6,192 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 public sealed class BindingRadialTests {
-    [Fact]
-    public void AuthoredExcursionDeadZoneRangesAndHysteresisSelectRings() {
-        var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: ExcursionProfile()));
+    private static BindingProfileDocument ExcursionProfile() {
+        var profile = Profile();
 
-        _ = bindings.Resolve(pressesWithheld: false, slot: 0, signal: InputSignal.Press(source: "keyboard.tab"));
-        var excursion = bindings.WheelFor(slot: 0)!.Excursion;
-
-        Assert.NotNull(@object: excursion);
-        Assert.Equal(expected: -1, actual: BindingWheelGeometry.ResolveExcursionRing(vector: new Vector2(x: 0.15f, y: 0f), excursion: excursion, previousRing: -1));
-        Assert.Equal(expected: 0, actual: BindingWheelGeometry.ResolveExcursionRing(vector: new Vector2(x: 0.20f, y: 0f), excursion: excursion, previousRing: -1));
-        Assert.Equal(expected: 1, actual: BindingWheelGeometry.ResolveExcursionRing(vector: new Vector2(x: 0.50f, y: 0f), excursion: excursion, previousRing: -1));
-        Assert.Equal(expected: 2, actual: BindingWheelGeometry.ResolveExcursionRing(vector: new Vector2(x: 0.90f, y: 0f), excursion: excursion, previousRing: -1));
-
-        Assert.Equal(expected: 0, actual: BindingWheelGeometry.ResolveExcursionRing(vector: new Vector2(x: 0.36f, y: 0f), excursion: excursion, previousRing: 0));
-        Assert.Equal(expected: 1, actual: BindingWheelGeometry.ResolveExcursionRing(vector: new Vector2(x: 0.38f, y: 0f), excursion: excursion, previousRing: 0));
-        Assert.Equal(expected: 1, actual: BindingWheelGeometry.ResolveExcursionRing(vector: new Vector2(x: 0.34f, y: 0f), excursion: excursion, previousRing: 1));
-        Assert.Equal(expected: 0, actual: BindingWheelGeometry.ResolveExcursionRing(vector: new Vector2(x: 0.32f, y: 0f), excursion: excursion, previousRing: 1));
+        return profile with {
+            Wheels = [
+                new BindingWheelDefinition(
+                Id: "excursion",
+                Group: "play",
+                HoldPages: ["tab-page"],
+                Rings: [
+                        Ring(id: "excursion-near"),
+                        Ring(id: "excursion-middle"),
+                        Ring(id: "excursion-far"),
+                    ],
+                Style: new BindingWheelStyleDefinition(
+                    PointerSelection: BindingWheelSpatialSelectionMode.Angle,
+                    Placement: BindingWheelPlacement.ViewportCenter,
+                    RingSelection: BindingWheelRingSelectionMode.Excursion,
+                    Excursion: new BindingWheelExcursionDefinition(
+                        DeadZone: 0.15f,
+                        Hysteresis: 0.02f,
+                        SpatialTravelFraction: 0.20f,
+                        Thresholds: [0.35f, 0.70f]
+                    )
+                )
+            ),
+            ],
+        };
     }
+    private static BindingChordDefinition Page(string group, IReadOnlyList<string> chord, string id, IReadOnlyList<BindingPageEntryDefinition>? entries = null) => new(
+        Group: group,
+        Chord: chord,
+        Page: new BindingPageDefinition(
+            Id: id,
+            Entries: (entries ?? [])
+        )
+    );
+    private static BindingProfileDocument Profile() => new(
+        Version: BindingProfileDocument.CurrentVersion,
+        Modifiers: [
+            new BindingModifierDefinition(
+                Id: "tab",
+                Sources: ["keyboard.tab"]
+            ),
+            new BindingModifierDefinition(
+                Id: "lt",
+                Sources: ["gamepad.leftTrigger"]
+            ),
+            new BindingModifierDefinition(
+                Id: "rt",
+                Sources: ["gamepad.rightTrigger"]
+            ),
+        ],
+        Chords: [
+            Page(
+                group: "play",
+                chord: [],
+                id: "base"
+            ),
+            Page(
+                group: "play",
+                chord: ["tab"],
+                id: "tab-page",
+                entries: [new BindingPageEntryDefinition(
+                        Sources: ["gamepad.leftStick"],
+                        Command: "test.radial.select"
+                    )]
+            ),
+            Page(
+                group: "play",
+                chord: ["lt"],
+                id: "lt-page"
+            ),
+            Page(
+                group: "play",
+                chord: ["rt"],
+                id: "rt-page"
+            ),
+        ],
+        Wheels: [
+            Wheel(
+                holdPages: ["tab-page", "lt-page"],
+                id: "primary",
+                ringId: "primary-ring"
+            ),
+            Wheel(
+                holdPages: ["rt-page"],
+                id: "secondary",
+                ringId: "secondary-ring"
+            ),
+        ]
+    );
+    private static BindingPageDefinition Ring(string id) => new(
+        Id: id,
+        Entries: [
+            new BindingPageEntryDefinition(
+                Sources: null,
+                Command: TestModule.Command
+            ),
+            new BindingPageEntryDefinition(
+                Sources: null,
+                Command: TestModule.Command
+            ),
+        ]
+    );
+    private static BindingWheelDefinition Wheel(string id, IReadOnlyList<string> holdPages, string ringId) => new(
+        Id: id,
+        Group: "play",
+        HoldPages: holdPages,
+        Rings: [
+            new BindingPageDefinition(
+                Id: ringId,
+                Entries: [
+                    new BindingPageEntryDefinition(
+                        Sources: null,
+                        Command: TestModule.Command
+                    ),
+                    new BindingPageEntryDefinition(
+                        Sources: null,
+                        Command: TestModule.Command
+                    ),
+                ]
+            ),
+        ],
+        Style: new BindingWheelStyleDefinition(
+            PointerSelection: BindingWheelSpatialSelectionMode.HitTarget,
+            Placement: BindingWheelPlacement.ViewportCenter,
+            DeadZoneFraction: 0.2f,
+            AxisDeadZone: 0.06f,
+            RingWidthFraction: 0.08f,
+            OuterGraceRingFraction: 0.25f,
+            SectorOffset: 0.25f,
+            InitialRing: 0
+        )
+    );
+
     [Fact]
-    public void SectorOffsetIsInSectorsSoHalfMakesNorthTheSeamForAnyCount() {
-        var centered = new BindingWheelStyleDefinition(AxisDeadZone: 0.1f);
-        var seam = new BindingWheelStyleDefinition(AxisDeadZone: 0.1f, SectorOffset: 0.5f);
-        var justEast = new Vector2(x: 0.05f, y: 1f);
-        var justWest = new Vector2(x: -0.05f, y: 1f);
+    public void ACompiledSectorReturnsThroughTheSeatsPrincipalDoor() {
+        var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: Profile()));
+        var registry = new CommandRegistry(modules: [new TestModule()]);
+        var expectedPrincipal = CommandPrincipal.Peer(
+            generation: 4,
+            index: 17
+        );
+        var router = new InputRouter(
+            registry: registry,
+            bindings: bindings,
+            principalResolver: new FixedPrincipalResolver(principal: expectedPrincipal)
+        );
 
-        foreach (var count in new[] { 3, 4, 6, 7, }) {
-            // Offset 0: the first entry straddles north on either side.
-            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(sectorCount: count, style: centered, vector: justEast).Sector);
-            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(sectorCount: count, style: centered, vector: justWest).Sector);
-            // Offset 0.5: north is the seam — east of it the first entry, west of it the last — whatever the count.
-            Assert.Equal(expected: 0, actual: BindingWheelGeometry.SelectAxis(sectorCount: count, style: seam, vector: justEast).Sector);
-            Assert.Equal(expected: (count - 1), actual: BindingWheelGeometry.SelectAxis(sectorCount: count, style: seam, vector: justWest).Sector);
-        }
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            slot: 2,
+            signal: InputSignal.Press(source: "keyboard.tab")
+        );
+        var activation = bindings.WheelFor(slot: 2)!.Rings[0].Sectors[0].Activation;
 
-        // Sectors advance clockwise: due east on a four-wheel is entry 1 either way.
-        Assert.Equal(expected: 1, actual: BindingWheelGeometry.SelectAxis(vector: new Vector2(x: 1f, y: 0f), sectorCount: 4, style: centered).Sector);
-        Assert.Equal(expected: 1, actual: BindingWheelGeometry.SelectAxis(vector: new Vector2(x: 1f, y: 0f), sectorCount: 4, style: seam).Sector);
+        Assert.True(condition: router.Activate(
+            activation: activation,
+            slot: 2
+        ));
+
+        var snapshot = router.SnapshotForTick(
+            tick: 7UL,
+            windowEndTick: ulong.MaxValue
+        );
+
+        Assert.True(condition: snapshot.TryGetLane(
+            lane: out var lane,
+            slot: 2
+        ));
+        var entry = Assert.Single(collection: lane.Entries);
+
+        Assert.Equal(
+            expected: expectedPrincipal,
+            actual: entry.Principal
+        );
+        Assert.Equal(
+            expected: CommandPhase.Started,
+            actual: entry.Phase
+        );
+        Assert.Equal(
+            expected: CommandOrigin.Binding,
+            actual: entry.Origin
+        );
+        Assert.Null(@object: entry.Source);
     }
     [Fact]
     public void AWholeSectorOfOffsetIsRefusedAsAReorder() {
@@ -53,89 +202,14 @@ public sealed class BindingRadialTests {
 
         var refusal = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: document));
 
-        Assert.Contains(expectedSubstring: "sectorOffset", actualString: refusal.Message);
-        Assert.Contains(expectedSubstring: "reorder", actualString: refusal.Message);
-    }
-    [Fact]
-    public void AngleUsesInputNeutralWhileHitTargetUsesTheDisplayedHub() {
-        var openingInput = new Vector2(x: 700f, y: 500f);
-        var centeredHub = new Vector2(x: 400f, y: 300f);
-
-        Assert.Equal(
-            expected: Vector2.Zero,
-            actual: BindingWheelGeometry.ResolveSpatialTargetVector(BindingWheelSpatialSelectionMode.Angle, position: openingInput, neutral: openingInput, hub: centeredHub)
+        Assert.Contains(
+            expectedSubstring: "sectorOffset",
+            actualString: refusal.Message
         );
-        Assert.Equal(
-            expected: new Vector2(x: 300f, y: 200f),
-            actual: BindingWheelGeometry.ResolveSpatialTargetVector(BindingWheelSpatialSelectionMode.HitTarget, position: openingInput, neutral: openingInput, hub: centeredHub)
+        Assert.Contains(
+            expectedSubstring: "reorder",
+            actualString: refusal.Message
         );
-    }
-    [Fact]
-    public void ExcursionPolicyRoundTripsAsAuthoredData() {
-        var json = JsonSerializer.Serialize(value: ExcursionProfile(), jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument);
-
-        Assert.Contains(actualString: json, expectedSubstring: "\"ringSelection\": \"Excursion\"");
-        Assert.Contains(actualString: json, expectedSubstring: "\"deadZone\": 0.15");
-        Assert.Contains(actualString: json, expectedSubstring: "\"thresholds\": [");
-        Assert.Contains(actualString: json, expectedSubstring: "\"spatialTravelFraction\": 0.2");
-        Assert.Contains(actualString: json, expectedSubstring: "\"hysteresis\": 0.02");
-
-        var roundTripped = JsonSerializer.Deserialize(json: json, jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument);
-        var style = roundTripped!.Wheels![0].Style!;
-
-        Assert.Equal(expected: BindingWheelRingSelectionMode.Excursion, actual: style.RingSelection);
-        Assert.Equal(expected: [0.35f, 0.70f], actual: style.Excursion!.Thresholds);
-    }
-    [Fact]
-    public void ExcursionRequiresExactlyOneBoundaryBetweenEachRing() {
-        var document = ExcursionProfile();
-        var wheel = document.Wheels![0];
-        var invalid = document with {
-            Wheels = [wheel with {
-                Style = wheel.Style! with {
-                    Excursion = wheel.Style.Excursion! with { Thresholds = [0.35f] },
-                },
-            }],
-        };
-
-        _ = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: invalid));
-    }
-    [Fact]
-    public void HitTargetCanUseNeutralRelativeExcursionWithoutConflatingTheTwoOrigins() {
-        var document = ExcursionProfile();
-        var wheel = document.Wheels![0];
-        var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: document with {
-            Wheels = [wheel with {
-                Style = wheel.Style! with { PointerSelection = BindingWheelSpatialSelectionMode.HitTarget },
-            }],
-        }));
-
-        _ = bindings.Resolve(pressesWithheld: false, slot: 0, signal: InputSignal.Press(source: "keyboard.tab"));
-        var view = bindings.WheelFor(slot: 0)!;
-        var neutral = new Vector2(x: 100f, y: 100f);
-        var hub = new Vector2(x: 200f, y: 100f);
-        var position = new Vector2(x: 230f, y: 100f);
-        var neutralVector = (position - neutral);
-        var normalized = BindingWheelGeometry.NormalizeSpatialExcursion(vector: neutralVector, viewportUnit: 100f, excursion: view.Excursion!);
-        var ring = BindingWheelGeometry.ResolveExcursionRing(vector: normalized, excursion: view.Excursion!, previousRing: -1);
-        var targetingVector = BindingWheelGeometry.ResolveSpatialTargetVector(
-            mode: view.Style.PointerSelection,
-            position: position,
-            neutral: neutral,
-            hub: hub
-        );
-        var selection = BindingWheelGeometry.SelectSpatial(
-            vector: targetingVector,
-            sectorCount: view.Rings[ring].Sectors.Count,
-            ringCount: view.Rings.Count,
-            style: view.Style,
-            mode: view.Style.PointerSelection,
-            unit: 100f
-        );
-
-        Assert.Equal(actual: ring, expected: 2);
-        Assert.Equal(expected: new Vector2(x: 30f, y: 0f), actual: targetingVector);
-        Assert.Equal(expected: BindingWheelSelectionOutcome.Sector, actual: selection.Outcome);
     }
     [Fact]
     public void AngleSelectionIgnoresOuterDistanceWhileHitTargetRetainsIt() {
@@ -147,7 +221,10 @@ public sealed class BindingRadialTests {
         );
 
         var selection = BindingWheelGeometry.SelectSpatial(
-            vector: new Vector2(x: 1_000f, y: 0f),
+            vector: new Vector2(
+                x: 1_000f,
+                y: 0f
+            ),
             sectorCount: 4,
             ringCount: 1,
             style: angle,
@@ -155,13 +232,22 @@ public sealed class BindingRadialTests {
             unit: 100f
         );
 
-        Assert.Equal(expected: 1, actual: selection.Sector);
-        Assert.Equal(expected: BindingWheelSelectionOutcome.Sector, actual: selection.Outcome);
+        Assert.Equal(
+            expected: 1,
+            actual: selection.Sector
+        );
+        Assert.Equal(
+            expected: BindingWheelSelectionOutcome.Sector,
+            actual: selection.Outcome
+        );
 
         var targeted = angle with { PointerSelection = BindingWheelSpatialSelectionMode.HitTarget };
 
         selection = BindingWheelGeometry.SelectSpatial(
-            vector: new Vector2(x: 1_000f, y: 0f),
+            vector: new Vector2(
+                x: 1_000f,
+                y: 0f
+            ),
             sectorCount: 4,
             ringCount: 1,
             style: targeted,
@@ -169,66 +255,369 @@ public sealed class BindingRadialTests {
             unit: 100f
         );
 
-        Assert.Equal(expected: -1, actual: selection.Sector);
-        Assert.Equal(expected: BindingWheelSelectionOutcome.Outside, actual: selection.Outcome);
-    }
-    [Fact]
-    public void ExplicitAxisDeadZoneIsIndependentFromSpatialHubGeometry() {
-        var style = new BindingWheelStyleDefinition(
-            DeadZoneFraction: 0.20f,
-            AxisDeadZone: 0.05f,
-            RingWidthFraction: 0.08f
-        );
-        var axis = BindingWheelGeometry.SelectAxis(
-            vector: new Vector2(x: 0.10f, y: 0f),
-            sectorCount: 4,
-            style: style
-        );
-        var spatial = BindingWheelGeometry.SelectSpatial(
-            vector: new Vector2(x: 10f, y: 0f),
-            sectorCount: 4,
-            ringCount: 1,
-            style: style,
-            mode: BindingWheelSpatialSelectionMode.Angle,
-            unit: 100f
-        );
-
-        Assert.Equal(expected: BindingWheelSelectionOutcome.Sector, actual: axis.Outcome);
-        Assert.Equal(expected: BindingWheelSelectionOutcome.DeadZone, actual: spatial.Outcome);
-    }
-    [Fact]
-    public void PlacementIsIndependentFromSelectionSource() {
-        var pointer = new Vector2(x: 12f, y: 34f);
-        var viewportCenter = new Vector2(x: 400f, y: 300f);
-
         Assert.Equal(
-            expected: pointer,
-            actual: BindingWheelGeometry.ResolveOpeningCenter(BindingWheelPlacement.Pointer, pointerAvailable: true, pointer: pointer, viewportCenter: viewportCenter)
+            expected: -1,
+            actual: selection.Sector
         );
         Assert.Equal(
-            expected: viewportCenter,
-            actual: BindingWheelGeometry.ResolveOpeningCenter(BindingWheelPlacement.Pointer, pointerAvailable: false, pointer: pointer, viewportCenter: viewportCenter)
-        );
-        Assert.Equal(
-            expected: viewportCenter,
-            actual: BindingWheelGeometry.ResolveOpeningCenter(BindingWheelPlacement.ViewportCenter, pointerAvailable: true, pointer: pointer, viewportCenter: viewportCenter)
+            expected: BindingWheelSelectionOutcome.Outside,
+            actual: selection.Outcome
         );
     }
     [Fact]
-    public void SelectionAndPlacementPoliciesRoundTripAsAuthoredTokens() {
-        var json = JsonSerializer.Serialize(value: Profile(), jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument);
+    public void AngleUsesInputNeutralWhileHitTargetUsesTheDisplayedHub() {
+        var openingInput = new Vector2(
+            x: 700f,
+            y: 500f
+        );
+        var centeredHub = new Vector2(
+            x: 400f,
+            y: 300f
+        );
 
-        Assert.Contains(actualString: json, expectedSubstring: "\"pointerSelection\": \"HitTarget\"");
-        Assert.Contains(actualString: json, expectedSubstring: "\"placement\": \"ViewportCenter\"");
+        Assert.Equal(
+            expected: Vector2.Zero,
+            actual: BindingWheelGeometry.ResolveSpatialTargetVector(
+                BindingWheelSpatialSelectionMode.Angle,
+                position: openingInput,
+                neutral: openingInput,
+                hub: centeredHub
+            )
+        );
+        Assert.Equal(
+            expected: new Vector2(
+                x: 300f,
+                y: 200f
+            ),
+            actual: BindingWheelGeometry.ResolveSpatialTargetVector(
+                BindingWheelSpatialSelectionMode.HitTarget,
+                position: openingInput,
+                neutral: openingInput,
+                hub: centeredHub
+            )
+        );
+    }
+    [Fact]
+    public void AuthoredExcursionDeadZoneRangesAndHysteresisSelectRings() {
+        var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: ExcursionProfile()));
 
-        var roundTripped = JsonSerializer.Deserialize(json: json, jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument);
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            slot: 0,
+            signal: InputSignal.Press(source: "keyboard.tab")
+        );
+        var excursion = bindings.WheelFor(slot: 0)!.Excursion;
 
-        Assert.NotNull(@object: roundTripped);
-        var style = roundTripped.Wheels![0].Style;
+        Assert.NotNull(@object: excursion);
+        Assert.Equal(
+            expected: -1,
+            actual: BindingWheelGeometry.ResolveExcursionRing(
+                vector: new Vector2(
+                    x: 0.15f,
+                    y: 0f
+                ),
+                excursion: excursion,
+                previousRing: -1
+            )
+        );
+        Assert.Equal(
+            expected: 0,
+            actual: BindingWheelGeometry.ResolveExcursionRing(
+                vector: new Vector2(
+                    x: 0.20f,
+                    y: 0f
+                ),
+                excursion: excursion,
+                previousRing: -1
+            )
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: BindingWheelGeometry.ResolveExcursionRing(
+                vector: new Vector2(
+                    x: 0.50f,
+                    y: 0f
+                ),
+                excursion: excursion,
+                previousRing: -1
+            )
+        );
+        Assert.Equal(
+            expected: 2,
+            actual: BindingWheelGeometry.ResolveExcursionRing(
+                vector: new Vector2(
+                    x: 0.90f,
+                    y: 0f
+                ),
+                excursion: excursion,
+                previousRing: -1
+            )
+        );
 
-        Assert.NotNull(@object: style);
-        Assert.Equal(expected: BindingWheelSpatialSelectionMode.HitTarget, actual: style.PointerSelection);
-        Assert.Equal(expected: BindingWheelPlacement.ViewportCenter, actual: style.Placement);
+        Assert.Equal(
+            expected: 0,
+            actual: BindingWheelGeometry.ResolveExcursionRing(
+                vector: new Vector2(
+                    x: 0.36f,
+                    y: 0f
+                ),
+                excursion: excursion,
+                previousRing: 0
+            )
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: BindingWheelGeometry.ResolveExcursionRing(
+                vector: new Vector2(
+                    x: 0.38f,
+                    y: 0f
+                ),
+                excursion: excursion,
+                previousRing: 0
+            )
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: BindingWheelGeometry.ResolveExcursionRing(
+                vector: new Vector2(
+                    x: 0.34f,
+                    y: 0f
+                ),
+                excursion: excursion,
+                previousRing: 1
+            )
+        );
+        Assert.Equal(
+            expected: 0,
+            actual: BindingWheelGeometry.ResolveExcursionRing(
+                vector: new Vector2(
+                    x: 0.32f,
+                    y: 0f
+                ),
+                excursion: excursion,
+                previousRing: 1
+            )
+        );
+    }
+    [Fact]
+    public void AxisSelectionIsClearedAtBothGestureBoundaries() {
+        var gesture = new BindingWheelGestureState();
+
+        gesture.Open();
+        _ = gesture.TrySelect(
+            axis: new Vector2(
+                x: 0.75f,
+                y: -0.25f
+            ),
+            sequence: 19L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        );
+
+        Assert.True(condition: gesture.AxisKnown);
+        Assert.Equal(
+            expected: 19L,
+            actual: gesture.AxisSequence
+        );
+
+        gesture.Close();
+
+        Assert.False(condition: gesture.AxisKnown);
+        Assert.False(condition: gesture.AxisNeutral);
+        Assert.Equal(
+            expected: Vector2.Zero,
+            actual: gesture.Axis
+        );
+        Assert.Equal(
+            expected: 0L,
+            actual: gesture.AxisSequence
+        );
+
+        _ = gesture.TrySelect(
+            axis: Vector2.UnitX,
+            sequence: 20L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        );
+        gesture.Open();
+
+        Assert.False(condition: gesture.AxisKnown);
+        Assert.False(condition: gesture.AxisNeutral);
+        Assert.Equal(
+            expected: Vector2.Zero,
+            actual: gesture.Axis
+        );
+        Assert.Equal(
+            expected: 0L,
+            actual: gesture.AxisSequence
+        );
+    }
+    [Fact]
+    public void AxisSelectionRetainsEachThrowAgainstWeakerReturnSpringSamples() {
+        var gesture = new BindingWheelGestureState();
+        var intended = new Vector2(
+            x: 0.82f,
+            y: -0.48f
+        );
+        var repeated = (intended * 0.7f);
+        var rebound = new Vector2(
+            x: -0.234f,
+            y: 0.225f
+        );
+
+        gesture.Open();
+
+        Assert.False(condition: gesture.TrySelect(
+            axis: new Vector2(
+                x: 0.05f,
+                y: -0.04f
+            ),
+            sequence: 1L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.True(condition: gesture.TrySelect(
+            axis: intended,
+            deadZoneSquared: 0.01f,
+            sequence: 2L,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.False(condition: gesture.TrySelect(
+            axis: rebound,
+            deadZoneSquared: 0.01f,
+            sequence: 3L,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.Equal(
+            expected: intended,
+            actual: gesture.Axis
+        );
+        Assert.Equal(
+            expected: 2L,
+            actual: gesture.AxisSequence
+        );
+
+        Assert.True(condition: gesture.TrySelect(
+            axis: new Vector2(
+                x: 0.04f,
+                y: -0.03f
+            ),
+            sequence: 4L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.False(condition: gesture.TrySelect(
+            axis: rebound,
+            deadZoneSquared: 0.01f,
+            sequence: 5L,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.Equal(
+            expected: intended,
+            actual: gesture.Axis
+        );
+        Assert.True(condition: gesture.AxisNeutral);
+        Assert.Equal(
+            expected: 4L,
+            actual: gesture.AxisSequence
+        );
+
+        Assert.True(condition: gesture.TrySelect(
+            axis: repeated,
+            deadZoneSquared: 0.01f,
+            sequence: 6L,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.Equal(
+            expected: repeated,
+            actual: gesture.Axis
+        );
+        Assert.False(condition: gesture.AxisNeutral);
+        Assert.Equal(
+            expected: 6L,
+            actual: gesture.AxisSequence
+        );
+
+        Assert.True(condition: gesture.TrySelect(
+            axis: Vector2.Zero,
+            sequence: 7L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.False(condition: gesture.TrySelect(
+            axis: rebound,
+            deadZoneSquared: 0.01f,
+            sequence: 8L,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.Equal(
+            expected: repeated,
+            actual: gesture.Axis
+        );
+        Assert.True(condition: gesture.AxisNeutral);
+        Assert.Equal(
+            expected: 7L,
+            actual: gesture.AxisSequence
+        );
+    }
+    [Fact]
+    public void AxisSelectionTracksRotationWithoutRequiringANewMagnitudePeak() {
+        var gesture = new BindingWheelGestureState();
+        var first = new Vector2(
+            x: 0.95f,
+            y: 0f
+        );
+        var rotated = new Vector2(
+            x: 0f,
+            y: 0.80f
+        );
+        var rotatedAgain = new Vector2(
+            x: -0.70f,
+            y: 0f
+        );
+
+        gesture.Open();
+
+        Assert.True(condition: gesture.TrySelect(
+            axis: first,
+            deadZoneSquared: 0.01f,
+            sequence: 1L,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.True(condition: gesture.TrySelect(
+            axis: rotated,
+            deadZoneSquared: 0.01f,
+            sequence: 2L,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.True(condition: gesture.TrySelect(
+            axis: rotatedAgain,
+            deadZoneSquared: 0.01f,
+            sequence: 3L,
+            switchThresholdSquared: 0.16f
+        ));
+
+        Assert.Equal(
+            expected: rotatedAgain,
+            actual: gesture.Axis
+        );
+        Assert.False(condition: gesture.AxisNeutral);
+        Assert.Equal(
+            expected: 3L,
+            actual: gesture.AxisSequence
+        );
+
+        Assert.True(condition: gesture.TrySelect(
+            axis: Vector2.Zero,
+            sequence: 4L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.Equal(
+            expected: rotatedAgain,
+            actual: gesture.Axis
+        );
+        Assert.True(condition: gesture.AxisNeutral);
     }
     [Fact]
     public void CancellationRemainsLatchedUntilTheNextGestureOpens() {
@@ -254,158 +643,431 @@ public sealed class BindingRadialTests {
         Assert.True(condition: gesture.CanArm);
     }
     [Fact]
-    public void AxisSelectionIsClearedAtBothGestureBoundaries() {
-        var gesture = new BindingWheelGestureState();
-
-        gesture.Open();
-        _ = gesture.TrySelect(
-            axis: new Vector2(x: 0.75f, y: -0.25f),
-            sequence: 19L,
-            deadZoneSquared: 0.01f,
-            switchThresholdSquared: 0.16f
+    public void ComposerKeysRadialsByIdRatherThanCollapsingAGroup() {
+        var baseDocument = Profile();
+        var overlay = new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [Page(
+                    group: "play",
+                    chord: ["tab", "lt"],
+                    id: "third-page"
+                )],
+            Wheels: [Wheel(
+                    holdPages: ["third-page"],
+                    id: "third",
+                    ringId: "third-ring"
+                )]
         );
 
-        Assert.True(condition: gesture.AxisKnown);
-        Assert.Equal(expected: 19L, actual: gesture.AxisSequence);
-
-        gesture.Close();
-
-        Assert.False(condition: gesture.AxisKnown);
-        Assert.False(condition: gesture.AxisNeutral);
-        Assert.Equal(expected: Vector2.Zero, actual: gesture.Axis);
-        Assert.Equal(expected: 0L, actual: gesture.AxisSequence);
-
-        _ = gesture.TrySelect(
-            axis: Vector2.UnitX,
-            sequence: 20L,
-            deadZoneSquared: 0.01f,
-            switchThresholdSquared: 0.16f
+        var composed = WorldBindingComposer.Compose(
+            baseDocument,
+            overlay
         );
-        gesture.Open();
 
-        Assert.False(condition: gesture.AxisKnown);
-        Assert.False(condition: gesture.AxisNeutral);
-        Assert.Equal(expected: Vector2.Zero, actual: gesture.Axis);
-        Assert.Equal(expected: 0L, actual: gesture.AxisSequence);
+        Assert.Equal(
+            expected: 3,
+            actual: composed.Wheels?.Count
+        );
+        _ = BindingProfile.Compile(document: composed);
     }
     [Fact]
-    public void AxisSelectionRetainsEachThrowAgainstWeakerReturnSpringSamples() {
-        var gesture = new BindingWheelGestureState();
-        var intended = new Vector2(x: 0.82f, y: -0.48f);
-        var repeated = (intended * 0.7f);
-        var rebound = new Vector2(x: -0.234f, y: 0.225f);
+    public void ExcursionPolicyRoundTripsAsAuthoredData() {
+        var json = JsonSerializer.Serialize(
+            value: ExcursionProfile(),
+            jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument
+        );
 
-        gesture.Open();
+        Assert.Contains(
+            actualString: json,
+            expectedSubstring: "\"ringSelection\": \"Excursion\""
+        );
+        Assert.Contains(
+            actualString: json,
+            expectedSubstring: "\"deadZone\": 0.15"
+        );
+        Assert.Contains(
+            actualString: json,
+            expectedSubstring: "\"thresholds\": ["
+        );
+        Assert.Contains(
+            actualString: json,
+            expectedSubstring: "\"spatialTravelFraction\": 0.2"
+        );
+        Assert.Contains(
+            actualString: json,
+            expectedSubstring: "\"hysteresis\": 0.02"
+        );
 
-        Assert.False(condition: gesture.TrySelect(
-            axis: new Vector2(x: 0.05f, y: -0.04f),
-            sequence: 1L,
-            deadZoneSquared: 0.01f,
-            switchThresholdSquared: 0.16f
-        ));
-        Assert.True(condition: gesture.TrySelect(
-            axis: intended,
-            deadZoneSquared: 0.01f,
-            sequence: 2L,
-            switchThresholdSquared: 0.16f
-        ));
-        Assert.False(condition: gesture.TrySelect(
-            axis: rebound,
-            deadZoneSquared: 0.01f,
-            sequence: 3L,
-            switchThresholdSquared: 0.16f
-        ));
-        Assert.Equal(expected: intended, actual: gesture.Axis);
-        Assert.Equal(expected: 2L, actual: gesture.AxisSequence);
+        var roundTripped = JsonSerializer.Deserialize(
+            json: json,
+            jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument
+        );
+        var style = roundTripped!.Wheels![0].Style!;
 
-        Assert.True(condition: gesture.TrySelect(
-            axis: new Vector2(x: 0.04f, y: -0.03f),
-            sequence: 4L,
-            deadZoneSquared: 0.01f,
-            switchThresholdSquared: 0.16f
-        ));
-        Assert.False(condition: gesture.TrySelect(
-            axis: rebound,
-            deadZoneSquared: 0.01f,
-            sequence: 5L,
-            switchThresholdSquared: 0.16f
-        ));
-        Assert.Equal(expected: intended, actual: gesture.Axis);
-        Assert.True(condition: gesture.AxisNeutral);
-        Assert.Equal(expected: 4L, actual: gesture.AxisSequence);
-
-        Assert.True(condition: gesture.TrySelect(
-            axis: repeated,
-            deadZoneSquared: 0.01f,
-            sequence: 6L,
-            switchThresholdSquared: 0.16f
-        ));
-        Assert.Equal(expected: repeated, actual: gesture.Axis);
-        Assert.False(condition: gesture.AxisNeutral);
-        Assert.Equal(expected: 6L, actual: gesture.AxisSequence);
-
-        Assert.True(condition: gesture.TrySelect(
-            axis: Vector2.Zero,
-            sequence: 7L,
-            deadZoneSquared: 0.01f,
-            switchThresholdSquared: 0.16f
-        ));
-        Assert.False(condition: gesture.TrySelect(
-            axis: rebound,
-            deadZoneSquared: 0.01f,
-            sequence: 8L,
-            switchThresholdSquared: 0.16f
-        ));
-        Assert.Equal(expected: repeated, actual: gesture.Axis);
-        Assert.True(condition: gesture.AxisNeutral);
-        Assert.Equal(expected: 7L, actual: gesture.AxisSequence);
+        Assert.Equal(
+            expected: BindingWheelRingSelectionMode.Excursion,
+            actual: style.RingSelection
+        );
+        Assert.Equal(
+            expected: [0.35f, 0.70f],
+            actual: style.Excursion!.Thresholds
+        );
     }
     [Fact]
-    public void AxisSelectionTracksRotationWithoutRequiringANewMagnitudePeak() {
-        var gesture = new BindingWheelGestureState();
-        var first = new Vector2(x: 0.95f, y: 0f);
-        var rotated = new Vector2(x: 0f, y: 0.80f);
-        var rotatedAgain = new Vector2(x: -0.70f, y: 0f);
+    public void ExcursionRequiresExactlyOneBoundaryBetweenEachRing() {
+        var document = ExcursionProfile();
+        var wheel = document.Wheels![0];
+        var invalid = document with {
+            Wheels = [wheel with {
+                Style = wheel.Style! with {
+                    Excursion = wheel.Style.Excursion! with { Thresholds = [0.35f] },
+                },
+            }],
+        };
 
-        gesture.Open();
+        _ = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: invalid));
+    }
+    [Fact]
+    public void ExplicitAxisDeadZoneIsIndependentFromSpatialHubGeometry() {
+        var style = new BindingWheelStyleDefinition(
+            DeadZoneFraction: 0.20f,
+            AxisDeadZone: 0.05f,
+            RingWidthFraction: 0.08f
+        );
+        var axis = BindingWheelGeometry.SelectAxis(
+            vector: new Vector2(
+                x: 0.10f,
+                y: 0f
+            ),
+            sectorCount: 4,
+            style: style
+        );
+        var spatial = BindingWheelGeometry.SelectSpatial(
+            vector: new Vector2(
+                x: 10f,
+                y: 0f
+            ),
+            sectorCount: 4,
+            ringCount: 1,
+            style: style,
+            mode: BindingWheelSpatialSelectionMode.Angle,
+            unit: 100f
+        );
 
-        Assert.True(condition: gesture.TrySelect(
-            axis: first,
-            deadZoneSquared: 0.01f,
-            sequence: 1L,
-            switchThresholdSquared: 0.16f
-        ));
-        Assert.True(condition: gesture.TrySelect(
-            axis: rotated,
-            deadZoneSquared: 0.01f,
-            sequence: 2L,
-            switchThresholdSquared: 0.16f
-        ));
-        Assert.True(condition: gesture.TrySelect(
-            axis: rotatedAgain,
-            deadZoneSquared: 0.01f,
-            sequence: 3L,
-            switchThresholdSquared: 0.16f
-        ));
+        Assert.Equal(
+            expected: BindingWheelSelectionOutcome.Sector,
+            actual: axis.Outcome
+        );
+        Assert.Equal(
+            expected: BindingWheelSelectionOutcome.DeadZone,
+            actual: spatial.Outcome
+        );
+    }
+    [Fact]
+    public void HitTargetCanUseNeutralRelativeExcursionWithoutConflatingTheTwoOrigins() {
+        var document = ExcursionProfile();
+        var wheel = document.Wheels![0];
+        var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: document with {
+            Wheels = [wheel with {
+                Style = wheel.Style! with { PointerSelection = BindingWheelSpatialSelectionMode.HitTarget },
+            }],
+        }));
 
-        Assert.Equal(expected: rotatedAgain, actual: gesture.Axis);
-        Assert.False(condition: gesture.AxisNeutral);
-        Assert.Equal(expected: 3L, actual: gesture.AxisSequence);
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            slot: 0,
+            signal: InputSignal.Press(source: "keyboard.tab")
+        );
+        var view = bindings.WheelFor(slot: 0)!;
+        var neutral = new Vector2(
+            x: 100f,
+            y: 100f
+        );
+        var hub = new Vector2(
+            x: 200f,
+            y: 100f
+        );
+        var position = new Vector2(
+            x: 230f,
+            y: 100f
+        );
+        var neutralVector = (position - neutral);
+        var normalized = BindingWheelGeometry.NormalizeSpatialExcursion(
+            vector: neutralVector,
+            viewportUnit: 100f,
+            excursion: view.Excursion!
+        );
+        var ring = BindingWheelGeometry.ResolveExcursionRing(
+            vector: normalized,
+            excursion: view.Excursion!,
+            previousRing: -1
+        );
+        var targetingVector = BindingWheelGeometry.ResolveSpatialTargetVector(
+            mode: view.Style.PointerSelection,
+            position: position,
+            neutral: neutral,
+            hub: hub
+        );
+        var selection = BindingWheelGeometry.SelectSpatial(
+            vector: targetingVector,
+            sectorCount: view.Rings[ring].Sectors.Count,
+            ringCount: view.Rings.Count,
+            style: view.Style,
+            mode: view.Style.PointerSelection,
+            unit: 100f
+        );
 
-        Assert.True(condition: gesture.TrySelect(
-            axis: Vector2.Zero,
-            sequence: 4L,
-            deadZoneSquared: 0.01f,
-            switchThresholdSquared: 0.16f
-        ));
-        Assert.Equal(expected: rotatedAgain, actual: gesture.Axis);
-        Assert.True(condition: gesture.AxisNeutral);
+        Assert.Equal(
+            actual: ring,
+            expected: 2
+        );
+        Assert.Equal(
+            expected: new Vector2(
+                x: 30f,
+                y: 0f
+            ),
+            actual: targetingVector
+        );
+        Assert.Equal(
+            expected: BindingWheelSelectionOutcome.Sector,
+            actual: selection.Outcome
+        );
+    }
+    [Fact]
+    public void PlacementIsIndependentFromSelectionSource() {
+        var pointer = new Vector2(
+            x: 12f,
+            y: 34f
+        );
+        var viewportCenter = new Vector2(
+            x: 400f,
+            y: 300f
+        );
+
+        Assert.Equal(
+            expected: pointer,
+            actual: BindingWheelGeometry.ResolveOpeningCenter(
+                BindingWheelPlacement.Pointer,
+                pointerAvailable: true,
+                pointer: pointer,
+                viewportCenter: viewportCenter
+            )
+        );
+        Assert.Equal(
+            expected: viewportCenter,
+            actual: BindingWheelGeometry.ResolveOpeningCenter(
+                BindingWheelPlacement.Pointer,
+                pointerAvailable: false,
+                pointer: pointer,
+                viewportCenter: viewportCenter
+            )
+        );
+        Assert.Equal(
+            expected: viewportCenter,
+            actual: BindingWheelGeometry.ResolveOpeningCenter(
+                BindingWheelPlacement.ViewportCenter,
+                pointerAvailable: true,
+                pointer: pointer,
+                viewportCenter: viewportCenter
+            )
+        );
+    }
+    [Fact]
+    public void SectorOffsetIsInSectorsSoHalfMakesNorthTheSeamForAnyCount() {
+        var centered = new BindingWheelStyleDefinition(AxisDeadZone: 0.1f);
+        var seam = new BindingWheelStyleDefinition(
+            AxisDeadZone: 0.1f,
+            SectorOffset: 0.5f
+        );
+        var justEast = new Vector2(
+            x: 0.05f,
+            y: 1f
+        );
+        var justWest = new Vector2(
+            x: -0.05f,
+            y: 1f
+        );
+
+        foreach (var count in new[] { 3, 4, 6, 7, }) {
+            // Offset 0: the first entry straddles north on either side.
+            Assert.Equal(
+                expected: 0,
+                actual: BindingWheelGeometry.SelectAxis(
+                    sectorCount: count,
+                    style: centered,
+                    vector: justEast
+                ).Sector
+            );
+            Assert.Equal(
+                expected: 0,
+                actual: BindingWheelGeometry.SelectAxis(
+                    sectorCount: count,
+                    style: centered,
+                    vector: justWest
+                ).Sector
+            );
+            // Offset 0.5: north is the seam — east of it the first entry, west of it the last — whatever the count.
+            Assert.Equal(
+                expected: 0,
+                actual: BindingWheelGeometry.SelectAxis(
+                    sectorCount: count,
+                    style: seam,
+                    vector: justEast
+                ).Sector
+            );
+            Assert.Equal(
+                expected: (count - 1),
+                actual: BindingWheelGeometry.SelectAxis(
+                    sectorCount: count,
+                    style: seam,
+                    vector: justWest
+                ).Sector
+            );
+        }
+
+        // Sectors advance clockwise: due east on a four-wheel is entry 1 either way.
+        Assert.Equal(
+            expected: 1,
+            actual: BindingWheelGeometry.SelectAxis(
+                vector: new Vector2(
+                    x: 1f,
+                    y: 0f
+                ),
+                sectorCount: 4,
+                style: centered
+            ).Sector
+        );
+        Assert.Equal(
+            expected: 1,
+            actual: BindingWheelGeometry.SelectAxis(
+                vector: new Vector2(
+                    x: 1f,
+                    y: 0f
+                ),
+                sectorCount: 4,
+                style: seam
+            ).Sector
+        );
+    }
+    [Fact]
+    public void SelectionAndPlacementPoliciesRoundTripAsAuthoredTokens() {
+        var json = JsonSerializer.Serialize(
+            value: Profile(),
+            jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument
+        );
+
+        Assert.Contains(
+            actualString: json,
+            expectedSubstring: "\"pointerSelection\": \"HitTarget\""
+        );
+        Assert.Contains(
+            actualString: json,
+            expectedSubstring: "\"placement\": \"ViewportCenter\""
+        );
+
+        var roundTripped = JsonSerializer.Deserialize(
+            json: json,
+            jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument
+        );
+
+        Assert.NotNull(@object: roundTripped);
+        var style = roundTripped.Wheels![0].Style;
+
+        Assert.NotNull(@object: style);
+        Assert.Equal(
+            expected: BindingWheelSpatialSelectionMode.HitTarget,
+            actual: style.PointerSelection
+        );
+        Assert.Equal(
+            expected: BindingWheelPlacement.ViewportCenter,
+            actual: style.Placement
+        );
+    }
+    [Fact]
+    public void SeveralSourcesCanHoldOneRadialAndAGroupCanCarryAnother() {
+        var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: Profile()));
+
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            slot: 2,
+            signal: InputSignal.Press(source: "keyboard.tab")
+        );
+        var primary = bindings.WheelFor(slot: 2);
+
+        Assert.NotNull(@object: primary);
+        Assert.Equal(
+            expected: "primary",
+            actual: primary.Id
+        );
+        Assert.Equal(
+            expected: BindingWheelSpatialSelectionMode.HitTarget,
+            actual: primary.Style.PointerSelection
+        );
+        Assert.Equal(
+            expected: BindingWheelPlacement.ViewportCenter,
+            actual: primary.Style.Placement
+        );
+        Assert.Equal(
+            expected: 0.25f,
+            actual: primary.Style.SectorOffset
+        );
+        var selector = Assert.Single(collection: bindings.Resolve(
+            slot: 2,
+            source: "gamepad.leftStick"
+        )!);
+
+        Assert.Equal(
+            expected: "test.radial.select",
+            actual: selector.Command
+        );
+
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            slot: 2,
+            signal: InputSignal.Press(source: "gamepad.leftTrigger")
+        );
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            slot: 2,
+            signal: InputSignal.Release(source: "keyboard.tab")
+        );
+
+        Assert.Same(
+            expected: primary,
+            actual: bindings.WheelFor(slot: 2)
+        );
+
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            slot: 2,
+            signal: InputSignal.Release(source: "gamepad.leftTrigger")
+        );
+
+        Assert.Null(@object: bindings.WheelFor(slot: 2));
+
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            slot: 2,
+            signal: InputSignal.Press(source: "gamepad.rightTrigger")
+        );
+
+        Assert.Equal(
+            expected: "secondary",
+            actual: bindings.WheelFor(slot: 2)?.Id
+        );
     }
     [Fact]
     public void SpatialNeutralCapturesTheFirstAvailablePositionWithinEachGesture() {
         var gesture = new BindingWheelGestureState();
-        var first = new Vector2(x: 120f, y: 80f);
-        var later = new Vector2(x: 300f, y: 240f);
+        var first = new Vector2(
+            x: 120f,
+            y: 80f
+        );
+        var later = new Vector2(
+            x: 300f,
+            y: 240f
+        );
 
         Assert.False(condition: gesture.TryCaptureSpatialNeutral(position: first));
 
@@ -414,25 +1076,42 @@ public sealed class BindingRadialTests {
         Assert.False(condition: gesture.SpatialNeutralKnown);
         Assert.True(condition: gesture.TryCaptureSpatialNeutral(position: first));
         Assert.False(condition: gesture.TryCaptureSpatialNeutral(position: later));
-        Assert.Equal(expected: first, actual: gesture.SpatialNeutral);
+        Assert.Equal(
+            expected: first,
+            actual: gesture.SpatialNeutral
+        );
 
         gesture.Close();
 
         Assert.False(condition: gesture.SpatialNeutralKnown);
-        Assert.Equal(expected: Vector2.Zero, actual: gesture.SpatialNeutral);
+        Assert.Equal(
+            expected: Vector2.Zero,
+            actual: gesture.SpatialNeutral
+        );
 
         gesture.Open();
 
         Assert.True(condition: gesture.TryCaptureSpatialNeutral(position: later));
-        Assert.Equal(expected: later, actual: gesture.SpatialNeutral);
+        Assert.Equal(
+            expected: later,
+            actual: gesture.SpatialNeutral
+        );
     }
     [Fact]
     public void UnregisteredSectorDispatchRemainsADistinctCommitOutcome() {
         var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: Profile()));
         var registry = new CommandRegistry(modules: []);
-        var router = new InputRouter(registry: registry, bindings: bindings, principalResolver: new FixedPrincipalResolver(principal: CommandPrincipal.Console));
+        var router = new InputRouter(
+            registry: registry,
+            bindings: bindings,
+            principalResolver: new FixedPrincipalResolver(principal: CommandPrincipal.Console)
+        );
 
-        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
+        _ = bindings.Resolve(
+            pressesWithheld: false,
+            slot: 2,
+            signal: InputSignal.Press(source: "keyboard.tab")
+        );
         var activation = bindings.WheelFor(slot: 2)!.Rings[0].Sectors[0].Activation;
         var outcome = BindingWheelCommitResult.Dispatch(
             activation: activation,
@@ -443,166 +1122,23 @@ public sealed class BindingRadialTests {
             slot: 2
         );
 
-        Assert.Equal(expected: BindingWheelCommitStatus.Unregistered, actual: outcome.Status);
-        Assert.Equal(expected: TestModule.Command, actual: outcome.Command);
-        Assert.Equal(expected: "unregistered", actual: outcome.Reason);
-        Assert.Empty(collection: router.SnapshotForTick(tick: 7UL, windowEndTick: ulong.MaxValue).Lanes);
-    }
-    [Fact]
-    public void SeveralSourcesCanHoldOneRadialAndAGroupCanCarryAnother() {
-        var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: Profile()));
-
-        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
-        var primary = bindings.WheelFor(slot: 2);
-
-        Assert.NotNull(@object: primary);
-        Assert.Equal(expected: "primary", actual: primary.Id);
-        Assert.Equal(expected: BindingWheelSpatialSelectionMode.HitTarget, actual: primary.Style.PointerSelection);
-        Assert.Equal(expected: BindingWheelPlacement.ViewportCenter, actual: primary.Style.Placement);
-        Assert.Equal(expected: 0.25f, actual: primary.Style.SectorOffset);
-        var selector = Assert.Single(collection: bindings.Resolve(slot: 2, source: "gamepad.leftStick")!);
-
-        Assert.Equal(expected: "test.radial.select", actual: selector.Command);
-
-        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Press(source: "gamepad.leftTrigger"));
-        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Release(source: "keyboard.tab"));
-
-        Assert.Same(expected: primary, actual: bindings.WheelFor(slot: 2));
-
-        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Release(source: "gamepad.leftTrigger"));
-
-        Assert.Null(@object: bindings.WheelFor(slot: 2));
-
-        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Press(source: "gamepad.rightTrigger"));
-
-        Assert.Equal(expected: "secondary", actual: bindings.WheelFor(slot: 2)?.Id);
-    }
-    [Fact]
-    public void ACompiledSectorReturnsThroughTheSeatsPrincipalDoor() {
-        var bindings = new PagedInputBindings(profile: BindingProfile.Compile(document: Profile()));
-        var registry = new CommandRegistry(modules: [new TestModule()]);
-        var expectedPrincipal = CommandPrincipal.Peer(generation: 4, index: 17);
-        var router = new InputRouter(registry: registry, bindings: bindings, principalResolver: new FixedPrincipalResolver(principal: expectedPrincipal));
-
-        _ = bindings.Resolve(pressesWithheld: false, slot: 2, signal: InputSignal.Press(source: "keyboard.tab"));
-        var activation = bindings.WheelFor(slot: 2)!.Rings[0].Sectors[0].Activation;
-
-        Assert.True(condition: router.Activate(activation: activation, slot: 2));
-
-        var snapshot = router.SnapshotForTick(tick: 7UL, windowEndTick: ulong.MaxValue);
-
-        Assert.True(condition: snapshot.TryGetLane(lane: out var lane, slot: 2));
-        var entry = Assert.Single(collection: lane.Entries);
-
-        Assert.Equal(expected: expectedPrincipal, actual: entry.Principal);
-        Assert.Equal(expected: CommandPhase.Started, actual: entry.Phase);
-        Assert.Equal(expected: CommandOrigin.Binding, actual: entry.Origin);
-        Assert.Null(@object: entry.Source);
-    }
-    [Fact]
-    public void ComposerKeysRadialsByIdRatherThanCollapsingAGroup() {
-        var baseDocument = Profile();
-        var overlay = new BindingProfileDocument(
-            Version: BindingProfileDocument.CurrentVersion,
-            Modifiers: [],
-            Chords: [Page(group: "play", chord: ["tab", "lt"], id: "third-page")],
-            Wheels: [Wheel(holdPages: ["third-page"], id: "third", ringId: "third-ring")]
+        Assert.Equal(
+            expected: BindingWheelCommitStatus.Unregistered,
+            actual: outcome.Status
         );
-
-        var composed = WorldBindingComposer.Compose(baseDocument, overlay);
-
-        Assert.Equal(expected: 3, actual: composed.Wheels?.Count);
-        _ = BindingProfile.Compile(document: composed);
+        Assert.Equal(
+            expected: TestModule.Command,
+            actual: outcome.Command
+        );
+        Assert.Equal(
+            expected: "unregistered",
+            actual: outcome.Reason
+        );
+        Assert.Empty(collection: router.SnapshotForTick(
+            tick: 7UL,
+            windowEndTick: ulong.MaxValue
+        ).Lanes);
     }
-
-    private static BindingProfileDocument Profile() => new(
-        Version: BindingProfileDocument.CurrentVersion,
-        Modifiers: [
-            new BindingModifierDefinition(Id: "tab", Sources: ["keyboard.tab"]),
-            new BindingModifierDefinition(Id: "lt", Sources: ["gamepad.leftTrigger"]),
-            new BindingModifierDefinition(Id: "rt", Sources: ["gamepad.rightTrigger"]),
-        ],
-        Chords: [
-            Page(group: "play", chord: [], id: "base"),
-            Page(
-                group: "play",
-                chord: ["tab"],
-                id: "tab-page",
-                entries: [new BindingPageEntryDefinition(Sources: ["gamepad.leftStick"], Command: "test.radial.select")]
-            ),
-            Page(group: "play", chord: ["lt"], id: "lt-page"),
-            Page(group: "play", chord: ["rt"], id: "rt-page"),
-        ],
-        Wheels: [
-            Wheel(holdPages: ["tab-page", "lt-page"], id: "primary", ringId: "primary-ring"),
-            Wheel(holdPages: ["rt-page"], id: "secondary", ringId: "secondary-ring"),
-        ]
-    );
-    private static BindingProfileDocument ExcursionProfile() {
-        var profile = Profile();
-
-        return profile with {
-            Wheels = [
-                new BindingWheelDefinition(
-                    Id: "excursion",
-                    Group: "play",
-                    HoldPages: ["tab-page"],
-                    Rings: [
-                        Ring(id: "excursion-near"),
-                        Ring(id: "excursion-middle"),
-                        Ring(id: "excursion-far"),
-                    ],
-                    Style: new BindingWheelStyleDefinition(
-                        PointerSelection: BindingWheelSpatialSelectionMode.Angle,
-                        Placement: BindingWheelPlacement.ViewportCenter,
-                        RingSelection: BindingWheelRingSelectionMode.Excursion,
-                        Excursion: new BindingWheelExcursionDefinition(
-                            DeadZone: 0.15f,
-                            Hysteresis: 0.02f,
-                            SpatialTravelFraction: 0.20f,
-                            Thresholds: [0.35f, 0.70f]
-                        )
-                    )
-                ),
-            ],
-        };
-    }
-    private static BindingPageDefinition Ring(string id) => new(
-        Id: id,
-        Entries: [
-            new BindingPageEntryDefinition(Sources: null, Command: TestModule.Command),
-            new BindingPageEntryDefinition(Sources: null, Command: TestModule.Command),
-        ]
-    );
-    private static BindingChordDefinition Page(string group, IReadOnlyList<string> chord, string id, IReadOnlyList<BindingPageEntryDefinition>? entries = null) => new(
-        Group: group,
-        Chord: chord,
-        Page: new BindingPageDefinition(Id: id, Entries: (entries ?? []))
-    );
-    private static BindingWheelDefinition Wheel(string id, IReadOnlyList<string> holdPages, string ringId) => new(
-        Id: id,
-        Group: "play",
-        HoldPages: holdPages,
-        Rings: [
-            new BindingPageDefinition(
-                Id: ringId,
-                Entries: [
-                    new BindingPageEntryDefinition(Sources: null, Command: TestModule.Command),
-                    new BindingPageEntryDefinition(Sources: null, Command: TestModule.Command),
-                ]
-            ),
-        ],
-        Style: new BindingWheelStyleDefinition(
-            PointerSelection: BindingWheelSpatialSelectionMode.HitTarget,
-            Placement: BindingWheelPlacement.ViewportCenter,
-            DeadZoneFraction: 0.2f,
-            AxisDeadZone: 0.06f,
-            RingWidthFraction: 0.08f,
-            OuterGraceRingFraction: 0.25f,
-            SectorOffset: 0.25f,
-            InitialRing: 0
-        )
-    );
 
     private sealed class FixedPrincipalResolver(CommandPrincipal principal) : ICommandPrincipalResolver {
         public CommandPrincipal PrincipalOf(int slot) => principal;

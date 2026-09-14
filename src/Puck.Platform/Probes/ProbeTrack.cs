@@ -4,14 +4,14 @@ using Puck.Maths;
 
 namespace Puck.Platform.Probes;
 
-/// <summary>One recorded sample in a <c>puck.probe-track.v1</c> track.</summary>
+/// <summary>One recorded sample in a <c>puck.probe.track.v1</c> track.</summary>
 /// <param name="T">The elapsed capture time, in seconds from the track's own start. Finite, non-negative, and
 /// strictly ascending across the track — the schedule playback follows.</param>
 /// <param name="C">The channel values, one entry per the document's declared <see cref="ProbeTrackDocument.Channels"/>.</param>
 /// <param name="K">The confidence, nominally in <c>[0, 1]</c>.</param>
 public sealed record ProbeTrackSample(double T, IReadOnlyList<double>? C = null, double K = 1.0);
 /// <summary>
-/// A recorded reading track (<c>puck.probe-track.v1</c>): a timestamped sequence of samples an probe can be
+/// A recorded reading track (<c>puck.probe.track.v1</c>): a timestamped sequence of samples an probe can be
 /// fed instead of a live device, so its bindings are testable without hardware.
 /// </summary>
 /// <param name="Schema">The schema tag; must equal <see cref="SchemaVersion"/>.</param>
@@ -21,7 +21,7 @@ public sealed record ProbeTrackSample(double T, IReadOnlyList<double>? C = null,
 /// <param name="Samples">The recorded samples, in strictly ascending <see cref="ProbeTrackSample.T"/> order.</param>
 public sealed record ProbeTrackDocument(string? Schema = ProbeTrackDocument.SchemaVersion, double RateHz = 30.0, int Channels = 0, IReadOnlyList<ProbeTrackSample>? Samples = null) {
     /// <summary>The only accepted schema tag.</summary>
-    public const string SchemaVersion = "puck.probe-track.v1";
+    public const string SchemaVersion = "puck.probe.track.v1";
 }
 /// <summary>
 /// The System.Text.Json source-generation context for <see cref="ProbeTrackDocument"/> — the only sanctioned entry
@@ -47,8 +47,8 @@ public sealed class ProbeTrackPlayer {
     private readonly int m_channelCount;
     private readonly long m_loopTicks;
     private readonly ProbeReadingRing m_ring;
-    private readonly ProbeTrackSample[] m_samples;
     private readonly long[] m_sampleTicks;
+    private readonly ProbeTrackSample[] m_samples;
 
     private int m_cursor = -1;
     private long m_loop = -1L;
@@ -60,7 +60,7 @@ public sealed class ProbeTrackPlayer {
     /// <param name="ring">The ring to publish into.</param>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> or <paramref name="ring"/> is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">The document fails one of the <c>puck.probe-track.v1</c> shape
+    /// <exception cref="InvalidDataException">The document fails one of the <c>puck.probe.track.v1</c> shape
     /// checks: wrong schema tag, a non-positive rate, a channel count outside
     /// <c>0..</c><see cref="ProbeReadingLimits.MaxChannels"/>, no samples, a sample whose channel count
     /// disagrees with the declared <see cref="ProbeTrackDocument.Channels"/>, or a sample time that is not finite,
@@ -69,10 +69,17 @@ public sealed class ProbeTrackPlayer {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(ring);
 
-        if (!string.Equals(a: document.Schema, b: ProbeTrackDocument.SchemaVersion, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: document.Schema,
+            b: ProbeTrackDocument.SchemaVersion,
+            comparisonType: StringComparison.Ordinal
+        )) {
             throw new InvalidDataException(message: $"a probe track's $schema must be '{ProbeTrackDocument.SchemaVersion}'.");
         }
-        if (!double.IsFinite(d: document.RateHz) || (document.RateHz <= 0.0)) {
+        if (
+            !double.IsFinite(d: document.RateHz) ||
+            (document.RateHz <= 0.0)
+        ) {
             throw new InvalidDataException(message: "a probe track's rateHz must be positive.");
         }
         if (
@@ -97,7 +104,10 @@ public sealed class ProbeTrackPlayer {
             if ((sample.C?.Count ?? 0) != document.Channels) {
                 throw new InvalidDataException(message: $"every probe track sample must carry exactly {document.Channels} channel value(s).");
             }
-            if (!double.IsFinite(d: sample.T) || (sample.T < 0.0)) {
+            if (
+                !double.IsFinite(d: sample.T) ||
+                (sample.T < 0.0)
+            ) {
                 throw new InvalidDataException(message: $"probe track sample {index} has t {sample.T}; every t must be finite and non-negative.");
             }
 
@@ -111,7 +121,10 @@ public sealed class ProbeTrackPlayer {
             previousTicks = ticks;
         }
 
-        var periodTicks = Math.Max(val1: 1L, val2: ((long)Math.Round(a: (Stopwatch.Frequency / document.RateHz))));
+        var periodTicks = Math.Max(
+            val1: 1L,
+            val2: ((long)Math.Round(a: (Stopwatch.Frequency / document.RateHz)))
+        );
 
         m_channelCount = document.Channels;
         m_loopTicks = (previousTicks + periodTicks);
@@ -130,7 +143,10 @@ public sealed class ProbeTrackPlayer {
             m_originTimestamp = nowTimestamp;
         }
 
-        var elapsedTicks = Math.Max(val1: 0L, val2: (nowTimestamp - m_originTimestamp));
+        var elapsedTicks = Math.Max(
+            val1: 0L,
+            val2: (nowTimestamp - m_originTimestamp)
+        );
         var loop = (elapsedTicks / m_loopTicks);
         var offsetTicks = (elapsedTicks % m_loopTicks);
 
@@ -141,7 +157,10 @@ public sealed class ProbeTrackPlayer {
 
         var index = m_cursor;
 
-        while (((index + 1) < m_sampleTicks.Length) && (m_sampleTicks[(index + 1)] <= offsetTicks)) {
+        while (
+            ((index + 1) < m_sampleTicks.Length) &&
+            (m_sampleTicks[(index + 1)] <= offsetTicks)
+        ) {
             index++;
         }
 

@@ -1770,7 +1770,7 @@
         "palette": [
           {
             "color": "state.hexTableColors.wood",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.08
           }
         ],
@@ -1891,7 +1891,7 @@
         "palette": [
           {
             "color": "state.hexTileColors.a",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.05
           }
         ],
@@ -1974,7 +1974,7 @@
         "palette": [
           {
             "color": "state.hexTileColors.b",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.05
           }
         ],
@@ -2057,7 +2057,7 @@
         "palette": [
           {
             "color": "state.hexTileColors.c",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.05
           }
         ],
@@ -2140,7 +2140,7 @@
         "palette": [
           {
             "color": "state.hexStoneColors.light",
-            "shininess": 40,
+            "roughness": 0.613,
             "specular": 0.3
           }
         ],
@@ -2194,7 +2194,7 @@
         "palette": [
           {
             "color": "state.hexStoneColors.dark",
-            "shininess": 40,
+            "roughness": 0.613,
             "specular": 0.3
           }
         ],
@@ -2248,7 +2248,7 @@
         "palette": [
           {
             "color": "state.hexTableColors.tray",
-            "shininess": 10,
+            "roughness": 0.823,
             "specular": 0.06
           }
         ],

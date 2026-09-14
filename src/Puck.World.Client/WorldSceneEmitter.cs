@@ -82,10 +82,14 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // Always exactly m_derivedFaceScreens entries (Derive pads the reserved range with placeholders), so the word
     // cost this band contributes is IDENTICAL between the probe and every live build.
     private IReadOnlyList<WorldScreen> m_derivedFaceRows;
+    private float m_pendingDeltaSeconds;
     // Latched from the ONE construction-time probe: the host assigns SlotBase once and it is stable for this emitter's
     // lifetime, so the candidate measure composes against the same base a live program does.
     private int m_slotBase;
 
+    // The bounded volumes the latest live build's static placements baked (WorldPlacementStamper.EmitStatic);
+    // WorldFramePresenter.Dress composes them with the pool's per-frame volumes onto SdfFrame.Volumes.
+    private readonly List<SdfVolume> m_staticVolumes = new(capacity: SdfProgramBuilder.MaxVolumes);
     // Per-frame scratch reused to keep packing allocation-free: movement-driven gait state per avatar.
     private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
@@ -112,94 +116,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // teleport, an over-threshold correction) reseeds the follower exactly like an address change does, so the boom
     // never streaks the follower across the jump. -1 (never observed) reseeds on the first frame.
     private readonly int[] m_avatarDynamicsPoseEpoch = NewPoseEpochs();
-
-    private float m_pendingDeltaSeconds;
-
-    private static int[] NewPoseEpochs() {
-        var epochs = new int[WorldBodiesLimits.CapacityCeiling];
-
-        Array.Fill(array: epochs, value: -1);
-
-        return epochs;
-    }
-
-    /// <summary>Initializes a new instance of the <see cref="WorldSceneEmitter"/> class over the boot definition,
-    /// freezing the authoring-headroom policy and the placement reservation the probe branch reserves against.</summary>
-    /// <param name="client">The snapshot-fed entity view every pose, color, look, and active flag is read from.</param>
-    /// <param name="settings">The live render settings (the crowd soft-shadow radius is read while packing).</param>
-    /// <param name="animator">The creation-stamp pool (animated placements, attached placements, body-rooted stamps).</param>
-    /// <param name="audio">The narrow cue-submission seam the distance-driven footstep cue fires into while packing.</param>
-    /// <param name="anchor">The per-seat perception anchor the crowd soft-shadow centers resolve their body indices
-    /// through.</param>
-    /// <param name="continuum">The route-to-presentation-frame resolver used to keep locally followed travelers in
-    /// their original catalog slot across authority handoffs.</param>
-    /// <param name="text">The world-relative font catalog used by creation text runs.</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldSceneEmitter(WorldClient client, WorldRenderSettings settings, WorldStampPool animator, IWorldAudioCueSink audio, WorldPerceptionAnchor anchor, WorldContinuum continuum, WorldTextCatalog text) {
-        ArgumentNullException.ThrowIfNull(argument: client);
-        ArgumentNullException.ThrowIfNull(argument: settings);
-        ArgumentNullException.ThrowIfNull(argument: animator);
-        ArgumentNullException.ThrowIfNull(argument: audio);
-        ArgumentNullException.ThrowIfNull(argument: anchor);
-        ArgumentNullException.ThrowIfNull(argument: continuum);
-        ArgumentNullException.ThrowIfNull(argument: text);
-
-        m_client = client;
-        m_continuum = continuum;
-        m_anchor = anchor;
-        m_settings = settings;
-        m_animator = animator;
-        m_text = text;
-        m_audio = audio;
-
-        var definition = client.Definition;
-
-        m_noseFactor = definition.PlayerDefaults.NoseFactor;
-
-        m_authoringHeadroomScreens = definition.Authoring.AuthoringHeadroomScreens;
-        m_authoringHeadroomPlacements = definition.Authoring.AuthoringHeadroomPlacements;
-        m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
-        // Placeholder rows until the first delivery calls ObserveDelivery with the real derived faces — matters only
-        // for the construction-time capacity probe (SdfCompositionFrameSource's ctor runs it synchronously, before
-        // WorldFramePresenter can ever reconcile a delivery), so the probe reserves this band's word/instance cost even
-        // though no delivery has landed yet.
-        m_derivedFaceRows = WorldPrototypeFacets.ReservedFaceSlots(
-            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
-            derivedFaceScreens: m_derivedFaceScreens
-        );
-
-        // A booted world may already stamp animated/attached placements or inhabited bodies — register them before the probe
-        // so the worst-case build sees the same pool the first live build will (body stamps are empty until the first
-        // snapshot).
-        RefreshBodyStamps();
-        m_animator.Reconcile(
-            placements: definition.Placements,
-            creations: definition.Creations,
-            dynamics: definition.Dynamics,
-            bodyStamps: m_bodyStamps
-        );
-        // A future stamp may use either emission class. Reserve both independent floors: a scoped creation's
-        // single instance does not cover a scope-free creation's per-shape directory entries or probe words.
-        (m_placementReservation, m_placementShapeReservation) = WorldPlacementStamper.StaticStampReservation(
-            creations: definition.Creations,
-            placements: definition.Placements,
-            worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
-        );
-        m_placementReservation += m_authoringHeadroomPlacements;
-        m_placementShapeReservation = checked(m_placementShapeReservation + m_authoringHeadroomPlacements * WorldPlacementPolicy.MaxShapesPerStamp);
-    }
-
-    /// <summary>The frozen transform-slot count this emitter declares: maximum-sized rigs for the detailed body band,
-    /// one root slot per remaining crowd body, then the reserved creation-stamp pool.</summary>
-    public int DynamicSlotCount => (WorldRigCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
-    /// <summary>Always <see langword="true"/>: this emitter's material palette is its own. Sole tenancy makes this
-    /// true; the scope makes it structural, so a positional stride this
-    /// scene grows later (a wallpaper fold or polar repeat over a sculpted creation) can only ever recolor materials
-    /// this emitter itself registered. The scene emits no positional stride today, so the clamp is inert and the
-    /// composed words are byte-identical to the unscoped build.</summary>
-    public bool OwnsMaterialScope => true;
-    /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 1);
 
     // The screens, static placement stamps + the creation-stamp pool, then the view's active avatars as leaf-level dynamic
     // instances riding frozen catalog slots. Active-only, never declared-but-parked: the per-tile instance mask width
@@ -282,13 +198,15 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 )
             );
         } else {
+            m_staticVolumes.Clear();
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
                 definition: client.Definition,
                 creations: creations,
                 placements: placements,
                 textCatalog: m_text.Catalog,
-                tintFor: null
+                tintFor: null,
+                volumes: m_staticVolumes
             );
         }
 
@@ -382,6 +300,21 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             position: out _
         );
     }
+    private float LiveBodyScale(WorldDefinition definition, int index) => WorldGaitDrivers.LiveBodyScale(
+        definition: definition,
+        index: index,
+        tick: m_client.Tick
+    );
+    private static int[] NewPoseEpochs() {
+        var epochs = new int[WorldBodiesLimits.CapacityCeiling];
+
+        Array.Fill(
+            array: epochs,
+            value: -1
+        );
+
+        return epochs;
+    }
     // Refresh the creation-stamp census: which active entities render their creation geometry through the stamp pool
     // (inhabitants + crowd creation-looks) instead of a catalog avatar. Called at each rebuild.
     private void RefreshBodyStamps() {
@@ -436,7 +369,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 ? new WorldStampPool.BodyStamp(
                     BodyIndex: index,
                     Creation: creation,
-                    Scale: (placement.Scale * look.Scale * liveScale),
+                    Scale: ((placement.Scale * look.Scale) * liveScale),
                     Motion: look.Motion
                 )
                 : null
@@ -460,11 +393,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         return null;
     }
-    private float LiveBodyScale(WorldDefinition definition, int index) => WorldGaitDrivers.LiveBodyScale(
-        definition: definition,
-        index: index,
-        tick: m_client.Tick
-    );
     private bool TryPresentedAppearance(int index, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
         if (m_client.IsActive(index: index)) {
             bodyColor = m_client.BodyColor(index: index);
@@ -688,13 +616,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         m_derivedFaceRows = derivedFaces;
     }
-    /// <summary>Latches <paramref name="deltaSeconds"/> for the catalog-avatar root followers, stepped once by the
-    /// next <see cref="PackDynamicTransforms"/>. Call once per produced frame, alongside the stamp pool's own
-    /// <c>Tick</c>.</summary>
-    /// <param name="deltaSeconds">Seconds advanced since the previous produced frame.</param>
-    public void Tick(float deltaSeconds) {
-        m_pendingDeltaSeconds += deltaSeconds;
-    }
     /// <inheritdoc/>
     /// <remarks>Every active avatar's leaves ride its interpolated snapshot pose plus a distance-driven gait phase (an
     /// idle avatar holds its pose; a teleport is clamped so it cannot spin the limbs through dozens of cycles), and the
@@ -854,6 +775,13 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             parkPosition: context.ParkPosition
         );
     }
+    /// <summary>Latches <paramref name="deltaSeconds"/> for the catalog-avatar root followers, stepped once by the
+    /// next <see cref="PackDynamicTransforms"/>. Call once per produced frame, alongside the stamp pool's own
+    /// <c>Tick</c>.</summary>
+    /// <param name="deltaSeconds">Seconds advanced since the previous produced frame.</param>
+    public void Tick(float deltaSeconds) {
+        m_pendingDeltaSeconds += deltaSeconds;
+    }
     /// <summary>Writes the program-rebuild watch counters this scene composes over: the client's three
     /// (<see cref="WorldClient.WriteRevision"/> — roster, server snapshot, definition delivery), then the continuum
     /// watch.
@@ -870,4 +798,84 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
         destination[WorldClient.RevisionComponentCount] = m_continuum.Revision;
     }
+
+    /// <summary>Initializes a new instance of the <see cref="WorldSceneEmitter"/> class over the boot definition,
+    /// freezing the authoring-headroom policy and the placement reservation the probe branch reserves against.</summary>
+    /// <param name="client">The snapshot-fed entity view every pose, color, look, and active flag is read from.</param>
+    /// <param name="settings">The live render settings (the crowd soft-shadow radius is read while packing).</param>
+    /// <param name="animator">The creation-stamp pool (animated placements, attached placements, body-rooted stamps).</param>
+    /// <param name="audio">The narrow cue-submission seam the distance-driven footstep cue fires into while packing.</param>
+    /// <param name="anchor">The per-seat perception anchor the crowd soft-shadow centers resolve their body indices
+    /// through.</param>
+    /// <param name="continuum">The route-to-presentation-frame resolver used to keep locally followed travelers in
+    /// their original catalog slot across authority handoffs.</param>
+    /// <param name="text">The world-relative font catalog used by creation text runs.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public WorldSceneEmitter(WorldClient client, WorldRenderSettings settings, WorldStampPool animator, IWorldAudioCueSink audio, WorldPerceptionAnchor anchor, WorldContinuum continuum, WorldTextCatalog text) {
+        ArgumentNullException.ThrowIfNull(argument: client);
+        ArgumentNullException.ThrowIfNull(argument: settings);
+        ArgumentNullException.ThrowIfNull(argument: animator);
+        ArgumentNullException.ThrowIfNull(argument: audio);
+        ArgumentNullException.ThrowIfNull(argument: anchor);
+        ArgumentNullException.ThrowIfNull(argument: continuum);
+        ArgumentNullException.ThrowIfNull(argument: text);
+
+        m_client = client;
+        m_continuum = continuum;
+        m_anchor = anchor;
+        m_settings = settings;
+        m_animator = animator;
+        m_text = text;
+        m_audio = audio;
+
+        var definition = client.Definition;
+
+        m_noseFactor = definition.PlayerDefaults.NoseFactor;
+
+        m_authoringHeadroomScreens = definition.Authoring.AuthoringHeadroomScreens;
+        m_authoringHeadroomPlacements = definition.Authoring.AuthoringHeadroomPlacements;
+        m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
+        // Placeholder rows until the first delivery calls ObserveDelivery with the real derived faces — matters only
+        // for the construction-time capacity probe (SdfCompositionFrameSource's ctor runs it synchronously, before
+        // WorldFramePresenter can ever reconcile a delivery), so the probe reserves this band's word/instance cost even
+        // though no delivery has landed yet.
+        m_derivedFaceRows = WorldPrototypeFacets.ReservedFaceSlots(
+            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
+            derivedFaceScreens: m_derivedFaceScreens
+        );
+
+        // A booted world may already stamp animated/attached placements or inhabited bodies — register them before the probe
+        // so the worst-case build sees the same pool the first live build will (body stamps are empty until the first
+        // snapshot).
+        RefreshBodyStamps();
+        m_animator.Reconcile(
+            placements: definition.Placements,
+            creations: definition.Creations,
+            dynamics: definition.Dynamics,
+            bodyStamps: m_bodyStamps
+        );
+        // A future stamp may use either emission class. Reserve both independent floors: a scoped creation's
+        // single instance does not cover a scope-free creation's per-shape directory entries or probe words.
+        (m_placementReservation, m_placementShapeReservation) = WorldPlacementStamper.StaticStampReservation(
+            creations: definition.Creations,
+            placements: definition.Placements,
+            worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
+        );
+        m_placementReservation += m_authoringHeadroomPlacements;
+        m_placementShapeReservation = checked((m_placementShapeReservation + (m_authoringHeadroomPlacements * WorldPlacementPolicy.MaxShapesPerStamp)));
+    }
+
+    /// <summary>The frozen transform-slot count this emitter declares: maximum-sized rigs for the detailed body band,
+    /// one root slot per remaining crowd body, then the reserved creation-stamp pool.</summary>
+    public int DynamicSlotCount => (WorldRigCatalog.DynamicTransformCapacity + WorldStampPool.DynamicSlotCount);
+    /// <summary>Always <see langword="true"/>: this emitter's material palette is its own. Sole tenancy makes this
+    /// true; the scope makes it structural, so a positional stride this
+    /// scene grows later (a wallpaper fold or polar repeat over a sculpted creation) can only ever recolor materials
+    /// this emitter itself registered. The scene emits no positional stride today, so the clamp is inert and the
+    /// composed words are byte-identical to the unscoped build.</summary>
+    public bool OwnsMaterialScope => true;
+    /// <inheritdoc/>
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 1);
+    /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
+    public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
 }

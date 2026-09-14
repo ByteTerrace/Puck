@@ -49,6 +49,59 @@ Linux x64: Windows covers junctions and hard links, while Linux also covers
 file symlinks without the Windows symlink privilege. No live Azure mutation is
 part of these tests.
 
+`WorldReleaseMetadataTransitionLawTests` exercises metadata upgrades against a
+real checkpoint with gameplay and journal history, continuation under the changed
+definition, reverse application against latest state, and undo afterward. It checks
+every other definition and checkpoint section, named conflicts, and custom null
+presence. JSON object member order may change when a deleted custom key returns;
+its value must survive. These laws establish the isolated preservation rule;
+the [CLI fixture tests](../Puck.Cli.Tests/README.md) own packaged qualification
+integration. `WorldReleaseMetadataPublicationLawTests` exercises the
+directory-backed atomic publisher, including interruption before and after the
+root write, competing authority, leaving activation during upload, retained
+receipts, and retries after candidate progress. These do not exercise Azure VMSS.
+The publication control also starts with unfilled draws in the published package
+and initialized draws in its gameplay checkpoint. Silo lifecycle controls cover
+local-only rows signing as their stable instance names through replacement and
+stale-writer refusal.
+
+`WorldReleaseRewindProbe.cs` contains one focused local lifecycle check through
+actual hosted rows, release controls, and the directory store. It deploys metadata,
+advances gameplay, rolls back while retaining the latest ticks, and intentionally
+rewinds a later internal transfer. It interrupts restore after the first durable
+world publication, resumes with admission closed, and compares complete restored
+checkpoints. Disconnected players' documented parking is checked explicitly,
+including reconnect; current operation receipts and fresh writer generations
+survive. Restart and completed-operation resume must retain subsequent progress.
+A rejected private rewind recovers its fresh drain state; interrupting recovery
+before activation must preserve that choice when a new coordinator resumes.
+Repeating a fully published admission still checks fences and the group CAS,
+and completes after one pump boundary without registering routes again.
+This checks the coordinator and storage behavior in one compiled engine; packaged
+runtime and live Azure acceptance remain separate.
+
+`WorldReleaseCoordinatorContractLawTests` checks immutable coordinator requirements
+and legacy identity preservation. Set `PUCK_TEST_PREVIOUS_WORLD_SERVER` to a
+`Puck.World.Server.dll` from before coordinator contracts, and
+`PUCK_TEST_PREVIOUS_METADATA_SERVER` to one supporting only the metadata contract.
+Each previous archive reader runs in an isolated assembly context, accepts its
+supported control and refuses the new receipt requirement without writing.
+Each binary-dependent case skips when its variable is absent;
+its output records the reader's SHA-256 for provenance.
+
+`WorldAuthorityReceiptSnapshotLawTests` checks a selected root's original index
+and complete receipt chain, excludes later publications, and refuses corrupt or
+inconsistent graphs. `WorldReleaseReceiptFixtureLawTests` reconstructs a disposable
+authority around a real checkpoint with journaled edits. It verifies receipt
+lookups and duplicate/conflicting operation decisions after continuation, plus
+interrupted uploads and a competing root writer. `WorldReleaseCutoverLawTests`
+also delays the live export's root read while a later mutation arrives, and checks
+that cancellation leaves the publication queue usable. Archive laws cover receipt
+pins, interrupted uploads, canonical decoding and missing legacy proof. Independent
+receipt lookups and duplicate retries inside each packaged engine are checked by
+the CLI Docker qualification controls; different-build compatibility still needs
+evidence from the actual release pair.
+
 ## What an assertion must prove
 
 Assert behavior, not an incidental implementation shape. Counts that belong to
@@ -65,3 +118,7 @@ dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-build
 
 Review slow TRX cases before reducing workloads. Do not make the default run
 fast by silently excluding functional coverage.
+
+## Documentation
+
+📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

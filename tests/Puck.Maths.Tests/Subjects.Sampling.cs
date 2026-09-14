@@ -510,8 +510,8 @@ internal static partial class Subjects {
 
                 if (radialBits != expectedRadial) {
                     return $"the {(double.IsNegative(d: angle)
-                    ? "negative"
-                    : "positive")}-zero cap stored radial bits {radialBits}";
+                        ? "negative"
+                        : "positive")}-zero cap stored radial bits {radialBits}";
                 }
             }
         }
@@ -1116,7 +1116,10 @@ internal static partial class Subjects {
 
             // The octave overload at one layer is the lattice sample halved to nearest on its magnitude (half away
             // from zero), exactly; every layer count stays bounded.
-            var halved = ((value.Value < 0L) ? -((-value.Value + 1L) >> 1) : ((value.Value + 1L) >> 1));
+            var halved = ((value.Value < 0L)
+                ? -((-value.Value + 1L) >> 1)
+                : ((value.Value + 1L) >> 1)
+            );
 
             for (var octaves = 1; (octaves <= 16); ++octaves) {
                 var layered = FieldNoise.Sample(

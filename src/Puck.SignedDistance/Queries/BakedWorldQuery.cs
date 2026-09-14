@@ -47,11 +47,11 @@ namespace Puck.SignedDistance.Queries;
 /// </para>
 /// </summary>
 public sealed class BakedWorldQuery : IWorldQuery {
-    private readonly WorldQueryArtifact m_artifact;
-
     /// <summary>The widest query radius the cell walk accepts, in cells — the ceiling
     /// <see cref="Overlap"/> and <see cref="SphereCast"/> refuse past.</summary>
     public const int MaxRadiusCells = 64;
+
+    private readonly WorldQueryArtifact m_artifact;
 
     /// <summary>Wraps a baked artifact.</summary>
     /// <param name="artifact">The baked artifact to query.</param>
@@ -77,143 +77,11 @@ public sealed class BakedWorldQuery : IWorldQuery {
         var sum = unchecked((left + right));
 
         return ((((left ^ sum) & (right ^ sum)) < 0L)
-            ? ((left < 0L) ? long.MinValue : long.MaxValue)
+            ? ((left < 0L)
+                ? long.MinValue
+                : long.MaxValue)
             : sum
         );
-    }
-    private static int ClampIndex(Int128 value, int maximum) =>
-        ((value < Int128.Zero)
-            ? 0
-            : ((value > maximum)
-                ? maximum
-                : ((int)value)
-            )
-        );
-    private static long ClampToLong(Int128 value) =>
-        ((value < long.MinValue)
-            ? long.MinValue
-            : ((value > long.MaxValue)
-                ? long.MaxValue
-                : ((long)value)
-            )
-        );
-    // Directed Q48.16 division: the floor (roundUp false) or the ceiling (roundUp true) of numerator/denominator,
-    // exact whenever the quotient is exact, saturating at the carrier. Every slab entry takes the floor and every
-    // slab exit the ceiling, which is what keeps truncation from closing an interval the segment really enters.
-    private static long DivideRawDirected(long numeratorRaw, long denominatorRaw, bool roundUp) {
-        var highBits = (numeratorRaw >> 47);
-
-        // A numerator narrower than 48 signed bits — every coordinate difference a room-scale grid can produce —
-        // shifts into a long without loss, and a 64-bit divide is an order of magnitude cheaper than a 128-bit one.
-        if (
-            (highBits == 0L) ||
-            (highBits == -1L)
-        ) {
-            var narrowNumerator = (numeratorRaw << 16);
-            var narrowQuotient = (narrowNumerator / denominatorRaw);
-            var narrowRemainder = (narrowNumerator % denominatorRaw);
-
-            if (narrowRemainder != 0L) {
-                var narrowPositive = ((narrowRemainder > 0L) == (denominatorRaw > 0L));
-
-                if (roundUp) {
-                    if (narrowPositive) {
-                        narrowQuotient++;
-                    }
-                } else if (!narrowPositive) {
-                    narrowQuotient--;
-                }
-            }
-
-            return narrowQuotient;
-        }
-
-        var numerator = ((((Int128)numeratorRaw)) << 16);
-        var denominator = ((Int128)denominatorRaw);
-        var quotient = (numerator / denominator);
-        var remainder = (numerator % denominator);
-
-        if (remainder != Int128.Zero) {
-            var positive = ((numerator > Int128.Zero) == (denominatorRaw > 0L));
-
-            if (roundUp) {
-                if (positive) {
-                    quotient += Int128.One;
-                }
-            } else if (!positive) {
-                quotient -= Int128.One;
-            }
-        }
-
-        return ClampToLong(value: quotient);
-    }
-    // Intersects the sweep with the axis slab [lowRaw, highRaw], narrowing [enterRaw, exitRaw] in place. Returns
-    // false once the running interval is empty, which is the "this cell cannot be reached" answer.
-    private static bool NarrowSlab(long originRaw, long directionRaw, long lowRaw, long highRaw, ref long enterRaw, ref long exitRaw) {
-        if (directionRaw == 0L) {
-            return (
-                (originRaw >= lowRaw) &&
-                (originRaw <= highRaw)
-            );
-        }
-
-        var nearBoundRaw = ((directionRaw > 0L) ? lowRaw : highRaw);
-        var farBoundRaw = ((directionRaw > 0L) ? highRaw : lowRaw);
-        var nearRaw = DivideRawDirected(
-            denominatorRaw: directionRaw,
-            numeratorRaw: SubtractRawSaturating(
-                left: nearBoundRaw,
-                right: originRaw
-            ),
-            roundUp: false
-        );
-        var farRaw = DivideRawDirected(
-            denominatorRaw: directionRaw,
-            numeratorRaw: SubtractRawSaturating(
-                left: farBoundRaw,
-                right: originRaw
-            ),
-            roundUp: true
-        );
-
-        if (nearRaw > enterRaw) {
-            enterRaw = nearRaw;
-        }
-
-        if (farRaw < exitRaw) {
-            exitRaw = farRaw;
-        }
-
-        return (enterRaw <= exitRaw);
-    }
-    private static long ScaleRawSaturating(long valueRaw, long scaleRaw) =>
-        ClampToLong(value: (((((Int128)valueRaw)) * scaleRaw) >> 16));
-    // Saturating raw subtraction: a difference overflows exactly when the operands differ in sign and the result
-    // takes the subtrahend's.
-    private static long SubtractRawSaturating(long left, long right) {
-        var difference = unchecked((left - right));
-
-        return ((((left ^ right) & (left ^ difference)) < 0L)
-            ? ((left < 0L) ? long.MinValue : long.MaxValue)
-            : difference
-        );
-    }
-    // The artifact's grid lives in world space, so a query point is its exact displacement from the world origin —
-    // never its raw .Local, which repeats every cell and would answer for whichever copy of the grid the caller's
-    // cell happens to be. The rebase is exact integer arithmetic and the identity inside cell (0,0,0).
-    private static FixedVector3 WorldOf(FixedPosition position, string paramName) {
-        if (!position.TryDelta(
-            delta: out var world,
-            origin: FixedPosition.Zero
-        )) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: position,
-                message: "The position's displacement from the world origin is outside signed Q48.16, so it has no world coordinate this artifact's grid can be indexed by.",
-                paramName: paramName
-            );
-        }
-
-        return world;
     }
     // The exact clamp-to-solid Euclidean test, run against both layers in one walk: a blocked cell is the cell box
     // extruded through every Y, and an authored ground is the same box's half-space at or below its height. Each
@@ -342,112 +210,6 @@ public sealed class BakedWorldQuery : IWorldQuery {
 
         return false;
     }
-    private void CheckRadius(FixedQ4816 radius) {
-        var limit = (((Int128)MaxRadiusCells) * m_artifact.CellSizeRaw);
-
-        if (radius.Value > limit) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: radius,
-                message: $"A query radius may span at most {MaxRadiusCells} cells of this artifact ({MaxRadius} world units); the cell walk it drives is quadratic in the radius and this provider carries no occupancy hierarchy.",
-                paramName: nameof(radius)
-            );
-        }
-    }
-    private long ColumnMinXRaw(int column) => GridCoordinate(
-        index: column,
-        originRaw: m_artifact.OriginXRaw
-    );
-    private long ColumnMaxXRaw(int column) => GridCoordinate(
-        index: (column + 1),
-        originRaw: m_artifact.OriginXRaw
-    );
-    // Enumerates the cells the swept volume can reach, column by column in sweep order, and keeps the nearest
-    // contact. A column contributes nothing beyond the running best once the sweep cannot enter it earlier than that
-    // best, which is the whole early-out: no cell is visited twice and no cell outside the swept band is visited.
-    private bool March(FixedVector3 origin, FixedVector3 dir, FixedQ4816 maxDist, FixedQ4816 radius, out RayHit hit) {
-        hit = default;
-
-        var direction = dir.Normalize();
-
-        if (
-            (direction == FixedVector3.Zero) ||
-            (maxDist <= FixedQ4816.Zero)
-        ) {
-            return false;
-        }
-
-        if (
-            !m_artifact.HasBlocked &&
-            !m_artifact.HasHeightfield
-        ) {
-            return false;
-        }
-
-        var sweep = new Sweep(
-            direction: direction,
-            maxDistanceRaw: maxDist.Value,
-            origin: origin,
-            radiusRaw: Math.Max(
-                val1: 0L,
-                val2: radius.Value
-            )
-        );
-
-        if (!TryColumnSpan(
-            first: out var firstColumn,
-            highRaw: sweep.MaxXRaw,
-            last: out var lastColumn,
-            lowRaw: sweep.MinXRaw
-        )) {
-            return false;
-        }
-
-        var contact = default(Contact);
-        var step = ((sweep.DirectionXRaw < 0L) ? -1 : 1);
-
-        for (var column = ((step < 0) ? lastColumn : firstColumn); ((column >= firstColumn) && (column <= lastColumn)); column += step) {
-            if (!TryColumnWindow(
-                column: column,
-                enterRaw: out var windowEnterRaw,
-                exitRaw: out var windowExitRaw,
-                sweep: sweep
-            )) {
-                continue;
-            }
-
-            if (
-                contact.Found &&
-                (
-                    (contact.DistanceRaw <= 0L) ||
-                    (
-                        (sweep.DirectionXRaw != 0L) &&
-                        (windowEnterRaw > contact.DistanceRaw)
-                    )
-                )
-            ) {
-                break;
-            }
-
-            ScanColumn(
-                column: column,
-                contact: ref contact,
-                sweep: sweep,
-                windowEnterRaw: windowEnterRaw,
-                windowExitRaw: windowExitRaw
-            );
-        }
-
-        if (!contact.Found) {
-            return false;
-        }
-
-        hit = BuildHit(
-            contact: contact,
-            sweep: sweep
-        );
-
-        return true;
-    }
     private RayHit BuildHit(in Contact contact, in Sweep sweep) {
         var cellMinXRaw = ColumnMinXRaw(column: contact.Column);
         var cellMinZRaw = RowMinZRaw(row: contact.Row);
@@ -490,7 +252,9 @@ public sealed class BakedWorldQuery : IWorldQuery {
                     min: cellMinXRaw,
                     value: centerXRaw
                 )),
-                Y: FixedQ4816.FromRawBits(value: (contact.Ground ? contact.HeightRaw : centerYRaw)),
+                Y: FixedQ4816.FromRawBits(value: (contact.Ground
+            ? contact.HeightRaw
+            : centerYRaw)),
                 Z: FixedQ4816.FromRawBits(value: Math.Clamp(
                     max: RowMaxZRaw(row: contact.Row),
                     min: cellMinZRaw,
@@ -499,16 +263,239 @@ public sealed class BakedWorldQuery : IWorldQuery {
             ))
         );
     }
+    private void CheckRadius(FixedQ4816 radius) {
+        var limit = (((Int128)MaxRadiusCells) * m_artifact.CellSizeRaw);
+
+        if (radius.Value > limit) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: radius,
+                message: $"A query radius may span at most {MaxRadiusCells} cells of this artifact ({MaxRadius} world units); the cell walk it drives is quadratic in the radius and this provider carries no occupancy hierarchy.",
+                paramName: nameof(radius)
+            );
+        }
+    }
+    private static int ClampIndex(Int128 value, int maximum) =>
+        ((value < Int128.Zero)
+            ? 0
+            : ((value > maximum)
+                ? maximum
+                : ((int)value)
+        ));
+    private static long ClampToLong(Int128 value) =>
+        ((value < long.MinValue)
+            ? long.MinValue
+            : ((value > long.MaxValue)
+                ? long.MaxValue
+                : ((long)value)
+        ));
+    private long ColumnMaxXRaw(int column) => GridCoordinate(
+        index: (column + 1),
+        originRaw: m_artifact.OriginXRaw
+    );
+    private long ColumnMinXRaw(int column) => GridCoordinate(
+        index: column,
+        originRaw: m_artifact.OriginXRaw
+    );
+    // Directed Q48.16 division: the floor (roundUp false) or the ceiling (roundUp true) of numerator/denominator,
+    // exact whenever the quotient is exact, saturating at the carrier. Every slab entry takes the floor and every
+    // slab exit the ceiling, which is what keeps truncation from closing an interval the segment really enters.
+    private static long DivideRawDirected(long numeratorRaw, long denominatorRaw, bool roundUp) {
+        var highBits = (numeratorRaw >> 47);
+
+        // A numerator narrower than 48 signed bits — every coordinate difference a room-scale grid can produce —
+        // shifts into a long without loss, and a 64-bit divide is an order of magnitude cheaper than a 128-bit one.
+        if (
+            (highBits == 0L) ||
+            (highBits == -1L)
+        ) {
+            var narrowNumerator = (numeratorRaw << 16);
+            var narrowQuotient = (narrowNumerator / denominatorRaw);
+            var narrowRemainder = (narrowNumerator % denominatorRaw);
+
+            if (narrowRemainder != 0L) {
+                var narrowPositive = ((narrowRemainder > 0L) == (denominatorRaw > 0L));
+
+                if (roundUp) {
+                    if (narrowPositive) {
+                        narrowQuotient++;
+                    }
+                } else if (!narrowPositive) {
+                    narrowQuotient--;
+                }
+            }
+
+            return narrowQuotient;
+        }
+
+        var numerator = ((((Int128)numeratorRaw)) << 16);
+        var denominator = ((Int128)denominatorRaw);
+        var quotient = (numerator / denominator);
+        var remainder = (numerator % denominator);
+
+        if (remainder != Int128.Zero) {
+            var positive = ((numerator > Int128.Zero) == (denominatorRaw > 0L));
+
+            if (roundUp) {
+                if (positive) {
+                    quotient += Int128.One;
+                }
+            } else if (!positive) {
+                quotient -= Int128.One;
+            }
+        }
+
+        return ClampToLong(value: quotient);
+    }
     private long GridCoordinate(long originRaw, int index) =>
         ((long)(((Int128)originRaw) + (((Int128)index) * m_artifact.CellSizeRaw)));
-    private long RowMinZRaw(int row) => GridCoordinate(
-        index: row,
-        originRaw: m_artifact.OriginZRaw
-    );
+    // Enumerates the cells the swept volume can reach, column by column in sweep order, and keeps the nearest
+    // contact. A column contributes nothing beyond the running best once the sweep cannot enter it earlier than that
+    // best, which is the whole early-out: no cell is visited twice and no cell outside the swept band is visited.
+    private bool March(FixedVector3 origin, FixedVector3 dir, FixedQ4816 maxDist, FixedQ4816 radius, out RayHit hit) {
+        hit = default;
+
+        var direction = dir.Normalize();
+
+        if (
+            (direction == FixedVector3.Zero) ||
+            (maxDist <= FixedQ4816.Zero)
+        ) {
+            return false;
+        }
+
+        if (
+            !m_artifact.HasBlocked &&
+            !m_artifact.HasHeightfield
+        ) {
+            return false;
+        }
+
+        var sweep = new Sweep(
+            direction: direction,
+            maxDistanceRaw: maxDist.Value,
+            origin: origin,
+            radiusRaw: Math.Max(
+                val1: 0L,
+                val2: radius.Value
+            )
+        );
+
+        if (!TryColumnSpan(
+            first: out var firstColumn,
+            highRaw: sweep.MaxXRaw,
+            last: out var lastColumn,
+            lowRaw: sweep.MinXRaw
+        )) {
+            return false;
+        }
+
+        var contact = default(Contact);
+        var step = ((sweep.DirectionXRaw < 0L)
+            ? -1
+            : 1
+        );
+
+        for (var column = ((step < 0)
+            ? lastColumn
+            : firstColumn
+        ); ((column >= firstColumn) && (column <= lastColumn)); column += step) {
+            if (!TryColumnWindow(
+                column: column,
+                enterRaw: out var windowEnterRaw,
+                exitRaw: out var windowExitRaw,
+                sweep: sweep
+            )) {
+                continue;
+            }
+
+            if (
+                contact.Found &&
+                (
+                    (contact.DistanceRaw <= 0L) ||
+                    (
+                        (sweep.DirectionXRaw != 0L) &&
+                        (windowEnterRaw > contact.DistanceRaw)
+                    )
+                )
+            ) {
+                break;
+            }
+
+            ScanColumn(
+                column: column,
+                contact: ref contact,
+                sweep: sweep,
+                windowEnterRaw: windowEnterRaw,
+                windowExitRaw: windowExitRaw
+            );
+        }
+
+        if (!contact.Found) {
+            return false;
+        }
+
+        hit = BuildHit(
+            contact: contact,
+            sweep: sweep
+        );
+
+        return true;
+    }
+    // Intersects the sweep with the axis slab [lowRaw, highRaw], narrowing [enterRaw, exitRaw] in place. Returns
+    // false once the running interval is empty, which is the "this cell cannot be reached" answer.
+    private static bool NarrowSlab(long originRaw, long directionRaw, long lowRaw, long highRaw, ref long enterRaw, ref long exitRaw) {
+        if (directionRaw == 0L) {
+            return (
+                (originRaw >= lowRaw) &&
+                (originRaw <= highRaw)
+            );
+        }
+
+        var nearBoundRaw = ((directionRaw > 0L)
+            ? lowRaw
+            : highRaw
+        );
+        var farBoundRaw = ((directionRaw > 0L)
+            ? highRaw
+            : lowRaw
+        );
+        var nearRaw = DivideRawDirected(
+            denominatorRaw: directionRaw,
+            numeratorRaw: SubtractRawSaturating(
+                left: nearBoundRaw,
+                right: originRaw
+            ),
+            roundUp: false
+        );
+        var farRaw = DivideRawDirected(
+            denominatorRaw: directionRaw,
+            numeratorRaw: SubtractRawSaturating(
+                left: farBoundRaw,
+                right: originRaw
+            ),
+            roundUp: true
+        );
+
+        if (nearRaw > enterRaw) {
+            enterRaw = nearRaw;
+        }
+
+        if (farRaw < exitRaw) {
+            exitRaw = farRaw;
+        }
+
+        return (enterRaw <= exitRaw);
+    }
     private long RowMaxZRaw(int row) => GridCoordinate(
         index: (row + 1),
         originRaw: m_artifact.OriginZRaw
     );
+    private long RowMinZRaw(int row) => GridCoordinate(
+        index: row,
+        originRaw: m_artifact.OriginZRaw
+    );
+    private static long ScaleRawSaturating(long valueRaw, long scaleRaw) =>
+        ClampToLong(value: (((((Int128)valueRaw)) * scaleRaw) >> 16));
     private void ScanColumn(in Sweep sweep, int column, long windowEnterRaw, long windowExitRaw, ref Contact contact) {
         // Both coordinates are linear in the sweep parameter, so the Z the sweep can reach inside this column is
         // bounded by its values at the window's two ends, dilated by the radius. One tick of slack absorbs the
@@ -625,6 +612,18 @@ public sealed class BakedWorldQuery : IWorldQuery {
             }
         }
     }
+    // Saturating raw subtraction: a difference overflows exactly when the operands differ in sign and the result
+    // takes the subtrahend's.
+    private static long SubtractRawSaturating(long left, long right) {
+        var difference = unchecked((left - right));
+
+        return ((((left ^ right) & (left ^ difference)) < 0L)
+            ? ((left < 0L)
+                ? long.MinValue
+                : long.MaxValue)
+            : difference
+        );
+    }
     private bool TryCellIndex(FixedQ4816 x, FixedQ4816 z, out int cellIndex) {
         cellIndex = -1;
 
@@ -721,6 +720,23 @@ public sealed class BakedWorldQuery : IWorldQuery {
             lowRaw: lowRaw,
             originRaw: m_artifact.OriginZRaw
         );
+    // The artifact's grid lives in world space, so a query point is its exact displacement from the world origin —
+    // never its raw .Local, which repeats every cell and would answer for whichever copy of the grid the caller's
+    // cell happens to be. The rebase is exact integer arithmetic and the identity inside cell (0,0,0).
+    private static FixedVector3 WorldOf(FixedPosition position, string paramName) {
+        if (!position.TryDelta(
+            delta: out var world,
+            origin: FixedPosition.Zero
+        )) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: position,
+                message: "The position's displacement from the world origin is outside signed Q48.16, so it has no world coordinate this artifact's grid can be indexed by.",
+                paramName: paramName
+            );
+        }
+
+        return world;
+    }
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentOutOfRangeException">An endpoint, or the segment between them, is outside signed
@@ -844,14 +860,14 @@ public sealed class BakedWorldQuery : IWorldQuery {
         if (
             !m_artifact.HasHeightfield ||
             !TryCellIndex(
-                cellIndex: out var cellIndex,
-                x: world.X,
-                z: world.Z
-            ) ||
+            cellIndex: out var cellIndex,
+            x: world.X,
+            z: world.Z
+        ) ||
             !m_artifact.TryHeightRaw(
-                cellIndex: cellIndex,
-                heightRaw: out var raw
-            )
+            cellIndex: cellIndex,
+            heightRaw: out var raw
+        )
         ) {
             return false;
         }

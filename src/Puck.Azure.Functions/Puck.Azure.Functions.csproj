@@ -16,13 +16,13 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
+        <ProjectReference Include="..\Puck.Azure\Puck.Azure.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
     </ItemGroup>
 
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
-        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="[1.*,1.5.2)" />
-        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="[1.*,1.6.2)" />
         <!-- Direct only to float past 1.17.1, which declares Azure.Identity.OnBehalfOfCredential that Azure.Core 1.60
              also declares; transitively Microsoft.Extensions.Azure pins the colliding floor. -->
         <PackageReference Include="Azure.Identity" Version="[1.*,2.0)" />
@@ -34,7 +34,6 @@
         <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="[2.*,3.0)" />
         <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.EventGrid" Version="[3.*,4.0)" />
         <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="[2.*,3.0)" />
-        <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Mcp" Version="[1.*,2.0)" />
         <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Blobs" Version="[6.*,7.0)" />
         <PackageReference Include="Microsoft.Azure.Functions.Worker.OpenTelemetry" Version="[1.*,2.0)" />
         <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="[2.*,3.0)" />

@@ -3,8 +3,7 @@ using System.Text;
 
 namespace Puck.Azure.Functions.Utilities;
 
-internal static class AzureUtilities
-{
+internal static class AzureUtilities {
     private static ReadOnlySpan<byte> ArmNamespaceBytes => [
         0x11, 0xFB, 0x06, 0xFB, 0x71, 0x2D, 0x4D, 0xDD,
         0x98, 0xC7, 0xE7, 0x1B, 0xBD, 0x58, 0x88, 0x30,
@@ -50,7 +49,10 @@ internal static class AzureUtilities
             scratchLength += Encoding.UTF8.GetByteCount(s: value);
         }
 
-        scratchLength += Math.Max(val1: 0, val2: (values.Length - 1));
+        scratchLength += Math.Max(
+            val1: 0,
+            val2: (values.Length - 1)
+        );
 
         var scratchSpan = (
             (512 >= scratchLength)

@@ -8,9 +8,9 @@ namespace Puck.Vulkan.Interop;
 /// when disposed.
 /// </summary>
 public sealed class VulkanFramebufferSet : IDisposable {
-    private bool m_disposed;
-
     private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
+
+    private bool m_disposed;
 
     /// <summary>Gets the native <c>VkDevice</c> handle that owns the resources.</summary>
     public nint DeviceHandle { get; }

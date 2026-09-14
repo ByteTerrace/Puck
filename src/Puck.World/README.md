@@ -1,34 +1,44 @@
-# Puck.World — the world game host
+# Puck.World
+
+Normal builds generate the registered world JSON and shader bytecode from their
+tracked parents. See [generated assets](../../build/README.md) for build,
+source-control, and packaging rules.
+
+Puck.World is the application that composes a document-defined local
+multiplayer world of up to 4096 simulated bodies (four local seats plus
+autonomous stand-ins), rendered through the SDF engine and scripted end to end
+over its own console. This project is the composition root of a multi-project
+engine. This README owns application usage; sibling projects own their local contracts:
+
+| Project | Owns |
+|---|---|
+| [`Puck.World.Schema`](../Puck.World.Schema/README.md) | The `puck.world.definition.v1` document model |
+| [`Puck.World.Protocol`](../Puck.World.Protocol/README.md) | The wire/tape protocol |
+| [`Puck.Networking`](../Puck.Networking/README.md) | The world-agnostic wire substrate—the frame grammar and reader/writer pair |
+| [`Puck.World.Server`](../Puck.World.Server/README.md) | The authoritative runtime: the tick, entity table, grants, addons, owned worlds, storage, replay |
+| [`Puck.World.Client`](../Puck.World.Client/README.md) | The per-machine client half: seats, the entity view, the fly camera application, and the binding-authoring layer |
+| `Puck.World` (this project) | The audio director, the frame source, presentation, console command modules, assets, and `Program.cs` |
+
+The reference-game design lives in [the game guide](../../docs/game/README.md);
+nothing there is evidence that a capability is built. What each `Puck.*`
+project is for is [`docs/project-map.md`](../../docs/project-map.md).
+
+## Operator access
 
 For AI pairing, `world.control start|stop|status` manages an authenticated
 Operator attachment without restarting World. CLI serves console exec and
 completed PNG tools over local stdio or OAuth-protected remote HTTP; see
 [setup and trust](../Puck.Mcp/README.md).
 
-`Puck.World` is the live game: a document-driven, network-shaped local
-multiplayer world of up to 4096 simulated bodies (four local seats plus
-autonomous stand-ins), rendered through the SDF engine and scripted end to end
-over its own console. This project is the composition root of a multi-project
-split, and this README is the entry point — each sibling owns its own depth:
+## Usage
 
-| Project | Owns |
-|---|---|
-| [`Puck.World.Schema`](../Puck.World.Schema/README.md) | What a world IS — the `puck.world.def.v1` document model |
-| [`Puck.World.Protocol`](../Puck.World.Protocol/README.md) | What a world SAYS — the wire/tape protocol |
-| [`Puck.Networking`](../Puck.Networking/README.md) | The world-agnostic wire substrate — the frame grammar and reader/writer pair |
-| [`Puck.World.Server`](../Puck.World.Server/README.md) | The authoritative runtime: the tick, entity table, grants, addons, owned worlds, storage, replay |
-| [`Puck.World.Client`](../Puck.World.Client/README.md) | The per-machine client half: seats, the entity view, the fly camera application, and the binding-authoring layer |
-| `Puck.World` (this project) | The audio director, the frame source, presentation, console command modules, assets, and `Program.cs` |
+For the standalone avatar prototype, see the [Moth flight studio](Assets/worlds/avatars/moth.md).
+It pairs a rebuilt SDF avatar with the Moth Pipeline, with inspection cameras,
+walking and flight poses, and live document reload.
 
-The product intent (the overworld, the reveal ladder) lives in
-[`CLAUDE.md`](../../CLAUDE.md) and [`docs/vision.md`](../../docs/vision.md);
-nothing there is evidence that a capability is built. What each `Puck.*`
-project is for is [`docs/project-map.md`](../../docs/project-map.md).
-
-## Run it
-
-For the standalone avatar prototype, see the [Moth flight studio](Assets/worlds/moth.md).
-It has inspection cameras, walking and flight poses, and live document reload.
+The [Moth courtyard](Assets/worlds/moth-courtyard.md) imports that model into an
+eight-body scene: one isolated inspection subject and seven held pose stations,
+with named cameras and independent sky and volumetric-cloud toggles.
 
 For service extensions, use the [configuration guide](../Puck.World.Server/ExtensionConfiguration.md)
 and the [Azure example](Assets/hosting/azure.extensions.example.json). The operator
@@ -43,7 +53,7 @@ transforms and facets across inventory refreshes, and `world.reflow.preview` / `
 declared footprints through a guarded, undoable placement-and-payment batch. The district guide owns the policy
 and its current boundaries.
 
-```
+```bash
 dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6
 ```
 
@@ -74,11 +84,11 @@ there is no TCP fallback. `PeerStream` adapts those messages to World's byte
 codecs. After that peer handshake, an interactive connection crosses two
 application checks: `WorldHelloDoor` (the version-1 protocol contract) and
 `WorldAdmissionDoor`
-(`Puck.World.Schema`'s `WorldAdmissionDoor.cs`) — a challenge-response
+(`Puck.World.Schema`'s `WorldAdmissionDoor.cs`)—a challenge-response
 identity check over `Puck.Attestation`'s signed attestations against the
 world document's own `admission` section. A world authoring no `admission`
 entries admits no remote peer at all, and no traveller from another authority
-either (deny by default — a transfer's own arrival verdict comes from the same
+either (deny by default—a transfer's own arrival verdict comes from the same
 section, through a keyless `federatedAuthority` row naming the source authority
 namespace or `*`). Transport identity alone grants no World permissions.
 `world.peers` echoes each connection's
@@ -86,7 +96,7 @@ verified identity and mapped principal and disclosure tier, plus an `arrivals:`
 group naming each transferred body and the authority its verdict was decided
 against; `world.admission` echoes the document's own authored entries and each
 one's `disclosure`. `world.projection` echoes what this authority would hand a
-peer at each tier — the byte size and the section inventory — or at the tier a
+peer at each tier—the byte size and the section inventory—or at the tier a
 named federation namespace resolves to.
 
 Authority-to-authority projection and transfer additionally require
@@ -100,7 +110,7 @@ peer listening available. `puck canary` creates a run-scoped key for every
 runner-owned authority pair.
 
 **Hosted Puck.** Sign in with a ByteTerrace API Users account and use the
-generated authentication configuration from the deployed [Puck world release](../../build/Azure.cs):
+generated authentication configuration from the deployed [Puck world release](../../docs/development/ci.md#azure-production-deployment):
 
 ```text
 dotnet run --project src/Puck.World -c Release -- --connect play.puck.byteterrace.com:7825 --authentication-config-file /path/to/world-authentication.json
@@ -116,18 +126,31 @@ The [Azure authentication provider](../Puck.World.Azure/README.md#silo-hosting)
 owns token validation and group membership policy; those concepts stay outside
 the engine.
 
+**Branding.** `host.title` and `host.icon` are the window's caption and its
+icon. Both are durable document fields with no CLI reflection, so a world
+shipped by someone else wears its own name and mark rather than the engine's.
+`host.icon` resolves against the world document's own directory (an absolute
+path is taken as-is), so the `.ico` travels beside the world file:
+
+```json
+"host": { "title": "Harbour Nine", "icon": "harbour-nine.ico" }
+```
+
+Authoring neither wears the executable's own icon and `Puck: World`. An icon
+this OS cannot read falls back the same way rather than refusing the boot.
+
 **Headless.** `--headless` (or the document's `host.presentation: none`) boots
-with no window, no GPU device, no swapchain, and no audio device — the
+with no window, no GPU device, no swapchain, and no audio device—the
 authoritative server, console, and tape only:
 
-```
+```bash
 dotnet run --project src/Puck.World -c Release -- --headless --exit-after-seconds 6
 ```
 
 `--headless` is a developer/CI reflection of `host.presentation`, never a
 separate product (the unification contract): the SAME console verb surface
 drives both shapes, minus whatever presentation composed. The command
-VOCABULARY itself must be identical in every shape — the document validators
+VOCABULARY itself must be identical in every shape—the document validators
 check a world's `bindingOverlays`
 against whatever this composition registers, so a genuinely presentation-only
 verb (`world.fps`/`.gpu`/`render*`/`view*`, audio, recording) refuses as
@@ -136,10 +159,10 @@ application it can activate) is CORE-registered (nothing in its dependency
 chain is GPU-typed), terminal-owned `console` is
 registered beside `quit`, and `world.screenshot`/`player.wheel.*` are
 CORE-registered too but resolve their presentation dependency as OPTIONAL and
-refuse BY NAME at use instead of going unregistered — a headless boot that
+refuse BY NAME at use instead of going unregistered—a headless boot that
 left a stock wheel sector unregistered would refuse the SAME boot document a
 windowed boot admits. `screen.*` is
-registered in EVERY shape (owner ruling, 2026-08-03: the machine host is core
+registered in EVERY shape (the machine host is core
 state, not presentation-fed): `screen.insert`/`.eject`/`.select`/`.options`/
 `.link`/`.unlink` apply through the ordered domain headless exactly as
 windowed, and `screen.source <index> camera|capture|desktop|view|qr` still
@@ -149,7 +172,7 @@ honest failure rather than refusing as unknown.
 in EVERY shape, `AddWorldPresentation` only when a window is composed.
 
 **Offscreen.** The document's `host.presentation: offscreen` boots a real GPU
-device and the composed-frame render pipeline (the world render alone — no post-render extension chain,
+device and the composed-frame render pipeline (the world render alone—no post-render extension chain,
 unified overlay/console-mirror/binding-bar, no audio device, no gamepad or
 pointer input) with NO window and NO swap chain ever created, so
 `world.screenshot` writes real PNGs of the composed world with nothing on
@@ -160,11 +183,11 @@ screen. There is no `--offscreen` CLI flag; author it in the world document:
 ```
 
 Direct3D 12 is genuinely surfaceless (the device activates on its first GPU
-call, exactly like `Puck.Post`'s retired `PostDirectXDevice` — see
+call, exactly like `Puck.Post`'s retired `PostDirectXDevice`—see
 `experimental/Puck.Post/PostDirectXDevice.cs`); Vulkan's device bring-up in
 this codebase is fused to a real native surface, so this shape stands up a
 native window through the SAME path the windowed shape uses but never shows
-it and never builds a swap chain against it — see
+it and never builds a swap chain against it—see
 `WorldOffscreenGpuActivation`'s remarks for the exact obstacle. Diegetic
 View-type screens (the jumbotron pool the windowed render-root factory stands
 up via `WorldScreenBinder.ConfigureViews`) are a known gap this shape does not
@@ -205,13 +228,72 @@ state, matched group, and precedence winner. A missing row contributes no match,
 which keeps portable profile layers usable across worlds. When the winning group
 changes, held commands and chord/page latches from the old group are cleared.
 
+## Shader pipelines
+
+A `views.pipelines` row names a pipeline instance and its source document or
+one-off shader. The source resolves relative to the world document. A layout
+slot selects the instance with `pipeline`; it can instead select a `camera`,
+but cannot select both. The row's optional camera supplies shader camera
+inputs, and `timeScale` seeds its presentation clock. `views.shaderToolchain`
+optionally selects the compiler-tools directory.
+
+Start the three-pass feedback example from the repository root:
+
+```powershell
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/pipeline.world.json --state-dir artifacts/pipeline/state
+```
+
+The ink simulation feeds a color pass and a fullscreen finish. Drag the pointer
+to draw. From the console:
+
+```text
+pipeline.status
+pipeline.watch ink on
+pipeline.inspect ink
+pipeline.set ink simulation {"decay":0.995}
+pipeline.set ink visualize {"exposure":1.4}
+pipeline.time ink pause
+pipeline.step ink
+pipeline.output ink simulation
+pipeline.capture ink artifacts/pipeline/simulation.png
+pipeline.output ink image
+pipeline.reset ink
+pipeline.time ink resume
+```
+
+Edit [the simulation shader](Assets/pipelines/ink-simulation.glsl) while it runs.
+Compilation happens in the background. A typo reports a source diagnostic and
+keeps the complete last successful pipeline running. Saving a correction
+installs a new candidate at a frame boundary. `pipeline.reload ink` requests
+compilation explicitly. A step advances time by 1/60 second and leaves the
+instance paused; reset clears feedback and time. `pipeline.inspect` shows the
+ordered passes, resource lifetimes, resolved image sizes and allocation bytes;
+GPU timings are marked unavailable when the backend supplies no timing data.
+`pipeline.capture` queues a PNG of the selected output, including while paused.
+The completion report says when the file has been written.
+
+`pipeline.load <name> <source> [camera]` authors a row through normal world
+validation. The rendered host creates it only after the mutation is accepted.
+To try a one-off shader in the example's existing slot, run
+`pipeline.load ink ../pipelines/moth.glsl`; it replaces that instance's source
+through the same background compilation path. Return with
+`pipeline.load ink ../pipelines/ink.pipeline.json`.
+
+Loading a new row does not change the active layout: select its name in a layout
+slot. The [shader README](../Puck.Shaders/README.md#shader-pipelines-and-live-development)
+owns the pipeline document and source-language contracts.
+
+[The Moth shader](Assets/pipelines/moth.glsl) remains a one-pass procedural
+character example; its header controls poses and framing. Its
+[concept pack](../../docs/game/art/moth-concept-pack-2026-09-09/README.md) is the visual
+reference.
 ## The console
 
 The console is the control plane: process stdin in, results on stdout,
 refusals and server narration on stderr, all mirrored onto the in-game panel
 (the terminal's `ConsoleTape` in `Puck.Hosting`, drawn by `Puck.Overlays`'
 console-panel writer). Every capability is a verb. **Type `help` for the
-live, self-documenting verb list** — it is generated from the registered
+live, self-documenting verb list**—it is generated from the registered
 commands, so this README does not catalog verbs.
 
 Each local seat has its own text session, editor, history, tape, and allowed
@@ -232,7 +314,7 @@ Facts a script needs:
   `player.bindings`) needs no polling. `WorldConsoleWaitGate.cs` and
   `world.wait` are the explicit waits.
 - **Ordering.** Within one stdin batch, submissions apply in FIFO order
-  across kinds — a grant before a command is visible to that command. The
+  across kinds—a grant before a command is visible to that command. The
   contract and its battery are in
   [`Puck.World.Server`'s README](../Puck.World.Server/README.md).
 - **Acks.** `wire.ack quiet` drops success acknowledgements of the
@@ -250,25 +332,25 @@ Facts a script needs:
 
 ## What lives here
 
-- `Program.cs` — the composition root: resolves the boot shape BEFORE any
+- `Program.cs`—the composition root: resolves the boot shape BEFORE any
   registration, then calls `WorldBootComposition.AddWorldAuthoritativeCore`
   always and `AddWorldPresentation` only when windowed;
   `WorldPostBuildWiring.Install` wires the affordance vocabulary, RE-VALIDATES
   the boot document's binding vocabulary now that the registry is real (the
   FIRST validation, at `WorldDefinitionLoader.TryResolve` above, ran before
   the registry existed, so its command half was a documented no-op in EVERY
-  boot shape — see `WorldPostBuildWiring.Install`'s remarks), the session-lever
+  boot shape—see `WorldPostBuildWiring.Install`'s remarks), the session-lever
   sink, and the server's echo/cue taps once, after the container builds, in
   EITHER shape. A refused re-validation prints its reason and fails the boot
   (`Install` returns `false`) before `Program.cs` ever calls `IHost.RunAsync`.
-- `WorldBootComposition.cs` — the two composition methods (above): everything
+- `WorldBootComposition.cs`—the two composition methods (above): everything
   server-safe (profiles, roster, server, grants, addons, replay tape, the
-  console's tick barrier, `WorldMachineHost` and `WorldScreenBinder` — the
+  console's tick barrier, `WorldMachineHost` and `WorldScreenBinder`—the
   machine host is core state that boots and steps in every shape, and the
   binder is CORE too, since `world.faces`/`body.engage` read its bound/
-  no-signal state even headless — every server-safe command module including
+  no-signal state even headless—every server-safe command module including
   `ScreenCommandModule`, and the camera control application (the `player.mode`
-  and `player.camera` verbs) — for command-vocabulary parity: a world's binding document commits
+  and `player.camera` verbs)—for command-vocabulary parity: a world's binding document commits
   that vocabulary in every boot shape, and the validator checks it against what
   the shape registers) vs. everything genuinely presentation-only (the GPU host,
   render root, overlays, the audio device, gamepads). `WorldUiCommandModule`
@@ -284,16 +366,16 @@ Facts a script needs:
   `Puck.Launcher.AddLauncherHeadlessTerminal` plus, on Windows, a standalone
   `Puck.Platform.Windows.AddWindowsPrecisionWaiter`. The two boot shapes are
   never composed together.
-- `WorldSimulation.cs` / `HeadlessWorldSimulation.cs` — the two boot shapes'
+- `WorldSimulation.cs` / `HeadlessWorldSimulation.cs`—the two boot shapes'
   `IFixedStepSimulation`s, each a thin holder of one `WorldHostStep`. Windowed
   contributes a post-step (seat-binding sync and seat-context publish);
-  headless contributes none — no `WorldClient`, no screens.
-- `WorldHostStep.cs` — the one fixed step every boot shape runs, in one order:
+  headless contributes none—no `WorldClient`, no screens.
+- `WorldHostStep.cs`—the one fixed step every boot shape runs, in one order:
   decide whether boot is due, submit its seats' intents, drain the host's
   pending transfers, step boot through
-  `Puck.World.Server.WorldServerStepShell.Step` (not in this project) —
+  `Puck.World.Server.WorldServerStepShell.Step` (not in this project)—
   `WorldServer.Step`, then the replay tape's `NoteTick` and the console wait
-  gate's and capture scheduler's `PublishTick` — or, while boot is paused,
+  gate's and capture scheduler's `PublishTick`—or, while boot is paused,
   drain an administrative mutation and release a stalled `world.wait`; step
   every other instance; run the shell's post-step; finish the seat intents.
   It counts the host work a `world.wait` is clocked by, measures the per-phase
@@ -302,13 +384,13 @@ Facts a script needs:
   `IWorldSimulationClock` the frame producer reads. `Puck.Launcher.FixedStepPump`
   (not in this project) owns the accumulator both boot shapes' hosted services
   drive it through.
-- `WorldInstanceHost.cs` / `WorldInstance.cs` — the process's running world
+- `WorldInstanceHost.cs` / `WorldInstance.cs`—the process's running world
   instances. The boot world is one entry (name `boot`) beside every instance
   `world.instance.start` adds; each non-boot instance holds its own
   `WorldServer`/`WorldPopulation`/`WorldOwnedWorlds` and an empty
   `WorldMachineHost`, shares no singleton with the boot world, and advances on
   its OWN authored `simulation.rateHz` (never a shared build-wide rate) inside
-  the SAME `IFixedStepSimulation.Step` call (never a second pump) — a
+  the SAME `IFixedStepSimulation.Step` call (never a second pump)—a
   per-instance accumulator banks the host's master timeline (the boot world's
   own rate-derived cadence) and steps once per crossing of that instance's own
   step width. A live `world.rate pause`/`resume` lever holds/releases the
@@ -321,20 +403,20 @@ Facts a script needs:
   owned worlds live in, so `TryStart` refuses a name that is not one safe
   segment and independently refuses any name resolving its store outside the
   instances root. A non-boot instance now has its own local-seat table too
-  (`world.instance.seat.*` — enter/warp/face/run/stop/where/leave, applying
+  (`world.instance.seat.*`—enter/warp/face/run/stop/where/leave, applying
   through that instance's own `ApplySession`/`ApplyCommand`, with
   `world.instance.seats` the occupancy read-back and `ReapIfEmpty` retiring an
   instance whose last seat just left); only the CLIENT, the tape, and the
-  socket door still address the boot instance exclusively — that remaining
+  socket door still address the boot instance exclusively—that remaining
   asymmetry is wiring, not kind, and `WorldInstanceHost`'s remarks carry what a
   real flattening needs.
-- `*CommandModule.cs` — the console verb modules, one per family (player,
+- `*CommandModule.cs`—the console verb modules, one per family (player,
   world, population, mutation, grants, bindings, profile, screens, collision,
   looks, placements, network, refusals, audio, HUD, state,
   storage, recording, replay, views, waits, sdf, ui, instances, chat). Modules compose against
   the protocol link, so a scripted line drives the same wire a UI would.
   `WorldPopulationCommandModule.cs` (world.players/.devices/.population),
-  `ScreenCommandModule.cs` (`screen.*` — the machine host is core state that
+  `ScreenCommandModule.cs` (`screen.*`—the machine host is core state that
   boots and steps in every shape, so its whole verb surface is registered
   there too: `screen.insert`/`.eject`/`.select`/`.options`/`.link`/`.unlink`
   apply through the ordered domain headless exactly as windowed, and
@@ -342,7 +424,7 @@ Facts a script needs:
   device open (or, for `qr`, a real encode) and reports the honest failure
   rather than refusing as unknown), and
   most others are server-safe (registered in `AddWorldAuthoritativeCore`,
-  the fly camera application included — see above); `WorldCommandModule.cs`
+  the fly camera application included—see above); `WorldCommandModule.cs`
   (the graphics/GPU levers), `WorldHostCommandModule.cs`,
   `WorldViewCommandModule.cs`, `WorldAudioCommandModule.cs`,
   `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are
@@ -351,33 +433,33 @@ Facts a script needs:
   use when their presentation dependency is absent. Terminal-owned `console`
   is registered in every boot shape; `player.wheel.*` are the rows a world's
   own wheel-hold page binds.
-- `WorldDefinitionLoader.cs` — resolves and validates the boot world
+- `WorldDefinitionLoader.cs`—resolves and validates the boot world
   document; `RecordingDocumentSource.cs` does the same for
-  `puck.recording.v1`.
-- [`Puck.World.Client`](../Puck.World.Client/README.md) — the per-machine
+  `puck.recording.configuration.v1`.
+- [`Puck.World.Client`](../Puck.World.Client/README.md)—the per-machine
   client half: seats and device intents, the snapshot-fed entity view and
   render interpolation, the fly camera application, the
   binding-authoring layer, frame composition (`WorldFramePresenter.cs`), scene
   emission (`WorldSceneEmitter.cs`), and offscreen view composition
-  (`WorldViewComposer.cs`) — the three read the root's `WorldAudioDirector`
+  (`WorldViewComposer.cs`)—the three read the root's `WorldAudioDirector`
   only through `IWorldAudioFrameFeed`/`IWorldAudioCueSink`, never the concrete
   type.
-- `WorldAudioDirector.cs` — derives the emitter table from the delivered
+- `WorldAudioDirector.cs`—derives the emitter table from the delivered
   definition with stable ids, resolves emitter poses per produced frame, and
   publishes `AudioSnapshot`s to the mixer (see
   [`Audio/README.md`](Audio/README.md)). Stays here rather than in
   `Puck.World.Client` because it imports `Puck.World.Audio` types directly;
   the composition root passes it to `Puck.World.Client` types through the two
   narrow interfaces above.
-- [`Audio/`](Audio/README.md) — the deterministic mixer core, synth voices,
+- [`Audio/`](Audio/README.md)—the deterministic mixer core, synth voices,
   and the WASAPI output device.
-- `WorldScreenBinder.cs` and `ScreenCommandModule.cs` — the diegetic screens
+- `WorldScreenBinder.cs` and `ScreenCommandModule.cs`—the diegetic screens
   (below).
-- `WorldRenderProbe.cs` — the probed capacity envelope live placement is
+- `WorldRenderProbe.cs`—the probed capacity envelope live placement is
   validated against.
-- `WorldRecordingCommandModule.cs` — the recording-session command surface;
+- `WorldRecordingCommandModule.cs`—the recording-session command surface;
   generic frame capture lives in Hosting and is driven by Launcher.
-- `Assets/` — the one shipped world, `worlds/puck.world.json` (the island; the
+- `Assets/`—the one shipped world, `worlds/puck.world.json` (the island; the
   boot default), a delta over `worlds/standard.basis.json` (the standards as
   state, the safety net under everything at y = -64, and its debug texture);
   its districts under `worlds/modules/` (`modules/README.md`) and the tabletop
@@ -395,7 +477,7 @@ Facts a script needs:
   `src/Puck.World.Schema/README.md`, "Document composition"), the default recording document
   (`recordings/`), two shipped
   WASM addons (`addons/`: `default`, `hudbuilder`; mounted by no shipped world
-  today — the `arcade` addon was ported to a world `rules` section and its
+  today—the `arcade` addon was ported to a world `rules` section and its
   compiled guest deleted before the addons themselves went unmounted), and an example `puck.sdf.v1`
   document (`sdf/`).
 
@@ -404,8 +486,9 @@ Facts a script needs:
 Players create and edit CGB/AGB ROM source directly in the console with the
 `forge.*` commands. Source is a `puck.cartridge.v1` document: tiles, palettes,
 maps, variables, sprites and ordered input rules. `forge.save` persists the
-source, `forge.export` writes native ROM bytes, and `forge.play` submits the
-normal authoritative screen insertion. There are no shipped sample ROMs.
+source, `forge.export` writes native ROM bytes, and `forge.play` saves canonical
+source and submits its path through the normal authoritative insertion. The
+machine's content provider preserves the source identity and exported symbols.
 See the [cartridge authoring guide](../Puck.GamingBricks.Forge/README.md) for
 an executable walkthrough and the explicit first-version limits.
 
@@ -415,13 +498,13 @@ Everything durable is a document field; everything live is a console verb;
 there is no `PUCK_*` configuration surface for this game. The document
 families, their serialization contract, and the strict-parse rules are
 [`Puck.World.Schema`](../Puck.World.Schema/README.md)'s to describe. Live editing
-is one mutation vocabulary — validate the whole candidate, apply at the tick
-boundary, journal, `world.undo` by replay — owned by
+is one mutation vocabulary—validate the whole candidate, apply at the tick
+boundary, journal, `world.undo` by replay—owned by
 [`Puck.World.Server`](../Puck.World.Server/README.md). `world.save` writes a
 canonical session snapshot (live render levers, census, and runtime screen
 inserts fold into their document homes; every advancing `state` row/cell
 settles to its live value with its projected epoch reset to 0, so a reload
-resumes exactly where the save observed it instead of reading frozen — the
+resumes exactly where the save observed it instead of reading frozen—the
 live document itself is never touched), and `world.status` reports source,
 counts, drift, and the journal length. `world.imports` reads back the whole
 basis-and-imports composition graph in merge order, each import with the alias
@@ -450,8 +533,8 @@ The fixed collider vocabulary and generic contact geometry live in
 `Puck.Physics`; World retains document compilation, authority, pair selection,
 grounding/walkability, obstruction reporting, and body-state writes.
 
-A kit carrying a `rigid` facet is a passive physical entity — a billiard ball,
-a bowling pin, a domino — advanced by the rigid solver instead of a
+A kit carrying a `rigid` facet is a passive physical entity—a billiard ball,
+a bowling pin, a domino—advanced by the rigid solver instead of a
 locomotion program: gravity, restitution/friction/rolling against the world,
 real angular velocity, and momentum transfer against another rigid body or a
 kinematic character (which contributes its own velocity but is never itself
@@ -466,25 +549,25 @@ an instantaneous world-space impulse
 and wakes a resting body; `world.rigid` reads the live census (mass,
 velocity, resting) and the same `quiescent` flag the `$physics:quiescent` rule
 operand reads. The shipped world's `billiardsTray`/`bowlingLane`/`dominoes`
-placements are the garden's proof fixture — see the
+placements are the garden's proof fixture—see the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 for the mechanics and the [schema reference](../Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
 for the authored facet.
 
-Each tabletop game — chess, poker, dominoes, billiards, bowling, tic-tac-toe,
-hex lines, mancala, the solitaires — lives in its own file under `Assets/worlds/games/`, imported bare by
+Each tabletop game—chess, poker, dominoes, billiards, bowling, tic-tac-toe,
+hex lines, mancala, the solitaires—lives in its own file under `Assets/worlds/games/`, imported bare by
 `puck.world.json` (`WorldDefinition.Imports`; see the
-[`puck-world` skill's documents reference](../../.claude/skills/puck-world/references/documents.md#document-composition-basis-and-imports)),
+[`puck-world` skill's documents reference](../../.claude/skills/puck-world/references/documents-composition.md#document-composition-basis-and-imports)),
 and every district lives under `Assets/worlds/modules/`, imported under its alias. The island restates
 each game's root placement row onto the market hall's floor (`parent: marketCourt`) and each district's
 `<alias>Court` row where the district stands, so a module's own rows never carry island coordinates. The
-shared substrate — channels, kits, population capacity, spawn points, the island's own ground, hud/views,
-and everything no module's content touches — stays in `puck.world.json` itself; `world.imports` reads the
+shared substrate—channels, kits, population capacity, spawn points, the island's own ground, hud/views,
+and everything no module's content touches—stays in `puck.world.json` itself; `world.imports` reads the
 resolved stack back. A module addresses the world through placements, never
 absolute coordinates: chess's squares and pieces carry `parent: tabletop`, its
 board topology anchors to that placement, its piece rows are keyed by
 placement id and read through `placement:$each`, and dominoes, billiards, and
-bowling anchor to marker placements of their own — so a module composes into
+bowling anchor to marker placements of their own—so a module composes into
 any host that declares the placement it names. Hex lines (`hexlines.world.json`)
 is a radius-4 hexagonal disk of 61 pointy-top tiles on `hexTable` with two stone
 trays, its `hexLinesBoard` topology unanchored today (a `board` facet admits only
@@ -499,7 +582,7 @@ A kit carrying a `carry` facet may pick up another kit's rigid body:
 `body.carry <carrier> <target>` begins it (within an authored reach and mass
 ceiling, both scaling with the carrier's own live `Scale`), `body.release
 [carrier]` ends it; a carried body's own rigid integration is suspended, but
-its pose is not an unconditional follow — its own collider sweeps against
+its pose is not an unconditional follow—its own collider sweeps against
 static geometry and every other active body every tick, so it pushes and is
 blocked rather than passing through, and whatever correction that sweep
 applies is handed back to the carrier too, so the carrier itself is stopped
@@ -507,14 +590,14 @@ by what it is holding. `body.release` refuses by name when the carried
 body's current pose still overlaps geometry or another body. A released body
 re-enters the solver with the carrier's own velocity. `body.where` echoes
 `carrying=`/`carriedBy=` while the relationship holds. The garden's `walker`
-kit (Wren) is the worked example — see the [server reference](../Puck.World.Server/README.md#carry-as-attachment-worldbodycarrycs-worldpopulationcarrycs).
+kit (Wren) is the worked example—see the [server reference](../Puck.World.Server/README.md#carry-as-attachment-worldbodycarrycs-worldpopulationcarrycs).
 
 The garden's hound witness rules read body IDs from its own `houndIdentity`
 row. Its six cells correspond to the `hound` carrier's keys (90-95), and
 `boneHolder` and `reporter` admit the garden's full body-index range. This
 identity data belongs to the garden rather than an imported game.
 
-The `tabletop` placement carries a `board` facet (the tabletop primitive —
+The `tabletop` placement carries a `board` facet (the tabletop primitive—
 see the [schema reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns))
 anchoring an 8x8 `chessBoard` Grid topology, and 32 `piece`-kit rigid bodies
 (the garden's chess set, shrunk-Wren scale beside the `drinkMe`/`eatMe`
@@ -545,7 +628,7 @@ rolling/Coulomb friction couples a horizontal wake into spin (the ball's
 known rolling-friction overshoot, here on a lighter body), so the unsettled
 window can run long enough to drift the piece across a cell boundary before
 it rests; a small vertical impulse re-settles in place instead.
-`$physics:quiescent` is POPULATION-WIDE — any other rigid body still
+`$physics:quiescent` is POPULATION-WIDE—any other rigid body still
 settling (a just-released `carry` target tumbling, say) holds every board's
 own Edge-gated rules at bay too, so a board proof run alongside unrelated
 rigid activity can see two moves land on the same settle.
@@ -753,13 +836,13 @@ the [Schema
 reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)),
 which is why a hand never authors its own `Placeholder` policy.
 
-The garden also carries a 4x4x4 tic-tac-toe cube (Qubic), state only — the
+The garden also carries a 4x4x4 tic-tac-toe cube (Qubic), state only—the
 `Box`-topology worked example the schema's own discrete-boards section names.
 `tttCube` is a `Box` `state.lattices` topology (width/depth/layers all 4,
 64 cells); `tttBoard` is a plain `cellsOf: tttCube` int row (0 empty, 1/2 the
-two marks). A move is two console writes plus a request bump —
+two marks). A move is two console writes plus a request bump—
 `world.state.cell.set tttMoveCell $value <0..63>` then
-`world.state.cell.set tttMoveRequest $value 1 add` — resolved by
+`world.state.cell.set tttMoveRequest $value 1 add`—resolved by
 `ttt-place-mark` (gated on the cell naming an empty board cell and no winner
 yet; `$cell:tttMoveCell:$value` is the dynamic-key indirection that turns the
 authored cell index into `tttBoard`'s own write address), which places the
@@ -767,8 +850,8 @@ mark, advances `tttMoveCount`/`tttBoardVersion`, and toggles `tttActive`.
 `ttt-reject-out-of-range`/`ttt-reject-illegal` resync `tttMoveApplied` without
 touching the board when the request names an out-of-bounds or already-occupied
 cell, so a bad request never sticks. `ttt-check-win` (gated on
-`tttBoardVersion` having advanced) folds all 76 four-in-a-row lines — each a
-literal 64-bit cell mask, `(occupancyMask & lineMask) == lineMask` — through
+`tttBoardVersion` having advanced) folds all 76 four-in-a-row lines—each a
+literal 64-bit cell mask, `(occupancyMask & lineMask) == lineMask`—through
 eight-line chunks (the 64-token expression ceiling bounds how many lines one
 expression ORs together) into `tttWinner` (0 none, 1 X, 2 O, 3 draw at 64
 moves). `world.state tttBoard`/`tttWinner` is the read-back; there is no
@@ -795,7 +878,7 @@ before submitting the rebuild.
 
 Creation text emits as real emboss/engrave SDF geometry on every placement
 shape: a static placement stamps it into the static program, and an animated,
-inhabited, or attached placement carries it through the replay stamp pool — the
+inhabited, or attached placement carries it through the replay stamp pool—the
 run rides the registration's root transform, so lettering follows the body or
 the placed root while timeline frames move the shapes. A `textRuns[]` row may
 also author `maxWidth` (greedy glyph-level wrapping), `align`
@@ -809,7 +892,7 @@ placement's creation-face override may use `{ "$type": "text", "lines": [...],
 "font": ..., "columns": ..., "rows": ..., "foreground": "#RRGGBB",
 "background": "#RRGGBB" }` (either color may instead bind to a text state cell,
 `state.<row>.<key>`). It renders through the engine's per-cell
-glyph-decal tier off the same packed font atlas — a fixed monospace cell grid
+glyph-decal tier off the same packed font atlas—a fixed monospace cell grid
 (capped by the engine's per-screen decal cell budget), sampled at shade time
 with no per-glyph geometry cost, bypassing the CRT image pipeline. Signs,
 plaques, and monitors belong on this tier; short sculptural lettering stays a
@@ -823,7 +906,7 @@ the locally loaded world's text remains fully rendered.
 ## The diegetic screens
 
 Three primitives, split cleanly: a **surface** (a `WorldScreen` slab in the
-document), a **source** (the signal it carries — a closed `WorldScreenSource`
+document), a **source** (the signal it carries—a closed `WorldScreenSource`
 hierarchy: none, test pattern, booted machine, webcam, compositor capture, a
 jumbotron view of this same world through a placeable `WorldCamera`, the
 diegetic console, an authored QR code, a remote-session projection, or
@@ -833,7 +916,7 @@ and within what radius).
 **A physical camera is an input device, seated like a gamepad, never named by
 hardware.** Each enumerated device gets a reconnect-stable `InputDeviceId`
 (`InputDeviceId.FromKey` over the platform's device id) and a roster token
-(`camera<N>` by first-seen order, beside `keyboard1`/`gamepad<N>`) —
+(`camera<N>` by first-seen order, beside `keyboard1`/`gamepad<N>`)—
 `world.devices` lists every device and the seat it drives; `player.assign
 camera<N> <slot>` moves one between occupied seats, but refuses an empty target
 because a passive sensor cannot create player presence. A newly seen camera
@@ -849,19 +932,19 @@ flight; the renderer adopts completed snapshots and retires vanished devices
 without waiting for discovery. Another scan becomes due two seconds after the
 previous result was consumed. A seat with no camera, or whose camera lacks the
 requested sensor, reports that fault through `screen.state`/`screen.camera` rather than
-refusing the bind — reassigning a camera moves every consumer to the new
+refusing the bind—reassigning a camera moves every consumer to the new
 device with no reopen, on the next produced frame. A scan that fails (the
-platform enumeration call throws) is never read as "every camera unplugged" —
+platform enumeration call throws) is never read as "every camera unplugged"—
 the device table is left untouched and removals resume only once a scan
 completes again, and the failure narrates once per failure episode on stderr
 rather than on every retry.
 
-Camera demand — which (seat, sensor) pairs need an open feed, at what profile
-— is a live set, fully recomputed every produced frame from the actual
+Camera demand—which (seat, sensor) pairs need an open feed, at what profile
+—is a live set, fully recomputed every produced frame from the actual
 consumers: camera-bound screen slots (`ScreenSlot.CameraSeat`/
 `CameraSensorKind`), retained probe sockets, and retained HUD `Frame`
 elements naming a camera; the richest requested profile wins when more than
-one consumer names the same pair. Nothing is declared once and remembered —
+one consumer names the same pair. Nothing is declared once and remembered—
 `screen.source <i> camera …` moving away from a camera, `screen.eject`, a HUD
 panel losing its `Frame` element, and `player.assign` reseating a device all
 resolve within the same one-publish seam: the next produced frame's demand
@@ -869,33 +952,32 @@ recompute drops what is no longer wanted and picks up what changed, closing a
 device's graph once none of its feeds are demanded any more (lazily reopened
 on the next demand, exactly like the first open).
 
-**A booted MACHINE is authoritative server state, not presentation-fed**
-(owner ruling, 2026-08-03). `Puck.World.Server.WorldMachineHost` owns
-boot/step/cable-link/reconfigure/memory-peek for every declared screen's
-machine, in every boot shape (headless included); `screen.insert`/`.eject`/
-`.select`/`.options`/`.link`/`.unlink` submit a `WorldScreenOp` through the
-ordered submission domain (`IServerLink.SubmitScreenOp`, CAS-pinned and
-tape-covered for BOTH `Insert` and a Machine-magazine `Select` — a failed
-boot is a failed op, never a disguised success) rather than calling a
-presentation binder directly. `WorldScreenBinder.cs` is a PURE READER for a
-machine-owning index (its framebuffer handle/light,
-`IScreenMachine.PublishFrame` each produced frame — the one GPU call this
-project still makes on a machine's behalf), recreates its own slot for a
+**A booted MACHINE is authoritative server state, not presentation-fed.** `Puck.World.Server.WorldMachineHost` owns
+boot, exact-tick advancement, links, and hardware access for named machines in
+every boot shape, including headless. Screens and speakers consume their named
+outputs. `machine.operation` carries expected generation and named-machine Control
+authority; `screen.insert` and `forge.play` use that executor for named producers,
+while `screen.eject` detaches the display. Legacy screen operations remain in the
+protocol. Generic provider operations are refused during recording until the tape
+can capture their execution. `WorldScreenBinder.cs` reads a machine output's
+framebuffer handle and light and calls
+`IMachineVideoOutput.PublishFrame` each produced frame—the one GPU call this
+project still makes on a machine's behalf. It recreates its own slot for a
 screen index removed and later restored by `world.reset`/`.load` exactly as
 `WorldMachineHost` does (bounded to indices the render engine's boot-frozen
 provider key set already names). A recreate re-points a `ScreenSourceCell`'s
 `Slot` field rather than writing a fresh delegate into the engine's
-provider maps — `SdfEngineNode` copies those maps' delegates ONCE, at
+provider maps—`SdfEngineNode` copies those maps' delegates ONCE, at
 construction, and never re-reads this binder's own dictionaries again, so
 only the cell indirection (never a brand-new delegate) is visible to an
 already-running renderer after a remove+reset. It still OWNS the genuinely presentation
-sources — a test pattern, an authored QR code, the webcam, compositor
-capture, or a jumbotron view — bound through `screen.source <index> <kind>`
+sources—a test pattern, an authored QR code, the webcam, compositor
+capture, or a jumbotron view—bound through `screen.source <index> <kind>`
 (`camera`, `capture`, `desktop`, `view`, `qr`; it ejects a
 present machine first, through the ordered domain) and `screen.eject` (which
-routes to whichever half — machine or
-local producer — actually holds the slot). A camera source row picks its
-`sensor` (`color` default, or `infrared` — its own shared feed; two-sensor
+routes to whichever half—machine or
+local producer—actually holds the slot). A camera source row picks its
+`sensor` (`color` default, or `infrared`—its own shared feed; two-sensor
 worlds prefer the device's Windows Face Authentication Profile V2 and its
 driver-declared simultaneous native format pair. On Windows, Puck first asks
 the frame server for both native GPU surfaces: YUY2 (BRIO) or NV12 (Surface)
@@ -919,7 +1001,7 @@ that cannot stream the public pair keeps the first-bound sensor and faults the
 other by name, and an absent IR source faults that feed loudly)
 and may author `controls` (one physical camera device has one state across its
 color and IR streams, so the first controls-bearing camera row authored for a
-given SEAT wins regardless of sensor — two seats' cameras carry independent
+given SEAT wins regardless of sensor—two seats' cameras carry independent
 states; the standard
 UVC pan/tilt/zoom/exposure/focus/color surface plus the vendor-extension
 `fieldOfView` in degrees and raw `vendor` selector/value rows,
@@ -928,9 +1010,9 @@ stream is live (vendor-extension writes are firmware-ignored on an idle
 filter), an `UpsertScreen` mutation (`world.row.set screens …`) moves the
 device live through the ordered domain, and `screen.camera` lists every known
 device (token, name, sensors, tier, and the seat it drives) with each live
-sensor's own section — negotiated extent, native transport subtype/rate,
+sensor's own section—negotiated extent, native transport subtype/rate,
 coordinated capture mode, device range, mode, current value, the resolved
-seat's authored value, and raw vendor read-backs — over the pipe (the device
+seat's authored value, and raw vendor read-backs—over the pipe (the device
 stays authoritative: values clamp to its reported envelope, members never authored
 leave driver defaults untouched, and removing an applied member restores its
 default). A QR is the one source with no
@@ -938,21 +1020,21 @@ per-frame cost at all: `QrEncoder` (in `Puck.World.Schema`) resolves the module
 grid and the binder rasterizes it ONCE at author time, then re-uploads the
 unchanged buffer only after a device loss. `world.identify <screenIndex>
 [ecLevel]` (`WorldIdentifyCommandModule`) is a composition over that same live
-path rather than a source of its own: it mints the RUNNING world's identity —
-`puck:world/<documentId>?schema=<schema>&hash=sha256-64/<hex>` — and hands it
+path rather than a source of its own: it mints the RUNNING world's identity—
+`puck:world/<documentId>?schema=<schema>&hash=sha256-64/<hex>`—and hands it
 to `WorldScreenBinder.TryQr`, so a phone pointed at a live session carries the
 world's identity away. The hash is recomputed from the LIVE definition's
 canonical bytes on every invocation (mutations included), never read from the
 boot-time load pin, so the code never claims an identity the running world no
 longer has; the echo says `hash-covers=live-definition` and carries the payload
-in full. It is deterministic in the definition alone — same document, same
+in full. It is deterministic in the definition alone—same document, same
 payload, every run. An
 unbound slot gets the engine's no-signal card, and a missing device is loud
 data in `world.screens`/`screen.state`, never a crash. A machine screen is
 engine-neutral (`Puck.Abstractions.Machines`): `WorldBootComposition`
 registers the SM83 family (`gaming-brick`) and the ARM7TDMI machine
 (`advanced-gaming-brick`) onto `WorldMachineHost`, and `body.engage`
-composes a control application onto the machine — the same `PlayerIntent`
+composes a control application onto the machine—the same `PlayerIntent`
 currency, translated once into a neutral pad image through the named kit's
 `pad` map, folded server-side (`WorldEngagement.FoldTick`) and read directly by
 `WorldMachineHost.Advance` inside `WorldServer.Step`; the authority to compose
@@ -960,19 +1042,19 @@ rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.
 
 A THIRD registered engine, `tune-instrument`
 (`Puck.HumbleGamingBrick.Forge.Tune.TuneInstrumentEngine`), is a diegetic, player-operated
-instrument: its content is a `puck.audio.v1` document rather than a
+instrument: its content is a `puck.tune.v1` document rather than a
 cartridge ROM, compiled to the same jukebox cart `Audio/TuneMachineSource.cs`
 plays passively and booted on a real `Puck.HumbleGamingBrick.MachineHost`, so
 `body.engage` reaches it exactly like any other screen machine. While a seat
 holds the application, `WorldServer.InstrumentClockBoundary` folds the
 instrument's own authored tempo into the world's `MusicClock` boundary each
-tick — holding the application is the whole gate, and there is deliberately no
+tick—holding the application is the whole gate, and there is deliberately no
 session lever beside it (`WorldSessionLever`'s own remarks: a knob the
 simulation reads is a mutation, not a lever). `instrument.state` reads which screen (if any) the routed seat is engaged
 with, whether it carries the capability, and its tempo. See
 [`Audio/README.md`](Audio/README.md) for the instrument host itself.
 
-A placeable camera's offscreen view can also be EXPORTED — read as a GPU
+A placeable camera's offscreen view can also be EXPORTED—read as a GPU
 texture by a consumer outside the render engine (a probe kernel, see
 `## Probes` below) rather than only sampled by a jumbotron screen.
 `WorldScreenBinder.TryGetViewExport`/`ReleaseViewExport` register/withdraw a
@@ -993,40 +1075,40 @@ producer queue before publishing that image as readable.
 ## HUD frame elements
 
 A HUD `Frame` element (`WorldHudElementKind.Frame`) shows a live frame inside
-the banded overlay — the same four-arm `WorldFrameSource` vocabulary a screen
+the banded overlay—the same four-arm `WorldFrameSource` vocabulary a screen
 samples (`camera`, `view`, `probe`, `capture`), never a pipeline of its own.
 `WorldScreenBinder.DeclareFrameSource`/`TryAcquireFrame` take an explicit
 enclosing SEAT (the owning identity panel's slot for a player-scope panel,
 or seat 1 for a world-scope one) alongside the source, since a bare `camera`
-source (no authored `seat`) means "this panel's own seat" — the seat argument
+source (no authored `seat`) means "this panel's own seat"—the seat argument
 is what resolves that, not a value baked into the source record. They are the
 registry every non-screen consumer of a `WorldFrameSource` shares: the former
 opens a non-camera producer's underlying feed the first time anything asks
-for it (idempotent — a view renders every `ViewStack` refresh with no wired
+for it (idempotent—a view renders every `ViewStack` refresh with no wired
 screen narrowing its round-robin turn, a probe reads whatever its own kernel
 publishes, a capture opens through the same ladder a declared screen's capture
-source uses); a `camera` source declares nothing here at all — it instead
+source uses); a `camera` source declares nothing here at all—it instead
 rides `RetainFrameSource`/`ReleaseFrameSource`'s reference-counted table,
 whose membership is one of the inputs `ReconcileCameraDemand`
 (`WorldScreenBinder.FrameSources.cs`) recomputes camera demand from every
 produced frame, alongside every camera-bound screen slot and retained probe
-socket — see the seated-camera section above; the latter (`TryAcquireFrame`)
+socket—see the seated-camera section above; the latter (`TryAcquireFrame`)
 reads the current frame, render-thread-side, once per produced frame. `WorldOverlayFrameSources` (`Puck.Overlays.IOverlayFrameSources`)
 is the integer-keyed adapter the compositor addresses: `WorldHudFeed.BuildElements`
 resolves a `Frame` element's `Source` to a key on the structure rebuild (world
 panels at seat 1, a joined seat's own panel at its own seat), and the
 compositor calls `TryAcquire` each produced frame to bind the element's
 overlay slot. Two elements naming an identical (source, seat) pair share one
-key, one feed, and one slot — keying on the pair, not the source alone, is
+key, one feed, and one slot—keying on the pair, not the source alone, is
 what keeps two seats' otherwise-identical bare camera panels (both authoring
-no `seat`) from collapsing onto the same feed. A `portrait` panel — a mirrored,
-rounded picture-in-picture of the color camera — is the shape such an element
+no `seat`) from collapsing onto the same feed. A `portrait` panel—a mirrored,
+rounded picture-in-picture of the color camera—is the shape such an element
 takes.
 
 ## Native capture
 
 The world records itself to WebM/Matroska through the recording graph in
-`Puck.Recording` (`puck.recording.v1` — resolved at boot from `--recording`
+`Puck.Recording` (`puck.recording.configuration.v1`—resolved at boot from `--recording`
 or `Assets/recordings/default.recording.json`). `capture.start` arms Hosting's
 generic frame-capture controller with a `RecordingSession`; Launcher supplies
 the exact final root surface immediately before presentation, and the active
@@ -1047,19 +1129,19 @@ arm-to-first-packet latency.
 ## Probes
 
 A document's optional `probes` rows (`WorldProbe`, boot-authored only) each
-declare a registered `puck.probe.v1` kind and plug one `WorldFrameSource` into
-each of the kind's typed sockets (`inputs`, by socket name) — or, in place of
-every socket at once, a recorded `puck.probe-track.v1` track — and carry the
+declare a registered `puck.probe.manifest.v1` kind and plug one `WorldFrameSource` into
+each of the kind's typed sockets (`inputs`, by socket name)—or, in place of
+every socket at once, a recorded `puck.probe.track.v1` track—and carry the
 bindings that route one of its channels to a command axis (a `probe.<name>`
 source, an ordinary bindable stick-like input any binding overlay may map), a
 presentation float (a `render.extensions` config field, or another probe's
-kind config field — patched live into its running kernel), or the existing
+kind config field—patched live into its running kernel), or the existing
 camera control surface. A socket's class is `frame` (any one frame source) or
 `strobePair` (a strobing infrared sensor's lit frame and the unlit frame kept
-before it — bound only to a `camera` source with sensor Infrared); an
+before it—bound only to a `camera` source with sensor Infrared); an
 `optional` socket may be left unbound (a null input to the kernel). A socket
 source is the same four-arm `WorldFrameSource` vocabulary a screen samples:
-`camera` (a declared sensor and seat — `seat` absent means the enclosing
+`camera` (a declared sensor and seat—`seat` absent means the enclosing
 instance's own seat, the same convention a `screens` row and a HUD `Frame`
 element follow; every camera socket in one probe must resolve to the same seat,
 because one kernel run has one host graph; `profile` is honored while source
@@ -1082,12 +1164,12 @@ capture in both boot shapes (headless, every camera/view/probe socket faults
 by name for want of a live feed and a parameter binding finds no composed
 pass; a track-input probe and every axis binding run in full), resolving each
 socket against the binder's live state and (re)attaching the kernel to the
-trigger sensor's open graph whenever any socket's generation — or the output
-ring's — changes; a socket whose source is not ready yet (an unpublished ring,
+trigger sensor's open graph whenever any socket's generation—or the output
+ring's—changes; a socket whose source is not ready yet (an unpublished ring,
 an unopened camera) idles the whole probe with that fault and retries every
 frame until it resolves. A camera socket retains its own (seat, sensor,
 profile) demand while its instance lives, then releases it on retirement, the
-same ownership shape a visible HUD `Frame` element uses — no `screens` row
+same ownership shape a visible HUD `Frame` element uses—no `screens` row
 need ever name the sensor for a probe to read it. A probe is not a device and
 never occupies a seat: an axis binding addresses its own instance's seat's
 lane directly (`InputSignal.Slot`), its `probe:<seat>` device id is only the
@@ -1095,7 +1177,7 @@ router's held-state key, it never counts as player activity, and it loses its
 carried sample whenever the terminal takes focus, exactly as a gamepad does.
 
 A row is seat-relative when at least one of its camera sockets carries no
-`seat` of its own — it is then instanced once per occupied local seat, each
+`seat` of its own—it is then instanced once per occupied local seat, each
 instance carrying its own reading ring, kernel run, packed constants, and
 bindings, and resolving its seat-less sockets against its own seat, exactly
 the way the identity HUD panel is already instanced per seat. A row whose
@@ -1107,7 +1189,7 @@ frame, a seat leaving retires them (ending the run, releasing the output ring,
 releasing retained view exports, and releasing every binding's held router
 state) with no reboot. An axis
 binding declared on a seat-relative row may not author its own `seat` (refused
-at document load — it always takes its instance's); one declared on a
+at document load—it always takes its instance's); one declared on a
 single-instance row still authors `seat` as before (absent defaults to seat
 1). A `probe`-target parameter binding or a `probe` socket naming a
 seat-relative probe resolves to the enclosing instance's own seat's target
@@ -1117,26 +1199,26 @@ the lit-frame blob centroid `ir-blob` (bright-mass centroid/coverage/mean
 luminance of the above-threshold pixels over the FaceAuth infrared stream)
 and `faerie` (relights the color frame from a light orbiting an authored
 anchor, with the infrared strobe pair's lit-minus-unlit response as the
-height field; see `src/Puck.Shaders/README.md`) — GPU-tier only today.
+height field; see `src/Puck.Shaders/README.md`)—GPU-tier only today.
 
 `probe.status` echoes every live instance's run state (or fault), tier, rate,
 cycles/drops, latest capture age, channel values and confidence, every
 binding's conditioned value and write count, and (for a camera socket) the
 resolved device token (`camera<N>`, or `seat<N>-unassigned` when the socket's
-seat carries no camera) — a query, always echoing even under `wire.ack quiet`.
+seat carries no camera)—a query, always echoing even under `wire.ack quiet`.
 A seat-relative row's instance is listed as `<id>@<seat>`; a single-instance
 row's is listed by its bare `<id>`. `probe.record <probe>[@<seat>] <path>
 <seconds>` arms a live recording of one instance's fresh readings to a
-`puck.probe-track.v1` document, sampled once per host frame (an instance
+`puck.probe.track.v1` document, sampled once per host frame (an instance
 faster than the host frame rate records its latest reading per frame); each
 sample carries its own capture time, and playback follows those times, so
 completion narrates on stderr with the sample count and the recorded cadence
 replays as recorded. The `@<seat>` suffix is required to name one instance of
 a seat-relative row (omitting it is refused as ambiguous, naming the live
 instances) and optional on a single-instance row. The recorded document plugs
-into a track-input probe in place of a live device — the hardware-free proof
+into a track-input probe in place of a live device—the hardware-free proof
 leg every probe admits. `probe.set <probe>[@<seat>] <field> <value>` patches
-one float config field of a declared probe's kind live — the same constants
+one float config field of a declared probe's kind live—the same constants
 write a `probe`-target parameter binding performs, bound only by the field's
 own declared range; a parameter binding targeting the same field overwrites a
 `probe.set` write on its own next changed reading. With no `@<seat>` suffix a
@@ -1155,15 +1237,17 @@ All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
 `world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
-`world.debug-view`, `world.timing`, `world.gpu`, `world.fps`. Named tiers are
+`world.debug-view`, `world.timing`, `world.gpu`, `world.fps`. Render scale applies
+to both seat views and named cameras, multiplied by any layout-transition scale.
+Named tiers are
 facades over continuous values. Do not assume a lower render scale is
-monotonic for a large instance field — read both `world.gpu` and `world.fps`
+monotonic for a large instance field—read both `world.gpu` and `world.fps`
 at the intended population and view layout. `world.budget` is the DERIVED cost
 sheet, not a lever: the live render program's packed words/instances against
 their frozen envelopes, the Lipschitz step scale and march multiplier, the far
 distance with its reach multiplier, horizon-ray step tax, and far-plane fog
 remnant, the field lattice program's node/cadence counts and exact
-full-cell/body-slot pass costs, and the state row count —
+full-cell/body-slot pass costs, and the state row count—
 how an authored choice's price becomes legible instead of a silent frame tax.
 Navigation adds its compiled cell count, fixed A*/shared-tree workspace bytes,
 authored search caps, live follower count, and this tick's expansions to that
@@ -1174,41 +1258,56 @@ domains contribute their aggregate per-tick budget once, not once per follower.
 `world.navigation` and `world.budget` are server-safe under `--headless`;
 the latter names the absent renderer while retaining all authoritative costs.
 
+`world.sdf.dump <path>` exports the live packed GPU program as little-endian
+32-bit words, replacing the destination file. Use it to inspect the instructions,
+materials and acceleration tables actually uploaded, rather than the reserved
+capacity. It requires an initialized renderer and does not change the world.
+Dynamic transforms and the per-frame grid are separate buffers and are excluded.
+The dump follows the current `SdfProgram` layout; it is a diagnostic snapshot,
+not a loadable or durable asset format.
+
 `render.farDistance` is the depth every camera march ends at (default 40 when
 unauthored; 1..8192), re-read on every definition revision like the lighting
-below — geometry beyond it is never marched, so an infinite ground plane shows
-a horizon curve there unless `render.sky.fogDensity` absorbs it first.
+below—geometry beyond it is never marched, so an infinite ground plane shows
+a horizon curve there unless the `render.sky` fog layer absorbs it first.
 
 Two document sections author the scene's lighting instead of a verb, re-read
-on every definition revision (a live edit lands on the next frame):
-`render.lighting` sets the directional sun and ambient term; `render.sky` sets
-the procedural sky gradient, sun disc, star field (each star hash-dealt its own
-blackbody colour and apparent luminosity; `stars.twinkle { share, depth, rate }`
-scintillates a share of them on the tick clock), cloud layer (`clouds
-{ coverage, softness, scale, seed, color, drift, spin, curl, shear }` — a
-hashed, warped noise layer over everything above it; drift translates it,
-spin turns it about the zenith, curl winds it Coriolis-fashion, shear slides
-the shaping field so clouds re-form as they travel — all on the tick clock),
-and distance fog.
-Both are
-optional, and every field within them is optional individually — absent
-renders the pinned defaults unchanged. `render.cycle`
+on every definition revision (a live edit lands on the next frame).
+`render.lighting.lights[]` is a typed list, at most eight, each `$type`
+`directional` (`direction`, `color`, `weight`, `angularRadius`, `shadows`—the
+one shadowing light drives the soft-shadow march, whose penumbra is the tangent
+of its angular radius; the rest are scaled by ambient occlusion), `hemisphere`
+(`color`, `base`, `gradient`) or `rim` (`color`, `weight`, `power`, added after
+the material shade); absent, the pinned sun and hemisphere render.
+`render.lighting.curvature` adds cavity darkening, ridge light and an ink outline
+read through the `inkLow`/`inkHigh` curvature band (1 / fillet radius).
+`render.sky.layers[]` is a stack of `$type` `gradient` (two to four `stops` of
+`elevation`/`color`), `fog`, `sunDisc` (bound to a light slot), `stars` (each
+star hash-dealt its own blackbody colour and apparent luminosity;
+`twinkle { share, depth, rate }` scintillates a share of them on the tick clock)
+and `clouds` (`coverage, softness, scale, seed, color, drift, spin, curl, shear`
+—a hashed, warped noise layer over everything above it, all on the tick clock),
+composited in that order whatever order they are authored in. Every field is
+optional individually. `world.lighting` echoes both sections. `render.cycle`
 keys both over a state row: `{ "state": "timeOfDay", "keys": [ { "at": 0.25,
-"lighting": {…}, "sky": {…} }, … ] }` — the row's live value (its fractional
+"lighting": {…}, "sky": {…} }, … ] }`—the row's live value (its fractional
 part, so an advancing row wraps once per unit) picks the two bracketing keys
-and every lighting/sky field interpolates between them; a key states only the
-fields it moves, the rest hold from the previous key. The clock is simulation
-state (an advancing `state` row — deterministic, replayed, settable with
+and every lighting/sky lane interpolates between them (directions along the
+arc; counts, kinds, seeds and flags held); a key states only the fields it
+moves, addresses a light by slot and a stop by index with the kinds the statics
+author, and the rest hold from the previous key. The clock is simulation
+state (an advancing `state` row—deterministic, replayed, settable with
 `world.row.set state`); the interpolation is presentation.
 
 ## Engine boundaries worth knowing
 
-- `SdfProgramBuilder.MaxInstances = 16384`: per-tile mask width scales with
+- `SdfProgramBuilder.MaxInstances = 65536`: per-tile mask width scales with
   DECLARED instances, which is why this project emits active avatars only and
   probes capacity floors at construction.
-- The exact soft-shadow gather addresses all 16384 instance slots, including
-  reserved pools. Camera-tile masking is a separate approximation selected by
-  the quality policy or `world.shadow-mask camera-tile`.
+- The exact soft-shadow gather scans the live program's instance range, up to
+  the 65536-instance ceiling. Empty stamp capacity emits no live instances.
+  Camera-tile masking is a separate approximation selected by the quality
+  policy or `world.shadow-mask camera-tile`.
 - `OffscreenRenderBudget.RegisteredViews = 64`: do not register a rendered view per
   population entry.
 - XInput caps at 4 Xbox-family pads locally; HID pads are uncapped.
@@ -1216,16 +1315,16 @@ state (an advancing `state` row — deterministic, replayed, settable with
 ## Verifying
 
 `Puck.World` is greenfield (`CLAUDE.md` rule 3): verify by RUNNING the game
-and driving stdin verbs — no gate stages, no `--validate` flags, and no
+and driving stdin verbs—no gate stages, no `--validate` flags, and no
 golden corpus. Byte-identity observations (the canonical save round-trip,
 `git diff` on shipped worlds) are useful evidence but never acceptance
-criteria for feature work (owner ruling, 2026-07-20: if a shipped world's
+criteria for feature work (if a shipped world's
 JSON moves as a side effect of a landing, note it and move on; goldens become
 worth building when the data settles).
 
 A typical assertion session over a pipe:
 
-```
+```bash
 printf 'world.status\nbody.where 0\nworld.grants console\n' |
   dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6
 ```
@@ -1240,7 +1339,7 @@ from a composed `render.extensions` pass, or `[debug] captured frame N ->
 <path>` from the engine node at the bottom. A node that draws nothing this
 frame forwards the request inward, so the readback always lands on the node
 that actually produced the shown frame. Arming a second capture while one is still
-pending is REFUSED by name — the earlier path would never be written — and a
+pending is REFUSED by name—the earlier path would never be written—and a
 request still outstanding when the run ends prints a `WARNING` naming it. A
 scripted caller can therefore distinguish a reported write from an unserved
 request. In-process callers receive a `FrameCaptureRequest` from
@@ -1248,14 +1347,12 @@ request. In-process callers receive a `FrameCaptureRequest` from
 failure. See [the render contract](../Puck.SdfVm/README.md#capture-completion).
 
 Committed, re-runnable proofs cover most load-bearing seams as `puck canary`
-manifests under `tests/Puck.World.Canaries/` — `sdf-decode-sign-refusal`
-(all twelve builder-mirrored sign fields), `world-seat-binding-recompose`
+manifests under `tests/Puck.World.Canaries/`—`sdf-decode-sign-refusal`
+(all twelve builder-mirrored sign fields) and `world-seat-binding-recompose`
 (a forced seat recompose against a registered command, cleanly, with no
-binding-narration), and `addon-mutation-seam` (the grant-door outcome matrix
-plus a real compiled WASM guest's chained mutate and boot-anchored replay
-arming — see `src/Puck.Cli/README.md`'s `puck canary` section for the
-`stream` override that lets a `world.grant` claim bind its stderr-narrated
-confirmation) among them. Strict-parse and mutation-all-or-nothing are
+binding-narration) among them—see `src/Puck.Cli/README.md`'s `puck canary`
+section for the `stream` override that lets a `world.grant` claim bind its
+stderr-narrated confirmation. Strict-parse and mutation-all-or-nothing are
 proved in-process by
 `tests/Puck.World.Tests/{StrictParseLawTests,MutationAllOrNothingLawTests}.cs`,
 and cited repository paths are checked by `puck doc-links`.
@@ -1265,15 +1362,15 @@ dynamic loopback endpoint, with one human-driven body ringing all four
 ground authorities purely through the router that follows a body wherever it
 now lives. `ordered-domain`,
 `headless-boot`, `lane-present-deletion`, `hud-document`, and
-`engagement-dissolution` have no committed battery at all — validate them by
+`engagement-dissolution` have no committed battery at all—validate them by
 running the app. Principal/grant enforcement and engage/disengage authority
 are proved by `AuthorityAdministrationLawTests`, `EngageAuthorityLawTests`, and
 `ControlApplicationLawTests` in `tests/Puck.World.Tests`.
 
 The former World proof suite (proof.cs and its standalone harnesses) was quarantined
-out of the build on 2026-08-02 with the rest of `experimental/`; nothing has
+out of the build with the rest of `experimental/`; nothing has
 taken over its coverage, and its subcommand inventory lives in git history,
-not here. Do not cite it or re-derive a gate from it — the current
+not here. Do not cite it or re-derive a gate from it—the current
 verification story is the paragraph above.
 
 The [discrete state contract](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
@@ -1290,7 +1387,11 @@ rule select eligible actions by highest score or weighted chance, with authored
 reconsideration, commitment, and interrupts. Inspect them with `world.decisions`;
 `world.rules` identifies policy-bearing rules and `world.budget` includes their
 worst-case work (`world.budget.rules` breaks the total down by rule). To
-debug one rule, `world.rule.trace <rule>` captures its next evaluations —
+debug one rule, `world.rule.trace <rule>` captures its next evaluations—
 bindings, each gate conjunct's values and verdict, each effect's value and
-outcome — and prints them after a `world.wait`. The Schema reference includes a
+outcome—and prints them after a `world.wait`. The Schema reference includes a
 complete rule example.
+
+## Documentation
+
+📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

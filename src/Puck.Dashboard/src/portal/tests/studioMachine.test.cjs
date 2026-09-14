@@ -3,13 +3,9 @@
 // local disk through a file-backed `fetch` stand-in — the same "drive the shipped bytes" posture
 // as tests/engine-wasm.test.cjs and tests/official.test.cjs, just wired together.
 //
-// bootEngineFromOfficial (native/engineBoot.ts) does not exist in this worktree yet — it is owned
-// by a work package built in parallel. Per this package's own contract, `testBootEngine` below
-// stands in for it: it boots through native/engineHost's createEngineHost in 'inline' mode over
-// the local AppBundle and reproduces bootEngineFromOfficial's own documented version check. The
-// machine itself never imports engineBoot.ts — it only calls whatever `bootEngine` function its
-// own `input` is given (see studio/types.ts's BootEngine remarks); this file is that seam's one
-// test-time implementation.
+// testBootEngine boots the local AppBundle and checks its schema/commit against the official
+// tree. The machine receives it through its bootEngine input; browser-specific boot behavior
+// belongs to native/engineBoot.ts.
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const fs = require('node:fs');
@@ -52,16 +48,18 @@ function repositoryRoot() {
 const root = repositoryRoot();
 const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
-const officialDir = path.join(root, 'artifacts', 'official');
-const officialManifest = path.join(officialDir, 'dev', 'manifest.json');
+const officialManifest = process.env.PUCK_TEST_OFFICIAL_MANIFEST || path.join(root, 'artifacts', 'official', 'dev', 'manifest.json');
+const officialDir = path.dirname(path.dirname(officialManifest));
+const officialChannel = path.basename(path.dirname(officialManifest));
 
 const HAS_FIXTURES = fs.existsSync(mainMjs) && fs.existsSync(officialManifest);
+assert.ok(!process.env.PUCK_TEST_OFFICIAL_MANIFEST || HAS_FIXTURES, 'Explicit release fixtures must exist');
 
 if (!HAS_FIXTURES) {
   test(`studioMachine (SKIPPED: no local AppBundle/official fixtures under ${appBundleDir} / ${officialDir} — ` +
     `publish Puck.World.Browser and run 'puck.exe official build' to produce them)`, { skip: true }, () => {});
 } else {
-  /** Serves `artifacts/official` straight off disk through the same `fetch`-shaped interface
+  /** Serves the selected official tree off disk through the same `fetch`-shaped interface
    * officialClient.ts calls — a local twin of tests/official.test.cjs's own in-memory fakeFetch. */
   function diskFetch(input) {
     const url = typeof input === 'string' ? input : input.href;
@@ -88,7 +86,7 @@ if (!HAS_FIXTURES) {
   function resolvedOfficial() {
     return resolveOfficial({
       VITE_PUCK_OFFICIAL_BASE: pathToFileURL(officialDir + path.sep).href,
-      VITE_PUCK_OFFICIAL_CHANNEL: 'dev',
+      VITE_PUCK_OFFICIAL_CHANNEL: officialChannel,
     });
   }
 

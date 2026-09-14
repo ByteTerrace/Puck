@@ -101,7 +101,11 @@ public sealed partial class WorldAddonRuntime : IWorldAddonHost {
     // naming the wildcard covers every subject of the capability, which is the one shape a row may legally carry that is
     // broader than a body.
     private static bool IsRequested(MountedAddon addon, WorldCapability capability, GrantSubject subject) {
-        return WorldCapabilityRequests.Contains(addon.Requests, capability, subject);
+        return WorldCapabilityRequests.Contains(
+            addon.Requests,
+            capability,
+            subject
+        );
     }
     private static void QueueAnswer(MountedAddon addon, ushort ordinal, AddonVerdict verdict, ushort handleIndex = 0, ushort handleGeneration = 0) {
         addon.Answers[addon.AnswerCount++] = new AddonInCell(

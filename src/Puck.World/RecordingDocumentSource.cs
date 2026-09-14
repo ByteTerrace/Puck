@@ -2,7 +2,7 @@ using Puck.Recording.Document;
 
 namespace Puck.World;
 
-/// <summary>The loaded recording document plus its on-disk origin. The recording document (<c>puck.recording.v1</c>) is
+/// <summary>The loaded recording document plus its on-disk origin. The recording document (<c>puck.recording.configuration.v1</c>) is
 /// HOST-scope data — like the storage host-section, it describes an operation the running world performs rather than the
 /// world's own state — so it is resolved once at boot and held for the capture verbs. <see cref="SourcePath"/> is
 /// <see langword="null"/> when the document is the baked <see cref="RecordingDocument.CreateDefault"/> (no file, or a

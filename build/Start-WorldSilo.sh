@@ -2,16 +2,16 @@
 # Installed by the VM extension; configuration and signing material are protected settings.
 set -euo pipefail
 umask 077
-if ! command -v docker >/dev/null || ! command -v curl >/dev/null || ! command -v python3 >/dev/null; then
+if ! command -v docker >/dev/null || ! command -v curl >/dev/null || ! command -v python3 >/dev/null || ! command -v flock >/dev/null; then
     . /etc/os-release
     case "$ID" in
         azurelinux)
-            tdnf install -y moby-engine moby-cli curl python3
+            tdnf install -y moby-engine moby-cli curl python3 util-linux
             ;;
         ubuntu)
             export DEBIAN_FRONTEND=noninteractive
             apt-get update -qq
-            apt-get install -y -qq docker.io curl python3
+            apt-get install -y -qq docker.io curl python3 util-linux
             ;;
         *)
             printf 'Unsupported world host OS: %s\n' "$ID" >&2
@@ -19,6 +19,14 @@ if ! command -v docker >/dev/null || ! command -v curl >/dev/null || ! command -
             ;;
     esac
 fi
+# Serialize retained extension scripts with coordinator guest effects. Recheck the
+# durable operation after waiting: Azure may execute a previously accepted job late.
+exec 9>/run/puck-world-release.lock
+flock -w 600 9
+release_guard() {
+    __RELEASE_GUARD__
+}
+release_guard
 systemctl enable --now docker
 install -d -m 700 /etc/puck /var/lib/puck
 # The runtime uses the .NET image's unprivileged app UID; bootstrap remains root-owned.
@@ -43,18 +51,36 @@ for attempt in $(seq 1 30); do
     sleep 10
 done
 docker logout '__REGISTRY__' >/dev/null
-# A release updates configuration only after the current process has saved its world.
+# Only the coordinator drains and stops an authoritative worker. A retried extension
+# may observe its own healthy candidate, but must never restart a running writer.
+release_guard
 if docker inspect puck-world >/dev/null 2>&1; then
     if [ "$(docker inspect -f '{{.State.Running}}' puck-world)" = true ]; then
-        curl --fail --silent --show-error --max-time __SHUTDOWN_SECONDS__ -X POST http://127.0.0.1:__HEALTH_PORT__/drain
+        if [ "$(docker inspect -f '{{.Config.Image}}' puck-world)" != '__IMAGE__' ]; then
+            printf 'Another world image is still running; the coordinator must drain it first.\n' >&2
+            exit 1
+        fi
+        curl --fail --silent --show-error --max-time 30 http://127.0.0.1:__HEALTH_PORT__/release/status |
+            python3 -c 'import json,sys; assert json.load(sys.stdin)["release"] == "__RELEASE_ID__", "another release is running"'
+        curl --fail --silent --show-error --max-time 30 http://127.0.0.1:__HEALTH_PORT__/private-healthz
+    else
+        systemctl stop puck-world.service
+        docker rm puck-world >/dev/null
     fi
-    systemctl stop puck-world.service
-    docker rm puck-world >/dev/null
 fi
 printf '%s' '__SILO_DOCUMENT__' | base64 -d >/etc/puck/silo.json
-printf '%s' '__FEDERATION_KEY__' | base64 -d >/etc/puck/federation.pk8
-chgrp 1654 /etc/puck/silo.json /etc/puck/federation.pk8
-chmod 640 /etc/puck/silo.json /etc/puck/federation.pk8
+python3 - <<'KEYS'
+import base64, json, os, pathlib
+for name, encoded in json.loads(base64.b64decode('__FEDERATION_KEYS__')).items():
+    if '/' in name or '\\' in name or not name.startswith('federation') or not name.endswith('.pk8'):
+        raise ValueError('invalid retained signing-key filename')
+    path = pathlib.Path('/etc/puck') / name
+    path.write_bytes(base64.b64decode(encoded, validate=True))
+    os.chown(path, 0, 1654)
+    os.chmod(path, 0o640)
+KEYS
+chgrp 1654 /etc/puck/silo.json
+chmod 640 /etc/puck/silo.json
 if [ '__MCP_ENABLED__' = 1 ]; then
     rm -f /etc/puck/mcp.pfx
     printf '%s' '__MCP_DOCUMENT__' | base64 -d >/etc/puck/mcp.json
@@ -117,34 +143,14 @@ else
     systemctl disable --now puck-tls.service 2>/dev/null || true
 fi
 for attempt in $(seq 1 180); do
-    if curl --fail --silent http://127.0.0.1:__HEALTH_PORT__/healthz; then
+    if curl --fail --silent --max-time 30 http://127.0.0.1:__HEALTH_PORT__/private-healthz; then
         if [ '__MCP_ENABLED__' = 1 ] && ! curl --fail --silent --max-time 10 --connect-to '__MCP_HOST__:443:127.0.0.1:8443' 'https://__MCP_HOST__/.well-known/oauth-protected-resource/mcp' >/dev/null; then
             sleep 2
             continue
         fi
         printf '%s\n' '__IMAGE__' >/etc/puck/release
-        # Keep the running image and one previous release. Remove only unused world-silo images.
-        python3 - <<'CLEANUP'
-import json, subprocess
-images = subprocess.check_output(['docker', 'image', 'ls', '__REGISTRY__/world-silo', '--format', '{{.ID}}'], text=True).splitlines()
-protected = set()
-for container in subprocess.check_output(['docker', 'ps', '-aq'], text=True).splitlines():
-    protected.add(json.loads(subprocess.check_output(['docker', 'inspect', container], text=True))[0]['Image'])
-unused = 0
-for identity in dict.fromkeys(images):
-    details = json.loads(subprocess.check_output(['docker', 'image', 'inspect', identity], text=True))[0]
-    full = details['Id']
-    if full in protected:
-        continue
-    unused += 1
-    if unused > 1:
-        references = [value for value in (details.get('RepoTags') or []) + (details.get('RepoDigests') or [])
-                      if value.startswith('__REGISTRY__/world-silo:') or value.startswith('__REGISTRY__/world-silo@')]
-        for reference in references:
-            # Removing the last tag can also remove its digest reference.
-            if subprocess.run(['docker', 'image', 'inspect', reference], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
-                subprocess.run(['docker', 'image', 'rm', reference], check=True)
-CLEANUP
+        # Registry retention owns rollback availability; never guess the previous
+        # release from local image ordering or prune retained images during startup.
         exit 0
     fi
     sleep 2

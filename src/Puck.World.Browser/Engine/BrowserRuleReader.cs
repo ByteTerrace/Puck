@@ -10,7 +10,6 @@ namespace Puck.World.Browser.Engine;
 /// <param name="Answer">The hostless value returned, formatted the same way a trace's own bindings already are (see
 /// <see cref="RuleEvaluation.DescribeFact"/>) — <c>absent</c>, <c>forever</c>, or the raw value.</param>
 public readonly record struct BrowserHostFact(string Rule, string Operand, string Answer);
-
 /// <summary>The session's own rule reader: wraps a <see cref="FrameHost"/> for every state read and write, and
 /// widens it to <see cref="IWorldRuleReader"/> — the world's sixteen operand facts plus the two body-reference
 /// resolutions <c>Puck.World.Server.WorldServer</c> answers from real bodies, machines, a clock, and adjacencies —
@@ -24,7 +23,7 @@ public readonly record struct BrowserHostFact(string Rule, string Operand, strin
 /// <see cref="HostFacts"/> so a judged tick's own trace can show an author which rules leaned on a fact this engine
 /// cannot supply, without throwing the <see cref="InvalidCastException"/> a bare <see cref="FrameHost"/> draws the
 /// moment such a rule evaluates.</summary>
-/// <remarks><see cref="RuleEvaluator.Read(Puck.State.OperandFact, ulong)"/> hands every operand's own
+/// <remarks><see cref="RuleEvaluator.Read(Puck.State.OperandFact, ulong, ulong)"/> hands every operand's own
 /// <c>OperandFact.Read</c> call the SAME object the evaluator was constructed over as the reader — so the object
 /// judging a tick must itself cast to <see cref="IWorldRuleReader"/>, which a bare <see cref="FrameHost"/> never
 /// does. This type owns its own <see cref="RuleEvaluator"/>/<see cref="RuleLatch"/> rather than reusing the wrapped
@@ -37,10 +36,15 @@ public sealed class BrowserRuleReader : IRuleHost, IWorldRuleReader {
     public const int MaxHostFacts = 4096;
 
     private readonly FrameHost m_frameHost;
-    private readonly List<BrowserHostFact> m_hostFacts = [];
-    private string? m_boundTokenKey;
+
     private string? m_boundPreviousKey;
+    private string? m_boundTokenKey;
     private bool m_tableKeyMissing;
+
+    private readonly List<BrowserHostFact> m_hostFacts = [];
+
+    /// <summary>Gets the latch <see cref="Judge"/> clears before each run.</summary>
+    public RuleLatch Latch { get; } = new();
 
     /// <summary>Wraps a fresh frame host: state reads, writes, and preflight scoping ride it unchanged.</summary>
     /// <param name="frameHost">The frame host.</param>
@@ -51,70 +55,38 @@ public sealed class BrowserRuleReader : IRuleHost, IWorldRuleReader {
         Evaluator = new RuleEvaluator(host: this);
     }
 
-    /// <summary>Gets the wrapped frame every state read and write goes to.</summary>
-    public StateFrame Frame => m_frameHost.Frame;
-    /// <summary>Gets the evaluator a judged tick runs through — bound to this reader, never the wrapped frame
-    /// host's own dormant evaluator.</summary>
-    public RuleEvaluator Evaluator { get; }
-    /// <summary>Gets the latch <see cref="Judge"/> clears before each run.</summary>
-    public RuleLatch Latch { get; } = new();
-    /// <summary>Gets every hostless world-operand read the most recent <see cref="Judge"/> call captured, in read
-    /// order.</summary>
-    public IReadOnlyList<BrowserHostFact> HostFacts => m_hostFacts;
-
-    /// <summary>Rebinds the wrapped frame to rows its layout fits.</summary>
-    /// <param name="rows">The rows.</param>
-    public void Rebind(IReadOnlyList<StateRow> rows) => m_frameHost.Rebind(rows: rows);
-    /// <summary>Judges one tick over the given rules in array order, capturing every hostless world-operand read
-    /// this tick made.</summary>
-    /// <param name="rules">The rules, already restricted to what a frame can evaluate.</param>
-    /// <param name="tick">The tick the reads answer as of.</param>
-    /// <returns><see langword="true"/> when any effect wrote the frame.</returns>
-    public bool Judge(CompiledRule[] rules, ulong tick) {
-        m_hostFacts.Clear();
-        Latch.Clear();
-
-        return Evaluator.Evaluate(rules: rules, latch: Latch, tick: tick, stepTicks: 1UL);
-    }
-
+    string? IRuleReader.BoundEachKey => Evaluator.BoundEachKey;
+    int IRuleReader.BoundEachPosition => Evaluator.BoundEachPosition;
+    StateHandle IRuleReader.BoundEachRowHandle => Evaluator.BoundEachRowHandle;
+    string? IRuleReader.BoundPreviousKey { get => m_boundPreviousKey; set => m_boundPreviousKey = value; }
+    string? IRuleReader.BoundTokenKey { get => m_boundTokenKey; set => m_boundTokenKey = value; }
+    StateCatalog IRuleReader.Catalog => m_frameHost.Catalog;
+    Span<long> IRuleReader.PatternWord => m_frameHost.PatternWord;
+    CompiledPatterns IRuleReader.Patterns => m_frameHost.Patterns;
+    StateStore IRuleReader.Store => m_frameHost.Store;
+    bool IRuleReader.TableKeyMissing { get => m_tableKeyMissing; set => m_tableKeyMissing = value; }
     // IRuleReader — the evaluation in flight (Tick, BoundEachKey, BoundIndex, BindingValue, table-key reporting) is
     // OUR OWN Evaluator's, never the wrapped frame host's dormant one; everything else about the section being read
     // (the store, the catalog, the patterns, board scratch, row versions) rides the wrapped host unchanged.
     ulong IRuleReader.Tick => Evaluator.Tick;
-    StateStore IRuleReader.Store => m_frameHost.Store;
-    StateCatalog IRuleReader.Catalog => m_frameHost.Catalog;
-    CompiledPatterns IRuleReader.Patterns => m_frameHost.Patterns;
-    string? IRuleReader.BoundEachKey => Evaluator.BoundEachKey;
-    string? IRuleReader.BoundTokenKey { get => m_boundTokenKey; set => m_boundTokenKey = value; }
-    string? IRuleReader.BoundPreviousKey { get => m_boundPreviousKey; set => m_boundPreviousKey = value; }
-    bool IRuleReader.TableKeyMissing { get => m_tableKeyMissing; set => m_tableKeyMissing = value; }
-    Span<long> IRuleReader.PatternWord => m_frameHost.PatternWord;
+    ulong IRuleReader.EngineTick => Evaluator.EngineTick;
 
-    int IRuleReader.BoundIndex(BoundKey key) => Evaluator.BoundIndex(key: key);
-    long IRuleReader.BindingValue(int ordinal) => Evaluator.BindingValue(ordinal: ordinal);
-    CompiledTable IRuleReader.Table(int ordinal) => m_frameHost.Table(ordinal: ordinal);
-    void IRuleReader.ReportTableKeyMissing(string table, long key) => Evaluator.ReportTableKeyMissing(table: table, key: key);
-    Span<long> IRuleReader.BoardScratch(int cells) => m_frameHost.BoardScratch(cells: cells);
-    bool IRuleReader.TryRowVersion(StateHandle row, out ulong version) => m_frameHost.TryRowVersion(row: row, version: out version);
+    /// <summary>Gets the evaluator a judged tick runs through — bound to this reader, never the wrapped frame
+    /// host's own dormant evaluator.</summary>
+    public RuleEvaluator Evaluator { get; }
+    /// <summary>Gets the wrapped frame every state read and write goes to.</summary>
+    public StateFrame Frame => m_frameHost.Frame;
+    /// <summary>Gets every hostless world-operand read the most recent <see cref="Judge"/> call captured, in read
+    /// order.</summary>
+    public IReadOnlyList<BrowserHostFact> HostFacts => m_hostFacts;
 
-    // IRuleHost — state mutation and preflight scoping ride the wrapped frame host's own door unchanged; this
-    // reader widens only the world-operand reads below, never how a write lands.
-    bool IRuleHost.TryApply(StateMutation mutation, ulong tick, bool preflight, out string reason) => m_frameHost.TryApply(mutation: mutation, tick: tick, preflight: preflight, reason: out reason);
     void IRuleHost.BeginPreflight() => m_frameHost.BeginPreflight();
+    long IRuleReader.BindingValue(int ordinal) => Evaluator.BindingValue(ordinal: ordinal);
+    Span<long> IRuleReader.BoardScratch(int cells) => m_frameHost.BoardScratch(cells: cells);
+    int IRuleReader.BoundIndex(BoundKey key) => Evaluator.BoundIndex(key: key);
     void IRuleHost.EndPreflight() => m_frameHost.EndPreflight();
-    bool IRuleHost.TryCommitPreflight(ulong tick, out string reason) => m_frameHost.TryCommitPreflight(tick: tick, reason: out reason);
     EffectOutcome IRuleHost.FireEffect(EffectFact effect, string ruleName, ulong tick, ulong stepTicks, bool preflight) => EffectOutcome.Skipped;
-    // No rule kind is this reader's own — a decision or interaction rule's own Decision/Interaction extension is
-    // simply never consulted (the same posture a bare FrameHost already takes for every rule kind); its base
-    // Gate/Effects still evaluate through the library's own plain gate-and-fire, exactly as they would for a rule
-    // carrying no such extension at all.
-    bool IRuleHost.TryEvaluateOwn(CompiledRule rule, RuleLatch latch, ulong tick, ulong stepTicks, out bool applied) {
-        applied = false;
-
-        return false;
-    }
-    void IRuleHost.RefusalRecorded(in RuleRuntimeDiagnostic diagnostic) { }
-
+    string IWorldRuleReader.PairKey(PairKeyFact key) => "-1_-1";
     // IWorldRuleReader — the sixteen world-operand facts, each the honest hostless answer this build's own
     // documentation already commits to for "no such body"/"no such machine"/"no such clock"/"no such link", applied
     // here for "there is no host at all": population 0 (WorldRuleFacts.Population), physics vacuously quiescent
@@ -129,37 +101,194 @@ public sealed class BrowserRuleReader : IRuleHost, IWorldRuleReader {
     // (WorldPopulation.NavigationFact's own out-of-range-index case). PlacementInfluenceOperand alone reads Absent —
     // an unrepresented influence provider is UNKNOWABLE, never a falsely safe zero, exactly as
     // WorldServer.Influence.cs already answers it for the one real case that reads Absent today.
-    RuleFact IWorldRuleReader.Read(PopulationOperand operand) => Record(operand: nameof(PopulationOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Int));
-    RuleFact IWorldRuleReader.Read(PhysicsQuiescentOperand operand) => Record(operand: nameof(PhysicsQuiescentOperand), fact: RuleFact.Finite(value: 1L, kind: CellKind.Bool));
-    RuleFact IWorldRuleReader.Read(ClockOperand operand) => Record(operand: nameof(ClockOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Int));
-    RuleFact IWorldRuleReader.Read(RegionOccupancyOperand operand) => Record(operand: nameof(RegionOccupancyOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Int));
-    RuleFact IWorldRuleReader.Read(PlacementInfluenceOperand operand) => Record(operand: nameof(PlacementInfluenceOperand), fact: RuleFact.Absent(kind: CellKind.Int));
-    RuleFact IWorldRuleReader.Read(MachineMemoryOperand operand) => Record(operand: nameof(MachineMemoryOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Int));
-    RuleFact IWorldRuleReader.Read(ArgBodyOperand operand) => Record(operand: nameof(ArgBodyOperand), fact: RuleFact.Finite(value: -1L, kind: CellKind.Int));
-    RuleFact IWorldRuleReader.Read(BodyDistanceOperand operand) => Record(operand: nameof(BodyDistanceOperand), fact: RuleFact.Finite(value: FixedQ4816.MaxValue.Value, kind: CellKind.Fixed));
-    RuleFact IWorldRuleReader.Read(LineOfSightOperand operand) => Record(operand: nameof(LineOfSightOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Bool));
-    RuleFact IWorldRuleReader.Read(ParkedOperand operand) => Record(operand: nameof(ParkedOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Int));
-    RuleFact IWorldRuleReader.Read(UprightOperand operand) => Record(operand: nameof(UprightOperand), fact: RuleFact.Finite(value: FixedQ4816.One.Value, kind: CellKind.Fixed));
-    RuleFact IWorldRuleReader.Read(LinkStalenessOperand operand) => Record(operand: nameof(LinkStalenessOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Int));
-    RuleFact IWorldRuleReader.Read(ChannelOperand operand) => Record(operand: nameof(ChannelOperand), fact: RuleFact.Finite(value: FixedQ4816.Zero.Value, kind: CellKind.Fixed));
-    RuleFact IWorldRuleReader.Read(NearestOperand operand) => Record(operand: nameof(NearestOperand), fact: RuleFact.Finite(value: -1L, kind: CellKind.Int));
-    RuleFact IWorldRuleReader.Read(NavigationOperand operand) => Record(operand: nameof(NavigationOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Int));
-    RuleFact IWorldRuleReader.Read(BoardCellOfOperand operand) => Record(operand: nameof(BoardCellOfOperand), fact: RuleFact.Finite(value: -1L, kind: CellKind.Int));
+    RuleFact IWorldRuleReader.Read(PopulationOperand operand) => Record(
+        operand: nameof(PopulationOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: 0L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(PhysicsQuiescentOperand operand) => Record(
+        operand: nameof(PhysicsQuiescentOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Bool,
+            value: 1L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(ClockOperand operand) => Record(
+        operand: nameof(ClockOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: 0L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(RegionOccupancyOperand operand) => Record(
+        operand: nameof(RegionOccupancyOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: 0L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(PlacementInfluenceOperand operand) => Record(
+        operand: nameof(PlacementInfluenceOperand),
+        fact: RuleFact.Absent(kind: CellKind.Int)
+    );
+    RuleFact IWorldRuleReader.Read(MachineMemoryOperand operand) => Record(
+        operand: nameof(MachineMemoryOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: 0L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(ArgBodyOperand operand) => Record(
+        operand: nameof(ArgBodyOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: -1L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(BodyDistanceOperand operand) => Record(
+        operand: nameof(BodyDistanceOperand),
+        fact: RuleFact.Finite(
+            value: FixedQ4816.MaxValue.Value,
+            kind: CellKind.Fixed
+        )
+    );
+    RuleFact IWorldRuleReader.Read(LineOfSightOperand operand) => Record(
+        operand: nameof(LineOfSightOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Bool,
+            value: 0L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(ParkedOperand operand) => Record(
+        operand: nameof(ParkedOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: 0L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(UprightOperand operand) => Record(
+        operand: nameof(UprightOperand),
+        fact: RuleFact.Finite(
+            value: FixedQ4816.One.Value,
+            kind: CellKind.Fixed
+        )
+    );
+    RuleFact IWorldRuleReader.Read(BodyFactOperand operand) => Record(
+        operand: nameof(BodyFactOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: 0L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(LinkStalenessOperand operand) => Record(
+        operand: nameof(LinkStalenessOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: 0L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(ChannelOperand operand) => Record(
+        operand: nameof(ChannelOperand),
+        fact: RuleFact.Finite(
+            value: FixedQ4816.Zero.Value,
+            kind: CellKind.Fixed
+        )
+    );
+    RuleFact IWorldRuleReader.Read(NearestOperand operand) => Record(
+        operand: nameof(NearestOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: -1L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(NavigationOperand operand) => Record(
+        operand: nameof(NavigationOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: 0L
+        )
+    );
+    RuleFact IWorldRuleReader.Read(BoardCellOfOperand operand) => Record(
+        operand: nameof(BoardCellOfOperand),
+        fact: RuleFact.Finite(
+            kind: CellKind.Int,
+            value: -1L
+        )
+    );
+    void IRuleHost.RefusalRecorded(in RuleRuntimeDiagnostic diagnostic) { }
+    void IRuleReader.ReportTableKeyMissing(string table, long key) => Evaluator.ReportTableKeyMissing(
+        key: key,
+        table: table
+    );
     // No body reference ever resolves — the same "-1 = no body" convention every read above already carries; a
     // $pair: key over two unresolved bodies spells through WorldServer.ResolvePairKey's own "a_b" convention with
     // both sides -1, never a special case.
     int IWorldRuleReader.ResolveBody(in CompiledBodyRef bodyRef) => -1;
-    string IWorldRuleReader.PairKey(PairKeyFact key) => "-1_-1";
+    CompiledTable IRuleReader.Table(int ordinal) => m_frameHost.Table(ordinal: ordinal);
+    // IRuleHost — state mutation and preflight scoping ride the wrapped frame host's own door unchanged; this
+    // reader widens only the world-operand reads below, never how a write lands.
+    bool IRuleHost.TryApply(StateMutation mutation, ulong tick, bool preflight, out string reason) => m_frameHost.TryApply(
+        mutation: mutation,
+        preflight: preflight,
+        reason: out reason,
+        tick: tick
+    );
+    bool IRuleHost.TryCommitPreflight(ulong tick, out string reason) => m_frameHost.TryCommitPreflight(
+        reason: out reason,
+        tick: tick
+    );
+    // No rule kind is this reader's own — a decision or interaction rule's own Decision/Interaction extension is
+    // simply never consulted (the same posture a bare FrameHost already takes for every rule kind); its base
+    // Gate/Effects still evaluate through the library's own plain gate-and-fire, exactly as they would for a rule
+    // carrying no such extension at all.
+    bool IRuleHost.TryEvaluateOwn(CompiledRule rule, RuleLatch latch, ulong tick, ulong stepTicks, out bool applied) {
+        applied = false;
+
+        return false;
+    }
+    bool IRuleReader.TryRowVersion(StateHandle row, out ulong version) => m_frameHost.TryRowVersion(
+        row: row,
+        version: out version
+    );
 
     private RuleFact Record(string operand, RuleFact fact) {
         if (m_hostFacts.Count < MaxHostFacts) {
             m_hostFacts.Add(item: new BrowserHostFact(
                 Rule: Evaluator.RuleName,
                 Operand: operand,
-                Answer: RuleEvaluation.DescribeFact(value: fact.Value, kind: fact.Kind, isForever: fact.IsForever, isAbsent: fact.IsAbsent)
+                Answer: RuleEvaluation.DescribeFact(
+                    value: fact.Value,
+                    kind: fact.Kind,
+                    isForever: fact.IsForever,
+                    isAbsent: fact.IsAbsent
+                )
             ));
         }
 
         return fact;
     }
+
+    /// <summary>Judges one tick over the given rules in array order, capturing every hostless world-operand read
+    /// this tick made.</summary>
+    /// <param name="rules">The rules, already restricted to what a frame can evaluate.</param>
+    /// <param name="tick">The tick the reads answer as of.</param>
+    /// <param name="engineTick">The engine-tick coordinate <paramref name="tick"/> completes at.</param>
+    /// <returns><see langword="true"/> when any effect wrote the frame.</returns>
+    public bool Judge(CompiledRule[] rules, ulong tick, ulong engineTick) {
+        m_hostFacts.Clear();
+        Latch.Clear();
+
+        return Evaluator.Evaluate(
+            rules: rules,
+            latch: Latch,
+            tick: tick,
+            engineTick: engineTick,
+            stepTicks: 1UL
+        );
+    }
+    /// <summary>Rebinds the wrapped frame to rows its layout fits.</summary>
+    /// <param name="rows">The rows.</param>
+    public void Rebind(IReadOnlyList<StateRow> rows) => m_frameHost.Rebind(rows: rows);
 }

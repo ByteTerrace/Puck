@@ -17,28 +17,53 @@ public sealed class WorldGeneratorExhaustionLawTests {
         Source: GeneratorSource.WeightedNumeric,
         Mode: mode,
         Weighted: [
-            new GeneratorWeightedNumeric(Value: 10, Weight: 1UL),
-            new GeneratorWeightedNumeric(Value: 20, Weight: 3UL),
-            new GeneratorWeightedNumeric(Value: 30, Weight: 5UL),
-            new GeneratorWeightedNumeric(Value: 40, Weight: 2UL),
+            new GeneratorWeightedNumeric(
+                Value: 10,
+                Weight: 1UL
+            ),
+            new GeneratorWeightedNumeric(
+                Value: 20,
+                Weight: 3UL
+            ),
+            new GeneratorWeightedNumeric(
+                Value: 30,
+                Weight: 5UL
+            ),
+            new GeneratorWeightedNumeric(
+                Value: 40,
+                Weight: 2UL
+            ),
         ]
     );
+    private static GeneratorEngine.FireResult Fire(StateGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? masks) {
+        Assert.True(
+            condition: TryFire(
+                cursor: cursor,
+                generator: generator,
+                masks: masks,
+                reason: out var reason,
+                result: out var result
+            ),
+            userMessage: reason
+        );
+
+        return result;
+    }
     private static bool TryFire(StateGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? masks, out GeneratorEngine.FireResult result, out string reason) =>
         GeneratorEngine.TryFire(
             generator: generator,
             targetKind: CellKind.Int,
-            seedState: GeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: Site, documentSeed: WorldSeed),
+            seedState: GeneratorEngine.ComputeSeedState(
+                documentSeed: WorldSeed,
+                instanceIdentity: Instance,
+                site: Site
+            ),
             stream: GeneratorEngine.ComputeStreamId(site: Site),
             cursor: cursor,
             masks: masks,
             result: out result,
             reason: out reason
         );
-    private static GeneratorEngine.FireResult Fire(StateGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? masks) {
-        Assert.True(condition: TryFire(generator: generator, cursor: cursor, masks: masks, result: out var result, reason: out var reason), userMessage: reason);
-
-        return result;
-    }
     private static string Validate(StateGenerator generator, CellKind kind, DrawTiming timing) {
         var definition = new WorldDefinition(
             Simulation: new WorldSimulationDefaults(RateHz: 240),
@@ -46,37 +71,119 @@ public sealed class WorldGeneratorExhaustionLawTests {
                 new WorldStateRow(
                     Name: CellName.Parse(candidate: "loot"),
                     Kind: kind,
-                    Draw: new Draw(Generator: generator, Timing: timing)
+                    Draw: new Draw(
+                        Generator: generator,
+                        Timing: timing
+                    )
                 ),
             ])
         );
 
-        return (WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason) ? string.Empty : reason);
+        return (WorldDefinitionValidator.TryValidateLocally(
+            definition: definition,
+            reason: out var reason
+        )
+            ? string.Empty
+            : reason
+        );
     }
 
     [Fact]
-    public void WithoutReplacement_DrawsEveryOutcomeOncePerPass_ThenRefusesByName() {
-        var bag = Bag(mode: GeneratorMode.WithoutReplacement);
+    public void PartiallyDrawnSampling_IsAliasTableIdentical_WithoutPerDrawTableAllocation() {
+        var generator = Bag(mode: GeneratorMode.RestartOnExhaustion);
+        const ulong Mask = 0b0101UL;
+        var seed = GeneratorEngine.ComputeSeedState(
+            documentSeed: WorldSeed,
+            instanceIdentity: Instance,
+            site: Site
+        );
+        var stream = GeneratorEngine.ComputeStreamId(site: Site);
+        var weights = new ulong[] { 1UL, 3UL, 5UL, 2UL };
+
+        for (var mask = 1UL; (mask < 0b1111UL); mask++) {
+            var remaining = Enumerable.Range(
+                count: 4,
+                start: 0
+            )
+                .Where(predicate: index => ((mask & (1UL << index)) == 0UL))
+                .Select(selector: index => (Element: index, Weight: weights[index]))
+                .ToArray();
+
+            for (var cursor = 0L; (cursor < 32L); cursor++) {
+                var expectedRng = Pcg32XshRr.Create(
+                    state: seed,
+                    stream: stream
+                );
+
+                expectedRng.Advance(count: unchecked((((ulong)cursor) * 2UL)));
+                var expectedEntry = WeightedSampler.Create<int>(entries: remaining).Sample(generator: ref expectedRng);
+                var actual = Fire(
+                    generator: generator,
+                    cursor: cursor,
+                    masks: [new(Word0: mask)]
+                );
+
+                Assert.Equal(
+                    expected: generator.Weighted![expectedEntry].Value,
+                    actual: actual.Numeric
+                );
+            }
+        }
+
+        _ = Fire(
+            generator: generator,
+            cursor: 0L,
+            masks: [new(Word0: Mask)]
+        );
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var cursor = 0L; (cursor < 1024L); cursor++) {
+            _ = Fire(
+                generator: generator,
+                cursor: cursor,
+                masks: [new(Word0: Mask)]
+            );
+        }
+
+        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+
+        // One tiny returned mask plus the test's one-element input mask are expected; rebuilding an AliasTable per
+        // draw formerly allocated several arrays and exceeded this bound by orders of magnitude.
+        Assert.InRange(
+            actual: allocated,
+            high: (256L * 1024L),
+            low: 0L
+        );
+    }
+    [Fact]
+    public void PersistedCursorAndMask_ReplayTheSameDraw() {
+        var bag = Bag(mode: GeneratorMode.RestartOnExhaustion);
         var cursor = 0L;
         IReadOnlyList<ClosedBitset256>? masks = null;
-        var drawn = new List<long>();
+        var trail = new List<(long Cursor, ClosedBitset256[]? Masks, long Value)>();
 
-        for (var draw = 0; (draw < 4); draw++) {
-            var fired = Fire(generator: bag, cursor: cursor, masks: masks);
+        for (var draw = 0; (draw < 11); draw++) {
+            var fired = Fire(
+                cursor: cursor,
+                generator: bag,
+                masks: masks
+            );
 
-            Assert.Equal(expected: 1L, actual: fired.Samples);
-            Assert.NotNull(@object: fired.Masks);
-            Assert.Single(collection: fired.Masks!);
-            Assert.Equal(expected: (draw + 1), actual: fired.Masks![0].Count);
-
-            drawn.Add(item: fired.Numeric!.Value);
+            trail.Add(item: (cursor, masks?.ToArray(), fired.Numeric!.Value));
             cursor += fired.Samples;
             masks = fired.Masks;
         }
 
-        Assert.Equal(expected: new long[] { 10L, 20L, 30L, 40L }, actual: drawn.Order().ToArray());
-        Assert.False(condition: TryFire(generator: bag, cursor: cursor, masks: masks, result: out _, reason: out var reason));
-        Assert.Contains(expectedSubstring: "drawn out", actualString: reason);
+        foreach (var (at, mask, value) in trail) {
+            Assert.Equal(
+                expected: value,
+                actual: Fire(
+                    cursor: at,
+                    generator: bag,
+                    masks: mask
+                ).Numeric
+            );
+        }
     }
     [Fact]
     public void RestartOnExhaustion_StartsANewPass_AndEveryPassIsAPermutation() {
@@ -88,44 +195,26 @@ public sealed class WorldGeneratorExhaustionLawTests {
             var drawn = new List<long>();
 
             for (var draw = 0; (draw < 4); draw++) {
-                var fired = Fire(generator: bag, cursor: cursor, masks: masks);
+                var fired = Fire(
+                    cursor: cursor,
+                    generator: bag,
+                    masks: masks
+                );
 
                 drawn.Add(item: fired.Numeric!.Value);
                 cursor += fired.Samples;
                 masks = fired.Masks;
             }
 
-            Assert.Equal(expected: new long[] { 10L, 20L, 30L, 40L }, actual: drawn.Order().ToArray());
-            Assert.Equal(expected: 4, actual: masks![0].Count);
+            Assert.Equal(
+                expected: new long[] { 10L, 20L, 30L, 40L },
+                actual: drawn.Order().ToArray()
+            );
+            Assert.Equal(
+                expected: 4,
+                actual: masks![0].Count
+            );
         }
-    }
-    [Fact]
-    public void PersistedCursorAndMask_ReplayTheSameDraw() {
-        var bag = Bag(mode: GeneratorMode.RestartOnExhaustion);
-        var cursor = 0L;
-        IReadOnlyList<ClosedBitset256>? masks = null;
-        var trail = new List<(long Cursor, ClosedBitset256[]? Masks, long Value)>();
-
-        for (var draw = 0; (draw < 11); draw++) {
-            var fired = Fire(generator: bag, cursor: cursor, masks: masks);
-
-            trail.Add(item: (cursor, masks?.ToArray(), fired.Numeric!.Value));
-            cursor += fired.Samples;
-            masks = fired.Masks;
-        }
-
-        foreach (var (at, mask, value) in trail) {
-            Assert.Equal(expected: value, actual: Fire(generator: bag, cursor: at, masks: mask).Numeric);
-        }
-    }
-    [Fact]
-    public void WithReplacement_IgnoresAnyMaskAndPersistsNone() {
-        var bag = Bag(mode: GeneratorMode.WithReplacement);
-        var plain = Fire(generator: bag, cursor: 7L, masks: null);
-        var withStaleMask = Fire(generator: bag, cursor: 7L, masks: [new(Word0: 0b1011UL)]);
-
-        Assert.Null(@object: plain.Masks);
-        Assert.Equal(expected: plain.Numeric, actual: withStaleMask.Numeric);
     }
     [Fact]
     public void TheCompiledTableCache_NeverChangesWhatASourcePicks() {
@@ -137,73 +226,185 @@ public sealed class WorldGeneratorExhaustionLawTests {
         var third = Bag(mode: GeneratorMode.WithReplacement);
 
         for (var cursor = 0L; (cursor < 64L); cursor++) {
-            var expected = Fire(generator: first, cursor: cursor, masks: null).Numeric;
+            var expected = Fire(
+                cursor: cursor,
+                generator: first,
+                masks: null
+            ).Numeric;
 
-            Assert.Equal(expected: expected, actual: Fire(generator: first, cursor: cursor, masks: null).Numeric);
-            Assert.Equal(expected: expected, actual: Fire(generator: second, cursor: cursor, masks: null).Numeric);
-            Assert.Equal(expected: expected, actual: Fire(generator: third, cursor: cursor, masks: null).Numeric);
+            Assert.Equal(
+                expected: expected,
+                actual: Fire(
+                    cursor: cursor,
+                    generator: first,
+                    masks: null
+                ).Numeric
+            );
+            Assert.Equal(
+                expected: expected,
+                actual: Fire(
+                    cursor: cursor,
+                    generator: second,
+                    masks: null
+                ).Numeric
+            );
+            Assert.Equal(
+                expected: expected,
+                actual: Fire(
+                    cursor: cursor,
+                    generator: third,
+                    masks: null
+                ).Numeric
+            );
         }
-    }
-    [Fact]
-    public void Validator_AdmitsModeOnTheExhaustingShapes_AndRefusesItElsewhere() {
-        Assert.Equal(expected: string.Empty, actual: Validate(generator: Bag(mode: GeneratorMode.RestartOnExhaustion), kind: CellKind.Int, timing: DrawTiming.Event));
-        Assert.Equal(expected: string.Empty, actual: Validate(generator: Bag(mode: GeneratorMode.WithoutReplacement), kind: CellKind.Fixed, timing: DrawTiming.Event));
-
-        var uniform = new StateGenerator(Source: GeneratorSource.UniformRange, Mode: GeneratorMode.RestartOnExhaustion, RangeMin: 0, RangeMax: 9);
-        var stream = new StateGenerator(Source: GeneratorSource.StreamDraw, Mode: GeneratorMode.WithoutReplacement);
-
-        Assert.Contains(expectedSubstring: "only markov, weightedNumeric and symmetryOrbit exhaust", actualString: Validate(generator: uniform, kind: CellKind.Int, timing: DrawTiming.Event));
-        Assert.Contains(expectedSubstring: "only markov, weightedNumeric and symmetryOrbit exhaust", actualString: Validate(generator: stream, kind: CellKind.Int, timing: DrawTiming.Event));
-
-        // A boot-timed state row draws once at first fill and keeps its facet, so an exhausting mode is admitted
-        // there the same way it is for a Markov source; only the settle-and-clear document fields refuse an
-        // exhausting source.
-        Assert.Equal(expected: string.Empty, actual: Validate(generator: Bag(mode: GeneratorMode.RestartOnExhaustion), kind: CellKind.Int, timing: DrawTiming.Boot));
-    }
-    [Fact]
-    public void PartiallyDrawnSampling_IsAliasTableIdentical_WithoutPerDrawTableAllocation() {
-        var generator = Bag(mode: GeneratorMode.RestartOnExhaustion);
-        const ulong Mask = 0b0101UL;
-        var seed = GeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: Site, documentSeed: WorldSeed);
-        var stream = GeneratorEngine.ComputeStreamId(site: Site);
-        var weights = new ulong[] { 1UL, 3UL, 5UL, 2UL };
-
-        for (var mask = 1UL; (mask < 0b1111UL); mask++) {
-            var remaining = Enumerable.Range(start: 0, count: 4)
-                .Where(predicate: index => ((mask & (1UL << index)) == 0UL))
-                .Select(selector: index => (Element: index, Weight: weights[index]))
-                .ToArray();
-
-            for (var cursor = 0L; (cursor < 32L); cursor++) {
-                var expectedRng = Pcg32XshRr.Create(state: seed, stream: stream);
-
-                expectedRng.Advance(count: unchecked(((ulong)cursor) * 2UL));
-                var expectedEntry = WeightedSampler.Create<int>(entries: remaining).Sample(generator: ref expectedRng);
-                var actual = Fire(generator: generator, cursor: cursor, masks: [new(Word0: mask)]);
-
-                Assert.Equal(expected: generator.Weighted![expectedEntry].Value, actual: actual.Numeric);
-            }
-        }
-
-        _ = Fire(generator: generator, cursor: 0L, masks: [new(Word0: Mask)]);
-        var before = GC.GetAllocatedBytesForCurrentThread();
-
-        for (var cursor = 0L; (cursor < 1024L); cursor++) {
-            _ = Fire(generator: generator, cursor: cursor, masks: [new(Word0: Mask)]);
-        }
-
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
-
-        // One tiny returned mask plus the test's one-element input mask are expected; rebuilding an AliasTable per
-        // draw formerly allocated several arrays and exceeded this bound by orders of magnitude.
-        Assert.InRange(actual: allocated, low: 0L, high: (256L * 1024L));
     }
     [Fact]
     public void ValidatorAndEngine_RefuseAnUndefinedMode() {
         var invalid = Bag(mode: unchecked((GeneratorMode)byte.MaxValue));
 
-        Assert.Contains(expectedSubstring: "is not a defined GeneratorMode", actualString: Validate(generator: invalid, kind: CellKind.Int, timing: DrawTiming.Event));
-        Assert.False(condition: TryFire(generator: invalid, cursor: 0L, masks: null, result: out _, reason: out var reason));
-        Assert.Contains(expectedSubstring: "is not a defined GeneratorMode", actualString: reason);
+        Assert.Contains(
+            expectedSubstring: "is not a defined GeneratorMode",
+            actualString: Validate(
+                generator: invalid,
+                kind: CellKind.Int,
+                timing: DrawTiming.Event
+            )
+        );
+        Assert.False(condition: TryFire(
+            cursor: 0L,
+            generator: invalid,
+            masks: null,
+            reason: out var reason,
+            result: out _
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "is not a defined GeneratorMode"
+        );
+    }
+    [Fact]
+    public void Validator_AdmitsModeOnTheExhaustingShapes_AndRefusesItElsewhere() {
+        Assert.Equal(
+            expected: string.Empty,
+            actual: Validate(
+                generator: Bag(mode: GeneratorMode.RestartOnExhaustion),
+                kind: CellKind.Int,
+                timing: DrawTiming.Event
+            )
+        );
+        Assert.Equal(
+            expected: string.Empty,
+            actual: Validate(
+                generator: Bag(mode: GeneratorMode.WithoutReplacement),
+                kind: CellKind.Fixed,
+                timing: DrawTiming.Event
+            )
+        );
+
+        var uniform = new StateGenerator(
+            Source: GeneratorSource.UniformRange,
+            Mode: GeneratorMode.RestartOnExhaustion,
+            RangeMin: 0,
+            RangeMax: 9
+        );
+        var stream = new StateGenerator(
+            Source: GeneratorSource.StreamDraw,
+            Mode: GeneratorMode.WithoutReplacement
+        );
+
+        Assert.Contains(
+            expectedSubstring: "only markov, weightedNumeric and symmetryOrbit exhaust",
+            actualString: Validate(
+                generator: uniform,
+                kind: CellKind.Int,
+                timing: DrawTiming.Event
+            )
+        );
+        Assert.Contains(
+            expectedSubstring: "only markov, weightedNumeric and symmetryOrbit exhaust",
+            actualString: Validate(
+                generator: stream,
+                kind: CellKind.Int,
+                timing: DrawTiming.Event
+            )
+        );
+
+        // A boot-timed state row draws once at first fill and keeps its facet, so an exhausting mode is admitted
+        // there the same way it is for a Markov source; only the settle-and-clear document fields refuse an
+        // exhausting source.
+        Assert.Equal(
+            expected: string.Empty,
+            actual: Validate(
+                generator: Bag(mode: GeneratorMode.RestartOnExhaustion),
+                kind: CellKind.Int,
+                timing: DrawTiming.Boot
+            )
+        );
+    }
+    [Fact]
+    public void WithReplacement_IgnoresAnyMaskAndPersistsNone() {
+        var bag = Bag(mode: GeneratorMode.WithReplacement);
+        var plain = Fire(
+            cursor: 7L,
+            generator: bag,
+            masks: null
+        );
+        var withStaleMask = Fire(
+            generator: bag,
+            cursor: 7L,
+            masks: [new(Word0: 0b1011UL)]
+        );
+
+        Assert.Null(@object: plain.Masks);
+        Assert.Equal(
+            expected: plain.Numeric,
+            actual: withStaleMask.Numeric
+        );
+    }
+    [Fact]
+    public void WithoutReplacement_DrawsEveryOutcomeOncePerPass_ThenRefusesByName() {
+        var bag = Bag(mode: GeneratorMode.WithoutReplacement);
+        var cursor = 0L;
+        IReadOnlyList<ClosedBitset256>? masks = null;
+        var drawn = new List<long>();
+
+        for (var draw = 0; (draw < 4); draw++) {
+            var fired = Fire(
+                cursor: cursor,
+                generator: bag,
+                masks: masks
+            );
+
+            Assert.Equal(
+                expected: 1L,
+                actual: fired.Samples
+            );
+            Assert.NotNull(@object: fired.Masks);
+            Assert.Single(collection: fired.Masks!);
+            Assert.Equal(
+                expected: (draw + 1),
+                actual: fired.Masks![0].Count
+            );
+
+            drawn.Add(item: fired.Numeric!.Value);
+            cursor += fired.Samples;
+            masks = fired.Masks;
+        }
+
+        Assert.Equal(
+            expected: new long[] { 10L, 20L, 30L, 40L },
+            actual: drawn.Order().ToArray()
+        );
+        Assert.False(condition: TryFire(
+            cursor: cursor,
+            generator: bag,
+            masks: masks,
+            reason: out var reason,
+            result: out _
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "drawn out"
+        );
     }
 }

@@ -14,6 +14,7 @@ namespace Puck.World;
 /// </summary>
 internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
     private readonly WorldScreenBinder m_binder;
+    private readonly OverlayFrameSourceGeneration m_generation;
 
     // The cached-structure key table, keyed by canonical wire form plus seat rather than the source record alone: a
     // Camera.Controls.Vendor list must compare structurally, and a bare Camera source with no
@@ -22,8 +23,6 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
     private readonly Stack<int> m_freeKeys = new();
     private readonly Dictionary<(string Source, int Seat), int> m_keys = new();
     private readonly List<SourceEntry?> m_sources = [];
-
-    private readonly OverlayFrameSourceGeneration m_generation;
 
     public WorldOverlayFrameSources(WorldScreenBinder binder) {
         m_binder = binder;
@@ -36,13 +35,19 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
     private void ReleaseActiveKey(int key) {
         var entry = m_sources[key]!;
 
-        m_binder.ReleaseFrameSource(source: entry.Source, seat: entry.Seat);
+        m_binder.ReleaseFrameSource(
+            source: entry.Source,
+            seat: entry.Seat
+        );
         TryRecycle(key: key);
     }
     private void RetainKey(int key) {
         var entry = m_sources[key]!;
 
-        m_binder.RetainFrameSource(source: entry.Source, seat: entry.Seat);
+        m_binder.RetainFrameSource(
+            source: entry.Source,
+            seat: entry.Seat
+        );
     }
     private void TryRecycle(int key) {
         if (
@@ -54,12 +59,19 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             return;
         }
 
-        m_binder.ForgetFrameSource(source: entry.Source, seat: entry.Seat);
+        m_binder.ForgetFrameSource(
+            source: entry.Source,
+            seat: entry.Seat
+        );
         _ = m_keys.Remove(key: (entry.StructuralSource, entry.Seat));
         m_sources[key] = null;
         m_freeKeys.Push(item: key);
     }
 
+    /// <summary>Begins the visible HUD source set for one produced frame.</summary>
+    public void BeginGeneration() => m_generation.BeginGeneration();
+    /// <summary>Ends the visible HUD source set and releases sources absent from it.</summary>
+    public void EndGeneration() => m_generation.EndGeneration();
     /// <summary>Resolves a key for one cached HUD element's <see cref="WorldFrameSource"/> in a seat scope. The key
     /// remains valid until that cached structure calls <see cref="ReleaseStructureKey"/>; the active generation
     /// separately retains its producer only while a visible HUD panel names it.</summary>
@@ -87,7 +99,10 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             return existing;
         }
 
-        var key = (m_freeKeys.TryPop(result: out var recycled) ? recycled : m_sources.Count);
+        var key = (m_freeKeys.TryPop(result: out var recycled)
+            ? recycled
+            : m_sources.Count
+        );
         var sourceEntry = new SourceEntry(
             binder: m_binder,
             key: key,
@@ -107,6 +122,9 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
 
         return key;
     }
+    /// <summary>Marks one stable key as used by a visible world- or seat-scope HUD panel this generation.</summary>
+    /// <param name="key">The key returned by <see cref="KeyFor"/>.</param>
+    public void MarkActive(int key) => m_generation.MarkActive(key: key);
     /// <summary>Releases one cached HUD element's logical use of a key. Producer ownership is tracked separately by
     /// the active generation and outstanding GPU leases; the slot is recycled only after all three reach zero.</summary>
     public void ReleaseStructureKey(int key) {
@@ -121,13 +139,6 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
         entry.StructureReferences--;
         TryRecycle(key: key);
     }
-    /// <summary>Begins the visible HUD source set for one produced frame.</summary>
-    public void BeginGeneration() => m_generation.BeginGeneration();
-    /// <summary>Ends the visible HUD source set and releases sources absent from it.</summary>
-    public void EndGeneration() => m_generation.EndGeneration();
-    /// <summary>Marks one stable key as used by a visible world- or seat-scope HUD panel this generation.</summary>
-    /// <param name="key">The key returned by <see cref="KeyFor"/>.</param>
-    public void MarkActive(int key) => m_generation.MarkActive(key: key);
     /// <inheritdoc/>
     public bool TryAcquire(int key, out OverlayFrameLease lease) {
         if (
@@ -136,10 +147,10 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             !m_generation.IsActive(key: key) ||
             (m_sources[key] is not { } entry) ||
             !m_binder.TryAcquireFrame(
-                source: entry.Source,
-                seat: entry.Seat,
-                frame: out var frame
-            )
+            source: entry.Source,
+            seat: entry.Seat,
+            frame: out var frame
+        )
         ) {
             lease = default;
 
@@ -166,7 +177,13 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             string structuralSource,
             int seat
         ) {
-            Leases = new FrameLeaseRelay(binder: binder, key: key, onIdle: onIdle, seat: seat, source: source);
+            Leases = new FrameLeaseRelay(
+                binder: binder,
+                key: key,
+                onIdle: onIdle,
+                seat: seat,
+                source: source
+            );
             Seat = seat;
             Source = source;
             StructuralSource = structuralSource;
@@ -177,12 +194,12 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
     // cannot dispose the capture/view/camera resource that pass still samples.
     private sealed class FrameLeaseRelay {
         private readonly WorldScreenBinder m_binder;
-        private readonly Action<int> m_release;
+        private readonly int m_key;
         private readonly Action<int> m_onIdle;
+        private readonly Action<int> m_release;
+        private readonly int m_seat;
         private readonly LeaseSlot[] m_slots = new LeaseSlot[2];
         private readonly WorldFrameSource m_source;
-        private readonly int m_key;
-        private readonly int m_seat;
 
         public FrameLeaseRelay(WorldScreenBinder binder, int key, Action<int> onIdle, WorldFrameSource source, int seat) {
             m_binder = binder;
@@ -193,13 +210,40 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             m_source = source;
         }
 
+        private void Release(int token) {
+            if (
+                (token < 0) ||
+                (token >= m_slots.Length) ||
+                !m_slots[token].Active
+            ) {
+                return;
+            }
+
+            var slot = m_slots[token];
+
+            m_slots[token] = default;
+
+            try {
+                slot.Release?.Invoke(obj: slot.ReleaseToken);
+            } finally {
+                m_binder.ReleaseFrameSource(
+                    seat: m_seat,
+                    source: m_source
+                );
+                m_onIdle(m_key);
+            }
+        }
+
         public OverlayFrameLease Retain(in SdfScreenSourceFrame frame) {
             for (var token = 0; (token < m_slots.Length); token++) {
                 if (m_slots[token].Active) {
                     continue;
                 }
 
-                m_binder.RetainFrameSource(seat: m_seat, source: m_source);
+                m_binder.RetainFrameSource(
+                    seat: m_seat,
+                    source: m_source
+                );
                 m_slots[token] = new LeaseSlot(
                     Active: true,
                     Release: frame.Release,
@@ -219,23 +263,6 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
         }
 
         public bool IsIdle => (!m_slots[0].Active && !m_slots[1].Active);
-
-        private void Release(int token) {
-            if ((token < 0) || (token >= m_slots.Length) || !m_slots[token].Active) {
-                return;
-            }
-
-            var slot = m_slots[token];
-
-            m_slots[token] = default;
-
-            try {
-                slot.Release?.Invoke(obj: slot.ReleaseToken);
-            } finally {
-                m_binder.ReleaseFrameSource(seat: m_seat, source: m_source);
-                m_onIdle(m_key);
-            }
-        }
 
         private readonly record struct LeaseSlot(bool Active, Action<int>? Release, int ReleaseToken);
     }

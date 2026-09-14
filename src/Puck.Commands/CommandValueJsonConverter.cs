@@ -34,7 +34,7 @@ public sealed class CommandValueJsonConverter : JsonConverter<CommandValue> {
     // whitespace-padded names — all of which Write would then hand back as a DIFFERENT token, silently rewriting an
     // authored document on the next save. A name table refuses everything that is not a member name, spelled the
     // way the enum spells it.
-    private static readonly FrozenDictionary<string, CommandValueKind> s_kindsByName = Enum.GetValues<CommandValueKind>().ToFrozenDictionary(
+    private static readonly FrozenDictionary<string, CommandValueKind> KindsByName = Enum.GetValues<CommandValueKind>().ToFrozenDictionary(
         comparer: StringComparer.Ordinal,
         elementSelector: static kind => kind,
         keySelector: static kind => kind.ToString()
@@ -47,10 +47,26 @@ public sealed class CommandValueJsonConverter : JsonConverter<CommandValue> {
 
         const string NotFiniteMessage = "CommandValue raw components must be finite numbers.";
 
-        var x = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
-        var y = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
-        var z = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
-        var w = JsonComponentReader.ReadFloat(notFiniteMessage: NotFiniteMessage, notNumberMessage: NotFiniteMessage, reader: ref reader);
+        var x = JsonComponentReader.ReadFloat(
+            notFiniteMessage: NotFiniteMessage,
+            notNumberMessage: NotFiniteMessage,
+            reader: ref reader
+        );
+        var y = JsonComponentReader.ReadFloat(
+            notFiniteMessage: NotFiniteMessage,
+            notNumberMessage: NotFiniteMessage,
+            reader: ref reader
+        );
+        var z = JsonComponentReader.ReadFloat(
+            notFiniteMessage: NotFiniteMessage,
+            notNumberMessage: NotFiniteMessage,
+            reader: ref reader
+        );
+        var w = JsonComponentReader.ReadFloat(
+            notFiniteMessage: NotFiniteMessage,
+            notNumberMessage: NotFiniteMessage,
+            reader: ref reader
+        );
 
         if (
             !reader.Read() ||
@@ -99,7 +115,7 @@ public sealed class CommandValueJsonConverter : JsonConverter<CommandValue> {
 
                     if (
                         (token is null) ||
-                        !s_kindsByName.TryGetValue(
+                        !KindsByName.TryGetValue(
                         key: token,
                         value: out var parsed
                     )

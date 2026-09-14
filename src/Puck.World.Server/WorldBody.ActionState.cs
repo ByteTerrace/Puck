@@ -501,10 +501,11 @@ public sealed partial class WorldBody {
         var start = (top - predicate.Arity);
         var holdsGroup = (predicate.Kind == CompiledPredicateKind.All);
 
-        for (var index = start; index < top; index++) {
+        for (var index = start; (index < top); index++) {
             holdsGroup = ((predicate.Kind == CompiledPredicateKind.All)
                 ? (holdsGroup && stack[index])
-                : (holdsGroup || stack[index]));
+                : (holdsGroup || stack[index])
+            );
         }
 
         top = start;
@@ -520,7 +521,7 @@ public sealed partial class WorldBody {
 
         foreach (var predicate in gate) {
             if (predicate.Kind == CompiledPredicateKind.Not) {
-                stack[top - 1] = !stack[top - 1];
+                stack[(top - 1)] = !stack[(top - 1)];
                 continue;
             }
             if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
@@ -545,7 +546,10 @@ public sealed partial class WorldBody {
             stack[top++] = holds;
         }
 
-        return ((top == 1) && stack[0]);
+        return (
+            (top == 1) &&
+            stack[0]
+        );
     }
     private static long InitialRaw(in CompiledActionStateSlot definition) => ((definition.Kind == ActionStateKind.Counter)
         ? definition.InitialValue.Value
@@ -619,7 +623,7 @@ public sealed partial class WorldBody {
 
         foreach (var predicate in gate) {
             if (predicate.Kind == CompiledPredicateKind.Not) {
-                stack[top - 1] = !stack[top - 1];
+                stack[(top - 1)] = !stack[(top - 1)];
                 continue;
             }
             if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
@@ -641,7 +645,10 @@ public sealed partial class WorldBody {
             stack[top++] = holds;
         }
 
-        return ((top == 1) && stack[0]);
+        return (
+            (top == 1) &&
+            stack[0]
+        );
     }
     // The first shaping row whose gate opens, or -1 when none does (an unmatched tick, or an empty/absent table).
     // ExecuteProgram calls this exactly once after refreshing recency clocks and stores the result in its scratch,

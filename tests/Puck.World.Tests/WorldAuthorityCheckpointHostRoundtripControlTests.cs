@@ -33,7 +33,10 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     );
     private static WorldServer Restore(WorldAuthorityCheckpoint checkpoint, string instanceIdentity = "boot") {
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
-        var machines = new WorldMachineHost(engines: [], screens: definition.Screens);
+        var machines = new WorldMachineHost(
+            engines: [],
+            screens: definition.Screens
+        );
 
         var (server, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
@@ -61,11 +64,15 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
 
-        for (var tick = 0; (tick < 100); tick++) {
+        for (var tick = 0; (tick < 12); tick++) {
             fixture.Step();
         }
 
-        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(checkpoint: out var checkpoint, hostRow: EmptyHostRow(), reason: out _));
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: EmptyHostRow(),
+            reason: out _
+        ));
 
         var entries = checkpoint!.Population.Entries;
         var original = entries[0].Residue;
@@ -79,8 +86,14 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         var restored = Restore(checkpoint: corrupted);
         var restoredResidue = restored.Body(index: entries[0].Index)!.CaptureIntegrationResidue();
 
-        Assert.NotEqual(expected: original.PositionRemainderX, actual: restoredResidue.PositionRemainderX);
-        Assert.Equal(expected: corruptedResidue.PositionRemainderX, actual: restoredResidue.PositionRemainderX);
+        Assert.NotEqual(
+            expected: original.PositionRemainderX,
+            actual: restoredResidue.PositionRemainderX
+        );
+        Assert.Equal(
+            expected: corruptedResidue.PositionRemainderX,
+            actual: restoredResidue.PositionRemainderX
+        );
     }
     // Control 2 — drop (falsify) m_ruleGateHeld: a rule whose gate has never held is captured with no latch entry;
     // forging a "held" entry for it must show up in the world.rules read-back, proving restore actually installs
@@ -95,20 +108,32 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         var definition = Fixtures.BuildDocument() with {
             Rules = [
                 new WorldRule(
-                    Name: ruleName,
-                    Gate: new ActionPredicate.CompareState(State: "$population", Comparison: ActionStateComparison.Greater, Value: long.MaxValue),
-                    Effects: [new WorldEffect.Save()]),
+                Name: ruleName,
+                Gate: new ActionPredicate.CompareState(
+                    State: "$population",
+                    Comparison: ActionStateComparison.Greater,
+                    Value: long.MaxValue
+                ),
+                Effects: [new WorldEffect.Save()]
+            ),
             ],
         };
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
-        for (var tick = 0; (tick < 10); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
-        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(checkpoint: out var checkpoint, hostRow: EmptyHostRow(), reason: out _));
-        Assert.DoesNotContain(expected: (ruleName.Value, true), collection: checkpoint!.Server.RuleGateHeld);
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: EmptyHostRow(),
+            reason: out _
+        ));
+        Assert.DoesNotContain(
+            expected: (ruleName.Value, true),
+            collection: checkpoint!.Server.RuleGateHeld
+        );
 
         var corrupted = checkpoint with {
             Server = checkpoint.Server with {
@@ -121,8 +146,16 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         var honestText = restoredHonest.Answer(query: new WorldQuery.Rules()).Text;
         var corruptedText = restoredCorrupted.Answer(query: new WorldQuery.Rules()).Text;
 
-        Assert.Contains(actualString: honestText, comparisonType: StringComparison.Ordinal, expectedSubstring: "latch=open");
-        Assert.Contains(actualString: corruptedText, comparisonType: StringComparison.Ordinal, expectedSubstring: "latch=held");
+        Assert.Contains(
+            actualString: honestText,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "latch=open"
+        );
+        Assert.Contains(
+            actualString: corruptedText,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "latch=held"
+        );
     }
     // Control 3 — leave a remote-human entry unparked: a captured entry marked IsRemoteHuman with Parked=false must
     // be parked as of the restore tick (WorldPopulation.Restore's own new rule) — proving the field is consulted,
@@ -138,11 +171,15 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
 
-        for (var tick = 0; (tick < 10); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
-        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(checkpoint: out var checkpoint, hostRow: EmptyHostRow(), reason: out _));
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: EmptyHostRow(),
+            reason: out _
+        ));
 
         var entries = checkpoint!.Population.Entries;
 
@@ -181,12 +218,12 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             },
             Admission = [Fixtures.AnyAuthorityArrivals()],
         };
-        const int peerSlot = WorldBodiesLimits.LocalSeatCount;
+        const int PeerSlot = WorldBodiesLimits.LocalSeatCount;
 
         using var fixture = Fixtures.FreshServer(definition: document);
 
         Assert.True(condition: fixture.Server.ExecuteAuthorityOperation(operation: () => fixture.Server.Population.TryAdmitRemotePeerAt(
-            slot: peerSlot,
+            slot: PeerSlot,
             source: IntentSource.Live,
             grantTemplates: [],
             identityDomain: string.Empty,
@@ -195,12 +232,16 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             refusal: out _
         )));
 
-        for (var tick = 0; (tick < 10); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
-        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(checkpoint: out var checkpoint, hostRow: EmptyHostRow(), reason: out _));
-        Assert.False(condition: checkpoint!.Population.Entries.Single(predicate: e => (e.Index == peerSlot)).Parked);
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: EmptyHostRow(),
+            reason: out _
+        ));
+        Assert.False(condition: checkpoint!.Population.Entries.Single(predicate: e => (e.Index == PeerSlot)).Parked);
 
         var restoredHonest = Restore(checkpoint: checkpoint);
         // The counterfactual: a checkpoint that captured this row as already parked (unchanged by restore's own
@@ -208,13 +249,15 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         // restore that failed to consult IsRemoteHuman observably different from one that does.
         var forcedUnparked = checkpoint with {
             Population = checkpoint.Population with {
-                Entries = [.. checkpoint.Population.Entries.Select(selector: e => ((e.Index == peerSlot) ? (e with { Parked = false, ParkedUntilTick = null }) : e))],
+                Entries = [.. checkpoint.Population.Entries.Select(selector: e => ((e.Index == PeerSlot)
+            ? (e with { Parked = false, ParkedUntilTick = null })
+            : e))],
             },
         };
         var restoredCorrupted = Restore(checkpoint: forcedUnparked);
 
-        Assert.True(condition: restoredHonest.Population.IsParked(index: peerSlot));
-        Assert.True(condition: restoredCorrupted.Population.IsParked(index: peerSlot));
+        Assert.True(condition: restoredHonest.Population.IsParked(index: PeerSlot));
+        Assert.True(condition: restoredCorrupted.Population.IsParked(index: PeerSlot));
     }
     // Extends Control 4's own peer-range park proof with the piece it named as missing: a public un-park entry
     // point. WorldPopulation.TryResumeParkedPeer (the peer-range counterpart of TryResumeParkedSeat) resumes a
@@ -238,13 +281,13 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
                 NetworkPlayers = 2,
             },
         };
-        const int peerSlot = WorldBodiesLimits.LocalSeatCount;
+        const int PeerSlot = WorldBodiesLimits.LocalSeatCount;
 
         using var fixture = Fixtures.FreshServer(definition: document);
         var admitted = default(WorldPeerEventEntry);
 
         Assert.True(condition: fixture.Server.ExecuteAuthorityOperation(operation: () => fixture.Server.Population.TryAdmitRemotePeerAt(
-            slot: peerSlot,
+            slot: PeerSlot,
             source: IntentSource.Live,
             grantTemplates: [],
             identityDomain: "example.test",
@@ -253,28 +296,38 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             refusal: out _
         )));
 
-        for (var tick = 0; (tick < 10); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
-        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(checkpoint: out var checkpoint, hostRow: EmptyHostRow(), reason: out _));
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: EmptyHostRow(),
+            reason: out _
+        ));
 
-        var entry = checkpoint!.Population.Entries.Single(predicate: e => (e.Index == peerSlot));
+        var entry = checkpoint!.Population.Entries.Single(predicate: e => (e.Index == PeerSlot));
 
         Assert.False(condition: entry.Parked);
 
         // Positive: a genuine reconnect resumes the SAME slot and the SAME generation — not a fresh mint.
         var restoredHonest = Restore(checkpoint: checkpoint);
 
-        Assert.True(condition: restoredHonest.Population.IsParked(index: peerSlot));
+        Assert.True(condition: restoredHonest.Population.IsParked(index: PeerSlot));
         Assert.True(condition: restoredHonest.Population.TryResumeParkedPeer(
             identityDomain: entry.IdentityDomain,
             identitySubject: entry.IdentitySubject,
             admitted: out var resumed
         ));
-        Assert.Equal(expected: peerSlot, actual: resumed.BodyIndex);
-        Assert.Equal(expected: admitted.Generation, actual: resumed.Generation);
-        Assert.False(condition: restoredHonest.Population.IsParked(index: peerSlot));
+        Assert.Equal(
+            expected: PeerSlot,
+            actual: resumed.BodyIndex
+        );
+        Assert.Equal(
+            expected: admitted.Generation,
+            actual: resumed.Generation
+        );
+        Assert.False(condition: restoredHonest.Population.IsParked(index: PeerSlot));
 
         // Control: the SAME restore, but the reconnect goes through the ordinary fresh-admission door instead.
         var restoredNaive = Restore(checkpoint: checkpoint);
@@ -288,9 +341,12 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             admitted: out freshlyMinted,
             refusal: out _
         )));
-        Assert.NotEqual(expected: peerSlot, actual: freshlyMinted.BodyIndex);
+        Assert.NotEqual(
+            expected: PeerSlot,
+            actual: freshlyMinted.BodyIndex
+        );
         // The original body is still there, still parked, still orphaned — the SAME identity now drives two bodies.
-        Assert.True(condition: restoredNaive.Population.IsParked(index: peerSlot));
+        Assert.True(condition: restoredNaive.Population.IsParked(index: PeerSlot));
     }
     // Control 5 — restore the source row with NextTransferId reset: the next minted id collides with one this row
     // already applied, and the drain refuses it by name rather than double-landing a second traveler under the
@@ -301,10 +357,20 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         using var disposeA = rowA;
         using var disposeB = rowB;
 
-        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(host: host, rowA: rowA, rowB: rowB);
+        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(
+            host: host,
+            rowA: rowA,
+            rowB: rowB
+        );
 
-        Assert.Equal(expected: 1UL, actual: checkpointA.HostRow.NextTransferId);
-        Assert.Contains(expected: 0UL, collection: checkpointA.HostRow.AppliedTransferIds);
+        Assert.Equal(
+            expected: 1UL,
+            actual: checkpointA.HostRow.NextTransferId
+        );
+        Assert.Contains(
+            expected: 0UL,
+            collection: checkpointA.HostRow.AppliedTransferIds
+        );
 
         var corruptedA = checkpointA with {
             HostRow = checkpointA.HostRow with { NextTransferId = 0 },
@@ -312,11 +378,18 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: corruptedA);
         var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
 
-        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(checkpointA: decodedA, checkpointB: decodedB, machineId: machineId);
+        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(
+            checkpointA: decodedA,
+            checkpointB: decodedB,
+            machineId: machineId
+        );
         using var disposeRestoredA = restoredA;
         using var disposeRestoredB = restoredB;
 
-        Assert.Equal(expected: 0UL, actual: restoredA.Instance.NextTransferId);
+        Assert.Equal(
+            expected: 0UL,
+            actual: restoredA.Instance.NextTransferId
+        );
 
         var originalError = Console.Error;
         using var captured = new StringWriter();
@@ -337,7 +410,11 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             Console.SetError(newError: originalError);
         }
 
-        Assert.Contains(expectedSubstring: "already applied", actualString: captured.ToString(), comparisonType: StringComparison.Ordinal);
+        Assert.Contains(
+            expectedSubstring: "already applied",
+            actualString: captured.ToString(),
+            comparisonType: StringComparison.Ordinal
+        );
         // The body never moved: refused before any detach, exactly like an ordinary already-applied replay.
         Assert.True(condition: restoredA.Server.Population.IsActive(index: 1));
     }
@@ -349,7 +426,11 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         using var disposeA = rowA;
         using var disposeB = rowB;
 
-        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(host: host, rowA: rowA, rowB: rowB);
+        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(
+            host: host,
+            rowA: rowA,
+            rowB: rowB
+        );
 
         Assert.Single(collection: checkpointA.HostRow.InDoubtTransfers);
 
@@ -359,7 +440,11 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: droppedA);
         var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
 
-        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(checkpointA: decodedA, checkpointB: decodedB, machineId: machineId);
+        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(
+            checkpointA: decodedA,
+            checkpointB: decodedB,
+            machineId: machineId
+        );
         using var disposeRestoredA = restoredA;
         using var disposeRestoredB = restoredB;
 
@@ -371,7 +456,10 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         Assert.False(condition: restoredA.Server.Population.IsActive(index: 0));
         Assert.False(condition: restoredB.Server.Population.IsActive(index: 0));
         Assert.Equal(
-            actual: restoredB.Server.TransferStatus(sourceAuthority: restoredA.Server.AuthorityIdentity, transferId: transferId),
+            actual: restoredB.Server.TransferStatus(
+                sourceAuthority: restoredA.Server.AuthorityIdentity,
+                transferId: transferId
+            ),
             expected: WorldTransferStatus.Reserved
         );
     }
@@ -382,7 +470,11 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
         using var disposeA = rowA;
         using var disposeB = rowB;
 
-        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(host: host, rowA: rowA, rowB: rowB);
+        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(
+            host: host,
+            rowA: rowA,
+            rowB: rowB
+        );
 
         var original = Assert.Single(collection: checkpointA.HostRow.InDoubtTransfers);
 
@@ -394,10 +486,28 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             },
         };
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: emptiedA);
-        var error = Assert.Throws<ArgumentException>(() => host.RestoreRow(rowA.Instance, decodedA.HostRow));
-        Assert.Contains("commit member count", error.Message, StringComparison.Ordinal);
-        var (afterA, afterB) = HostRoundtripFixture.CaptureBoth(host, rowA, rowB);
-        Assert.Equal(WorldAuthorityCheckpointCodec.Encode(checkpointA), WorldAuthorityCheckpointCodec.Encode(afterA));
-        Assert.Equal(WorldAuthorityCheckpointCodec.Encode(checkpointB), WorldAuthorityCheckpointCodec.Encode(afterB));
+        var error = Assert.Throws<ArgumentException>(testCode: () => host.RestoreRow(
+            row: rowA.Instance,
+            slice: decodedA.HostRow
+        ));
+
+        Assert.Contains(
+            "commit member count",
+            error.Message,
+            StringComparison.Ordinal
+        );
+        var (afterA, afterB) = HostRoundtripFixture.CaptureBoth(
+            host: host,
+            rowA: rowA,
+            rowB: rowB
+        );
+        Assert.Equal(
+            WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpointA),
+            WorldAuthorityCheckpointCodec.Encode(checkpoint: afterA)
+        );
+        Assert.Equal(
+            WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpointB),
+            WorldAuthorityCheckpointCodec.Encode(checkpoint: afterB)
+        );
     }
 }

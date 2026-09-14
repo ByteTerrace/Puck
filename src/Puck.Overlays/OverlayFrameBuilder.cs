@@ -140,54 +140,6 @@ public sealed class OverlayFrameBuilder {
         }
     }
 
-    /// <summary>Re-fills the token slab (the static prefix's front <see cref="OverlayTokenBlock.WordCount"/> words)
-    /// from a newly resolved theme, in place — the glyph atlas immediately after it is untouched. The caller (the
-    /// composition root, on a definition-revision change) is responsible for re-uploading
-    /// <see cref="Scratch"/>[..<see cref="OverlayTokenBlock.WordCount"/>] to the GPU buffer afterward; this call is
-    /// CPU-side only.</summary>
-    /// <param name="theme">The newly resolved theme.</param>
-    public void UpdateTokenBlock(in OverlayThemeValues theme) => OverlayTokenBlock.Write(
-        destination: m_scratch,
-        theme: in theme
-    );
-
-    /// <summary>Gets the clip table's first word index.</summary>
-    public int ClipBaseWords { get; }
-    /// <summary>Gets the number of clip-table rects packed this frame — the node's upload bound for the clip
-    /// region (never the whole <see cref="MaxClips"/>).</summary>
-    public int ClipCount => m_clipCount;
-    /// <summary>Gets the first element record's word index.</summary>
-    public int ElementBaseWords { get; }
-    /// <summary>Gets the number of elements packed this frame.</summary>
-    public int ElementCount => m_elementCount;
-    /// <summary>Gets the glyph pack the text runs and icon badges sample.</summary>
-    public OverlayGlyphSdfPack Glyphs => m_glyphs;
-    /// <summary>Gets whether this frame packed anything to draw.</summary>
-    public bool HasContent => ((m_panelCount > 0) || (m_elementCount > 0));
-    /// <summary>Gets whether any channel lost content this frame — either by exceeding its reservation
-    /// (<see cref="Dropped"/>) or by refusing its own excess at a self-declared cap (<see cref="Refused"/>) — the
-    /// node's narration gate for both causes.</summary>
-    public bool HasOverflow { get; private set; }
-    /// <summary>Gets the render height in pixels.</summary>
-    public uint Height { get; }
-    /// <summary>Gets the lease table every channel writes against.</summary>
-    public OverlayChannelLeases Leases { get; }
-    /// <summary>Gets the first panel record's word index (also the length of the static token+glyph prefix).</summary>
-    public int PanelBaseWords { get; }
-    /// <summary>Gets the number of panels packed this frame.</summary>
-    public int PanelCount => m_panelCount;
-    /// <summary>Gets the whole scratch buffer (the node's upload view).</summary>
-    public ReadOnlySpan<uint> Scratch => m_scratch;
-    /// <summary>Gets the first glyph-code word's index.</summary>
-    public int TextBaseWords { get; }
-    /// <summary>Gets the number of glyph-code words packed this frame — the node's upload bound for the text
-    /// region (never the whole <see cref="TextWordCapacity"/>).</summary>
-    public int TextWordCount => m_textWordCount;
-    /// <summary>Gets the render width in pixels.</summary>
-    public uint Width { get; }
-    /// <summary>Gets the buffer's total word count (a multiple of 4).</summary>
-    public int WordCount { get; }
-
     // The open channel's index. A write with no channel scope open is a programming error, never a data condition:
     // an unattributed record is exactly what the lease table exists to make impossible.
     private int ActiveChannel() {
@@ -468,6 +420,67 @@ public sealed class OverlayFrameBuilder {
     /// <param name="cellHeight">The cell height, px.</param>
     /// <returns>The run width, px.</returns>
     public float TextWidth(int chars, int cellHeight) => (chars * CellWidth(cellHeight: cellHeight));
+    /// <summary>Re-fills the token slab (the static prefix's front <see cref="OverlayTokenBlock.WordCount"/> words)
+    /// from a newly resolved theme, in place — the glyph atlas immediately after it is untouched. The caller (the
+    /// composition root, on a definition-revision change) is responsible for re-uploading
+    /// <see cref="Scratch"/>[..<see cref="OverlayTokenBlock.WordCount"/>] to the GPU buffer afterward; this call is
+    /// CPU-side only.</summary>
+    /// <param name="theme">The newly resolved theme.</param>
+    public void UpdateTokenBlock(in OverlayThemeValues theme) => OverlayTokenBlock.Write(
+        destination: m_scratch,
+        theme: in theme
+    );
+    /// <summary>Packs one sampled-frame element (a HUD picture-in-picture: a live <see cref="OverlayFrameSlots"/>
+    /// slot's content drawn into the element rect, e.g. the face-cam panel), optionally cross-faded with a second
+    /// slot. Word layout (12): 0..3 rect (normalized) · 4 = 4 | (slot &lt;&lt; 4) | (mirror &lt;&lt; 12) |
+    /// (fit &lt;&lt; 13) | ((slotB + 1) &lt;&lt; 16, 0 = no second slot) · 6 corner radius (px float) · 7 alpha ·
+    /// 8 mix (float, the weight of <paramref name="slot"/>; the shader samples both slots with the same fit/mirror
+    /// uv and blends <c>lerp(slotB, slot, mix)</c> before compositing) · 9 clip index. Word 8 is written only when
+    /// a second slot is present; it stays zero otherwise.</summary>
+    /// <param name="x">Left, px.</param>
+    /// <param name="y">Top, px.</param>
+    /// <param name="w">Width, px.</param>
+    /// <param name="h">Height, px.</param>
+    /// <param name="slot">The bound <see cref="OverlayFrameSlots"/> slot (<c>0..OverlayFrameSlots.SlotCount-1</c>)
+    /// the shader samples.</param>
+    /// <param name="fit">How the sampled content maps onto the element rect.</param>
+    /// <param name="mirror">Whether the sampled content flips horizontally.</param>
+    /// <param name="radius">The corner radius, px.</param>
+    /// <param name="alpha">The element opacity.</param>
+    /// <param name="slotB">The outgoing <see cref="OverlayFrameSlots"/> slot the shader cross-fades from, or -1 to
+    /// draw <paramref name="slot"/> alone.</param>
+    /// <param name="mix">The weight of <paramref name="slot"/> in the cross-fade, <c>[0,1]</c> (0 shows
+    /// <paramref name="slotB"/> alone, 1 shows <paramref name="slot"/> alone). Ignored when <paramref name="slotB"/>
+    /// is -1.</param>
+    /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
+    public void WriteFrame(float x, float y, float w, float h, int slot, OverlayHudFrameFit fit, bool mirror, float radius, float alpha, int slotB = -1, float mix = 1f) {
+        if (!TryTakeElement()) {
+            return;
+        }
+
+        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
+
+        m_scratch[offset] = Pack(value: (x * m_inverseWidth));
+        m_scratch[(offset + 1)] = Pack(value: (y * m_inverseHeight));
+        m_scratch[(offset + 2)] = Pack(value: (w * m_inverseWidth));
+        m_scratch[(offset + 3)] = Pack(value: (h * m_inverseHeight));
+        m_scratch[(offset + 4)] = 4u
+            | (((uint)slot) << 4)
+            | (mirror
+            ? (1u << 12)
+            : 0u)
+            | (((uint)fit) << 13)
+            | (((uint)(slotB + 1)) << 16);
+        m_scratch[(offset + 6)] = Pack(value: radius);
+        m_scratch[(offset + 7)] = Pack(value: alpha);
+
+        if (slotB >= 0) {
+            m_scratch[(offset + 8)] = Pack(value: mix);
+        }
+
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_elementCount++;
+    }
     /// <summary>Packs one icon chip (the binding-bar repertoire folded in as an element kind: rounded plate with the
     /// four chip-state tiers, a bound action's plate icon, and a physical-button badge — every glyph an ALREADY
     /// RESOLVED atlas index, 1-based, 0 = none; the caller (never this builder, never the shader) turns an icon
@@ -580,58 +593,6 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_panelCount++;
     }
-    /// <summary>Packs one sampled-frame element (a HUD picture-in-picture: a live <see cref="OverlayFrameSlots"/>
-    /// slot's content drawn into the element rect, e.g. the face-cam panel), optionally cross-faded with a second
-    /// slot. Word layout (12): 0..3 rect (normalized) · 4 = 4 | (slot &lt;&lt; 4) | (mirror &lt;&lt; 12) |
-    /// (fit &lt;&lt; 13) | ((slotB + 1) &lt;&lt; 16, 0 = no second slot) · 6 corner radius (px float) · 7 alpha ·
-    /// 8 mix (float, the weight of <paramref name="slot"/>; the shader samples both slots with the same fit/mirror
-    /// uv and blends <c>lerp(slotB, slot, mix)</c> before compositing) · 9 clip index. Word 8 is written only when
-    /// a second slot is present; it stays zero otherwise.</summary>
-    /// <param name="x">Left, px.</param>
-    /// <param name="y">Top, px.</param>
-    /// <param name="w">Width, px.</param>
-    /// <param name="h">Height, px.</param>
-    /// <param name="slot">The bound <see cref="OverlayFrameSlots"/> slot (<c>0..OverlayFrameSlots.SlotCount-1</c>)
-    /// the shader samples.</param>
-    /// <param name="fit">How the sampled content maps onto the element rect.</param>
-    /// <param name="mirror">Whether the sampled content flips horizontally.</param>
-    /// <param name="radius">The corner radius, px.</param>
-    /// <param name="alpha">The element opacity.</param>
-    /// <param name="slotB">The outgoing <see cref="OverlayFrameSlots"/> slot the shader cross-fades from, or -1 to
-    /// draw <paramref name="slot"/> alone.</param>
-    /// <param name="mix">The weight of <paramref name="slot"/> in the cross-fade, <c>[0,1]</c> (0 shows
-    /// <paramref name="slotB"/> alone, 1 shows <paramref name="slot"/> alone). Ignored when <paramref name="slotB"/>
-    /// is -1.</param>
-    /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
-    public void WriteFrame(float x, float y, float w, float h, int slot, OverlayHudFrameFit fit, bool mirror, float radius, float alpha, int slotB = -1, float mix = 1f) {
-        if (!TryTakeElement()) {
-            return;
-        }
-
-        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
-
-        m_scratch[offset] = Pack(value: (x * m_inverseWidth));
-        m_scratch[(offset + 1)] = Pack(value: (y * m_inverseHeight));
-        m_scratch[(offset + 2)] = Pack(value: (w * m_inverseWidth));
-        m_scratch[(offset + 3)] = Pack(value: (h * m_inverseHeight));
-        m_scratch[(offset + 4)] = 4u
-            | (((uint)slot) << 4)
-            | (mirror
-            ? (1u << 12)
-            : 0u
-            )
-            | (((uint)fit) << 13)
-            | (((uint)(slotB + 1)) << 16);
-        m_scratch[(offset + 6)] = Pack(value: radius);
-        m_scratch[(offset + 7)] = Pack(value: alpha);
-
-        if (slotB >= 0) {
-            m_scratch[(offset + 8)] = Pack(value: mix);
-        }
-
-        m_scratch[(offset + 9)] = ((uint)m_activeClip);
-        m_elementCount++;
-    }
     /// <summary>Packs one rounded-rect element (chip fill, selection fill, accent tick, state rail). Word layout
     /// (12): 0..3 rect (normalized) · 4 = 1 | (role &lt;&lt; 4) · 6 corner radius (px float) · 7 alpha ·
     /// 9 clip index.</summary>
@@ -711,45 +672,6 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 7)] = Pack(value: alpha);
         m_scratch[(offset + 8)] = Pack(value: color.B);
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
-        m_elementCount++;
-    }
-    /// <summary>Packs one filled annular sector — a radial menu's pie piece. Word layout (12): 0..1 center
-    /// (normalized) · 2 inner radius (px) · 3 outer radius (px) · 4 = 5 | (role &lt;&lt; 4) · 5 start angle ·
-    /// 6 sweep · 7 alpha · 8 gap (px) · 9 clip index · 10 glow role (0 = none). Angles are radians clockwise from
-    /// twelve o'clock, the wheel's own selection convention, so a piece and the gesture that selects it share one
-    /// transform.</summary>
-    /// <param name="centerX">The pie center x, px.</param>
-    /// <param name="centerY">The pie center y, px.</param>
-    /// <param name="innerRadius">The hole radius, px (0 for a full disc).</param>
-    /// <param name="outerRadius">The outer radius, px.</param>
-    /// <param name="startAngle">The piece's leading edge, radians clockwise from twelve.</param>
-    /// <param name="sweep">The piece's angular extent, radians (a full turn draws an unbroken ring/disc).</param>
-    /// <param name="gap">The half-width, px, trimmed off each angular edge so neighbours separate.</param>
-    /// <param name="role">The fill's color role.</param>
-    /// <param name="alpha">The element opacity (composes with the role's own alpha).</param>
-    /// <param name="glow">The glow's color role — a lit edge ring plus outward halo in that hue — or
-    /// <see langword="null"/> for no glow.</param>
-    /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
-    public void WriteWedge(float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float sweep, float gap, OverlayColorRole role, float alpha, OverlayColorRole? glow = null) {
-        if (!TryTakeElement()) {
-            return;
-        }
-
-        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
-
-        m_scratch[offset] = Pack(value: (centerX * m_inverseWidth));
-        m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
-        m_scratch[(offset + 2)] = Pack(value: innerRadius);
-        m_scratch[(offset + 3)] = Pack(value: outerRadius);
-        m_scratch[(offset + 4)] = 5u | (((uint)role) << 4);
-        m_scratch[(offset + 5)] = Pack(value: startAngle);
-        m_scratch[(offset + 6)] = Pack(value: sweep);
-        m_scratch[(offset + 7)] = Pack(value: alpha);
-        m_scratch[(offset + 8)] = Pack(value: gap);
-        m_scratch[(offset + 9)] = ((uint)m_activeClip);
-        m_scratch[(offset + 10)] = ((glow is { } glowRole)
-            ? ((uint)glowRole)
-            : 0u);
         m_elementCount++;
     }
     /// <summary>Packs one fixed-cell text run (codes stored pre-resolved as atlas glyph indices; anything outside
@@ -835,9 +757,86 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_elementCount++;
     }
+    /// <summary>Packs one filled annular sector — a radial menu's pie piece. Word layout (12): 0..1 center
+    /// (normalized) · 2 inner radius (px) · 3 outer radius (px) · 4 = 5 | (role &lt;&lt; 4) · 5 start angle ·
+    /// 6 sweep · 7 alpha · 8 gap (px) · 9 clip index · 10 glow role (0 = none). Angles are radians clockwise from
+    /// twelve o'clock, the wheel's own selection convention, so a piece and the gesture that selects it share one
+    /// transform.</summary>
+    /// <param name="centerX">The pie center x, px.</param>
+    /// <param name="centerY">The pie center y, px.</param>
+    /// <param name="innerRadius">The hole radius, px (0 for a full disc).</param>
+    /// <param name="outerRadius">The outer radius, px.</param>
+    /// <param name="startAngle">The piece's leading edge, radians clockwise from twelve.</param>
+    /// <param name="sweep">The piece's angular extent, radians (a full turn draws an unbroken ring/disc).</param>
+    /// <param name="gap">The half-width, px, trimmed off each angular edge so neighbours separate.</param>
+    /// <param name="role">The fill's color role.</param>
+    /// <param name="alpha">The element opacity (composes with the role's own alpha).</param>
+    /// <param name="glow">The glow's color role — a lit edge ring plus outward halo in that hue — or
+    /// <see langword="null"/> for no glow.</param>
+    /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
+    public void WriteWedge(float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float sweep, float gap, OverlayColorRole role, float alpha, OverlayColorRole? glow = null) {
+        if (!TryTakeElement()) {
+            return;
+        }
+
+        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
+
+        m_scratch[offset] = Pack(value: (centerX * m_inverseWidth));
+        m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
+        m_scratch[(offset + 2)] = Pack(value: innerRadius);
+        m_scratch[(offset + 3)] = Pack(value: outerRadius);
+        m_scratch[(offset + 4)] = 5u | (((uint)role) << 4);
+        m_scratch[(offset + 5)] = Pack(value: startAngle);
+        m_scratch[(offset + 6)] = Pack(value: sweep);
+        m_scratch[(offset + 7)] = Pack(value: alpha);
+        m_scratch[(offset + 8)] = Pack(value: gap);
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_scratch[(offset + 10)] = ((glow is { } glowRole)
+            ? ((uint)glowRole)
+            : 0u
+        );
+        m_elementCount++;
+    }
     /// <summary>The records one channel wrote this frame.</summary>
     /// <param name="channel">The channel.</param>
     /// <returns>The channel's written counts.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="channel"/> is not a declared channel.</exception>
     public OverlayChannelUsage Written(OverlayChannel channel) => Usage(counters: in m_written[IndexOf(channel: channel)]);
+
+    /// <summary>Gets the clip table's first word index.</summary>
+    public int ClipBaseWords { get; }
+    /// <summary>Gets the number of clip-table rects packed this frame — the node's upload bound for the clip
+    /// region (never the whole <see cref="MaxClips"/>).</summary>
+    public int ClipCount => m_clipCount;
+    /// <summary>Gets the first element record's word index.</summary>
+    public int ElementBaseWords { get; }
+    /// <summary>Gets the number of elements packed this frame.</summary>
+    public int ElementCount => m_elementCount;
+    /// <summary>Gets the glyph pack the text runs and icon badges sample.</summary>
+    public OverlayGlyphSdfPack Glyphs => m_glyphs;
+    /// <summary>Gets whether this frame packed anything to draw.</summary>
+    public bool HasContent => ((m_panelCount > 0) || (m_elementCount > 0));
+    /// <summary>Gets whether any channel lost content this frame — either by exceeding its reservation
+    /// (<see cref="Dropped"/>) or by refusing its own excess at a self-declared cap (<see cref="Refused"/>) — the
+    /// node's narration gate for both causes.</summary>
+    public bool HasOverflow { get; private set; }
+    /// <summary>Gets the render height in pixels.</summary>
+    public uint Height { get; }
+    /// <summary>Gets the lease table every channel writes against.</summary>
+    public OverlayChannelLeases Leases { get; }
+    /// <summary>Gets the first panel record's word index (also the length of the static token+glyph prefix).</summary>
+    public int PanelBaseWords { get; }
+    /// <summary>Gets the number of panels packed this frame.</summary>
+    public int PanelCount => m_panelCount;
+    /// <summary>Gets the whole scratch buffer (the node's upload view).</summary>
+    public ReadOnlySpan<uint> Scratch => m_scratch;
+    /// <summary>Gets the first glyph-code word's index.</summary>
+    public int TextBaseWords { get; }
+    /// <summary>Gets the number of glyph-code words packed this frame — the node's upload bound for the text
+    /// region (never the whole <see cref="TextWordCapacity"/>).</summary>
+    public int TextWordCount => m_textWordCount;
+    /// <summary>Gets the render width in pixels.</summary>
+    public uint Width { get; }
+    /// <summary>Gets the buffer's total word count (a multiple of 4).</summary>
+    public int WordCount { get; }
 }

@@ -15,32 +15,25 @@ namespace Puck.World.Tests;
 /// engine never guesses" discipline the neighboring zero-direction refusal already applies.
 /// </summary>
 public sealed class PlanarImpulseUnitDirectionLawTests {
-    [Fact]
-    public void NonUnitBodyDirectionRefusesByName() {
-        var typoed = DashDocument(bodyDirection: new Vector3(x: 3f, y: 0f, z: 4f)); // magnitude 5
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: typoed, neighbours: null, reason: out var reason), userMessage: "a magnitude-5 direction was expected to refuse");
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "bodyDirection");
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "magnitude 5");
-    }
-    [Fact]
-    public void UnitBodyDirectionValidates() {
-        var control = DashDocument(bodyDirection: new Vector3(x: 0f, y: 0f, z: 1f));
-
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, neighbours: null, reason: out var reason), userMessage: reason);
-    }
-
     /// <summary>Builds the shared fixture document with a "dash" composition channel and a one-effect PlanarImpulse
     /// action wired to the traveler kit's onPress — the smallest shape that reaches <c>ValidateEffect</c>'s
     /// <c>PlanarImpulse</c> arm.</summary>
     private static WorldDefinition DashDocument(Vector3 bodyDirection) {
         var document = Fixtures.BuildDocument();
-        var dashChannel = new WorldChannel(Name: "dash", Shape: ChannelShape.Binary, Composition: true);
+        var dashChannel = new WorldChannel(
+            Name: "dash",
+            Shape: ChannelShape.Binary,
+            Composition: true
+        );
         var dashAction = new ActionSpec(
             OnPress: new ActionTrigger(
                 Gate: null,
                 LatchSeconds: 0f,
-                Effects: [new WorldEffect.PlanarImpulse(BodyDirection: bodyDirection, Speed: 10f, DurationSeconds: 0.2f)]
+                Effects: [new WorldEffect.PlanarImpulse(
+                        BodyDirection: bodyDirection,
+                        Speed: 10f,
+                        DurationSeconds: 0.2f
+                    )]
             ),
             OnRelease: null
         );
@@ -49,5 +42,50 @@ public sealed class PlanarImpulseUnitDirectionLawTests {
             ChannelsRaw = [.. document.Channels, dashChannel],
             KitRowsRaw = [document.Kits[0] with { ActionsRaw = new Dictionary<string, ActionSpec> { ["dash"] = dashAction } }],
         };
+    }
+
+    [Fact]
+    public void NonUnitBodyDirectionRefusesByName() {
+        var typoed = DashDocument(bodyDirection: new Vector3(
+            x: 3f,
+            y: 0f,
+            z: 4f
+        )); // magnitude 5
+
+        Assert.False(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: typoed,
+                neighbours: null,
+                reason: out var reason
+            ),
+            userMessage: "a magnitude-5 direction was expected to refuse"
+        );
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "bodyDirection"
+        );
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "magnitude 5"
+        );
+    }
+    [Fact]
+    public void UnitBodyDirectionValidates() {
+        var control = DashDocument(bodyDirection: new Vector3(
+            x: 0f,
+            y: 0f,
+            z: 1f
+        ));
+
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: control,
+                neighbours: null,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
     }
 }

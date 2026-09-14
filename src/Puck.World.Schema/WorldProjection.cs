@@ -166,6 +166,39 @@ public sealed record WorldProjectionDocument(
 /// receiver has no directory to resolve one against.</para>
 /// </remarks>
 public static class WorldProjection {
+    // A projection discloses no `state` section, so a retained `state.<row>[.<key>]` reference would reach the peer
+    // as a pointer into a table it was never handed — read as one, it faults; resolved as one, it refuses. The egress
+    // is therefore flat: every reference is answered from this authority's own state and dropped.
+    //
+    // The rows above are the LIVE document's own objects, and their value holders carry the authored reference
+    // canonical write-back preserves, so the flattening runs on a rehydrated private copy.
+    private static WorldProjectionDocument Flatten(WorldProjectionDocument projection, WorldDefinition definition) {
+        if (!WorldStateDocumentValues.HasReference(graph: projection)) {
+            return projection;
+        }
+
+        if (
+            !TryDeserialize(
+            utf8Json: Serialize(projection: projection),
+            projection: out var copy,
+            reason: out var reason
+        ) ||
+            (copy is null)
+        ) {
+            throw new InvalidOperationException(message: $"the composed projection did not round-trip: {reason}");
+        }
+
+        if (!WorldStateDocumentValues.TryFlatten(
+            graph: copy,
+            reason: out var flattenReason,
+            source: definition
+        )) {
+            throw new InvalidOperationException(message: $"the composed projection could not be flattened: {flattenReason}");
+        }
+
+        return copy;
+    }
+
     /// <summary>Composes what <paramref name="tier"/> authorizes a peer to receive of <paramref name="definition"/>.</summary>
     /// <param name="definition">The authority's live document.</param>
     /// <param name="tier">The tier the admission door decided for this peer.</param>
@@ -241,44 +274,20 @@ public static class WorldProjection {
             : null)
         );
 
-        WorldStateDisclosure.ValidateBindings(definition, projection, recipient);
-        projection = projection with { Observations = WorldStateDisclosure.Compose(definition, recipient) };
+        WorldStateDisclosure.ValidateBindings(
+            definition: definition,
+            graph: projection,
+            recipient: recipient
+        );
+        projection = projection with { Observations = WorldStateDisclosure.Compose(
+            definition: definition,
+            recipient: recipient
+        ) };
         return Flatten(
             definition: definition,
             projection: projection
         );
     }
-
-    // A projection discloses no `state` section, so a retained `state.<row>[.<key>]` reference would reach the peer
-    // as a pointer into a table it was never handed — read as one, it faults; resolved as one, it refuses. The egress
-    // is therefore flat: every reference is answered from this authority's own state and dropped.
-    //
-    // The rows above are the LIVE document's own objects, and their value holders carry the authored reference
-    // canonical write-back preserves, so the flattening runs on a rehydrated private copy.
-    private static WorldProjectionDocument Flatten(WorldProjectionDocument projection, WorldDefinition definition) {
-        if (!WorldStateDocumentValues.HasReference(graph: projection)) {
-            return projection;
-        }
-
-        if (!TryDeserialize(
-            utf8Json: Serialize(projection: projection),
-            projection: out var copy,
-            reason: out var reason
-        ) || (copy is null)) {
-            throw new InvalidOperationException(message: $"the composed projection did not round-trip: {reason}");
-        }
-
-        if (!WorldStateDocumentValues.TryFlatten(
-            graph: copy,
-            reason: out var flattenReason,
-            source: definition
-        )) {
-            throw new InvalidOperationException(message: $"the composed projection could not be flattened: {flattenReason}");
-        }
-
-        return copy;
-    }
-
     /// <summary>Serializes a projection to its canonical UTF-8 bytes.</summary>
     /// <param name="projection">The projection.</param>
     /// <returns>The canonical UTF-8 byte form.</returns>
@@ -290,6 +299,63 @@ public static class WorldProjection {
             jsonTypeInfo: WorldJsonContext.Default.WorldProjectionDocument,
             value: projection
         );
+    }
+    /// <summary>Parses a projection from untrusted bytes, refusing by name — the same Try-shaped, never-throwing
+    /// discipline every other wire leaf follows.</summary>
+    /// <param name="utf8Json">The document bytes.</param>
+    /// <param name="projection">The projection on success.</param>
+    /// <param name="reason">The named refusal on failure.</param>
+    /// <returns><see langword="true"/> when the bytes are a well-formed <c>puck.world.projection.v1</c> document.</returns>
+    public static bool TryDeserialize(ReadOnlySpan<byte> utf8Json, out WorldProjectionDocument? projection, out string reason) {
+        projection = null;
+
+        try {
+            projection = JsonSerializer.Deserialize(
+                utf8Json: utf8Json,
+                jsonTypeInfo: WorldJsonContext.Default.WorldProjectionDocument
+            );
+        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
+            reason = $"the projection is not a valid {WorldProjectionDocument.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        if (projection is null) {
+            reason = "the projection deserialized to null.";
+
+            return false;
+        }
+
+        if (!string.Equals(
+            a: projection.Schema,
+            b: WorldProjectionDocument.SchemaVersion,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            reason = $"projection schema '{projection.Schema}' is not {WorldProjectionDocument.SchemaVersion}.";
+            projection = null;
+
+            return false;
+        }
+
+        foreach (var key in ((projection.Extensions?.Keys) ?? ((ICollection<string>)Array.Empty<string>()))) {
+            if (!DocumentExtensionsPolicy.IsReservedKey(key: key)) {
+                reason = $"projection contains unrecognized top-level member '{key}'.";
+                projection = null;
+
+                return false;
+            }
+        }
+
+        if (projection.Provenance.Tier != WorldDisclosureTier.Presentation) {
+            reason = $"projection provenance names tier '{projection.Provenance.Tier}'; only '{WorldDisclosureTier.Presentation}' composes a projection document.";
+            projection = null;
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
     }
     /// <summary>Rebuilds a locally-valid <see cref="WorldDefinition"/> from a projection — see the class remarks. Every
     /// undisclosed section arrives as its neutral built-in default, never as a fabricated stand-in for what the
@@ -392,63 +458,6 @@ public static class WorldProjection {
         }
 
         definition = hydrated;
-
-        return true;
-    }
-    /// <summary>Parses a projection from untrusted bytes, refusing by name — the same Try-shaped, never-throwing
-    /// discipline every other wire leaf follows.</summary>
-    /// <param name="utf8Json">The document bytes.</param>
-    /// <param name="projection">The projection on success.</param>
-    /// <param name="reason">The named refusal on failure.</param>
-    /// <returns><see langword="true"/> when the bytes are a well-formed <c>puck.world.projection.v1</c> document.</returns>
-    public static bool TryDeserialize(ReadOnlySpan<byte> utf8Json, out WorldProjectionDocument? projection, out string reason) {
-        projection = null;
-
-        try {
-            projection = JsonSerializer.Deserialize(
-                utf8Json: utf8Json,
-                jsonTypeInfo: WorldJsonContext.Default.WorldProjectionDocument
-            );
-        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
-            reason = $"the projection is not a valid {WorldProjectionDocument.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
-        }
-
-        if (projection is null) {
-            reason = "the projection deserialized to null.";
-
-            return false;
-        }
-
-        if (!string.Equals(
-            a: projection.Schema,
-            b: WorldProjectionDocument.SchemaVersion,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            reason = $"projection schema '{projection.Schema}' is not {WorldProjectionDocument.SchemaVersion}.";
-            projection = null;
-
-            return false;
-        }
-
-        foreach (var key in ((projection.Extensions?.Keys) ?? ((ICollection<string>)Array.Empty<string>()))) {
-            if (!DocumentExtensionsPolicy.IsReservedKey(key: key)) {
-                reason = $"projection contains unrecognized top-level member '{key}'.";
-                projection = null;
-
-                return false;
-            }
-        }
-
-        if (projection.Provenance.Tier != WorldDisclosureTier.Presentation) {
-            reason = $"projection provenance names tier '{projection.Provenance.Tier}'; only '{WorldDisclosureTier.Presentation}' composes a projection document.";
-            projection = null;
-
-            return false;
-        }
-
-        reason = string.Empty;
 
         return true;
     }

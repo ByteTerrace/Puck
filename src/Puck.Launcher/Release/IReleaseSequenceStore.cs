@@ -38,11 +38,18 @@ public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
     /// <inheritdoc/>
     public bool IsAcceptable(ReplayCommitRequirement requirement) {
         lock (m_gate) {
-            if (!m_marks.TryGetValue(key: (requirement.Domain, requirement.Subject), value: out var mark)) {
+            if (!m_marks.TryGetValue(
+                key: (requirement.Domain, requirement.Subject),
+                value: out var mark
+            )) {
                 return true;
             }
 
-            return ReleaseSequenceComparison.IsAcceptable(requirement: requirement, storedEpochStart: mark.EpochStart, storedSequence: mark.Sequence);
+            return ReleaseSequenceComparison.IsAcceptable(
+                requirement: requirement,
+                storedEpochStart: mark.EpochStart,
+                storedSequence: mark.Sequence
+            );
         }
     }
 }
@@ -62,9 +69,16 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
 
         var fields = File.ReadAllText(path: m_filePath).Split(separator: '\t');
 
-        if ((fields.Length != 4) ||
-            !long.TryParse(s: fields[2], result: out var epochStart) ||
-            !ulong.TryParse(s: fields[3], result: out var sequence)
+        if (
+            (fields.Length != 4) ||
+            !long.TryParse(
+            s: fields[2],
+            result: out var epochStart
+        ) ||
+            !ulong.TryParse(
+            s: fields[3],
+            result: out var sequence
+        )
         ) {
             return null;
         }
@@ -76,11 +90,21 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
     public void Advance(ReplayCommitRequirement requirement) {
         lock (m_gate) {
             var directory = Path.GetDirectoryName(path: m_filePath)!;
-            var tmpPath = Path.Combine(path1: directory, path2: $"{Guid.NewGuid():n}.tmp");
+            var tmpPath = Path.Combine(
+                path1: directory,
+                path2: $"{Guid.NewGuid():n}.tmp"
+            );
 
             _ = Directory.CreateDirectory(path: directory);
-            File.WriteAllText(path: tmpPath, contents: $"{requirement.Domain}\t{requirement.Subject}\t{requirement.EpochStartUnixSeconds}\t{requirement.Sequence}");
-            File.Move(destFileName: m_filePath, overwrite: true, sourceFileName: tmpPath);
+            File.WriteAllText(
+                path: tmpPath,
+                contents: $"{requirement.Domain}\t{requirement.Subject}\t{requirement.EpochStartUnixSeconds}\t{requirement.Sequence}"
+            );
+            File.Move(
+                destFileName: m_filePath,
+                overwrite: true,
+                sourceFileName: tmpPath
+            );
         }
     }
     /// <inheritdoc/>
@@ -88,14 +112,27 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
         lock (m_gate) {
             var mark = ReadMark();
 
-            if ((mark is not { } stored) ||
-                !string.Equals(a: stored.Domain, b: requirement.Domain, comparisonType: StringComparison.Ordinal) ||
-                !string.Equals(a: stored.Subject, b: requirement.Subject, comparisonType: StringComparison.Ordinal)
+            if (
+                (mark is not { } stored) ||
+                !string.Equals(
+                a: stored.Domain,
+                b: requirement.Domain,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                !string.Equals(
+                a: stored.Subject,
+                b: requirement.Subject,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
                 return true;
             }
 
-            return ReleaseSequenceComparison.IsAcceptable(requirement: requirement, storedEpochStart: stored.EpochStart, storedSequence: stored.Sequence);
+            return ReleaseSequenceComparison.IsAcceptable(
+                requirement: requirement,
+                storedEpochStart: stored.EpochStart,
+                storedSequence: stored.Sequence
+            );
         }
     }
 }
@@ -106,6 +143,9 @@ internal static class ReleaseSequenceComparison {
             return false;
         }
 
-        return ((requirement.EpochStartUnixSeconds > storedEpochStart) || (requirement.Sequence > storedSequence));
+        return (
+            (requirement.EpochStartUnixSeconds > storedEpochStart) ||
+            (requirement.Sequence > storedSequence)
+        );
     }
 }

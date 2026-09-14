@@ -78,8 +78,8 @@ public sealed record WorldInteractionsSection(IReadOnlyList<WorldInteraction> In
 /// engine primitive; a genre world authors its own interaction count, never a size drawn from a specific game).
 /// </summary>
 public static class WorldInteractionCapacity {
-    /// <summary>The most right carriers a <c>neighbours</c> budget admits per left carrier.</summary>
-    public const int MaxNeighbours = 64;
     /// <summary>The maximum declared interaction rows a document may carry.</summary>
     public const int MaxInteractions = 128;
+    /// <summary>The most right carriers a <c>neighbours</c> budget admits per left carrier.</summary>
+    public const int MaxNeighbours = 64;
 }

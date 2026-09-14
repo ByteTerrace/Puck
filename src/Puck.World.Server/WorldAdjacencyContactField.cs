@@ -104,7 +104,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
     private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         var resolution = m_inner.ResolveSweep(
             orientation: in orientation,
-                    position: ref position,
+            position: ref position,
             previousPosition: previousPosition,
             up: in up,
             velocity: ref velocity,

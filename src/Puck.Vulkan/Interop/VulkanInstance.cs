@@ -7,10 +7,9 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanInstance : IDisposable {
     private readonly nint m_debugMessengerHandle;
+    private readonly IVulkanInstanceApi m_instanceApi;
 
     private bool m_disposed;
-
-    private readonly IVulkanInstanceApi m_instanceApi;
 
     /// <summary>Gets the native display kind the instance was created for.</summary>
     public NativeDisplayKind DisplayKind { get; }
@@ -64,7 +63,10 @@ public sealed class VulkanInstance : IDisposable {
 
         if (0 != Handle) {
             // The messenger must go before the instance it reports for.
-            m_instanceApi.DestroyDebugMessenger(instanceHandle: Handle, messengerHandle: m_debugMessengerHandle);
+            m_instanceApi.DestroyDebugMessenger(
+                instanceHandle: Handle,
+                messengerHandle: m_debugMessengerHandle
+            );
             m_instanceApi.DestroyInstance(instanceHandle: Handle);
             Handle = 0;
         }

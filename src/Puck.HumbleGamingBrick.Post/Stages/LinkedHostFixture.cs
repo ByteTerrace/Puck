@@ -1,4 +1,5 @@
 using Puck.Abstractions.Machines;
+using Puck.GamingBricks;
 using Puck.Hosting;
 
 namespace Puck.HumbleGamingBrick.Post;
@@ -23,6 +24,28 @@ internal static class LinkedHostFixture {
     /// <summary>The work-RAM address holding the seat program's wrapping completed-transfer counter.</summary>
     public const ushort TransferCountAddress = 0xC0F4;
 
+    /// <summary>Creates one seat's queued host.</summary>
+    /// <param name="internalClock">Whether this seat drives the transfer clock.</param>
+    /// <param name="audioSampleRate">The host's audio output rate, or 0 for a silent host.</param>
+    /// <returns>The host. The caller owns it and must dispose it.</returns>
+    public static MachineHost NewHost(bool internalClock, int audioSampleRate = 0) =>
+        new(
+            bootMode: MachineBootMode.Fast,
+            audioSampleRate: audioSampleRate,
+            cartridgeRom: SeatRom(internalClock: internalClock),
+            model: ConsoleModel.DmgC
+        );
+    /// <summary>Creates a validated neutral pad image holding one button set.</summary>
+    /// <param name="buttons">The buttons held.</param>
+    /// <returns>The pad image.</returns>
+    public static MachinePadState Pad(MachineButtons buttons) =>
+        new(
+            Buttons: buttons,
+            LeftStick: default,
+            LeftTrigger: 0f,
+            RightStick: default,
+            RightTrigger: 0f
+        );
     /// <summary>Creates one seat's cartridge image.</summary>
     /// <param name="internalClock">Whether this seat drives the transfer clock (SC <c>0x81</c>) or waits on the peer's
     /// clock (SC <c>0x80</c>).</param>
@@ -107,25 +130,4 @@ internal static class LinkedHostFixture {
 
         return rom;
     }
-    /// <summary>Creates one seat's queued host.</summary>
-    /// <param name="internalClock">Whether this seat drives the transfer clock.</param>
-    /// <param name="audioSampleRate">The host's audio output rate, or 0 for a silent host.</param>
-    /// <returns>The host. The caller owns it and must dispose it.</returns>
-    public static MachineHost NewHost(bool internalClock, int audioSampleRate = 0) =>
-        new(
-            audioSampleRate: audioSampleRate,
-            cartridgeRom: SeatRom(internalClock: internalClock),
-            model: ConsoleModel.DmgC
-        );
-    /// <summary>Creates a validated neutral pad image holding one button set.</summary>
-    /// <param name="buttons">The buttons held.</param>
-    /// <returns>The pad image.</returns>
-    public static MachinePadState Pad(MachineButtons buttons) =>
-        new(
-            Buttons: buttons,
-            LeftStick: default,
-            LeftTrigger: 0f,
-            RightStick: default,
-            RightTrigger: 0f
-        );
 }

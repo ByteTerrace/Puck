@@ -128,22 +128,6 @@ public sealed class AddonHost : IDisposable {
         m_descriptors = descriptors;
         m_instances = instances;
     }
-    /// <summary>Compiles a guest under <paramref name="descriptor"/> without registering it — the PREPARE half of
-    /// the prepare/commit split: the fallible load (missing file, bad bytes, bad export, a <c>moduleHash</c> pin
-    /// mismatch) runs here. The returned instance is not reachable through <see cref="TryGet"/> or
-    /// <see cref="Instances"/> until a complete registry containing it is published through <see cref="Adopt"/>;
-    /// a discarded preparation is undone by disposing the instance.</summary>
-    /// <param name="descriptor">The neutral load request.</param>
-    /// <returns>The prepared instance — faulted rather than thrown on a load failure.</returns>
-    /// <exception cref="ArgumentException"><paramref name="descriptor"/> has a null-or-whitespace name.</exception>
-    public AddonInstance Prepare(in AddonDescriptor descriptor) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(
-            argument: descriptor.Name,
-            paramName: nameof(descriptor)
-        );
-
-        return Load(descriptor: in descriptor);
-    }
     /// <summary>Renders one line per addon: petname, content hash, fuel budget, and state.</summary>
     /// <returns>A newline-joined description, or <c>"no addons"</c> when none are loaded.</returns>
     public string Describe() {
@@ -180,6 +164,22 @@ public sealed class AddonHost : IDisposable {
         m_descriptors.Clear();
         m_engine.Dispose();
         GC.SuppressFinalize(obj: this);
+    }
+    /// <summary>Compiles a guest under <paramref name="descriptor"/> without registering it — the PREPARE half of
+    /// the prepare/commit split: the fallible load (missing file, bad bytes, bad export, a <c>moduleHash</c> pin
+    /// mismatch) runs here. The returned instance is not reachable through <see cref="TryGet"/> or
+    /// <see cref="Instances"/> until a complete registry containing it is published through <see cref="Adopt"/>;
+    /// a discarded preparation is undone by disposing the instance.</summary>
+    /// <param name="descriptor">The neutral load request.</param>
+    /// <returns>The prepared instance — faulted rather than thrown on a load failure.</returns>
+    /// <exception cref="ArgumentException"><paramref name="descriptor"/> has a null-or-whitespace name.</exception>
+    public AddonInstance Prepare(in AddonDescriptor descriptor) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            argument: descriptor.Name,
+            paramName: nameof(descriptor)
+        );
+
+        return Load(descriptor: in descriptor);
     }
     /// <summary>Looks up an addon by name.</summary>
     /// <param name="name">The addon name.</param>

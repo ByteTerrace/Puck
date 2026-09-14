@@ -28,15 +28,66 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
     /// commit which does serialize simply waits this long on the authority gate and then proceeds.</summary>
     private static readonly TimeSpan DrainHold = TimeSpan.FromMilliseconds(value: 250);
 
+    private static WorldTransferReservationRequest ArrivalReservation() =>
+        new(
+            TransferId: TransferId,
+            SourceAuthority: SourceAuthority,
+            SourceRateHz: 240,
+            SourceTick: 0,
+            DeadlineSourceTick: 60,
+            Border: "east",
+            BorderCapacity: null,
+            PartyAllOrNothing: true,
+            PeerAdmission: true,
+            Members: [new WorldTransferReservationMember(
+                    Principal: WorldPrincipal.Console,
+                    PreferredSlot: WorldBodiesLimits.LocalSeatCount,
+                    Identity: null,
+                    Source: IntentSource.Live,
+                    BodyColor: default,
+                    CatalogRig: 4,
+                    Mobility: new WorldMobilityIdentity(
+                        Incarnation: new WorldEntityAddress(
+                            Authority: "origin/world",
+                            Generation: 7,
+                            Index: WorldBodiesLimits.LocalSeatCount
+                        ),
+                        Epoch: 0
+                    )
+                )]
+        );
+    private static WorldDefinition TransferPopulationDocument() {
+        var document = Fixtures.BuildDocument();
+
+        return document with {
+            PopulationRaw = document.Population with {
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2),
+                NetworkPlayers = 2,
+            },
+            Admission = [Fixtures.AnyAuthorityArrivals()],
+        };
+    }
+
     [Fact]
     public async Task AConcurrentCommitPublishesNoTravelerBeforeItsVerdictGrantsAreInstalled() {
         using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
         var reservation = fixture.Server.ReserveTransfer(request: ArrivalReservation());
 
-        Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
+        Assert.True(
+            condition: reservation.Accepted,
+            userMessage: reservation.Reason
+        );
 
         var bodyIndex = Assert.Single(collection: reservation.BodyIndices);
-        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+        var member = new WorldTransferCommitMember(
+            Profile: null,
+            HasMappedArrival: false,
+            BodyMotionProgramName: "grounded",
+            Position: default,
+            YawRadians: default,
+            PlanarVelocity: default,
+            VerticalVelocity: default
+        );
 
         using var drainOpen = new ManualResetEventSlim(initialState: false);
         using var committerDone = new ManualResetEventSlim(initialState: false);
@@ -54,25 +105,51 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
         // waits for this host's next tick.
         // A task captures even a cleanup fault if the test times out and releases its events. An unhandled
         // exception on a raw background thread would terminate the entire test process instead of naming a law.
-        var committer = Task.Factory.StartNew(action: () => {
+        var committer = Task.Factory.StartNew(
+            action: () => {
             try {
-                Assert.True(condition: drainOpen.Wait(timeout: DrainOpenBudget), userMessage: "the ordered-domain drain never opened");
+                Assert.True(
+                    condition: drainOpen.Wait(timeout: DrainOpenBudget),
+                    userMessage: "the ordered-domain drain never opened"
+                );
 
-                accepted = fixture.Server.CommitTransfer(members: [member], reason: out commitReason, sourceAuthority: SourceAuthority, transferId: TransferId);
+                accepted = fixture.Server.CommitTransfer(
+                    members: [member],
+                    reason: out commitReason,
+                    sourceAuthority: SourceAuthority,
+                    transferId: TransferId
+                );
                 // Read the traveler the instant the destination called it committed, exactly as a routed read-back
                 // does: through the same authority gate, asking the same grant table WorldServer.AnswerSubmittedQuery
                 // asks before it will answer at all.
-                resolvedPrincipal = fixture.Server.TryTransferredPrincipal(ordinal: 0, principal: out principal, sourceAuthority: SourceAuthority, transferId: TransferId);
+                resolvedPrincipal = fixture.Server.TryTransferredPrincipal(
+                    ordinal: 0,
+                    principal: out principal,
+                    sourceAuthority: SourceAuthority,
+                    transferId: TransferId
+                );
                 (active, observeVerdict, driveVerdict) = fixture.Server.ExecuteAuthorityOperation(operation: () => (
                     fixture.Server.Population.IsActive(index: bodyIndex),
-                    fixture.Server.Grants.Allows(principal: principal, capability: WorldCapability.Observe, subject: GrantSubject.Body(index: bodyIndex)),
-                    fixture.Server.Grants.Allows(principal: principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: bodyIndex))));
+                    fixture.Server.Grants.Allows(
+                    principal: principal,
+                    capability: WorldCapability.Observe,
+                    subject: GrantSubject.Body(index: bodyIndex)
+                ),
+                    fixture.Server.Grants.Allows(
+                    principal: principal,
+                    capability: WorldCapability.Drive,
+                    subject: GrantSubject.Body(index: bodyIndex)
+                )));
             } catch (Exception exception) {
                 committerFault = exception;
             } finally {
                 committerDone.Set();
             }
-        }, cancellationToken: CancellationToken.None, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default);
+        },
+            cancellationToken: CancellationToken.None,
+            creationOptions: TaskCreationOptions.LongRunning,
+            scheduler: TaskScheduler.Default
+        );
 
         // The tick-thread role: one ordinary submission whose completion runs inside the ordered drain, holding it
         // open across the committer's whole operation.
@@ -83,24 +160,50 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
                 Sequence: 1,
                 CorrelationId: 1,
                 Principal: WorldPrincipal.Console,
-                Payload: new WorldSubmissionPayload.Query(Value: new WorldQuery.Rules())),
+                Payload: new WorldSubmissionPayload.Query(Value: new WorldQuery.Rules())
+            ),
             completion: _ => {
                 drainOpen.Set();
                 committerDone.Wait(timeout: DrainHold);
-            });
+            }
+        );
 
-        Assert.True(condition: committerDone.Wait(timeout: DrainOpenBudget, cancellationToken: TestContext.Current.CancellationToken), userMessage: "the committing authority never finished");
-        await committer.WaitAsync(timeout: DrainOpenBudget, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(
+            condition: committerDone.Wait(
+                timeout: DrainOpenBudget,
+                cancellationToken: TestContext.Current.CancellationToken
+            ),
+            userMessage: "the committing authority never finished"
+        );
+        await committer.WaitAsync(
+            timeout: DrainOpenBudget,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         Assert.Null(@object: committerFault);
-        Assert.True(condition: accepted, userMessage: commitReason);
-        Assert.True(condition: resolvedPrincipal, userMessage: "a committed transfer resolved no peer principal");
-        Assert.True(condition: active, userMessage: $"the destination called transfer {TransferId} committed but body {bodyIndex} was not active");
+        Assert.True(
+            condition: accepted,
+            userMessage: commitReason
+        );
+        Assert.True(
+            condition: resolvedPrincipal,
+            userMessage: "a committed transfer resolved no peer principal"
+        );
+        Assert.True(
+            condition: active,
+            userMessage: $"the destination called transfer {TransferId} committed but body {bodyIndex} was not active"
+        );
         // The discriminating pair: the body is published, and every row its arrival verdict authorizes is already
         // installed. A commit that returns between the population admit and the grant mint publishes a body a routed
         // read-back refuses by name.
-        Assert.True(condition: observeVerdict.IsAllowed, userMessage: $"{principal.Describe()} could not observe body:{bodyIndex} at the instant its commit was accepted ({observeVerdict.DescribeDenial()})");
-        Assert.True(condition: driveVerdict.IsAllowed, userMessage: $"{principal.Describe()} could not drive body:{bodyIndex} at the instant its commit was accepted ({driveVerdict.DescribeDenial()})");
+        Assert.True(
+            condition: observeVerdict.IsAllowed,
+            userMessage: $"{principal.Describe()} could not observe body:{bodyIndex} at the instant its commit was accepted ({observeVerdict.DescribeDenial()})"
+        );
+        Assert.True(
+            condition: driveVerdict.IsAllowed,
+            userMessage: $"{principal.Describe()} could not drive body:{bodyIndex} at the instant its commit was accepted ({driveVerdict.DescribeDenial()})"
+        );
     }
     /// <summary>The control leg: the same commit with nothing holding the ordered drain open. Without it the
     /// contended law cannot separate "admission mints grants at all" from "admission mints them atomically" — both
@@ -110,16 +213,48 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
         using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
         var reservation = fixture.Server.ReserveTransfer(request: ArrivalReservation());
 
-        Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
+        Assert.True(
+            condition: reservation.Accepted,
+            userMessage: reservation.Reason
+        );
 
         var bodyIndex = Assert.Single(collection: reservation.BodyIndices);
-        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+        var member = new WorldTransferCommitMember(
+            Profile: null,
+            HasMappedArrival: false,
+            BodyMotionProgramName: "grounded",
+            Position: default,
+            YawRadians: default,
+            PlanarVelocity: default,
+            VerticalVelocity: default
+        );
 
-        Assert.True(condition: fixture.Server.CommitTransfer(members: [member], reason: out var reason, sourceAuthority: SourceAuthority, transferId: TransferId), userMessage: reason);
-        Assert.True(condition: fixture.Server.TryTransferredPrincipal(ordinal: 0, principal: out var principal, sourceAuthority: SourceAuthority, transferId: TransferId));
+        Assert.True(
+            condition: fixture.Server.CommitTransfer(
+                members: [member],
+                reason: out var reason,
+                sourceAuthority: SourceAuthority,
+                transferId: TransferId
+            ),
+            userMessage: reason
+        );
+        Assert.True(condition: fixture.Server.TryTransferredPrincipal(
+            ordinal: 0,
+            principal: out var principal,
+            sourceAuthority: SourceAuthority,
+            transferId: TransferId
+        ));
         Assert.True(condition: fixture.Server.Population.IsActive(index: bodyIndex));
-        Assert.True(condition: fixture.Server.Grants.Allows(principal: principal, capability: WorldCapability.Observe, subject: GrantSubject.Body(index: bodyIndex)).IsAllowed);
-        Assert.True(condition: fixture.Server.Grants.Allows(principal: principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: bodyIndex)).IsAllowed);
+        Assert.True(condition: fixture.Server.Grants.Allows(
+            principal: principal,
+            capability: WorldCapability.Observe,
+            subject: GrantSubject.Body(index: bodyIndex)
+        ).IsAllowed);
+        Assert.True(condition: fixture.Server.Grants.Allows(
+            principal: principal,
+            capability: WorldCapability.Drive,
+            subject: GrantSubject.Body(index: bodyIndex)
+        ).IsAllowed);
     }
     /// <summary>The refusal control: a principal the arrival never minted anything for is still refused over the
     /// same body, by the same table. A law whose "allowed" assertions could pass for a principal holding nothing
@@ -129,47 +264,47 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
         using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
         var reservation = fixture.Server.ReserveTransfer(request: ArrivalReservation());
 
-        Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
+        Assert.True(
+            condition: reservation.Accepted,
+            userMessage: reservation.Reason
+        );
 
         var bodyIndex = Assert.Single(collection: reservation.BodyIndices);
-        var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+        var member = new WorldTransferCommitMember(
+            Profile: null,
+            HasMappedArrival: false,
+            BodyMotionProgramName: "grounded",
+            Position: default,
+            YawRadians: default,
+            PlanarVelocity: default,
+            VerticalVelocity: default
+        );
 
-        Assert.True(condition: fixture.Server.CommitTransfer(members: [member], reason: out var reason, sourceAuthority: SourceAuthority, transferId: TransferId), userMessage: reason);
-        Assert.True(condition: fixture.Server.TryTransferredPrincipal(ordinal: 0, principal: out var principal, sourceAuthority: SourceAuthority, transferId: TransferId));
+        Assert.True(
+            condition: fixture.Server.CommitTransfer(
+                members: [member],
+                reason: out var reason,
+                sourceAuthority: SourceAuthority,
+                transferId: TransferId
+            ),
+            userMessage: reason
+        );
+        Assert.True(condition: fixture.Server.TryTransferredPrincipal(
+            ordinal: 0,
+            principal: out var principal,
+            sourceAuthority: SourceAuthority,
+            transferId: TransferId
+        ));
 
-        var stranger = WorldPrincipal.Peer(index: (principal.Index + 1), generation: principal.Generation);
+        var stranger = WorldPrincipal.Peer(
+            index: (principal.Index + 1),
+            generation: principal.Generation
+        );
 
-        Assert.False(condition: fixture.Server.Grants.Allows(principal: stranger, capability: WorldCapability.Observe, subject: GrantSubject.Body(index: bodyIndex)).IsAllowed);
-    }
-
-    private static WorldTransferReservationRequest ArrivalReservation() =>
-        new(
-            TransferId: TransferId,
-            SourceAuthority: SourceAuthority,
-            SourceRateHz: 240,
-            SourceTick: 0,
-            DeadlineSourceTick: 60,
-            Border: "east",
-            BorderCapacity: null,
-            PartyAllOrNothing: true,
-            PeerAdmission: true,
-            Members: [new WorldTransferReservationMember(
-                Principal: WorldPrincipal.Console,
-                PreferredSlot: WorldBodiesLimits.LocalSeatCount,
-                Identity: null,
-                Source: IntentSource.Live,
-                BodyColor: default,
-                CatalogRig: 4,
-                Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "origin/world", Generation: 7, Index: WorldBodiesLimits.LocalSeatCount), Epoch: 0))]);
-    private static WorldDefinition TransferPopulationDocument() {
-        var document = Fixtures.BuildDocument();
-
-        return document with {
-            PopulationRaw = document.Population with {
-                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2),
-                NetworkPlayers = 2,
-            },
-            Admission = [Fixtures.AnyAuthorityArrivals()],
-        };
+        Assert.False(condition: fixture.Server.Grants.Allows(
+            principal: stranger,
+            capability: WorldCapability.Observe,
+            subject: GrantSubject.Body(index: bodyIndex)
+        ).IsAllowed);
     }
 }

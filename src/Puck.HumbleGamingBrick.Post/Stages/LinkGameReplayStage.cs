@@ -20,12 +20,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </para>
 /// </summary>
 internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
-    // The frozen scripts drive the captured link-session cart (--link-rom) — a CGB link-from-menu game — from power-on
-    // to its two-player link handshake. Both consoles walk the identical menu path, so one script drives both sides.
-    // Authored with --link-explore; see the HGB Post README's "link-game-replay" section for the cartridge contract.
-    // The frozen menu walk reaches the handshake by ~frame 700; 1200 frames leaves the pair deep in the live
-    // "LINKING… Waiting for other player" exchange with hundreds of transfers each way — ample, robust traffic.
-    private const int Frames = 1200;
+    private const ulong ExpectedAgbTrafficHash = 0xC68DC189E9861B53ul;
     // The traffic floor, captured from the verified-good run (the captured link-session cart, cgb↔agb, 1200 frames): the exact
     // byte-stream fingerprint each console shifted in over the handshake. The replay-identical check already proves the
     // two runs agree with each other; this pinned floor additionally catches a serial-behavior regression that stays
@@ -33,7 +28,12 @@ internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
     // the OTHER sent. If a legitimate core change moves these, re-capture from a fresh good run (the render-hash-floor
     // discipline) rather than deleting the floor.
     private const ulong ExpectedCgbTrafficHash = 0x8AF238BC0931D513ul;
-    private const ulong ExpectedAgbTrafficHash = 0xC68DC189E9861B53ul;
+    // The frozen scripts drive the captured link-session cart (--link-rom) — a CGB link-from-menu game — from power-on
+    // to its two-player link handshake. Both consoles walk the identical menu path, so one script drives both sides.
+    // Authored with --link-explore; see the HGB Post README's "link-game-replay" section for the cartridge contract.
+    // The frozen menu walk reaches the handshake by ~frame 700; 1200 frames leaves the pair deep in the live
+    // "LINKING… Waiting for other player" exchange with hundreds of transfers each way — ample, robust traffic.
+    private const int Frames = 1200;
 
     /// <inheritdoc/>
     public string Name =>
@@ -41,6 +41,94 @@ internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.C;
+
+    // The all-0xFF stream an unplugged port would shift in has a fixed FNV fingerprint per length; a real exchange never
+    // matches it. Compares against the FNV of `completions` copies of 0xFF.
+    private static bool IsIdle(ulong hash, int completions) {
+        var idle = Fnv1aHash.Create();
+
+        for (var index = 0; (index < completions); ++index) {
+            idle.Add(value: byte.MaxValue);
+        }
+
+        return (hash == idle.Value);
+    }
+    // One complete linked session from fresh machines: a Cgb console and an Agb console booting the same cartridge,
+    // both walking the frozen menu script to the handshake. Self-contained so the determinism leg repeats it exactly.
+    private static LinkReplayResult RunLinkedGame(byte[] rom) {
+        using var cgb = PostMachine.Build(
+            model: ConsoleModel.CgbE,
+            rom: rom
+        );
+        using var agb = PostMachine.Build(
+            model: ConsoleModel.Agb,
+            rom: rom
+        );
+
+        return LinkReplay.Run(
+            first: cgb,
+            firstScript: Script(),
+            second: agb,
+            secondScript: Script(),
+            frames: Frames
+        );
+    }
+    // The single menu-walk script both consoles follow (identical inputs on each side to reach the shared handshake).
+    // Authored with --link-explore against the captured link-session cart: five Start taps blow through the attract/title screens
+    // to the MAIN MENU (cursor on EXHIBITION, top-left), Right·Right walks to the LINKED PLAY icon (top-right), and A
+    // enters it — after which both consoles sit in the interrupt-driven "LINKING…" character-select handshake,
+    // exchanging serial bytes continuously. Each keyframe presses (tap) then releases six frames later.
+    private static LinkInputScript Script() =>
+        new(
+            (100, JoypadButtons.Start),
+            (106, JoypadButtons.None),
+            (170, JoypadButtons.Start),
+            (176, JoypadButtons.None),
+            (240, JoypadButtons.Start),
+            (246, JoypadButtons.None),
+            (310, JoypadButtons.Start),
+            (316, JoypadButtons.None),
+            (380, JoypadButtons.Start),
+            (386, JoypadButtons.None),
+            (480, JoypadButtons.Right),
+            (486, JoypadButtons.None),
+            (540, JoypadButtons.Right),
+            (546, JoypadButtons.None),
+            (600, JoypadButtons.A),
+            (606, JoypadButtons.None)
+        );
+    // Judges the traffic evidence of the first run; null means the handshake produced real, non-idle serial traffic on
+    // both sides.
+    private static string? Verify(LinkReplayResult result, string title) {
+        if (
+            (result.First.Completions == 0) ||
+            (result.Second.Completions == 0)
+        ) {
+            return $"{title} never reached a two-way link handshake — cgb completed {result.First.Completions} transfers, agb {result.Second.Completions} (expected both > 0)";
+        }
+
+        if (
+            IsIdle(
+            hash: result.First.TrafficHash,
+            completions: result.First.Completions
+        ) ||
+            IsIdle(
+            hash: result.Second.TrafficHash,
+            completions: result.Second.Completions
+        )
+        ) {
+            return $"{title}'s link exchanged only idle 0xFF bytes — no real traffic crossed the cable (cgb 0x{result.First.TrafficHash:X16}, agb 0x{result.Second.TrafficHash:X16})";
+        }
+
+        if (
+            (result.First.TrafficHash != ExpectedCgbTrafficHash) ||
+            (result.Second.TrafficHash != ExpectedAgbTrafficHash)
+        ) {
+            return $"{title}'s link traffic drifted from the pinned floor — cgb 0x{result.First.TrafficHash:X16} (expected 0x{ExpectedCgbTrafficHash:X16}), agb 0x{result.Second.TrafficHash:X16} (expected 0x{ExpectedAgbTrafficHash:X16}); if a core change legitimately moved this, re-capture the floor";
+        }
+
+        return null;
+    }
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -80,92 +168,4 @@ internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
 
         return PostStageOutcome.Pass(detail: $"{title} cgb↔agb over {Frames} frames: cgb sent {first.First.MasterSends}/completed {first.First.Completions}, agb sent {first.Second.MasterSends}/completed {first.Second.Completions} serial transfers (traffic 0x{first.First.TrafficHash:X16}/0x{first.Second.TrafficHash:X16}), replay-identical across two runs ({first.FirstState.Size}+{first.SecondState.Size} state bytes)");
     }
-
-    // One complete linked session from fresh machines: a Cgb console and an Agb console booting the same cartridge,
-    // both walking the frozen menu script to the handshake. Self-contained so the determinism leg repeats it exactly.
-    private static LinkReplayResult RunLinkedGame(byte[] rom) {
-        using var cgb = PostMachine.Build(
-            model: ConsoleModel.CgbE,
-            rom: rom
-        );
-        using var agb = PostMachine.Build(
-            model: ConsoleModel.Agb,
-            rom: rom
-        );
-
-        return LinkReplay.Run(
-            first: cgb,
-            firstScript: Script(),
-            second: agb,
-            secondScript: Script(),
-            frames: Frames
-        );
-    }
-    // Judges the traffic evidence of the first run; null means the handshake produced real, non-idle serial traffic on
-    // both sides.
-    private static string? Verify(LinkReplayResult result, string title) {
-        if (
-            (result.First.Completions == 0) ||
-            (result.Second.Completions == 0)
-        ) {
-            return $"{title} never reached a two-way link handshake — cgb completed {result.First.Completions} transfers, agb {result.Second.Completions} (expected both > 0)";
-        }
-
-        if (
-            IsIdle(
-            hash: result.First.TrafficHash,
-            completions: result.First.Completions
-        ) ||
-            IsIdle(
-            hash: result.Second.TrafficHash,
-            completions: result.Second.Completions
-        )
-        ) {
-            return $"{title}'s link exchanged only idle 0xFF bytes — no real traffic crossed the cable (cgb 0x{result.First.TrafficHash:X16}, agb 0x{result.Second.TrafficHash:X16})";
-        }
-
-        if (
-            (result.First.TrafficHash != ExpectedCgbTrafficHash) ||
-            (result.Second.TrafficHash != ExpectedAgbTrafficHash)
-        ) {
-            return $"{title}'s link traffic drifted from the pinned floor — cgb 0x{result.First.TrafficHash:X16} (expected 0x{ExpectedCgbTrafficHash:X16}), agb 0x{result.Second.TrafficHash:X16} (expected 0x{ExpectedAgbTrafficHash:X16}); if a core change legitimately moved this, re-capture the floor";
-        }
-
-        return null;
-    }
-    // The all-0xFF stream an unplugged port would shift in has a fixed FNV fingerprint per length; a real exchange never
-    // matches it. Compares against the FNV of `completions` copies of 0xFF.
-    private static bool IsIdle(ulong hash, int completions) {
-        var idle = Fnv1aHash.Create();
-
-        for (var index = 0; (index < completions); ++index) {
-            idle.Add(value: byte.MaxValue);
-        }
-
-        return (hash == idle.Value);
-    }
-    // The single menu-walk script both consoles follow (identical inputs on each side to reach the shared handshake).
-    // Authored with --link-explore against the captured link-session cart: five Start taps blow through the attract/title screens
-    // to the MAIN MENU (cursor on EXHIBITION, top-left), Right·Right walks to the LINKED PLAY icon (top-right), and A
-    // enters it — after which both consoles sit in the interrupt-driven "LINKING…" character-select handshake,
-    // exchanging serial bytes continuously. Each keyframe presses (tap) then releases six frames later.
-    private static LinkInputScript Script() =>
-        new(
-        (100, JoypadButtons.Start),
-        (106, JoypadButtons.None),
-        (170, JoypadButtons.Start),
-        (176, JoypadButtons.None),
-        (240, JoypadButtons.Start),
-        (246, JoypadButtons.None),
-        (310, JoypadButtons.Start),
-        (316, JoypadButtons.None),
-        (380, JoypadButtons.Start),
-        (386, JoypadButtons.None),
-        (480, JoypadButtons.Right),
-        (486, JoypadButtons.None),
-        (540, JoypadButtons.Right),
-        (546, JoypadButtons.None),
-        (600, JoypadButtons.A),
-        (606, JoypadButtons.None)
-    );
 }

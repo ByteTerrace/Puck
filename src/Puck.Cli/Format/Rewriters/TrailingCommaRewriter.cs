@@ -13,7 +13,10 @@ internal sealed class TrailingCommaRewriter : CSharpSyntaxRewriter {
         var expressions = visited.Expressions;
         var separators = expressions.GetSeparators().ToList();
 
-        if ((expressions.Count == 0) || (separators.Count >= expressions.Count)) {
+        if (
+            (expressions.Count == 0) ||
+            (separators.Count >= expressions.Count)
+        ) {
             return visited;
         }
 
@@ -30,8 +33,12 @@ internal sealed class TrailingCommaRewriter : CSharpSyntaxRewriter {
         var nodesAndTokens = new List<SyntaxNodeOrToken>(capacity: (expressions.Count * 2));
 
         for (var index = 0; (index < expressions.Count); index++) {
-            nodesAndTokens.Add(item: ((index == (expressions.Count - 1)) ? last.WithTrailingTrivia() : expressions[index]));
-            nodesAndTokens.Add(item: ((index < separators.Count) ? separators[index] : trailingComma));
+            nodesAndTokens.Add(item: ((index == (expressions.Count - 1))
+                ? last.WithTrailingTrivia()
+                : expressions[index]));
+            nodesAndTokens.Add(item: ((index < separators.Count)
+                ? separators[index]
+                : trailingComma));
         }
 
         return visited.WithExpressions(expressions: SyntaxFactory.SeparatedList<ExpressionSyntax>(nodesAndTokens: nodesAndTokens));

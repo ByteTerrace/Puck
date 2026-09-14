@@ -63,7 +63,7 @@ public static class SdfDocumentDecoder {
     /// <c>world.sdf.load</c> before the read completes (a <see cref="System.IO.FileInfo"/> length check, never a
     /// read-then-measure), so a multi-gigabyte file is rejected before it is read, hashed, or DOM-parsed. Derived from
     /// <see cref="MaxMaterials"/>/<see cref="MaxOps"/> with generous headroom: a maximal material entry
-    /// (<c>{"albedo":[...],"emissive":...,"specular":...,"shininess":...}</c>) and a maximal op (the largest is
+    /// (<c>{"albedo":[...],"emissive":...,"specular":...,"roughness":...,"sheen":...}</c>) and a maximal op (the largest is
     /// <c>plane</c>'s 6 members, each a number or 3-array) each run well under 256 bytes even generously
     /// pretty-printed, so <see cref="MaxMaterials"/> materials + <see cref="MaxOps"/> ops top out around 74 KiB
     /// (32 + 256 = 288 entries × 256 bytes); this constant is roughly 100× that, comfortably fitting any legitimately
@@ -77,7 +77,7 @@ public static class SdfDocumentDecoder {
     public const string Schema = "puck.sdf.v1";
 
     private static readonly string[] RootMembers = ["schema", "materials", "ops"];
-    private static readonly string[] MaterialMembers = ["albedo", "emissive", "specular", "shininess"];
+    private static readonly string[] MaterialMembers = ["albedo", "emissive", "specular", "roughness", "sheen"];
     private static readonly Dictionary<string, SdfDocumentOpKind> OpKinds = new(comparer: StringComparer.Ordinal) {
         ["reset"] = SdfDocumentOpKind.Reset,
         ["translate"] = SdfDocumentOpKind.Translate,
@@ -92,6 +92,7 @@ public static class SdfDocumentDecoder {
         ["torus"] = SdfDocumentOpKind.Torus,
         ["plane"] = SdfDocumentOpKind.Plane,
         ["noiseDisplace"] = SdfDocumentOpKind.NoiseDisplace,
+        ["cellDisplace"] = SdfDocumentOpKind.CellDisplace,
         ["cellJitter"] = SdfDocumentOpKind.CellJitter,
     };
     private static readonly Dictionary<SdfDocumentOpKind, string[]> OpMembers = new() {
@@ -108,6 +109,7 @@ public static class SdfDocumentDecoder {
         [SdfDocumentOpKind.Torus] = ["op", "majorRadius", "minorRadius", "material", "blend", "smooth"],
         [SdfDocumentOpKind.Plane] = ["op", "normal", "offset", "material", "blend", "smooth"],
         [SdfDocumentOpKind.NoiseDisplace] = ["op", "frequency", "amplitude", "octaves", "gain", "lacunarity", "seed"],
+        [SdfDocumentOpKind.CellDisplace] = ["op", "frequency", "amplitude", "seed", "mode", "randomness"],
         [SdfDocumentOpKind.CellJitter] = ["op", "spacing", "jitter", "seed", "tumble", "flavor"],
     };
     private static readonly Dictionary<string, SdfBlendOp> BlendNames = new(comparer: StringComparer.Ordinal) {
@@ -121,6 +123,10 @@ public static class SdfDocumentDecoder {
         ["chamferUnion"] = SdfBlendOp.ChamferUnion,
         ["chamferIntersection"] = SdfBlendOp.ChamferIntersection,
         ["chamferSubtraction"] = SdfBlendOp.ChamferSubtraction,
+        ["grooveUnion"] = SdfBlendOp.GrooveUnion,
+        ["pipeUnion"] = SdfBlendOp.PipeUnion,
+        ["grooveSubtraction"] = SdfBlendOp.GrooveSubtraction,
+        ["pipeSubtraction"] = SdfBlendOp.PipeSubtraction,
     };
     private static readonly HashSet<SdfBlendOp> TopLevelBlends = [SdfBlendOp.Union, SdfBlendOp.SmoothUnion, SdfBlendOp.ChamferUnion];
     private static readonly Dictionary<string, SdfNoiseFlavor> NoiseFlavorNames = new(comparer: StringComparer.Ordinal) {
@@ -226,6 +232,15 @@ public static class SdfDocumentDecoder {
                     );
 
                     break;
+                case SdfDocumentOpKind.CellDisplace:
+                    _ = builder.CellDisplace(
+                        op.Scalar0,
+                        op.Scalar1,
+                        op.Seed,
+                        ((SdfCellMode)op.Integer0),
+                        op.Vector0.X
+                    );
+                    break;
                 case SdfDocumentOpKind.NoiseDisplace:
                     // Octave-range / gain / lacunarity refusals are INHERITED from the builder (see the catch below),
                     // carrying the op index/name context; the depth-scoping rule was already enforced at decode.
@@ -280,6 +295,155 @@ public static class SdfDocumentDecoder {
         }
 
         return hash.Value;
+    }
+    // A negative smooth radius has no builder-side refusal to inherit — Shape() only finite-checks it (its sign is
+    // absorbed by the shader's own max(0, smooth)) and PopField clamps a negative scope smooth to zero at the C#
+    // layer, so BOTH are silent REPAIRS this front door must refuse instead of forwarding.
+    // The one field-op arm: refuses outside a push/pop pair (a field op reads the running accumulator, so unscoped it
+    // would displace every shape the composed world program holds before this document); octave-count integrality is
+    // checked here (the builder takes an int), while its range and the gain/lacunarity positivity refusals are
+    // inherited from the builder through Apply's catch.
+    private static SdfDocumentOp DecodeCellDisplace(Dictionary<string, JsonElement> members, string context, int depth, int index) {
+        if (depth < 1) {
+            throw new SdfDocumentException(
+                message: $"{context}: cellDisplace requires a push/pop field scope.",
+                reason: SdfRefusal.FieldOpNotScoped
+            );
+        }
+        if (
+            !members.TryGetValue(
+            key: "mode",
+            value: out var modeValue
+        ) ||
+            (modeValue.ValueKind != JsonValueKind.String) ||
+            (modeValue.GetString() is not ("F1" or "F2MinusF1"))
+        ) {
+            throw new SdfDocumentException(
+                message: $"{context}.mode: expected F1 or F2MinusF1.",
+                reason: SdfRefusal.NotANumber
+            );
+        }
+        if (
+            !members.TryGetValue(
+            key: "seed",
+            value: out var seedValue
+        ) ||
+            (seedValue.ValueKind != JsonValueKind.Number) ||
+            !seedValue.TryGetUInt32(value: out var seed)
+        ) {
+            throw new SdfDocumentException(
+                message: $"{context}.seed: expected an integer in 0..4294967295.",
+                reason: SdfRefusal.NotANumber
+            );
+        }
+        var mode = Enum.Parse<SdfCellMode>(value: modeValue.GetString()!);
+        var frequency = RequireFloat(
+            context: context,
+            key: "frequency",
+            members: members
+        );
+        var amplitude = RequireFloat(
+            context: context,
+            key: "amplitude",
+            members: members
+        );
+        var randomness = RequireFloat(
+            context: context,
+            key: "randomness",
+            members: members
+        );
+
+        try { new SdfCellDisplacement(
+            Amplitude: amplitude,
+            Frequency: frequency,
+            Mode: mode,
+            Randomness: randomness,
+            Seed: seed
+        ).Validate(); } catch (ArgumentException exception) {
+            throw new SdfDocumentException(
+                SdfRefusal.NotANumber,
+                $"{context}: {exception.Message}"
+            );
+        }
+        return new(
+            Index: index,
+            Kind: SdfDocumentOpKind.CellDisplace,
+            Vector0: new(
+                x: randomness,
+                y: 0f,
+                z: 0f
+            ),
+            Scalar0: frequency,
+            Scalar1: amplitude,
+            Integer0: ((int)mode),
+            Seed: seed
+        );
+    }
+    // The scatter fold, geometric-only (no materialVariants lane, so no positional-recolor repair to inherit). A
+    // point op: it folds only the document's own subsequent chain, and Replay's trailing ResetPoint fences the tail.
+    // The fold tiles space INFINITELY per axis - bound the scattered content with an intersection shape inside a
+    // push/pop scope, or give an axis a spacing larger than the region it should not repeat across.
+    private static SdfDocumentOp DecodeCellJitter(Dictionary<string, JsonElement> members, string context, int index) {
+        var flavor = SdfNoiseFlavor.White;
+
+        if (members.TryGetValue(
+            key: "flavor",
+            value: out var flavorElement
+        )) {
+            if (
+                (flavorElement.ValueKind != JsonValueKind.String) ||
+                !NoiseFlavorNames.TryGetValue(
+                key: (flavorElement.GetString() ?? string.Empty),
+                value: out flavor
+            )
+            ) {
+                throw new SdfDocumentException(
+                    reason: SdfRefusal.UnknownNoiseFlavorName,
+                    message: $"{context}: unknown flavor '{Describe(element: flavorElement)}' - expected white, blue, or gaussian."
+                );
+            }
+        }
+
+        var seedRaw = ReadOptionalFloat(
+            context: context,
+            fallback: 0f,
+            key: "seed",
+            members: members
+        );
+
+        if (
+            (seedRaw != MathF.Floor(x: seedRaw)) ||
+            (seedRaw < 0f) ||
+            (seedRaw > 4294967295f)
+        ) {
+            throw new SdfDocumentException(
+                message: $"{context}.seed: {seedRaw} must be an integer in 0..4294967295.",
+                reason: SdfRefusal.NotANumber
+            );
+        }
+
+        return new SdfDocumentOp(
+            Index: index,
+            Kind: SdfDocumentOpKind.CellJitter,
+            Vector0: RequireVector3(
+                context: context,
+                key: "spacing",
+                members: members
+            ),
+            Scalar0: RequireFloat(
+                context: context,
+                key: "jitter",
+                members: members
+            ),
+            Scalar1: ReadOptionalFloat(
+                context: context,
+                fallback: 0f,
+                key: "tumble",
+                members: members
+            ),
+            Integer0: ((int)flavor),
+            Seed: ((uint)seedRaw)
+        );
     }
     private static IReadOnlyList<SdfMaterial> DecodeMaterials(Dictionary<string, JsonElement> root) {
         // Omission is a structural REJECTION, not a repair into an empty list — an author who means "no materials"
@@ -344,9 +508,10 @@ public static class SdfDocumentDecoder {
                 );
             }
 
-            // AddMaterial's RequireNonNegative covers all four channels (a negative reflectance/emissive/specular
-            // strength or Blinn-Phong exponent has no physical reading) — refused HERE now, not inherited from the
-            // builder's throw (see the type remarks).
+            // AddMaterial's RequireNonNegative/RequireUnitRange covers all five channels (a negative
+            // reflectance/emissive/specular strength has no physical reading) — the sign check on albedo/emissive/
+            // specular is refused HERE, not inherited from the builder's throw (see the type remarks); an
+            // out-of-[0,1] roughness/sheen is inherited from AddMaterial's own refusal instead.
             var albedo = ReadNonNegativeVector3(
                 context: $"{context}.albedo",
                 element: albedoElement
@@ -371,27 +536,114 @@ public static class SdfDocumentDecoder {
                 )
                 : 0f
             );
-            var shininess = (members.TryGetValue(
-                key: "shininess",
-                value: out var shininessElement
+            var roughness = (members.TryGetValue(
+                key: "roughness",
+                value: out var roughnessElement
             )
                 ? ReadNonNegativeFloat(
-                    context: $"{context}.shininess",
-                    element: shininessElement
+                    context: $"{context}.roughness",
+                    element: roughnessElement
                 )
-                : 32f
+                : SdfMaterial.DefaultRoughness
+            );
+            var sheen = (members.TryGetValue(
+                key: "sheen",
+                value: out var sheenElement
+            )
+                ? ReadNonNegativeFloat(
+                    context: $"{context}.sheen",
+                    element: sheenElement
+                )
+                : 0f
             );
 
             list.Add(item: new SdfMaterial(
                 Albedo: albedo,
                 Emissive: emissive,
-                Shininess: shininess,
-                Specular: specular
+                Specular: specular,
+                Roughness: roughness,
+                Sheen: sheen
             ));
             index++;
         }
 
         return list;
+    }
+    private static SdfDocumentOp DecodeNoiseDisplace(Dictionary<string, JsonElement> members, string context, int depth, int index) {
+        if (depth < 1) {
+            throw new SdfDocumentException(
+                message: $"{context}: 'noiseDisplace' is a field op over the running accumulator and must sit inside a 'push'/'pop' pair — unscoped it would displace every shape composed before this document.",
+                reason: SdfRefusal.FieldOpNotScoped
+            );
+        }
+
+        var octavesRaw = ReadOptionalFloat(
+            context: context,
+            fallback: 4f,
+            key: "octaves",
+            members: members
+        );
+
+        if (
+            (octavesRaw != MathF.Floor(x: octavesRaw)) ||
+            (octavesRaw < ((float)int.MinValue)) ||
+            (octavesRaw > ((float)int.MaxValue))
+        ) {
+            throw new SdfDocumentException(
+                message: $"{context}.octaves: {octavesRaw} must be an integer.",
+                reason: SdfRefusal.NotANumber
+            );
+        }
+
+        var seedRaw = ReadOptionalFloat(
+            context: context,
+            fallback: 0f,
+            key: "seed",
+            members: members
+        );
+
+        if (
+            (seedRaw != MathF.Floor(x: seedRaw)) ||
+            (seedRaw < 0f) ||
+            (seedRaw > 4294967295f)
+        ) {
+            throw new SdfDocumentException(
+                message: $"{context}.seed: {seedRaw} must be an integer in 0..4294967295.",
+                reason: SdfRefusal.NotANumber
+            );
+        }
+
+        return new SdfDocumentOp(
+            Index: index,
+            Kind: SdfDocumentOpKind.NoiseDisplace,
+            Vector0: new Vector3(
+                x: ReadOptionalFloat(
+                    context: context,
+                    fallback: 0.5f,
+                    key: "gain",
+                    members: members
+                ),
+                y: ReadOptionalFloat(
+                    context: context,
+                    fallback: 2f,
+                    key: "lacunarity",
+                    members: members
+                ),
+                z: 0f
+            ),
+            Scalar0: RequireFloat(
+                context: context,
+                key: "frequency",
+                members: members
+            ),
+            Scalar1: RequireFloat(
+                context: context,
+                key: "amplitude",
+                members: members
+            ),
+            Integer0: ((int)octavesRaw),
+            Seed: ((uint)seedRaw)
+        );
     }
     private static IReadOnlyList<SdfDocumentOp> DecodeOps(Dictionary<string, JsonElement> root, int materialCount) {
         // Omission is refused the same way as materials' — an explicit "ops": [] stays the legal way to author (and,
@@ -696,6 +948,12 @@ public static class SdfDocumentDecoder {
                     members: members
                 )
             ),
+                SdfDocumentOpKind.CellDisplace => DecodeCellDisplace(
+                context: context,
+                depth: depth,
+                index: index,
+                members: members
+            ),
                 SdfDocumentOpKind.NoiseDisplace => DecodeNoiseDisplace(
                 context: context,
                 depth: depth,
@@ -874,143 +1132,6 @@ public static class SdfDocumentDecoder {
                 element: element
             )
             : fallback
-        );
-    }
-    // A negative smooth radius has no builder-side refusal to inherit — Shape() only finite-checks it (its sign is
-    // absorbed by the shader's own max(0, smooth)) and PopField clamps a negative scope smooth to zero at the C#
-    // layer, so BOTH are silent REPAIRS this front door must refuse instead of forwarding.
-    // The one field-op arm: refuses outside a push/pop pair (a field op reads the running accumulator, so unscoped it
-    // would displace every shape the composed world program holds before this document); octave-count integrality is
-    // checked here (the builder takes an int), while its range and the gain/lacunarity positivity refusals are
-    // inherited from the builder through Apply's catch.
-    private static SdfDocumentOp DecodeNoiseDisplace(Dictionary<string, JsonElement> members, string context, int depth, int index) {
-        if (depth < 1) {
-            throw new SdfDocumentException(
-                message: $"{context}: 'noiseDisplace' is a field op over the running accumulator and must sit inside a 'push'/'pop' pair — unscoped it would displace every shape composed before this document.",
-                reason: SdfRefusal.FieldOpNotScoped
-            );
-        }
-
-        var octavesRaw = ReadOptionalFloat(
-            context: context,
-            fallback: 4f,
-            key: "octaves",
-            members: members
-        );
-
-        if ((octavesRaw != MathF.Floor(x: octavesRaw)) || (octavesRaw < ((float)int.MinValue)) || (octavesRaw > ((float)int.MaxValue))) {
-            throw new SdfDocumentException(
-                message: $"{context}.octaves: {octavesRaw} must be an integer.",
-                reason: SdfRefusal.NotANumber
-            );
-        }
-
-        var seedRaw = ReadOptionalFloat(
-            context: context,
-            fallback: 0f,
-            key: "seed",
-            members: members
-        );
-
-        if ((seedRaw != MathF.Floor(x: seedRaw)) || (seedRaw < 0f) || (seedRaw > 4294967295f)) {
-            throw new SdfDocumentException(
-                message: $"{context}.seed: {seedRaw} must be an integer in 0..4294967295.",
-                reason: SdfRefusal.NotANumber
-            );
-        }
-
-        return new SdfDocumentOp(
-            Index: index,
-            Kind: SdfDocumentOpKind.NoiseDisplace,
-            Vector0: new Vector3(
-                x: ReadOptionalFloat(
-                    context: context,
-                    fallback: 0.5f,
-                    key: "gain",
-                    members: members
-                ),
-                y: ReadOptionalFloat(
-                    context: context,
-                    fallback: 2f,
-                    key: "lacunarity",
-                    members: members
-                ),
-                z: 0f
-            ),
-            Scalar0: RequireFloat(
-                context: context,
-                key: "frequency",
-                members: members
-            ),
-            Scalar1: RequireFloat(
-                context: context,
-                key: "amplitude",
-                members: members
-            ),
-            Integer0: ((int)octavesRaw),
-            Seed: ((uint)seedRaw)
-        );
-    }
-    // The scatter fold, geometric-only (no materialVariants lane, so no positional-recolor repair to inherit). A
-    // point op: it folds only the document's own subsequent chain, and Replay's trailing ResetPoint fences the tail.
-    // The fold tiles space INFINITELY per axis - bound the scattered content with an intersection shape inside a
-    // push/pop scope, or give an axis a spacing larger than the region it should not repeat across.
-    private static SdfDocumentOp DecodeCellJitter(Dictionary<string, JsonElement> members, string context, int index) {
-        var flavor = SdfNoiseFlavor.White;
-
-        if (members.TryGetValue(
-            key: "flavor",
-            value: out var flavorElement
-        )) {
-            if (
-                (flavorElement.ValueKind != JsonValueKind.String) ||
-                !NoiseFlavorNames.TryGetValue(
-                key: (flavorElement.GetString() ?? string.Empty),
-                value: out flavor
-            )
-            ) {
-                throw new SdfDocumentException(
-                    reason: SdfRefusal.UnknownNoiseFlavorName,
-                    message: $"{context}: unknown flavor '{Describe(element: flavorElement)}' - expected white, blue, or gaussian."
-                );
-            }
-        }
-
-        var seedRaw = ReadOptionalFloat(
-            context: context,
-            fallback: 0f,
-            key: "seed",
-            members: members
-        );
-
-        if ((seedRaw != MathF.Floor(x: seedRaw)) || (seedRaw < 0f) || (seedRaw > 4294967295f)) {
-            throw new SdfDocumentException(
-                message: $"{context}.seed: {seedRaw} must be an integer in 0..4294967295.",
-                reason: SdfRefusal.NotANumber
-            );
-        }
-
-        return new SdfDocumentOp(
-            Index: index,
-            Kind: SdfDocumentOpKind.CellJitter,
-            Vector0: RequireVector3(
-                context: context,
-                key: "spacing",
-                members: members
-            ),
-            Scalar0: RequireFloat(
-                context: context,
-                key: "jitter",
-                members: members
-            ),
-            Scalar1: ReadOptionalFloat(
-                context: context,
-                fallback: 0f,
-                key: "tumble",
-                members: members
-            ),
-            Integer0: ((int)flavor),
-            Seed: ((uint)seedRaw)
         );
     }
     private static float ReadSmooth(Dictionary<string, JsonElement> members, string context) {

@@ -11,11 +11,10 @@ namespace Puck.Networking.Tests.Peers;
 /// acknowledges a stream shutdown (<see cref="InMemoryPeerConnection"/>).</summary>
 internal sealed class FakePeerTransport : IPeerTransport {
     private readonly Channel<IPeerConnection> m_accepted = Channel.CreateUnbounded<IPeerConnection>();
-
-    private readonly Func<EndPoint, IPeerConnection> m_dial;
-
     private readonly List<IPeerConnection> m_taken = [];
     private readonly Lock m_takenLock = new();
+
+    private readonly Func<EndPoint, IPeerConnection> m_dial;
 
     /// <summary>Initializes the transport.</summary>
     /// <param name="dial">Produces the connection <see cref="DialAsync"/> returns for an endpoint.</param>
@@ -46,16 +45,16 @@ internal sealed class FakePeerTransport : IPeerTransport {
     /// <param name="connection">The connection the listener yields.</param>
     public void Accept(IPeerConnection connection) => m_accepted.Writer.TryWrite(item: connection);
     public ValueTask<IPeerConnection> DialAsync(EndPoint endpoint, CancellationToken ct = default) => ValueTask.FromResult(result: m_dial(arg: endpoint));
-    public ValueTask<IPeerListener> ListenAsync(IPEndPoint endpoint, CancellationToken ct = default) => ValueTask.FromResult<IPeerListener>(result: new Listener(
-        accepted: m_accepted,
-        endpoint: endpoint,
-        took: Took
-    ));
     public ValueTask DisposeAsync() {
         m_accepted.Writer.TryComplete();
 
         return ValueTask.CompletedTask;
     }
+    public ValueTask<IPeerListener> ListenAsync(IPEndPoint endpoint, CancellationToken ct = default) => ValueTask.FromResult<IPeerListener>(result: new Listener(
+        accepted: m_accepted,
+        endpoint: endpoint,
+        took: Took
+    ));
 
     private sealed class Listener : IPeerListener {
         private readonly Channel<IPeerConnection> m_accepted;
@@ -97,15 +96,15 @@ internal sealed class FakePeerTransport : IPeerTransport {
 internal sealed class SilentPeerConnection : IPeerConnection {
     private readonly CancellationTokenSource m_closed = new();
 
+    public EndPoint RemoteEndpoint { get; } = PeerTestSupport.Loopback(port: 1);
+    public ReadOnlyMemory<byte> RemoteTransportKey { get; } = "a key this connection never has to prove"u8.ToArray();
+
     private int m_disposed;
 
     /// <summary>Gets a value indicating whether <see cref="DisposeAsync"/> ran — what a law asserts to show a
     /// failed handshake released its connection.</summary>
     public bool IsDisposed => (Volatile.Read(location: ref m_disposed) != 0);
     public int MaxDatagramBytes => 0;
-
-    public EndPoint RemoteEndpoint { get; } = PeerTestSupport.Loopback(port: 1);
-    public ReadOnlyMemory<byte> RemoteTransportKey { get; } = "a key this connection never has to prove"u8.ToArray();
 
     public async ValueTask<Stream?> AcceptStreamAsync(CancellationToken ct = default) {
         using var wait = CancellationTokenSource.CreateLinkedTokenSource(
@@ -125,9 +124,6 @@ internal sealed class SilentPeerConnection : IPeerConnection {
 
         return null;
     }
-    public ValueTask<Stream> OpenStreamAsync(CancellationToken ct = default) => ValueTask.FromResult<Stream>(result: new SilentStream(closed: m_closed.Token));
-    public ValueTask<ReadOnlyMemory<byte>?> ReceiveDatagramAsync(CancellationToken ct = default) => throw new NotSupportedException(message: "the silent connection carries no datagrams");
-    public ValueTask SendDatagramAsync(ReadOnlyMemory<byte> datagram, CancellationToken ct = default) => throw new NotSupportedException(message: "the silent connection carries no datagrams");
     public ValueTask DisposeAsync() {
         if (Interlocked.Exchange(
             location1: ref m_disposed,
@@ -138,6 +134,9 @@ internal sealed class SilentPeerConnection : IPeerConnection {
 
         return ValueTask.CompletedTask;
     }
+    public ValueTask<Stream> OpenStreamAsync(CancellationToken ct = default) => ValueTask.FromResult<Stream>(result: new SilentStream(closed: m_closed.Token));
+    public ValueTask<ReadOnlyMemory<byte>?> ReceiveDatagramAsync(CancellationToken ct = default) => throw new NotSupportedException(message: "the silent connection carries no datagrams");
+    public ValueTask SendDatagramAsync(ReadOnlyMemory<byte> datagram, CancellationToken ct = default) => throw new NotSupportedException(message: "the silent connection carries no datagrams");
 
     /// <summary>Accepts every write and completes no read: a read waits until its own token is cancelled (and
     /// throws) or the connection closes (and reports end of stream).</summary>
@@ -226,37 +225,6 @@ internal sealed class InMemoryPeerConnection : IPeerConnection {
     public EndPoint RemoteEndpoint { get; }
     public ReadOnlyMemory<byte> RemoteTransportKey { get; }
 
-    /// <summary>Creates the two ends of one connection. End A's <see cref="RemoteTransportKey"/> is
-    /// <paramref name="keyProvedByB"/> and end B's is <paramref name="keyProvedByA"/>, as if each had proved its own
-    /// key to the other at the transport's handshake.</summary>
-    /// <param name="keyProvedByA">The key end A proved.</param>
-    /// <param name="keyProvedByB">The key end B proved.</param>
-    /// <returns>Both ends.</returns>
-    public static (InMemoryPeerConnection A, InMemoryPeerConnection B) Pair(ReadOnlyMemory<byte> keyProvedByA, ReadOnlyMemory<byte> keyProvedByB) {
-        var a = new InMemoryPeerConnection(
-            remoteEndpoint: PeerTestSupport.Loopback(port: 2),
-            remoteTransportKey: keyProvedByB
-        );
-        var b = new InMemoryPeerConnection(
-            remoteEndpoint: PeerTestSupport.Loopback(port: 1),
-            remoteTransportKey: keyProvedByA
-        );
-
-        a.m_remote = b;
-        b.m_remote = a;
-
-        return (a, b);
-    }
-    /// <summary>Lets every stream shutdown this end started complete, as a live remote would by acknowledging it.</summary>
-    public void AcknowledgeShutdowns() => m_shutdownsAcknowledged.TrySetResult();
-    /// <summary>Stands in for a remote that keeps the connection alive but never grants another byte of stream
-    /// flow-control credit: from now on every write on a stream this end owns blocks until the write's own token is
-    /// cancelled (throwing <see cref="OperationCanceledException"/>, as a transport's aborted write does) or this
-    /// connection is disposed (throwing <see cref="IOException"/>).</summary>
-    public void WithholdWriteCredit() => Volatile.Write(
-        location: ref m_writeCreditWithheld,
-        value: 1
-    );
     public async ValueTask<Stream?> AcceptStreamAsync(CancellationToken ct = default) {
         using var wait = CancellationTokenSource.CreateLinkedTokenSource(
             token1: ct,
@@ -270,6 +238,30 @@ internal sealed class InMemoryPeerConnection : IPeerConnection {
         } catch (ChannelClosedException) {
             return null;
         }
+    }
+    /// <summary>Lets every stream shutdown this end started complete, as a live remote would by acknowledging it.</summary>
+    public void AcknowledgeShutdowns() => m_shutdownsAcknowledged.TrySetResult();
+    public ValueTask DisposeAsync() {
+        if (!m_closed.TrySetResult()) {
+            return ValueTask.CompletedTask;
+        }
+
+        m_closing.Cancel();
+        m_inboundStreams.Writer.TryComplete();
+
+        InMemoryStream[] streams;
+
+        lock (m_streamsLock) {
+            streams = [.. m_streams];
+        }
+
+        // A closed connection ends every stream on it in both directions, the way a transport's connection close
+        // fails the remote's reads as well as this side's.
+        foreach (var stream in streams) {
+            stream.Abort();
+        }
+
+        return ValueTask.CompletedTask;
     }
     public ValueTask<Stream> OpenStreamAsync(CancellationToken ct = default) {
         var toRemote = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
@@ -299,30 +291,37 @@ internal sealed class InMemoryPeerConnection : IPeerConnection {
 
         return ValueTask.FromResult<Stream>(result: local);
     }
+    /// <summary>Creates the two ends of one connection. End A's <see cref="RemoteTransportKey"/> is
+    /// <paramref name="keyProvedByB"/> and end B's is <paramref name="keyProvedByA"/>, as if each had proved its own
+    /// key to the other at the transport's handshake.</summary>
+    /// <param name="keyProvedByA">The key end A proved.</param>
+    /// <param name="keyProvedByB">The key end B proved.</param>
+    /// <returns>Both ends.</returns>
+    public static (InMemoryPeerConnection A, InMemoryPeerConnection B) Pair(ReadOnlyMemory<byte> keyProvedByA, ReadOnlyMemory<byte> keyProvedByB) {
+        var a = new InMemoryPeerConnection(
+            remoteEndpoint: PeerTestSupport.Loopback(port: 2),
+            remoteTransportKey: keyProvedByB
+        );
+        var b = new InMemoryPeerConnection(
+            remoteEndpoint: PeerTestSupport.Loopback(port: 1),
+            remoteTransportKey: keyProvedByA
+        );
+
+        a.m_remote = b;
+        b.m_remote = a;
+
+        return (a, b);
+    }
     public ValueTask<ReadOnlyMemory<byte>?> ReceiveDatagramAsync(CancellationToken ct = default) => throw new NotSupportedException(message: "the in-memory connection carries no datagrams");
     public ValueTask SendDatagramAsync(ReadOnlyMemory<byte> datagram, CancellationToken ct = default) => throw new NotSupportedException(message: "the in-memory connection carries no datagrams");
-    public ValueTask DisposeAsync() {
-        if (!m_closed.TrySetResult()) {
-            return ValueTask.CompletedTask;
-        }
-
-        m_closing.Cancel();
-        m_inboundStreams.Writer.TryComplete();
-
-        InMemoryStream[] streams;
-
-        lock (m_streamsLock) {
-            streams = [.. m_streams];
-        }
-
-        // A closed connection ends every stream on it in both directions, the way a transport's connection close
-        // fails the remote's reads as well as this side's.
-        foreach (var stream in streams) {
-            stream.Abort();
-        }
-
-        return ValueTask.CompletedTask;
-    }
+    /// <summary>Stands in for a remote that keeps the connection alive but never grants another byte of stream
+    /// flow-control credit: from now on every write on a stream this end owns blocks until the write's own token is
+    /// cancelled (throwing <see cref="OperationCanceledException"/>, as a transport's aborted write does) or this
+    /// connection is disposed (throwing <see cref="IOException"/>).</summary>
+    public void WithholdWriteCredit() => Volatile.Write(
+        location: ref m_writeCreditWithheld,
+        value: 1
+    );
 
     /// <summary>One end of an in-memory stream: writes go to the outbox, reads drain the inbox, end of stream is the
     /// inbox completing, and disposal completes the outbox (the remote reads end of stream) and then waits for the

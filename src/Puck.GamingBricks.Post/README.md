@@ -10,18 +10,18 @@ The [project map](../../docs/project-map.md) shows where it sits in the wider
 repository; the [generated API reference](../../docs/api) owns complete member
 signatures, parameters, return values, and exceptions.
 
-## 🧱 Core types
+## Core types
 
 | Type | Purpose |
 |---|---|
 | `PostVerdict` | The outcome class of one stage: `Pass`, `Skip`, `Fail`, `Infra`. |
 | `PostTier` | The ordered fast→slow tier (`A`/`B`/`C`) a stage belongs to. |
-| `PostStageOutcome` | A verdict plus a one-line detail — what a stage returns. |
-| `PostStageResult` | A stage's name, tier, and outcome — one report row. |
+| `PostStageOutcome` | A verdict plus a one-line detail—what a stage returns. |
+| `PostStageResult` | A stage's name, tier, and outcome—one report row. |
 | `IPostStage<TContext>` | One battery stage: a name, a tier, and `Run(TContext)`. |
 | `PostBattery<TContext>` | Runs an ordered `IPostStage<TContext>` list, isolating each stage's exceptions as `Infra`, into a `PostReport`. |
 | `PostReport` | The folded per-stage results, exit code, and rendered table for one battery run. |
-| `HashDivergenceReport` | Snapshot-hashes two machines and, on a mismatch, prints the component/offset localization and hex windows — the loop and `DescribeDivergence` stay per-brick. |
+| `HashDivergenceReport` | Snapshot-hashes two machines and, on a mismatch, prints the component/offset localization and hex windows—the loop and `DescribeDivergence` stay per-brick. |
 | `CommandLineArguments` | `Value(args, name)` looks up a flag's following value; `TryValidateValues` rejects missing values for a known set of flags. |
 | `CorpusManifest` | Resolves explicit corpus paths or the pinned cache; `Load(path, cacheRoot)` sets the cache used for both fetch and resolution. Both runners expose `--corpus-cache`. |
 | `CoreEmbeddingProbe` | Checks synchronous core input, video, audio, state replay and lookahead without host infrastructure. |
@@ -42,3 +42,7 @@ they diverge per machine and forcing one shape onto two genuinely different
 run contexts would cost more than it saves. Each probe's `DescribeDivergence`
 (and, for the Advanced brick, its bus-subregion annotation) stays per-brick for
 the same reason and is handed to `HashDivergenceReport` as a delegate.
+
+## Documentation
+
+📚 [Machine emulation manual](../../docs/emulation/README.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

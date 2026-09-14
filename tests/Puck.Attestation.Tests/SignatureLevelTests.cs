@@ -13,23 +13,168 @@ public sealed class SignatureLevelTests {
         var codec = new CborAttestationCodec();
         var keys = MintDomainKeys(subject: "user:iris");
 
-        var (rootToIssuing, issuingToSubject) = BuildChain(codec: codec, keys: keys, notAfter: (Epoch + (86_400L * 30)), notBefore: (Epoch - 30));
+        var (rootToIssuing, issuingToSubject) = BuildChain(
+            codec: codec,
+            keys: keys,
+            notAfter: (Epoch + (86_400L * 30)),
+            notBefore: (Epoch - 30)
+        );
         var chain = new[] { rootToIssuing, issuingToSubject };
-        var trust = BuildTrustList(keys: keys, defaultMaximumAge: TimeSpan.FromHours(hours: 24));
-        var claim = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "iris's claim");
+        var trust = BuildTrustList(
+            keys: keys,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 24)
+        );
+        var claim = SignTestClaim(
+            codec: codec,
+            keys: keys,
+            purpose: "test.claim",
+            notBefore: (Epoch - 60),
+            notAfter: (Epoch + 3_600),
+            audience: "world:home",
+            sequence: null,
+            text: "iris's claim"
+        );
 
         return (codec, chain, trust, claim);
     }
     private static AttestationVerifyResult VerifyWithSignature(CborAttestationCodec codec, SignedAttestation[] chain, TrustList trust, SignedAttestation claim, ReadOnlyMemory<byte> signature) =>
-        AttestationVerifier.VerifyChain(codec: codec, claim: (claim with { Signature = signature }), chain: chain, trustList: trust, now: Now, expectedPurpose: "test.claim", expectedAudience: "world:home");
+        AttestationVerifier.VerifyChain(
+            codec: codec,
+            claim: (claim with { Signature = signature }),
+            chain: chain,
+            trustList: trust,
+            now: Now,
+            expectedPurpose: "test.claim",
+            expectedAudience: "world:home"
+        );
 
+    [Fact]
+    public void DeclaredAlgorithm_DifferentFromSigningAlgorithm_IsRefusedAtTheMintingBoundary() {
+        var (codec, _, _, claim) = BuildFixture();
+        var keys = MintDomainKeys(subject: "user:minting-boundary");
+
+        var exception = Assert.Throws<ArgumentException>(testCode: () => _ = AttestationSigner.Sign(
+            codec: codec,
+            header: claim.Header with { Algorithm = AttestationAlgorithms.EcdhP256HkdfSha256Aes256Gcm },
+            payloadKind: claim.PayloadKind,
+            payloadBytes: claim.PayloadBytes,
+            signingKey: keys.SubjectSigningKey,
+            signingAlgorithm: AttestationAlgorithms.EcdsaP256Sha256
+        ));
+
+        Assert.Equal(
+            expected: "header",
+            actual: exception.ParamName
+        );
+        Assert.Contains(
+            expectedSubstring: "declares algorithm",
+            actualString: exception.Message,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
+    }
+    // ECDSA malleability: (r, s) and (r, n-s) are both valid signatures over the same message, and .NET's
+    // signer does not canonicalise s. This is a negative result recorded on purpose — a signature is NOT a
+    // unique identifier for a claim, so replay defence rests on the sequence mark and the audience, never
+    // on "have I seen these bytes before".
+    [Fact]
+    public void EcdsaMalleability_RnMinusSIsASecondValidSignature() {
+        var (codec, chain, trust, claim) = BuildFixture();
+        var malleated = MalleateSignature(signature: claim.Signature.Span);
+
+        var result = VerifyWithSignature(
+            chain: chain,
+            claim: claim,
+            codec: codec,
+            signature: malleated,
+            trust: trust
+        );
+
+        Assert.True(condition: result.Verified);
+        Assert.False(condition: malleated.AsSpan().SequenceEqual(other: claim.Signature.Span));
+    }
     [Fact]
     public void MintedP1363Signature_Verifies() {
         var (codec, chain, trust, claim) = BuildFixture();
 
-        var result = VerifyWithSignature(codec: codec, chain: chain, trust: trust, claim: claim, signature: claim.Signature);
+        var result = VerifyWithSignature(
+            codec: codec,
+            chain: chain,
+            trust: trust,
+            claim: claim,
+            signature: claim.Signature
+        );
 
         AssertAccepted(result: result);
+    }
+    [Fact]
+    public void SignatureEncoding_AllZeroSignatureOfTheRightLength_IsRefused() {
+        var (codec, chain, trust, claim) = BuildFixture();
+
+        var result = VerifyWithSignature(
+            codec: codec,
+            chain: chain,
+            trust: trust,
+            claim: claim,
+            signature: new byte[claim.Signature.Length]
+        );
+
+        AssertRefused(
+            reasonMustContain: "signature does not verify",
+            result: result
+        );
+    }
+    // Encoding malleability, by contrast, is closed: P1363 is a fixed 64 bytes for P-256, so a DER SEQUENCE
+    // of the same (r, s) is not a candidate encoding.
+    [Fact]
+    public void SignatureEncoding_SameRsReencodedAsDer_IsRefused() {
+        var (codec, chain, trust, claim) = BuildFixture();
+
+        var result = VerifyWithSignature(
+            codec: codec,
+            chain: chain,
+            trust: trust,
+            claim: claim,
+            signature: EncodeSignatureAsDer(signature: claim.Signature.Span)
+        );
+
+        AssertRefused(
+            reasonMustContain: "signature does not verify",
+            result: result
+        );
+    }
+    [Fact]
+    public void SignatureEncoding_ValidSignatureWithLastByteRemoved_IsRefused() {
+        var (codec, chain, trust, claim) = BuildFixture();
+
+        var result = VerifyWithSignature(
+            codec: codec,
+            chain: chain,
+            trust: trust,
+            claim: claim,
+            signature: claim.Signature[..^1]
+        );
+
+        AssertRefused(
+            reasonMustContain: "signature does not verify",
+            result: result
+        );
+    }
+    [Fact]
+    public void SignatureEncoding_ValidSignatureWithOneZeroByteAppended_IsRefused() {
+        var (codec, chain, trust, claim) = BuildFixture();
+
+        var result = VerifyWithSignature(
+            codec: codec,
+            chain: chain,
+            trust: trust,
+            claim: claim,
+            signature: ((byte[])[.. claim.Signature.Span, 0x00])
+        );
+
+        AssertRefused(
+            reasonMustContain: "signature does not verify",
+            result: result
+        );
     }
     [Fact]
     public void SigningKeyCurve_AP384KeyNamedP256_IsRefusedAtTheMintingBoundary() {
@@ -46,72 +191,14 @@ public sealed class SignatureLevelTests {
             signingAlgorithm: AttestationAlgorithms.EcdsaP256Sha256
         ));
 
-        Assert.Equal(expected: "signingKey", actual: exception.ParamName);
-        Assert.Contains(expectedSubstring: "curve", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
-    }
-    [Fact]
-    public void DeclaredAlgorithm_DifferentFromSigningAlgorithm_IsRefusedAtTheMintingBoundary() {
-        var (codec, _, _, claim) = BuildFixture();
-        var keys = MintDomainKeys(subject: "user:minting-boundary");
-
-        var exception = Assert.Throws<ArgumentException>(testCode: () => _ = AttestationSigner.Sign(
-            codec: codec,
-            header: claim.Header with { Algorithm = AttestationAlgorithms.EcdhP256HkdfSha256Aes256Gcm },
-            payloadKind: claim.PayloadKind,
-            payloadBytes: claim.PayloadBytes,
-            signingKey: keys.SubjectSigningKey,
-            signingAlgorithm: AttestationAlgorithms.EcdsaP256Sha256
-        ));
-
-        Assert.Equal(expected: "header", actual: exception.ParamName);
-        Assert.Contains(expectedSubstring: "declares algorithm", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
-    }
-    // ECDSA malleability: (r, s) and (r, n-s) are both valid signatures over the same message, and .NET's
-    // signer does not canonicalise s. This is a negative result recorded on purpose — a signature is NOT a
-    // unique identifier for a claim, so replay defence rests on the sequence mark and the audience, never
-    // on "have I seen these bytes before".
-    [Fact]
-    public void EcdsaMalleability_RnMinusSIsASecondValidSignature() {
-        var (codec, chain, trust, claim) = BuildFixture();
-        var malleated = MalleateSignature(signature: claim.Signature.Span);
-
-        var result = VerifyWithSignature(chain: chain, claim: claim, codec: codec, signature: malleated, trust: trust);
-
-        Assert.True(condition: result.Verified);
-        Assert.False(condition: malleated.AsSpan().SequenceEqual(other: claim.Signature.Span));
-    }
-    // Encoding malleability, by contrast, is closed: P1363 is a fixed 64 bytes for P-256, so a DER SEQUENCE
-    // of the same (r, s) is not a candidate encoding.
-    [Fact]
-    public void SignatureEncoding_SameRsReencodedAsDer_IsRefused() {
-        var (codec, chain, trust, claim) = BuildFixture();
-
-        var result = VerifyWithSignature(codec: codec, chain: chain, trust: trust, claim: claim, signature: EncodeSignatureAsDer(signature: claim.Signature.Span));
-
-        AssertRefused(reasonMustContain: "signature does not verify", result: result);
-    }
-    [Fact]
-    public void SignatureEncoding_ValidSignatureWithOneZeroByteAppended_IsRefused() {
-        var (codec, chain, trust, claim) = BuildFixture();
-
-        var result = VerifyWithSignature(codec: codec, chain: chain, trust: trust, claim: claim, signature: ((byte[])[.. claim.Signature.Span, 0x00]));
-
-        AssertRefused(reasonMustContain: "signature does not verify", result: result);
-    }
-    [Fact]
-    public void SignatureEncoding_ValidSignatureWithLastByteRemoved_IsRefused() {
-        var (codec, chain, trust, claim) = BuildFixture();
-
-        var result = VerifyWithSignature(codec: codec, chain: chain, trust: trust, claim: claim, signature: claim.Signature[..^1]);
-
-        AssertRefused(reasonMustContain: "signature does not verify", result: result);
-    }
-    [Fact]
-    public void SignatureEncoding_AllZeroSignatureOfTheRightLength_IsRefused() {
-        var (codec, chain, trust, claim) = BuildFixture();
-
-        var result = VerifyWithSignature(codec: codec, chain: chain, trust: trust, claim: claim, signature: new byte[claim.Signature.Length]);
-
-        AssertRefused(reasonMustContain: "signature does not verify", result: result);
+        Assert.Equal(
+            expected: "signingKey",
+            actual: exception.ParamName
+        );
+        Assert.Contains(
+            expectedSubstring: "curve",
+            actualString: exception.Message,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
     }
 }

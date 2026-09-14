@@ -238,6 +238,24 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        // Branding is SHAPE-only, and deliberately forgiving past that: the title is whatever the author wants in the
+        // caption bar, and the icon is a path the platform backend resolves against the world document at boot. An
+        // icon that does not exist, or that this OS cannot read, degrades to the executable's own icon rather than
+        // refusing — a world must never fail to open over its decoration. Whitespace, though, is always a typo.
+        if (
+            (host.Title is { } title) &&
+            string.IsNullOrWhiteSpace(value: title)
+        ) {
+            errors.Add(item: "host.title must be non-whitespace or null.");
+        }
+
+        if (
+            (host.Icon is { } icon) &&
+            string.IsNullOrWhiteSpace(value: icon)
+        ) {
+            errors.Add(item: "host.icon must be non-whitespace or null.");
+        }
+
         ValidateHostEndpoint(
             value: host.Authority,
             path: "host.authority",
@@ -324,7 +342,10 @@ public static partial class WorldDefinitionValidator {
         }
 
         try {
-            return WorldRuleCompiler.CompileAllInteractions(definition, context ??= WorldRuleCompiler.Context(definition));
+            return WorldRuleCompiler.CompileAllInteractions(
+                definition,
+                context ??= WorldRuleCompiler.Context(definition: definition)
+            );
         } catch (RuleException exception) {
             errors.Add(item: exception.Message);
             return [];
@@ -486,13 +507,19 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.mode '{rule.Mode}' is not a defined ActionTriggerMode.");
             }
 
-            if (rule.Effects is null || (rule.Effects.Count == 0 && rule.Decision is null)) {
+            if (
+                (rule.Effects is null) ||
+                ((rule.Effects.Count == 0) && (rule.Decision is null))
+            ) {
                 errors.Add(item: $"{path}.effects must be non-empty — a rule that does nothing is a rule nothing can read back.");
             }
         }
 
         try {
-            return WorldRuleCompiler.CompileAll(definition, context ??= WorldRuleCompiler.Context(definition));
+            return WorldRuleCompiler.CompileAll(
+                definition,
+                context ??= WorldRuleCompiler.Context(definition: definition)
+            );
         } catch (RuleException exception) {
             errors.Add(item: exception.Message);
             return [];
@@ -512,23 +539,36 @@ public static partial class WorldDefinitionValidator {
         return false;
     }
     private static void ValidateFields(WorldDefinition definition, List<string> errors) {
-        ValidateDiscreteState(definition, errors);
-        var physical = WorldTopologyCompilation.FindPhysical(definition.StateRaw);
-        var physicalCount = (definition.StateRaw?.Lattices ?? []).Count(t => t?.Kind == TopologyKind.Field);
-        if (physicalCount > 1) {
-            errors.Add("state.lattices admits at most one physical field topology.");
-        }
-        foreach (var row in definition.StateRaw?.World ?? []) {
-            if (row?.Field is not null) {
-                var topologyName = (row.EffectiveDomain is StateDomain.CellsOf cellsOf ? cellsOf.Topology : null);
+        ValidateDiscreteState(
+            definition: definition,
+            errors: errors
+        );
+        var physical = WorldTopologyCompilation.FindPhysical(state: definition.StateRaw);
+        var physicalCount = (definition.StateRaw?.Lattices ?? []).Count(predicate: t => (t?.Kind == TopologyKind.Field));
 
-                if (physical is null || topologyName != physical.Name) {
-                    errors.Add($"state row '{row.Name}' field domain.topology '{topologyName}' names no physical topology.");
+        if (physicalCount > 1) {
+            errors.Add(item: "state.lattices admits at most one physical field topology.");
+        }
+        foreach (var row in (definition.StateRaw?.World ?? [])) {
+            if (row?.Field is not null) {
+                var topologyName = ((row.EffectiveDomain is StateDomain.CellsOf cellsOf)
+                    ? cellsOf.Topology
+                    : null
+                );
+
+                if (
+                    (physical is null) ||
+                    (topologyName != physical.Name)
+                ) {
+                    errors.Add(item: $"state row '{row.Name}' field domain.topology '{topologyName}' names no physical topology.");
                 }
             }
         }
-        if (physical is not null && definition.Fields is { Fields.Count: 0 }) {
-            errors.Add($"state.lattices '{physical.Name}' is declared but no state row carries a field trait.");
+        if (
+            (physical is not null) &&
+            (definition.Fields is { Fields.Count: 0 })
+        ) {
+            errors.Add(item: $"state.lattices '{physical.Name}' is declared but no state row carries a field trait.");
         }
         if (definition.Fields is not { } fields) {
             return;
@@ -832,7 +872,10 @@ public static partial class WorldDefinitionValidator {
                                 );
                             }
 
-                            if ((conditions[c] is { } definedCondition) && !Enum.IsDefined(value: definedCondition.Comparison)) {
+                            if (
+                                (conditions[c] is { } definedCondition) &&
+                                !Enum.IsDefined(value: definedCondition.Comparison)
+                            ) {
                                 errors.Add(item: $"{path}.when[{c}].comparison '{definedCondition.Comparison}' is unknown.");
                             }
                         }
@@ -850,7 +893,10 @@ public static partial class WorldDefinitionValidator {
                                 );
                             }
 
-                            if ((writes[t] is { } definedWrite) && !Enum.IsDefined(value: definedWrite.Op)) {
+                            if (
+                                (writes[t] is { } definedWrite) &&
+                                !Enum.IsDefined(value: definedWrite.Op)
+                            ) {
                                 errors.Add(item: $"{path}.then[{t}].op '{definedWrite.Op}' is unknown.");
                             }
                         }
@@ -914,9 +960,16 @@ public static partial class WorldDefinitionValidator {
                                 path: overPath
                             );
 
-                            if (string.Equals(a: over[o], b: flow.Field, comparisonType: StringComparison.Ordinal)) {
+                            if (string.Equals(
+                                a: over[o],
+                                b: flow.Field,
+                                comparisonType: StringComparison.Ordinal
+                            )) {
                                 errors.Add(item: $"{overPath} names '{over[o]}', the field flow itself transports; the field's own value already contributes without repeating it in over.");
-                            } else if ((over[o] is { } overName) && !overNames.Add(item: overName)) {
+                            } else if (
+                                (over[o] is { } overName) &&
+                                !overNames.Add(item: overName)
+                            ) {
                                 errors.Add(item: $"{overPath} names '{over[o]}', duplicated within over.");
                             }
                         }
@@ -986,7 +1039,10 @@ public static partial class WorldDefinitionValidator {
                     if (noise.Frequency < 1) {
                         errors.Add(item: $"{path}.frequency must be at least 1 (noise-cell edge in lattice cells; was {noise.Frequency}).");
                     }
-                    if ((noise.Octaves < 1) || (noise.Octaves > 4)) {
+                    if (
+                        (noise.Octaves < 1) ||
+                        (noise.Octaves > 4)
+                    ) {
                         errors.Add(item: $"{path}.octaves must be in 1..4 (was {noise.Octaves}).");
                     }
 
@@ -998,7 +1054,10 @@ public static partial class WorldDefinitionValidator {
 
                     if (!GeneratorEngine.TryResolveSource(
                         generators: definition.Generators,
-                        draw: new Draw(Source: draw.Source, Generator: draw.Generator),
+                        draw: new Draw(
+                            Source: draw.Source,
+                            Generator: draw.Generator
+                        ),
                         generator: out var drawSource,
                         reason: out var drawReason
                     )) {
@@ -1039,11 +1098,11 @@ public static partial class WorldDefinitionValidator {
                     if (
                         (latticeSamples > 0L) &&
                         !GeneratorEngine.TryCheckBatchCapacity(
-                            generator: drawSource,
-                            masks: drawnMasks,
-                            sampleCount: latticeSamples,
-                            reason: out var batchReason
-                        )
+                        generator: drawSource,
+                        masks: drawnMasks,
+                        reason: out var batchReason,
+                        sampleCount: latticeSamples
+                    )
                     ) {
                         errors.Add(item: $"{path} {batchReason}.");
                     }
@@ -1056,7 +1115,10 @@ public static partial class WorldDefinitionValidator {
                     if (scatter.Spacing < 2) {
                         errors.Add(item: $"{path}.spacing must be at least 2 cells (was {scatter.Spacing}).");
                     }
-                    if ((scatter.Radius < 1) || ((2 * scatter.Radius) > scatter.Spacing)) {
+                    if (
+                        (scatter.Radius < 1) ||
+                        ((2 * scatter.Radius) > scatter.Spacing)
+                    ) {
                         errors.Add(item: $"{path}.radius must be at least 1 and at most spacing/2 (a disc never leaves its block; was {scatter.Radius} against spacing {scatter.Spacing}).");
                     }
 

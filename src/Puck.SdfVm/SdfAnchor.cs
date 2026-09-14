@@ -86,7 +86,10 @@ public sealed class SdfAnchorTable : ISdfAnchorSource {
     public int Publish(string name, in SdfAnchor pose) {
         ArgumentNullException.ThrowIfNull(name);
 
-        if (!m_idsByName.TryGetValue(key: name, value: out var id)) {
+        if (!m_idsByName.TryGetValue(
+            key: name,
+            value: out var id
+        )) {
             id = m_poses.Count;
             m_idsByName[name] = id;
             m_poses.Add(item: pose);
@@ -100,6 +103,22 @@ public sealed class SdfAnchorTable : ISdfAnchorSource {
 
         return id;
     }
+    /// <inheritdoc/>
+    public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
+        if (
+            (anchorId < 0) ||
+            (anchorId >= m_poses.Count) ||
+            !m_live[anchorId]
+        ) {
+            anchor = default;
+
+            return false;
+        }
+
+        anchor = m_poses[anchorId];
+
+        return true;
+    }
     /// <summary>Resolves a published name to its stable id, without requiring the caller to know the pose (a rig
     /// binding a camera to <c>"player.0"</c> once at setup, then resolving the pose every frame through
     /// <see cref="TryResolveAnchor"/>).</summary>
@@ -111,18 +130,9 @@ public sealed class SdfAnchorTable : ISdfAnchorSource {
     public bool TryResolveId(string name, out int anchorId) {
         ArgumentNullException.ThrowIfNull(name);
 
-        return m_idsByName.TryGetValue(key: name, value: out anchorId);
-    }
-    /// <inheritdoc/>
-    public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
-        if ((anchorId < 0) || (anchorId >= m_poses.Count) || !m_live[anchorId]) {
-            anchor = default;
-
-            return false;
-        }
-
-        anchor = m_poses[anchorId];
-
-        return true;
+        return m_idsByName.TryGetValue(
+            key: name,
+            value: out anchorId
+        );
     }
 }

@@ -30,10 +30,10 @@ public enum SeatLookBehavior : byte {
 /// <param name="Value">The quantized look pair, with positive X right and positive Y up.</param>
 /// <param name="Behavior">How horizontal look affects body facing.</param>
 public readonly record struct SeatLookSample(FixedVector2 Value, SeatLookBehavior Behavior) {
-    /// <summary>Gets a value indicating whether either look axis is active.</summary>
-    public bool IsActive => ((Value.X != FixedQ4816.Zero) || (Value.Y != FixedQ4816.Zero));
     /// <summary>Gets a value indicating whether horizontal look faces the body.</summary>
     public bool FacesBody => ((Behavior == SeatLookBehavior.FaceBody) && (Value.X != FixedQ4816.Zero));
+    /// <summary>Gets a value indicating whether either look axis is active.</summary>
+    public bool IsActive => ((Value.X != FixedQ4816.Zero) || (Value.Y != FixedQ4816.Zero));
 }
 /// <summary>
 /// One local seat's device-intent producer: held channel contributions, analog sticks, and toggled motion samples —
@@ -49,13 +49,13 @@ public sealed class SeatController {
     private static readonly FixedQ4816 NegativeOne = -FixedQ4816.One;
 
     private SeatLookSample m_look;
-    // The analog producer's latest sample, routed from this tick's snapshot. InputRouter re-dispatches a carried analog
-    // value every tick; ClearAnalog wipes this local staging state after the tick so only snapshot input can refill it.
-    private SeatMoveSample m_move;
     // Presentation-only angular velocity from the seat's motion-input lane. Kept as the provider-neutral physical
     // sample (radians/second in the shared gamepad frame); WorldClient alone maps it to semantic look axes. Like the
     // sticks, it is consume-then-clear so a stopped/disconnected sensor cannot leave a stale turn behind.
     private Vector3 m_motionAngularVelocity;
+    // The analog producer's latest sample, routed from this tick's snapshot. InputRouter re-dispatches a carried analog
+    // value every tick; ClearAnalog wipes this local staging state after the tick so only snapshot input can refill it.
+    private SeatMoveSample m_move;
 
     // The device-image fold primitive per channel ordinal: base zero, contributions are (control value × scale), no
     // pool, accumulate in RAW Int64 and clamp EXACTLY ONCE at the end. A saturating clamp per contribution is
@@ -80,106 +80,11 @@ public sealed class SeatController {
     /// <summary>The seat-lifetime logical view state shared by input, movement, every renderer, and read-back.</summary>
     public WorldSeatViewState View { get; } = new();
 
-    /// <summary>Gets a value indicating whether <c>player.orbit</c> is held: pointer motion orbits the camera.</summary>
-    public bool Orbiting { get; private set; }
-    /// <summary>Whether any movement input is live this tick — a held row on a role ordinal or a deflected movement
-    /// stick. A cheap read (no fold) for gates such as the follow camera's; <see cref="HeldIntent"/> is the fold.</summary>
-    public bool MovementHeld {
-        get {
-            if (m_move.IsActive) {
-                return true;
-            }
-
-            foreach (var (key, _) in m_heldControls) {
-                if (m_channels.IsRole(ordinal: key.Ordinal)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-    }
     /// <summary>The camera yaw a movement-facing stick or camera-framed channel row is composed against — latched
     /// when that movement begins and held until it stops. The action-strafe stick deliberately bypasses this latch
     /// and follows live look yaw. <see langword="null"/> while no latched producer moves. Presentation-side
     /// composition state, like the camera itself.</summary>
     public float? CameraFrameYaw { get; set; }
-    /// <summary>Gets a value indicating whether <c>player.look.recenter</c> is held: the camera is driven round
-    /// behind the body every tick, so it stays there while the body turns.</summary>
-    public bool Recentering { get; private set; }
-    /// <summary>Gets a value indicating whether the seat's motion-control mode is toggled on. This is the generic
-    /// gate for sensor input; gyro look is its first consumer, while orientation/tilt movement can share the mode.</summary>
-    public bool MotionControlsActive { get; private set; }
-    /// <summary>This tick's provider-neutral angular velocity in radians per second. The gamepad frame is +X right,
-    /// +Y up, +Z back; the camera adapter maps it to semantic look directions.</summary>
-    public Vector3 MotionAngularVelocity => m_motionAngularVelocity;
-    /// <summary>Whether this tick's Axis2D look sample carries horizontal input that faces the body along the camera's
-    /// logical yaw. A held <see cref="FreeLooking"/> modifier suppresses it at read time, making chord/look dispatch
-    /// order irrelevant.</summary>
-    public bool LookFacesBody => (m_look.FacesBody && !FreeLooking);
-    /// <summary>Whether the held free-look modifier is active. Camera look continues, but right-stick yaw does not
-    /// write body heading and left-stick movement remains relative to authoritative heading until release.</summary>
-    public bool FreeLooking { get; private set; }
-    /// <summary>Gets a value indicating whether <c>player.steer</c> is held: pointer motion orbits the camera and the
-    /// body faces where it looks (the seat composes the camera facing into the Face roles).</summary>
-    public bool PointerSteering { get; private set; }
-
-    /// <summary>Sets the <c>player.orbit</c> hold.</summary>
-    /// <param name="held">Whether the command is held.</param>
-    public void SetOrbit(bool held) {
-        Orbiting = held;
-    }
-    /// <summary>Sets the <c>player.look.recenter</c> hold.</summary>
-    /// <param name="held">Whether the command is held.</param>
-    public void SetRecenter(bool held) {
-        Recentering = held;
-    }
-    /// <summary>Sets the held right-stick free-look modifier.</summary>
-    /// <param name="held">Whether free look is active.</param>
-    public void SetFreeLook(bool held) {
-        FreeLooking = held;
-    }
-    /// <summary>Sets the generic motion-control mode. Disabling it immediately drops the last sensor sample.</summary>
-    /// <param name="active">Whether motion controls are active.</param>
-    public void SetMotionControls(bool active) {
-        MotionControlsActive = active;
-
-        if (!active) {
-            m_motionAngularVelocity = Vector3.Zero;
-        }
-    }
-    /// <summary>Toggles the generic motion-control mode and returns its new state.</summary>
-    /// <returns><see langword="true"/> when motion controls are now active.</returns>
-    public bool ToggleMotionControls() {
-        SetMotionControls(active: !MotionControlsActive);
-
-        return MotionControlsActive;
-    }
-    /// <summary>Feeds the current angular-velocity sensor sample. Samples are accepted only while motion controls
-    /// are toggled on, so background sensor noise cannot alter a seat that is using ordinary controls.</summary>
-    /// <param name="angularVelocity">Provider-neutral radians per second.</param>
-    public void SetMotionAngularVelocity(Vector3 angularVelocity) {
-        if (
-            MotionControlsActive &&
-            float.IsFinite(f: angularVelocity.X) &&
-            float.IsFinite(f: angularVelocity.Y) &&
-            float.IsFinite(f: angularVelocity.Z)
-        ) {
-            m_motionAngularVelocity = angularVelocity;
-        }
-    }
-    /// <summary>Sets the <c>player.steer</c> hold.</summary>
-    /// <param name="held">Whether the command is held.</param>
-    public void SetSteer(bool held) {
-        PointerSteering = held;
-    }
-
-    /// <summary>Gets this tick's typed look sample; zero after <see cref="ClearAnalog"/> until routed input refills
-    /// it.</summary>
-    public SeatLookSample Look => m_look;
-    /// <summary>Gets this tick's typed movement sample, already quantized at the router boundary. It is zero after
-    /// <see cref="ClearAnalog"/> until routed input refills it; <c>player.sticks</c> is the only float echo.</summary>
-    public SeatMoveSample Move => m_move;
     /// <summary>The world's declared channel table — resolves each composition ordinal's shape for
     /// <see cref="HeldChannels"/>'s end clamp. Set once by the roster from the same table the server compiled
     /// (<c>WorldServer.Population.Channels</c>); <see langword="null"/> is normalized to
@@ -188,6 +93,9 @@ public sealed class SeatController {
         get => m_channels;
         set => m_channels = (value ?? WorldChannelTable.Empty);
     }
+    /// <summary>Whether the held free-look modifier is active. Camera look continues, but right-stick yaw does not
+    /// write body heading and left-stick movement remains relative to authoritative heading until release.</summary>
+    public bool FreeLooking { get; private set; }
     /// <summary>This tick's live-held device-channel image, submitted alongside <see cref="HeldIntent"/> — derived
     /// from the SAME held-control set <see cref="HeldIntent"/> reads, restricted to non-role ordinals; movement roles
     /// ride <see cref="HeldIntent"/> directly, never this image. Every held control's contribution to
@@ -249,9 +157,50 @@ public sealed class SeatController {
             return new PlayerIntent(Channels: channels);
         }
     }
+    /// <summary>Gets this tick's typed look sample; zero after <see cref="ClearAnalog"/> until routed input refills
+    /// it.</summary>
+    public SeatLookSample Look => m_look;
+    /// <summary>Whether this tick's Axis2D look sample carries horizontal input that faces the body along the camera's
+    /// logical yaw. A held <see cref="FreeLooking"/> modifier suppresses it at read time, making chord/look dispatch
+    /// order irrelevant.</summary>
+    public bool LookFacesBody => (m_look.FacesBody && !FreeLooking);
+    /// <summary>This tick's provider-neutral angular velocity in radians per second. The gamepad frame is +X right,
+    /// +Y up, +Z back; the camera adapter maps it to semantic look directions.</summary>
+    public Vector3 MotionAngularVelocity => m_motionAngularVelocity;
+    /// <summary>Gets a value indicating whether the seat's motion-control mode is toggled on. This is the generic
+    /// gate for sensor input; gyro look is its first consumer, while orientation/tilt movement can share the mode.</summary>
+    public bool MotionControlsActive { get; private set; }
+    /// <summary>Gets this tick's typed movement sample, already quantized at the router boundary. It is zero after
+    /// <see cref="ClearAnalog"/> until routed input refills it; <c>player.sticks</c> is the only float echo.</summary>
+    public SeatMoveSample Move => m_move;
+    /// <summary>Whether any movement input is live this tick — a held row on a role ordinal or a deflected movement
+    /// stick. A cheap read (no fold) for gates such as the follow camera's; <see cref="HeldIntent"/> is the fold.</summary>
+    public bool MovementHeld {
+        get {
+            if (m_move.IsActive) {
+                return true;
+            }
+
+            foreach (var (key, _) in m_heldControls) {
+                if (m_channels.IsRole(ordinal: key.Ordinal)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+    /// <summary>Gets a value indicating whether <c>player.orbit</c> is held: pointer motion orbits the camera.</summary>
+    public bool Orbiting { get; private set; }
+    /// <summary>Gets a value indicating whether <c>player.steer</c> is held: pointer motion orbits the camera and the
+    /// body faces where it looks (the seat composes the camera facing into the Face roles).</summary>
+    public bool PointerSteering { get; private set; }
     /// <summary>The profile this seat selects — the client-side identity (color and look-invert). The server body holds
     /// its own reference for speeds, assigned over the session wire.</summary>
     public WorldIdentity? Profile { get; set; }
+    /// <summary>Gets a value indicating whether <c>player.look.recenter</c> is held: the camera is driven round
+    /// behind the body every tick, so it stays there while the body turns.</summary>
+    public bool Recentering { get; private set; }
     /// <summary>The seat's client-side intent-source copy (matches the server body's; both are written by
     /// <c>body.control</c>).</summary>
     public IntentSource Source => m_source;
@@ -401,6 +350,11 @@ public sealed class SeatController {
             Value: move
         );
     }
+    /// <summary>Sets the held right-stick free-look modifier.</summary>
+    /// <param name="held">Whether free look is active.</param>
+    public void SetFreeLook(bool held) {
+        FreeLooking = held;
+    }
     /// <summary>Sets the client-side intent-source copy — <c>body.control</c>'s seat half (the server body's axis is
     /// written by the same command). A transition drops the live device holds via <see cref="ReleaseAllHeld"/>, so
     /// nothing leaks through a source switch or bursts when Live returns. A no-op if the source is unchanged.</summary>
@@ -412,5 +366,49 @@ public sealed class SeatController {
 
         m_source = source;
         ReleaseAllHeld();
+    }
+    /// <summary>Feeds the current angular-velocity sensor sample. Samples are accepted only while motion controls
+    /// are toggled on, so background sensor noise cannot alter a seat that is using ordinary controls.</summary>
+    /// <param name="angularVelocity">Provider-neutral radians per second.</param>
+    public void SetMotionAngularVelocity(Vector3 angularVelocity) {
+        if (
+            MotionControlsActive &&
+            float.IsFinite(f: angularVelocity.X) &&
+            float.IsFinite(f: angularVelocity.Y) &&
+            float.IsFinite(f: angularVelocity.Z)
+        ) {
+            m_motionAngularVelocity = angularVelocity;
+        }
+    }
+    /// <summary>Sets the generic motion-control mode. Disabling it immediately drops the last sensor sample.</summary>
+    /// <param name="active">Whether motion controls are active.</param>
+    public void SetMotionControls(bool active) {
+        MotionControlsActive = active;
+
+        if (!active) {
+            m_motionAngularVelocity = Vector3.Zero;
+        }
+    }
+    /// <summary>Sets the <c>player.orbit</c> hold.</summary>
+    /// <param name="held">Whether the command is held.</param>
+    public void SetOrbit(bool held) {
+        Orbiting = held;
+    }
+    /// <summary>Sets the <c>player.look.recenter</c> hold.</summary>
+    /// <param name="held">Whether the command is held.</param>
+    public void SetRecenter(bool held) {
+        Recentering = held;
+    }
+    /// <summary>Sets the <c>player.steer</c> hold.</summary>
+    /// <param name="held">Whether the command is held.</param>
+    public void SetSteer(bool held) {
+        PointerSteering = held;
+    }
+    /// <summary>Toggles the generic motion-control mode and returns its new state.</summary>
+    /// <returns><see langword="true"/> when motion controls are now active.</returns>
+    public bool ToggleMotionControls() {
+        SetMotionControls(active: !MotionControlsActive);
+
+        return MotionControlsActive;
     }
 }

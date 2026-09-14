@@ -8,9 +8,13 @@ public static class WorldCapabilityRequests {
     /// <param name="subject">The concrete subject.</param>
     public static bool Contains(IReadOnlyList<WorldCapabilityRequest>? requests, WorldCapability capability, GrantSubject subject) {
         if (requests is null) { return false; }
-        for (var index = 0; index < requests.Count; index++) {
+        for (var index = 0; (index < requests.Count); index++) {
             var request = requests[index];
-            if (request.Capability == capability && (request.Subject == subject || request.Subject.Kind == GrantSubjectKind.All)) {
+
+            if (
+                (request.Capability == capability) &&
+                ((request.Subject == subject) || (request.Subject.Kind == GrantSubjectKind.All))
+            ) {
                 return true;
             }
         }

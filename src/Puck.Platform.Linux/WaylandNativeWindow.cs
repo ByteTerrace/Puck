@@ -20,26 +20,26 @@ internal sealed unsafe class WaylandNativeWindow : INativeWindow, IWindowInputSo
 
     private static readonly Lock ListenerLock = new();
 
+    private static bool ListenersBuilt;
     private static nint RegistryListener;
+    private static nint ToplevelListener;
     private static nint WmBaseListener;
     private static nint XdgSurfaceListener;
-    private static nint ToplevelListener;
-    private static bool ListenersBuilt;
 
     private readonly NativeWindowOptions m_options;
 
-    private GCHandle m_selfHandle;
     private nint m_compositor;
     private nint m_display;
-    private nint m_registry;
-    private nint m_surface;
-    private nint m_toplevel;
-    private nint m_wmBase;
-    private nint m_xdgSurface;
     private bool m_disposed;
     private bool m_hasPainted;
     private bool m_isOpen = true;
     private bool m_isVisible;
+    private nint m_registry;
+    private GCHandle m_selfHandle;
+    private nint m_surface;
+    private nint m_toplevel;
+    private nint m_wmBase;
+    private nint m_xdgSurface;
 
     public WaylandNativeWindow(IOptions<NativeWindowOptions> options) {
         ArgumentNullException.ThrowIfNull(options);
@@ -117,6 +117,202 @@ internal sealed unsafe class WaylandNativeWindow : INativeWindow, IWindowInputSo
     public string Title => m_options.Title;
     public uint Width { get; private set; }
 
+    private void ApplyTitleAndAppId() {
+        var titlePointer = Marshal.StringToCoTaskMemUTF8(s: m_options.Title);
+        var appIdPointer = Marshal.StringToCoTaskMemUTF8(s: m_options.Title);
+
+        try {
+            WaylandClient.SetToplevelTitle(
+                titleUtf8: titlePointer,
+                toplevel: m_toplevel
+            );
+            WaylandClient.SetToplevelAppId(
+                appIdUtf8: appIdPointer,
+                toplevel: m_toplevel
+            );
+        } finally {
+            Marshal.FreeCoTaskMem(ptr: titlePointer);
+            Marshal.FreeCoTaskMem(ptr: appIdPointer);
+        }
+    }
+    private static nint BuildListener(ReadOnlySpan<nint> functionPointers) {
+        var block = Marshal.AllocHGlobal(cb: (IntPtr.Size * functionPointers.Length));
+
+        for (var index = 0; (index < functionPointers.Length); index++) {
+            Marshal.WriteIntPtr(
+                ofs: (index * IntPtr.Size),
+                ptr: block,
+                val: functionPointers[index]
+            );
+        }
+
+        return block;
+    }
+    private void DisposeInternal() {
+        if (m_toplevel != 0) {
+            WaylandClient.DestroyToplevel(toplevel: m_toplevel);
+            m_toplevel = 0;
+        }
+
+        if (m_xdgSurface != 0) {
+            WaylandClient.DestroyXdgSurface(xdgSurface: m_xdgSurface);
+            m_xdgSurface = 0;
+        }
+
+        if (m_surface != 0) {
+            WaylandClient.DestroySurface(surface: m_surface);
+            m_surface = 0;
+        }
+
+        if (m_wmBase != 0) {
+            WaylandClient.DestroyWmBase(wmBase: m_wmBase);
+            m_wmBase = 0;
+        }
+
+        if (m_registry != 0) {
+            WaylandClient.wl_proxy_destroy(proxy: m_registry);
+            m_registry = 0;
+        }
+
+        if (m_display != 0) {
+            WaylandClient.wl_display_disconnect(display: m_display);
+            m_display = 0;
+        }
+
+        FreeSelfHandle();
+        m_isOpen = false;
+        m_isVisible = false;
+    }
+    private static void EnsureListenersBuilt() {
+        lock (ListenerLock) {
+            if (ListenersBuilt) {
+                return;
+            }
+
+            RegistryListener = BuildListener(functionPointers: [
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, void>)&RegistryGlobal)),
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, void>)&RegistryGlobalRemove))
+            ]);
+            WmBaseListener = BuildListener(functionPointers: [
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, void>)&WmBasePing))
+            ]);
+            XdgSurfaceListener = BuildListener(functionPointers: [
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, void>)&XdgSurfaceConfigure))
+            ]);
+            ToplevelListener = BuildListener(functionPointers: [
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, int, int, nint, void>)&ToplevelConfigure)),
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, void>)&ToplevelClose))
+            ]);
+            ListenersBuilt = true;
+        }
+    }
+    private void FreeSelfHandle() {
+        if (m_selfHandle.IsAllocated) {
+            m_selfHandle.Free();
+        }
+    }
+    private static WaylandNativeWindow? FromData(nint data) {
+        if (data == 0) {
+            return null;
+        }
+
+        return (GCHandle.FromIntPtr(value: data).Target as WaylandNativeWindow);
+    }
+    private void OnRegistryGlobal(uint name, nint interfaceName, uint version) {
+        var interfaceText = Marshal.PtrToStringUTF8(ptr: interfaceName);
+
+        if (interfaceText == "wl_compositor") {
+            m_compositor = WaylandClient.Bind(
+                interfacePointer: WaylandClient.CompositorInterface,
+                name: name,
+                registry: m_registry,
+                version: Math.Min(
+                    val1: version,
+                    val2: WlCompositorMaxVersion
+                )
+            );
+            return;
+        }
+
+        if (interfaceText == "xdg_wm_base") {
+            m_wmBase = WaylandClient.Bind(
+                interfacePointer: WaylandClient.XdgWmBaseInterface,
+                name: name,
+                registry: m_registry,
+                version: Math.Min(
+                    val1: version,
+                    val2: XdgWmBaseMaxVersion
+                )
+            );
+        }
+    }
+    private void OnToplevelClose() {
+        m_isOpen = false;
+        m_isVisible = false;
+    }
+    private void OnToplevelConfigure(int width, int height) {
+        if (
+            (width <= 0) ||
+            (height <= 0)
+        ) {
+            return;
+        }
+
+        if (
+            (((uint)width) != Width) ||
+            (((uint)height) != Height)
+        ) {
+            Width = ((uint)width);
+            Height = ((uint)height);
+            ResizeCount++;
+        }
+    }
+    private void OnWmBasePing(uint serial) {
+        WaylandClient.Pong(
+            serial: serial,
+            wmBase: m_wmBase
+        );
+    }
+    private void OnXdgSurfaceConfigure(uint serial) {
+        WaylandClient.AckConfigure(
+            serial: serial,
+            xdgSurface: m_xdgSurface
+        );
+        m_hasPainted = true;
+        m_isVisible = true;
+        WaylandClient.Commit(surface: m_surface);
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void RegistryGlobal(nint data, nint registry, uint name, nint interfaceName, uint version) {
+        FromData(data: data)?.OnRegistryGlobal(
+            interfaceName: interfaceName,
+            name: name,
+            version: version
+        );
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void RegistryGlobalRemove(nint data, nint registry, uint name) {
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void ToplevelClose(nint data, nint toplevel) {
+        FromData(data: data)?.OnToplevelClose();
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void ToplevelConfigure(nint data, nint toplevel, int width, int height, nint states) {
+        FromData(data: data)?.OnToplevelConfigure(
+            height: height,
+            width: width
+        );
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void WmBasePing(nint data, nint wmBase, uint serial) {
+        FromData(data: data)?.OnWmBasePing(serial: serial);
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void XdgSurfaceConfigure(nint data, nint xdgSurface, uint serial) {
+        FromData(data: data)?.OnXdgSurfaceConfigure(serial: serial);
+    }
+
     public void Close() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -179,201 +375,5 @@ internal sealed unsafe class WaylandNativeWindow : INativeWindow, IWindowInputSo
 
         inputEvent = default;
         return false;
-    }
-
-    private void ApplyTitleAndAppId() {
-        var titlePointer = Marshal.StringToCoTaskMemUTF8(s: m_options.Title);
-        var appIdPointer = Marshal.StringToCoTaskMemUTF8(s: m_options.Title);
-
-        try {
-            WaylandClient.SetToplevelTitle(
-                titleUtf8: titlePointer,
-                toplevel: m_toplevel
-            );
-            WaylandClient.SetToplevelAppId(
-                appIdUtf8: appIdPointer,
-                toplevel: m_toplevel
-            );
-        } finally {
-            Marshal.FreeCoTaskMem(ptr: titlePointer);
-            Marshal.FreeCoTaskMem(ptr: appIdPointer);
-        }
-    }
-    private void DisposeInternal() {
-        if (m_toplevel != 0) {
-            WaylandClient.DestroyToplevel(toplevel: m_toplevel);
-            m_toplevel = 0;
-        }
-
-        if (m_xdgSurface != 0) {
-            WaylandClient.DestroyXdgSurface(xdgSurface: m_xdgSurface);
-            m_xdgSurface = 0;
-        }
-
-        if (m_surface != 0) {
-            WaylandClient.DestroySurface(surface: m_surface);
-            m_surface = 0;
-        }
-
-        if (m_wmBase != 0) {
-            WaylandClient.DestroyWmBase(wmBase: m_wmBase);
-            m_wmBase = 0;
-        }
-
-        if (m_registry != 0) {
-            WaylandClient.wl_proxy_destroy(proxy: m_registry);
-            m_registry = 0;
-        }
-
-        if (m_display != 0) {
-            WaylandClient.wl_display_disconnect(display: m_display);
-            m_display = 0;
-        }
-
-        FreeSelfHandle();
-        m_isOpen = false;
-        m_isVisible = false;
-    }
-    private void FreeSelfHandle() {
-        if (m_selfHandle.IsAllocated) {
-            m_selfHandle.Free();
-        }
-    }
-    private void OnRegistryGlobal(uint name, nint interfaceName, uint version) {
-        var interfaceText = Marshal.PtrToStringUTF8(ptr: interfaceName);
-
-        if (interfaceText == "wl_compositor") {
-            m_compositor = WaylandClient.Bind(
-                interfacePointer: WaylandClient.CompositorInterface,
-                name: name,
-                registry: m_registry,
-                version: Math.Min(
-                    val1: version,
-                    val2: WlCompositorMaxVersion
-                )
-            );
-            return;
-        }
-
-        if (interfaceText == "xdg_wm_base") {
-            m_wmBase = WaylandClient.Bind(
-                interfacePointer: WaylandClient.XdgWmBaseInterface,
-                name: name,
-                registry: m_registry,
-                version: Math.Min(
-                    val1: version,
-                    val2: XdgWmBaseMaxVersion
-                )
-            );
-        }
-    }
-    private void OnWmBasePing(uint serial) {
-        WaylandClient.Pong(
-            serial: serial,
-            wmBase: m_wmBase
-        );
-    }
-    private void OnXdgSurfaceConfigure(uint serial) {
-        WaylandClient.AckConfigure(
-            serial: serial,
-            xdgSurface: m_xdgSurface
-        );
-        m_hasPainted = true;
-        m_isVisible = true;
-        WaylandClient.Commit(surface: m_surface);
-    }
-    private void OnToplevelConfigure(int width, int height) {
-        if (
-            (width <= 0) ||
-            (height <= 0)
-        ) {
-            return;
-        }
-
-        if (
-            (((uint)width) != Width) ||
-            (((uint)height) != Height)
-        ) {
-            Width = ((uint)width);
-            Height = ((uint)height);
-            ResizeCount++;
-        }
-    }
-    private void OnToplevelClose() {
-        m_isOpen = false;
-        m_isVisible = false;
-    }
-    private static WaylandNativeWindow? FromData(nint data) {
-        if (data == 0) {
-            return null;
-        }
-
-        return (GCHandle.FromIntPtr(value: data).Target as WaylandNativeWindow);
-    }
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void RegistryGlobal(nint data, nint registry, uint name, nint interfaceName, uint version) {
-        FromData(data: data)?.OnRegistryGlobal(
-            interfaceName: interfaceName,
-            name: name,
-            version: version
-        );
-    }
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void RegistryGlobalRemove(nint data, nint registry, uint name) {
-    }
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void WmBasePing(nint data, nint wmBase, uint serial) {
-        FromData(data: data)?.OnWmBasePing(serial: serial);
-    }
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void XdgSurfaceConfigure(nint data, nint xdgSurface, uint serial) {
-        FromData(data: data)?.OnXdgSurfaceConfigure(serial: serial);
-    }
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void ToplevelConfigure(nint data, nint toplevel, int width, int height, nint states) {
-        FromData(data: data)?.OnToplevelConfigure(
-            height: height,
-            width: width
-        );
-    }
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void ToplevelClose(nint data, nint toplevel) {
-        FromData(data: data)?.OnToplevelClose();
-    }
-    private static void EnsureListenersBuilt() {
-        lock (ListenerLock) {
-            if (ListenersBuilt) {
-                return;
-            }
-
-            RegistryListener = BuildListener(functionPointers: [
-                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, void>)&RegistryGlobal)),
-                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, void>)&RegistryGlobalRemove))
-            ]);
-            WmBaseListener = BuildListener(functionPointers: [
-                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, void>)&WmBasePing))
-            ]);
-            XdgSurfaceListener = BuildListener(functionPointers: [
-                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, void>)&XdgSurfaceConfigure))
-            ]);
-            ToplevelListener = BuildListener(functionPointers: [
-                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, int, int, nint, void>)&ToplevelConfigure)),
-                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, void>)&ToplevelClose))
-            ]);
-            ListenersBuilt = true;
-        }
-    }
-    private static nint BuildListener(ReadOnlySpan<nint> functionPointers) {
-        var block = Marshal.AllocHGlobal(cb: (IntPtr.Size * functionPointers.Length));
-
-        for (var index = 0; (index < functionPointers.Length); index++) {
-            Marshal.WriteIntPtr(
-                ofs: (index * IntPtr.Size),
-                ptr: block,
-                val: functionPointers[index]
-            );
-        }
-
-        return block;
     }
 }

@@ -1300,9 +1300,9 @@ internal static partial class Subjects {
 
         foreach (var value in values) {
             largest = Math.Max(
-            val1: largest,
-            val2: value
-        );
+                val1: largest,
+                val2: value
+            );
         }
 
         return largest;

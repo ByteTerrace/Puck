@@ -2,8 +2,7 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace Puck.Azure.Functions;
 
-public readonly struct ProtectedToken
-{
+public readonly struct ProtectedToken {
     private const string Purpose = "users.tokens";
 
     public static ProtectedToken FromJwt(
@@ -16,14 +15,25 @@ public readonly struct ProtectedToken
             tokenDiscriminator: tokenDiscriminator,
             value: dataProtectionProvider
                 .CreateProtector(
-                    purpose: Purpose,
-                    subPurposes: [
+                purpose: Purpose,
+                subPurposes: [
                         tokenDiscriminator.ObjectId,
                         tokenDiscriminator.ToBase64String(),
                     ]
-                )
+            )
                 .Protect(plaintext: accessToken!)
         );
+    }
+    public string Unprotect(IDataProtectionProvider dataProtectionProvider) {
+        return dataProtectionProvider
+            .CreateProtector(
+            purpose: Purpose,
+            subPurposes: [
+                    TokenDiscriminator.ObjectId,
+                    TokenDiscriminator.ToBase64String(),
+                ]
+        )
+            .Unprotect(protectedData: Value);
     }
 
     public TokenDiscriminator TokenDiscriminator { get; }
@@ -35,18 +45,6 @@ public readonly struct ProtectedToken
     ) {
         TokenDiscriminator = tokenDiscriminator;
         Value = value;
-    }
-
-    public string Unprotect(IDataProtectionProvider dataProtectionProvider) {
-        return dataProtectionProvider
-            .CreateProtector(
-                purpose: Purpose,
-                subPurposes: [
-                    TokenDiscriminator.ObjectId,
-                    TokenDiscriminator.ToBase64String(),
-                ]
-            )
-            .Unprotect(protectedData: Value);
     }
 }
 

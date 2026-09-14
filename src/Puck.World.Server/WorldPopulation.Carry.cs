@@ -15,14 +15,14 @@ public sealed partial class WorldPopulation {
     /// <param name="reason">The refusal, by name, on failure; empty on success.</param>
     public bool TryBeginCarry(int carrierIndex, int targetIndex, out string reason) {
         if (
-            ((uint)carrierIndex >= (uint)Capacity) ||
+            (((uint)carrierIndex) >= ((uint)Capacity)) ||
             (m_entries[carrierIndex] is not { Active: true, Body: { } carrier })
         ) {
             reason = $"body:{carrierIndex} is not active";
             return false;
         }
         if (
-            ((uint)targetIndex >= (uint)Capacity) ||
+            (((uint)targetIndex) >= ((uint)Capacity)) ||
             (m_entries[targetIndex] is not { Active: true, Body: { } target })
         ) {
             reason = $"body:{targetIndex} is not active";
@@ -30,18 +30,20 @@ public sealed partial class WorldPopulation {
         }
 
         if (!carrier.TryBeginCarry(
-            target: target,
-            targetIndex: targetIndex,
+            reason: out reason,
             selfIndex: carrierIndex,
-            reason: out reason
+            target: target,
+            targetIndex: targetIndex
         )) {
             return false;
         }
 
-        RegisterCarry(carrierIndex: carrierIndex, targetIndex: targetIndex);
+        RegisterCarry(
+            carrierIndex: carrierIndex,
+            targetIndex: targetIndex
+        );
         return true;
     }
-
     /// <summary>Ends <paramref name="carrierIndex"/>'s active carry, handing the target back to the rigid solver
     /// with the carrier's own current velocity — see <see cref="WorldBody.EndCarry"/>.</summary>
     /// <param name="carrierIndex">The carrier's population index.</param>
@@ -49,7 +51,7 @@ public sealed partial class WorldPopulation {
     /// empty on success.</param>
     public bool TryEndCarry(int carrierIndex, out string reason) {
         if (
-            ((uint)carrierIndex >= (uint)Capacity) ||
+            (((uint)carrierIndex) >= ((uint)Capacity)) ||
             (m_entries[carrierIndex] is not { Active: true, Body: { } carrier })
         ) {
             reason = $"body:{carrierIndex} is not active";
@@ -68,7 +70,11 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
-        if (IsCarriedTargetPenetrating(carrierIndex: carrierIndex, target: target, targetIndex: targetIndex)) {
+        if (IsCarriedTargetPenetrating(
+            carrierIndex: carrierIndex,
+            target: target,
+            targetIndex: targetIndex
+        )) {
             reason = $"body:{targetIndex}'s released pose penetrates geometry or another body";
             return false;
         }
@@ -78,6 +84,7 @@ public sealed partial class WorldPopulation {
         reason = "";
         return true;
     }
+
     /// <summary>Gets whether <paramref name="target"/>'s CURRENT pose (already the tangibly-blocked pose
     /// <see cref="WorldBody.FollowCarrier"/> and <see cref="ResolveCarriedBodyPush"/> left it at) overlaps static
     /// geometry or any other active solid body — the released-pose check <see cref="TryEndCarry"/> refuses a release
@@ -93,7 +100,10 @@ public sealed partial class WorldPopulation {
 
         Span<FixedBodyColliderVolume> targetScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
         Span<FixedBodyColliderVolume> otherScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
-        var targetVolumes = target.ScaledColliderVolumes(volumes: targetCollider.Volumes, scratch: targetScratch);
+        var targetVolumes = target.ScaledColliderVolumes(
+            volumes: targetCollider.Volumes,
+            scratch: targetScratch
+        );
 
         for (var otherIndex = 0; (otherIndex < Capacity); otherIndex++) {
             if (
@@ -112,8 +122,11 @@ public sealed partial class WorldPopulation {
                 leftVolumes: targetVolumes,
                 rightPosition: other.FixedPosition,
                 rightOrientation: other.FixedOrientation,
-                rightVolumes: other.ScaledColliderVolumes(volumes: otherCollider.Volumes, scratch: otherScratch),
-                tieBreaker: (targetIndex ^ otherIndex),
+                rightVolumes: other.ScaledColliderVolumes(
+                    volumes: otherCollider.Volumes,
+                    scratch: otherScratch
+                ),
+                tieBreaker: targetIndex ^ otherIndex,
                 correction: out _
             )) {
                 return true;
@@ -135,11 +148,13 @@ public sealed partial class WorldPopulation {
     /// same broadphase cost <see cref="ResolveDynamicContacts"/> pays, bounded by how many carries are active rather
     /// than by the tick itself.</summary>
     public void UpdateCarriedBodies() => ReconcileCarriedBodies(follow: true);
+
     private void ReconcileCarriedBodies(bool follow) {
         var relationshipIndex = 0;
 
         while (relationshipIndex < m_activeCarryCount) {
             var relationship = m_activeCarries[relationshipIndex];
+
             if (
                 (m_entries[relationship.CarrierIndex] is not { Active: true, Body: { } carrier }) ||
                 (m_entries[relationship.TargetIndex] is not { Active: true, Body: { } target }) ||
@@ -206,11 +221,17 @@ public sealed partial class WorldPopulation {
             if (!FixedDynamicBodyContacts.TryCorrection(
                 leftPosition: target.FixedPosition,
                 leftOrientation: target.FixedOrientation,
-                leftVolumes: target.ScaledColliderVolumes(volumes: targetCollider.Volumes, scratch: targetScratch),
+                leftVolumes: target.ScaledColliderVolumes(
+                    volumes: targetCollider.Volumes,
+                    scratch: targetScratch
+                ),
                 rightPosition: other.FixedPosition,
                 rightOrientation: other.FixedOrientation,
-                rightVolumes: other.ScaledColliderVolumes(volumes: otherCollider.Volumes, scratch: otherScratch),
-                tieBreaker: (targetIndex ^ otherIndex),
+                rightVolumes: other.ScaledColliderVolumes(
+                    volumes: otherCollider.Volumes,
+                    scratch: otherScratch
+                ),
+                tieBreaker: targetIndex ^ otherIndex,
                 correction: out var correction
             )) {
                 continue;
@@ -237,7 +258,6 @@ public sealed partial class WorldPopulation {
             }
         }
     }
-
     private void RebuildCarryRelationships() {
         m_activeCarryCount = 0;
 
@@ -252,7 +272,10 @@ public sealed partial class WorldPopulation {
                 target.IsRigid &&
                 (target.CarriedBy == index)
             ) {
-                RegisterCarry(carrierIndex: index, targetIndex: targetIndex);
+                RegisterCarry(
+                    carrierIndex: index,
+                    targetIndex: targetIndex
+                );
             } else {
                 carrier.ForceDropCarrying();
             }
@@ -284,18 +307,24 @@ public sealed partial class WorldPopulation {
             (index < m_activeCarryCount) &&
             (m_activeCarries[index].CarrierIndex == carrierIndex)
         ) {
-            m_activeCarries[index] = new CarryRelationship(CarrierIndex: carrierIndex, TargetIndex: targetIndex);
+            m_activeCarries[index] = new CarryRelationship(
+                CarrierIndex: carrierIndex,
+                TargetIndex: targetIndex
+            );
             return;
         }
 
         Array.Copy(
-            sourceArray: m_activeCarries,
-            sourceIndex: index,
             destinationArray: m_activeCarries,
             destinationIndex: (index + 1),
-            length: (m_activeCarryCount - index)
+            length: (m_activeCarryCount - index),
+            sourceArray: m_activeCarries,
+            sourceIndex: index
         );
-        m_activeCarries[index] = new CarryRelationship(CarrierIndex: carrierIndex, TargetIndex: targetIndex);
+        m_activeCarries[index] = new CarryRelationship(
+            CarrierIndex: carrierIndex,
+            TargetIndex: targetIndex
+        );
         m_activeCarryCount++;
     }
     private void RemoveCarry(int carrierIndex) {
@@ -309,11 +338,11 @@ public sealed partial class WorldPopulation {
     private void RemoveCarryAt(int index) {
         m_activeCarryCount--;
         Array.Copy(
-            sourceArray: m_activeCarries,
-            sourceIndex: (index + 1),
             destinationArray: m_activeCarries,
             destinationIndex: index,
-            length: (m_activeCarryCount - index)
+            length: (m_activeCarryCount - index),
+            sourceArray: m_activeCarries,
+            sourceIndex: (index + 1)
         );
         m_activeCarries[m_activeCarryCount] = default;
     }

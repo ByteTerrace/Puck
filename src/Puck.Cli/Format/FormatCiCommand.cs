@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
@@ -7,48 +8,131 @@ namespace Puck.Cli.Format;
 // consumer: a separate trusted workflow validates the paths and commits with an expected-head guard.
 internal static class FormatCiCommand {
     internal static bool Admits(string path) =>
-        (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".cs")
+        (path.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: ".cs"
+        )
         && !path.Split('/').Any(predicate: static part => (part is "experimental" or "obj" or "bin" or "artifacts" or ".tmp" or ".git" or "node_modules" or "avm-temp" or "publish"))
-        && !path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".g.cs")
-        && !path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".generated.cs"));
-    internal static async Task<int> RunAsync(string[] args) {
-        if ((args is not [var baseSha, var headSha, var output])
-            || !Regex.IsMatch(input: baseSha, pattern: "\\A[0-9a-f]{40}\\z")
-            || !Regex.IsMatch(input: headSha, pattern: "\\A[0-9a-f]{40}\\z")) {
-            Console.Error.WriteLine(value: "Usage: puck format ci <base-sha> <head-sha> <empty-output-directory>");
-            return 2;
-        }
+        && !path.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: ".g.cs"
+        )
+        && !path.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: ".generated.cs"
+        ));
+    internal static Command Create() {
+        var baseArgument = new Argument<string>(name: "base-sha") { Description = "The full 40-hex-digit commit the pull request is measured from." };
+        var headArgument = new Argument<string>(name: "head-sha") { Description = "The full 40-hex-digit commit the checkout must already be at." };
+        var outputArgument = new Argument<string>(name: "output") { Description = "A fresh output directory for files.json, format.patch, and format.json." };
+        var command = new Command(
+            description: "Prepare a validated pull-request formatting artifact from a clean disposable checkout.",
+            name: "ci"
+        ) { baseArgument, headArgument, outputArgument };
+
+        command.Validators.Add(item: result => {
+            foreach (var argument in ((Argument<string>[])[baseArgument, headArgument])) {
+                var sha = result.GetValue(argument: argument);
+
+                if (
+                    (sha is null) ||
+                    !Regex.IsMatch(
+                    input: sha,
+                    pattern: "\\A[0-9a-f]{40}\\z"
+                )
+                ) {
+                    result.AddError(errorMessage: $"<{argument.Name}> must be a full 40-hex-digit commit sha.");
+
+                    return;
+                }
+            }
+        });
+        command.SetAction(action: (parseResult, _) => RunAsync(
+            baseSha: parseResult.GetRequiredValue(argument: baseArgument),
+            headSha: parseResult.GetRequiredValue(argument: headArgument),
+            output: parseResult.GetRequiredValue(argument: outputArgument)
+        ));
+        return command;
+    }
+    internal static async Task<int> RunAsync(string baseSha, string headSha, string output) {
         try {
             var root = (RepositoryPaths.FindRoot() ?? throw new InvalidOperationException(message: "Run in a Puck checkout."));
 
-            if (((await GitAsync(root: root, arguments: ["rev-parse", "HEAD"])).Trim() != headSha)
-                || !string.IsNullOrWhiteSpace(value: await GitAsync(root: root, arguments: ["status", "--porcelain", "--untracked-files=no"]))) {
+            if (
+                ((await GitAsync(
+                root: root,
+                arguments: ["rev-parse", "HEAD"]
+            )).Trim() != headSha) ||
+                !string.IsNullOrWhiteSpace(value: await GitAsync(
+                root: root,
+                arguments: ["status", "--porcelain", "--untracked-files=no"]
+            ))
+            ) {
                 throw new InvalidOperationException(message: "CI formatting requires the requested HEAD and a clean tracked working tree.");
             }
             output = Path.GetFullPath(path: output);
             if (Directory.Exists(path: output)) { throw new IOException(message: "Use a fresh formatting output directory."); }
             Directory.CreateDirectory(path: output);
-            var changed = (await GitAsync(root: root, arguments: ["diff", "--name-only", "-z", "--diff-filter=ACMR", $"{baseSha}...{headSha}", "--"]))
-                .Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries).Where(predicate: Admits).Order(comparer: StringComparer.Ordinal).ToArray();
+            var changed = (await GitAsync(
+                root: root,
+                arguments: ["diff", "--name-only", "-z", "--diff-filter=ACMR", $"{baseSha}...{headSha}", "--"]
+            ))
+                .Split(
+                separator: '\0',
+                options: StringSplitOptions.RemoveEmptyEntries
+            ).Where(predicate: Admits).Order(comparer: StringComparer.Ordinal).ToArray();
             var list = new JsonArray();
 
             foreach (var path in changed) {
                 // SDK-generated source is not a formatting input even when it happens to be tracked.
-                if (File.ReadLines(path: Path.Combine(path1: root, path2: path)).Take(count: 5).Any(predicate: static line => line.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "<auto-generated"))) {
+                if (File.ReadLines(path: Path.Combine(
+                    path1: root,
+                    path2: path
+                )).Take(count: 5).Any(predicate: static line => line.Contains(
+                    comparisonType: StringComparison.OrdinalIgnoreCase,
+                    value: "<auto-generated"
+                ))) {
                     Console.Error.WriteLine(value: $"format ci: generated source excluded: {path}");
                     continue;
                 }
                 list.Add(item: JsonValue.Create(value: path));
             }
-            var manifest = Path.Combine(path1: output, path2: "files.json");
+            var manifest = Path.Combine(
+                path1: output,
+                path2: "files.json"
+            );
 
-            File.WriteAllText(path: manifest, contents: list.ToJsonString());
-            var targets = FormatSelection.Read(root: root, manifest: manifest);
-            var before = targets.ToDictionary(keySelector: static path => path, elementSelector: static path => File.ReadAllBytes(path: path), comparer: StringComparer.Ordinal);
+            File.WriteAllText(
+                path: manifest,
+                contents: list.ToJsonString()
+            );
+            var targets = FormatSelection.Read(
+                root: root,
+                manifest: manifest
+            );
+            var before = targets.ToDictionary(
+                keySelector: static path => path,
+                elementSelector: static path => File.ReadAllBytes(path: path),
+                comparer: StringComparer.Ordinal
+            );
             var selected = FormatPasses.DefaultSelection();
 
-            if ((FormatSelection.Run(root: root, manifest: manifest, selected: selected, whatIf: false, verify: false) != 0)
-                || (FormatSelection.Run(root: root, manifest: manifest, selected: selected, whatIf: false, verify: true) != 0)) {
+            if (
+                (FormatSelection.Run(
+                root: root,
+                manifest: manifest,
+                selected: selected,
+                whatIf: false,
+                verify: false
+            ) != 0) ||
+                (FormatSelection.Run(
+                root: root,
+                manifest: manifest,
+                selected: selected,
+                whatIf: false,
+                verify: true
+            ) != 0)
+            ) {
                 throw new InvalidOperationException(message: "Formatting failed or did not converge. No commit artifact was produced.");
             }
             var modifications = new JsonArray();
@@ -58,25 +142,63 @@ internal static class FormatCiCommand {
 
                 if (!before[target].AsSpan().SequenceEqual(other: after)) {
                     modifications.Add(item: new JsonObject {
-                        ["path"] = Path.GetRelativePath(relativeTo: root, path: target).Replace(newChar: '/', oldChar: '\\'),
+                        ["path"] = Path.GetRelativePath(
+                        relativeTo: root,
+                        path: target
+                    ).Replace(
+                        newChar: '/',
+                        oldChar: '\\'
+                    ),
                         ["contents"] = Convert.ToBase64String(inArray: after),
                     });
                 }
             }
-            var touched = (await GitAsync(root: root, arguments: ["diff", "HEAD", "--name-only", "-z", "--"]))
-                .Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries);
-            var allowed = targets.Select(selector: path => Path.GetRelativePath(relativeTo: root, path: path).Replace(newChar: '/', oldChar: '\\')).ToHashSet(comparer: StringComparer.Ordinal);
+            var touched = (await GitAsync(
+                root: root,
+                arguments: ["diff", "HEAD", "--name-only", "-z", "--"]
+            ))
+                .Split(
+                separator: '\0',
+                options: StringSplitOptions.RemoveEmptyEntries
+            );
+            var allowed = targets.Select(selector: path => Path.GetRelativePath(
+                relativeTo: root,
+                path: path
+            ).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            )).ToHashSet(comparer: StringComparer.Ordinal);
 
             if (touched.Any(predicate: path => !allowed.Contains(item: path))) {
                 throw new InvalidOperationException(message: "A formatter changed a file outside the PR selection. No commit artifact was produced.");
             }
             // A textual patch remains usable for fork PRs, where the repository token cannot push.
-            File.WriteAllText(path: Path.Combine(path1: output, path2: "format.patch"), contents: await GitAsync(root: root, arguments: ["diff", "--binary", "--no-ext-diff", "HEAD", "--", .. allowed]));
+            File.WriteAllText(
+                path: Path.Combine(
+                    path1: output,
+                    path2: "format.patch"
+                ),
+                contents: await GitAsync(
+                    root: root,
+                    arguments: ["diff", "--binary", "--no-ext-diff", "HEAD", "--", .. allowed]
+                )
+            );
             var report = new JsonObject { ["base"] = baseSha, ["head"] = headSha, ["files"] = modifications };
 
-            File.WriteAllText(path: Path.Combine(path1: output, path2: "format.json"), contents: report.ToJsonString());
+            File.WriteAllText(
+                path: Path.Combine(
+                    path1: output,
+                    path2: "format.json"
+                ),
+                contents: report.ToJsonString()
+            );
             if (Environment.GetEnvironmentVariable(variable: "GITHUB_OUTPUT") is { Length: > 0 } githubOutput) {
-                File.AppendAllText(path: githubOutput, contents: $"changed={((modifications.Count > 0) ? "true" : "false")}\n");
+                File.AppendAllText(
+                    path: githubOutput,
+                    contents: $"changed={((modifications.Count > 0)
+                    ? "true"
+                    : "false")}\n"
+                );
             }
             Console.WriteLine(value: $"format ci: {targets.Length} selected file(s), {modifications.Count} formatted file(s).");
             return 0;
@@ -87,5 +209,10 @@ internal static class FormatCiCommand {
     }
 
     private static Task<string> GitAsync(string root, string[] arguments) =>
-        CliProcess.RunCheckedAsync(arguments: arguments, capture: true, executable: "git", root: root);
+        CliProcess.RunCheckedAsync(
+            arguments: arguments,
+            capture: true,
+            executable: "git",
+            root: root
+        );
 }

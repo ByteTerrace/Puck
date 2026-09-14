@@ -68,11 +68,21 @@ internal sealed partial class WorldScreenBinder {
                 : "unassigned"
             );
 
-            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{token} '{device.Name}' [{string.Join(separator: "+", values: device.Sensors)}] {device.Tier} seat={seatText}");
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{token} '{device.Name}' [{string.Join(
+                    separator: "+",
+                    values: device.Sensors
+                )}] {device.Tier} seat={seatText}"
+            );
 
             foreach (var feed in device.Feeds) {
                 _ = builder.Append(value: " — ");
-                DescribeCameraFeed(builder: builder, device: device, feed: feed);
+                DescribeCameraFeed(
+                    builder: builder,
+                    device: device,
+                    feed: feed
+                );
             }
         }
 
@@ -96,7 +106,10 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: $"unknown camera sensor '{sensor}'");
         }
 
-        if (!m_slots.TryGetValue(key: index, value: out var slot)) {
+        if (!m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        )) {
             return (Ok: false, Message: $"no screen {index} declared");
         }
 
@@ -123,7 +136,13 @@ internal sealed partial class WorldScreenBinder {
     /// <returns><see langword="true"/> when a shared-tier stream is open for the seat's sensor.</returns>
     public bool TryGetCameraAttachment(int seat, WorldCameraSensor sensor, out WorldCameraAttachment attachment) {
         if (
-            !TryResolveCamera(device: out var device, fault: out _, feed: out var feed, seat: seat, sensor: sensor) ||
+            !TryResolveCamera(
+            device: out var device,
+            fault: out _,
+            feed: out var feed,
+            seat: seat,
+            sensor: sensor
+        ) ||
             (feed!.SharedStream is not { } shared)
         ) {
             attachment = default;
@@ -172,10 +191,18 @@ internal sealed partial class WorldScreenBinder {
                 continue;
             }
 
-            ServiceCameraDeviceGraph(device: device, deviceContext: deviceContext);
+            ServiceCameraDeviceGraph(
+                device: device,
+                deviceContext: deviceContext
+            );
 
             foreach (var feed in device.Feeds) {
-                ServiceCameraFeed(device: device, deviceContext: deviceContext, feed: feed, gpu: gpu);
+                ServiceCameraFeed(
+                    device: device,
+                    deviceContext: deviceContext,
+                    feed: feed,
+                    gpu: gpu
+                );
             }
         }
     }
@@ -187,7 +214,10 @@ internal sealed partial class WorldScreenBinder {
     // read as "every camera unplugged" — the device table is left untouched and removals resume only once a scan
     // completes again; the failure narrates once per episode rather than on every retry.
     private void ServiceCameraDevices() {
-        if (!m_cameraDeviceScanner.TryPoll(Stopwatch.GetTimestamp(), out var scan)) { return; }
+        if (!m_cameraDeviceScanner.TryPoll(
+            Stopwatch.GetTimestamp(),
+            out var scan
+        )) { return; }
 
         CameraDeviceScanOutcome outcome;
         var infoById = new Dictionary<InputDeviceId, CameraDeviceInfo>();
@@ -202,7 +232,11 @@ internal sealed partial class WorldScreenBinder {
             outcome = new CameraDeviceScanOutcome.Failure(Message: scan.Failure);
         }
 
-        var decision = CameraDeviceScanReconciler.Reconcile(knownIds: m_cameraDevices.Keys.ToHashSet(), outcome: outcome, wasFailing: m_cameraDeviceScanFailed);
+        var decision = CameraDeviceScanReconciler.Reconcile(
+            knownIds: m_cameraDevices.Keys.ToHashSet(),
+            outcome: outcome,
+            wasFailing: m_cameraDeviceScanFailed
+        );
 
         m_cameraDeviceScanFailed = decision.IsFailing;
 
@@ -215,16 +249,28 @@ internal sealed partial class WorldScreenBinder {
         }
 
         foreach (var (deviceId, info) in infoById) {
-            if (m_cameraDevices.TryGetValue(key: deviceId, value: out var device)) {
+            if (m_cameraDevices.TryGetValue(
+                key: deviceId,
+                value: out var device
+            )) {
                 device.Name = info.Name;
                 device.Sensors = info.Sensors;
             } else {
-                device = new CameraDevice(deviceId: deviceId, platformId: info.Id, name: info.Name, sensors: info.Sensors);
+                device = new CameraDevice(
+                    deviceId: deviceId,
+                    platformId: info.Id,
+                    name: info.Name,
+                    sensors: info.Sensors
+                );
                 m_cameraDevices[deviceId] = device;
                 m_cameraDeviceOrder.Add(item: device);
             }
 
-            m_roster.ObserveDevice(device: deviceId, kind: InputDeviceKind.Camera, name: info.Name);
+            m_roster.ObserveDevice(
+                device: deviceId,
+                kind: InputDeviceKind.Camera,
+                name: info.Name
+            );
         }
 
         foreach (var deviceId in decision.ToRetire) {
@@ -234,7 +280,10 @@ internal sealed partial class WorldScreenBinder {
                 _ = m_cameraFeeds.Remove(key: (device.DeviceId, feed.Sensor));
             }
 
-            DisposeCameraDevice(device: device, fault: "camera disconnected");
+            DisposeCameraDevice(
+                device: device,
+                fault: "camera disconnected"
+            );
             _ = m_cameraDevices.Remove(key: deviceId);
             _ = m_cameraDeviceOrder.Remove(item: device);
         }
@@ -244,26 +293,52 @@ internal sealed partial class WorldScreenBinder {
     // frame. A seat with no enumerated camera, or whose camera lacks this sensor, simply has no feed yet.
     private bool TryFulfillCameraDemand(int seat, WorldCameraSensor sensor) {
         if (
-            !m_roster.TryGetSeatDevice(slot: PlayerRoster.SlotFromDisplay(number: seat), kind: InputDeviceKind.Camera, device: out var deviceId) ||
-            !m_cameraDevices.TryGetValue(key: deviceId, value: out var device) ||
-            !DeviceHasSensor(device: device, sensor: sensor)
+            !m_roster.TryGetSeatDevice(
+            slot: PlayerRoster.SlotFromDisplay(number: seat),
+            kind: InputDeviceKind.Camera,
+            device: out var deviceId
+        ) ||
+            !m_cameraDevices.TryGetValue(
+            key: deviceId,
+            value: out var device
+        ) ||
+            !DeviceHasSensor(
+            device: device,
+            sensor: sensor
+        )
         ) {
             return false;
         }
 
-        var profile = (m_cameraDemand.TryGetValue(key: (seat, sensor), value: out var requested) ? requested : WorldFeedProfile.Default);
+        var profile = (m_cameraDemand.TryGetValue(
+            key: (seat, sensor),
+            value: out var requested
+        )
+            ? requested
+            : WorldFeedProfile.Default
+        );
 
-        _ = EnsureCameraFeed(device: device, profile: profile, sensor: sensor);
+        _ = EnsureCameraFeed(
+            device: device,
+            profile: profile,
+            sensor: sensor
+        );
 
         return true;
     }
 
     /// <summary>Retains one live probe instance's camera feed demand at the socket's authored profile.</summary>
     public void RetainProbeCameraDemand(WorldScreenSource.Camera camera, int contextSeat) =>
-        RetainProbeCameraDemandCore(camera: camera, contextSeat: contextSeat);
+        RetainProbeCameraDemandCore(
+            camera: camera,
+            contextSeat: contextSeat
+        );
     /// <summary>Releases one live probe instance's camera feed demand.</summary>
     public void ReleaseProbeCameraDemand(WorldScreenSource.Camera camera, int contextSeat) =>
-        ReleaseProbeCameraDemandCore(camera: camera, contextSeat: contextSeat);
+        ReleaseProbeCameraDemandCore(
+            camera: camera,
+            contextSeat: contextSeat
+        );
 
     // Resolves (seat, sensor) to the device currently seated there and its feed — the one lookup every camera
     // consumer (a screen slot, a probe socket, a HUD frame) makes each frame. A device already known but with no
@@ -273,26 +348,43 @@ internal sealed partial class WorldScreenBinder {
         device = null;
         feed = null;
 
-        if (!m_roster.TryGetSeatDevice(slot: PlayerRoster.SlotFromDisplay(number: seat), kind: InputDeviceKind.Camera, device: out var deviceId)) {
+        if (!m_roster.TryGetSeatDevice(
+            slot: PlayerRoster.SlotFromDisplay(number: seat),
+            kind: InputDeviceKind.Camera,
+            device: out var deviceId
+        )) {
             fault = $"seat {seat} has no camera assigned";
 
             return false;
         }
 
-        if (!m_cameraDevices.TryGetValue(key: deviceId, value: out device)) {
+        if (!m_cameraDevices.TryGetValue(
+            key: deviceId,
+            value: out device
+        )) {
             fault = $"seat {seat}'s camera is not yet enumerated";
 
             return false;
         }
 
-        if (!DeviceHasSensor(device: device, sensor: sensor)) {
+        if (!DeviceHasSensor(
+            device: device,
+            sensor: sensor
+        )) {
             fault = $"seat {seat}'s camera '{device.Name}' has no {SensorName(sensor: sensor)} sensor";
 
             return false;
         }
 
-        if (!m_cameraFeeds.TryGetValue(key: (deviceId, sensor), value: out feed)) {
-            feed = EnsureCameraFeed(device: device, sensor: sensor, profile: WorldFeedProfile.Default);
+        if (!m_cameraFeeds.TryGetValue(
+            key: (deviceId, sensor),
+            value: out feed
+        )) {
+            feed = EnsureCameraFeed(
+                device: device,
+                sensor: sensor,
+                profile: WorldFeedProfile.Default
+            );
         }
 
         fault = "";
@@ -302,17 +394,53 @@ internal sealed partial class WorldScreenBinder {
     // The four per-frame reads a ScreenSlot bound to (CameraSeat, CameraSensorKind) makes — thin wrappers over
     // TryResolveCamera so the slot itself carries no camera machinery of its own.
     private SdfScreenSourceFrame AcquireCameraFrame(int seat, WorldCameraSensor sensor) =>
-        (TryResolveCamera(device: out _, fault: out _, feed: out var feed, seat: seat, sensor: sensor) ? feed!.AcquireFrame() : default);
+        (TryResolveCamera(
+            device: out _,
+            fault: out _,
+            feed: out var feed,
+            seat: seat,
+            sensor: sensor
+        )
+            ? feed!.AcquireFrame()
+            : default
+        );
     private nint CameraHandleFor(int seat, WorldCameraSensor sensor) =>
-        (TryResolveCamera(device: out _, fault: out _, feed: out var feed, seat: seat, sensor: sensor) ? feed!.Handle() : 0);
+        (TryResolveCamera(
+            device: out _,
+            fault: out _,
+            feed: out var feed,
+            seat: seat,
+            sensor: sensor
+        )
+            ? feed!.Handle()
+            : 0
+        );
     private Vector3 CameraLightFor(int seat, WorldCameraSensor sensor) =>
-        (TryResolveCamera(device: out _, fault: out _, feed: out var feed, seat: seat, sensor: sensor) ? feed!.Light : Vector3.Zero);
+        (TryResolveCamera(
+            device: out _,
+            fault: out _,
+            feed: out var feed,
+            seat: seat,
+            sensor: sensor
+        )
+            ? feed!.Light
+            : Vector3.Zero
+        );
     private string? CameraFaultFor(int seat, WorldCameraSensor sensor) {
-        if (!TryResolveCamera(device: out _, fault: out var fault, feed: out var feed, seat: seat, sensor: sensor)) {
+        if (!TryResolveCamera(
+            device: out _,
+            fault: out var fault,
+            feed: out var feed,
+            seat: seat,
+            sensor: sensor
+        )) {
             return fault;
         }
 
-        return (feed!.Live ? null : feed.Fault);
+        return (feed!.Live
+            ? null
+            : feed.Fault
+        );
     }
     private void ServiceCameraDeviceGraph(CameraDevice device, IGpuDeviceContext deviceContext) {
         // A retired last HUD camera source can leave a physical device with no sensor feeds. Do not reopen an empty
@@ -333,7 +461,10 @@ internal sealed partial class WorldScreenBinder {
             }
 
             if (device.Graph is not null) {
-                CloseCameraGraphFor(device: device, fault: null);
+                CloseCameraGraphFor(
+                    device: device,
+                    fault: null
+                );
             }
 
             return;
@@ -355,13 +486,20 @@ internal sealed partial class WorldScreenBinder {
                 return;
             }
 
-            AdoptCameraGraph(deviceContext: deviceContext, device: device, result: opening.Result);
+            AdoptCameraGraph(
+                deviceContext: deviceContext,
+                device: device,
+                result: opening.Result
+            );
 
             return;
         }
 
         if (device.Graph is { } graph) {
-            if (!graph.IsEnded && !device.SensorsChanged) {
+            if (
+                !graph.IsEnded &&
+                !device.SensorsChanged
+            ) {
                 return;
             }
 
@@ -381,8 +519,18 @@ internal sealed partial class WorldScreenBinder {
 
             // A sensor set change and a shared-tier startup refusal reopen at once; a real disconnect after live
             // streaming waits for the driver to settle.
-            CloseCameraGraphFor(device: device, fault: (graph.IsEnded ? (sharedStartFailed ? "camera GPU tier refused" : "camera disconnected") : null));
-            device.Countdown = ((graph.IsEnded && !sharedStartFailed) ? CameraReopenFrames : 0);
+            CloseCameraGraphFor(
+                device: device,
+                fault: (graph.IsEnded
+                ? (sharedStartFailed
+                    ? "camera GPU tier refused"
+                    : "camera disconnected")
+                : null)
+            );
+            device.Countdown = ((graph.IsEnded && !sharedStartFailed)
+                ? CameraReopenFrames
+                : 0
+            );
         }
 
         if (device.Countdown > 0) {
@@ -417,40 +565,87 @@ internal sealed partial class WorldScreenBinder {
         var sharedEligible = (
             !device.SharedRefused &&
             (m_hostsOnDirectX || (m_surfaceTransfers is not null)) &&
-            OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)
+            OperatingSystem.IsWindowsVersionAtLeast(
+            major: 10,
+            minor: 0,
+            build: 10240
+        )
         );
-        var adapterLuid = (sharedEligible ? m_renderAdapterLuid : null);
+        var adapterLuid = (sharedEligible
+            ? m_renderAdapterLuid
+            : null
+        );
         var capture = m_cameraCapture;
         var platformId = device.PlatformId;
 
         device.SensorsChanged = false;
         device.SharedRefused = false;
-        device.Opening = Task.Run(function: () => OpenCamera(adapterLuid: adapterLuid, capture: capture, deviceId: platformId, requests: requests, sensors: sensors));
+        device.Opening = Task.Run(function: () => OpenCamera(
+            adapterLuid: adapterLuid,
+            capture: capture,
+            deviceId: platformId,
+            requests: requests,
+            sensors: sensors
+        ));
     }
     private static CameraOpenResult OpenCamera(ICameraCaptureService capture, string deviceId, long? adapterLuid, CameraStreamRequest[] requests, WorldCameraSensor[] sensors) {
         var dropped = new List<WorldCameraSensor>();
 
         for (var count = requests.Length; (count > 0); count--) {
-            var slice = requests.AsSpan(length: count, start: 0);
+            var slice = requests.AsSpan(
+                length: count,
+                start: 0
+            );
 
-            if ((adapterLuid is { } luid) && capture.TryOpenShared(adapterLuid: luid, deviceId: deviceId, graph: out var shared, streams: slice)) {
-                return new CameraOpenResult(Dropped: [.. dropped], Pixels: null, Shared: shared);
+            if (
+                (adapterLuid is { } luid) &&
+                capture.TryOpenShared(
+                adapterLuid: luid,
+                deviceId: deviceId,
+                graph: out var shared,
+                streams: slice
+            )
+            ) {
+                return new CameraOpenResult(
+                    Dropped: [.. dropped],
+                    Pixels: null,
+                    Shared: shared
+                );
             }
 
-            if (capture.TryOpenPixels(deviceId: deviceId, graph: out var pixels, streams: slice)) {
-                return new CameraOpenResult(Dropped: [.. dropped], Pixels: pixels, Shared: null);
+            if (capture.TryOpenPixels(
+                deviceId: deviceId,
+                graph: out var pixels,
+                streams: slice
+            )) {
+                return new CameraOpenResult(
+                    Dropped: [.. dropped],
+                    Pixels: pixels,
+                    Shared: null
+                );
             }
 
             dropped.Add(item: sensors[(count - 1)]);
         }
 
-        return new CameraOpenResult(Dropped: [.. dropped], Pixels: null, Shared: null);
+        return new CameraOpenResult(
+            Dropped: [.. dropped],
+            Pixels: null,
+            Shared: null
+        );
     }
     private void AdoptCameraGraph(CameraDevice device, CameraOpenResult result, IGpuDeviceContext deviceContext) {
         if (result.Shared is { } shared) {
-            if (TryProvisionSharedTargets(device: device, deviceContext: deviceContext, fault: out var fault, graph: shared)) {
+            if (TryProvisionSharedTargets(
+                device: device,
+                deviceContext: deviceContext,
+                fault: out var fault,
+                graph: shared
+            )) {
                 device.Shared = shared;
-                Console.Out.WriteLine(value: $"[camera] GPU tier: '{shared.Name}' {DescribeStreams(graph: shared)}, {CameraTargetCount} shared targets per sensor{(m_hostsOnDirectX ? "" : ", imported for Vulkan sampling")}.");
+                Console.Out.WriteLine(value: $"[camera] GPU tier: '{shared.Name}' {DescribeStreams(graph: shared)}, {CameraTargetCount} shared targets per sensor{(m_hostsOnDirectX
+                    ? ""
+                    : ", imported for Vulkan sampling")}.");
             } else {
                 // Target provisioning is render-device work the platform cannot foresee; the next attempt, at once,
                 // skips the shared tier.
@@ -474,14 +669,20 @@ internal sealed partial class WorldScreenBinder {
         }
 
         foreach (var sensor in result.Dropped) {
-            if (m_cameraFeeds.TryGetValue(key: (device.DeviceId, sensor), value: out var droppedFeed)) {
+            if (m_cameraFeeds.TryGetValue(
+                key: (device.DeviceId, sensor),
+                value: out var droppedFeed
+            )) {
                 droppedFeed.Detach(fault: "the device cannot stream color and infrared concurrently");
             }
         }
 
         if (device.Graph is { } graph) {
             foreach (var stream in graph.Streams) {
-                if (m_cameraFeeds.TryGetValue(key: (device.DeviceId, WorldSensor(sensor: stream.Sensor)), value: out var attaching)) {
+                if (m_cameraFeeds.TryGetValue(
+                    key: (device.DeviceId, WorldSensor(sensor: stream.Sensor)),
+                    value: out var attaching
+                )) {
                     attaching.Attach(stream: stream);
                 }
             }
@@ -498,7 +699,11 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
 
-        if (!OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(
+            major: 10,
+            minor: 0,
+            build: 10240
+        )) {
             fault = "shared camera textures need Windows 10";
 
             return false;
@@ -507,11 +712,24 @@ internal sealed partial class WorldScreenBinder {
         var provisioned = new List<CameraFeed>(capacity: graph.Streams.Count);
 
         foreach (var stream in graph.Streams) {
-            if (!m_cameraFeeds.TryGetValue(key: (device.DeviceId, WorldSensor(sensor: stream.Sensor)), value: out var feed)) {
+            if (!m_cameraFeeds.TryGetValue(
+                key: (device.DeviceId, WorldSensor(sensor: stream.Sensor)),
+                value: out var feed
+            )) {
                 continue;
             }
 
-            if (!TryProvisionSharedRing(adapterLuid: adapterLuid, deviceContext: deviceContext, fault: out fault, format: stream.TargetFormat, height: stream.Height, images: out var images, importedViews: out var views, imports: out var imports, width: stream.Width)) {
+            if (!TryProvisionSharedRing(
+                adapterLuid: adapterLuid,
+                deviceContext: deviceContext,
+                fault: out fault,
+                format: stream.TargetFormat,
+                height: stream.Height,
+                images: out var images,
+                importedViews: out var views,
+                imports: out var imports,
+                width: stream.Width
+            )) {
                 foreach (var started in provisioned) {
                     started.ReleaseGpuTargets();
                 }
@@ -637,7 +855,10 @@ internal sealed partial class WorldScreenBinder {
             // The platform publishes completed slots on its own thread and the screen samples the latest one directly;
             // no CPU pixels ever exist on this tier, so Light stays dark.
             feed.Live = (shared.LatestSlot >= 0);
-            feed.Fault = (feed.Live ? null : "camera awaiting a first frame");
+            feed.Fault = (feed.Live
+                ? null
+                : "camera awaiting a first frame"
+            );
 
             if (feed.Live) {
                 ApplyCameraControlsFor(device: device);
@@ -646,14 +867,20 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        if ((feed.PixelStream is not { } stream) || !feed.ShouldPull()) {
+        if (
+            (feed.PixelStream is not { } stream) ||
+            !feed.ShouldPull()
+        ) {
             return;
         }
 
         var version = stream.FrameVersion;
 
         if (version == feed.LastFrameVersion) {
-            NoteCameraStarvation(device: device, feed: feed);
+            NoteCameraStarvation(
+                device: device,
+                feed: feed
+            );
 
             return;
         }
@@ -662,14 +889,24 @@ internal sealed partial class WorldScreenBinder {
             // The producer advertised a new version but the grab raced it; retry on the next produced frame rather
             // than spending the declaration's whole cadence on the miss.
             feed.Rearm();
-            NoteCameraStarvation(device: device, feed: feed);
+            NoteCameraStarvation(
+                device: device,
+                feed: feed
+            );
 
             return;
         }
 
-        var panelSurface = FitPanelSurface(feed: feed, surface: in surface);
+        var panelSurface = FitPanelSurface(
+            feed: feed,
+            surface: in surface
+        );
 
-        _ = feed.Surface.Publish(deviceContext: deviceContext, gpu: gpu, surface: in panelSurface);
+        _ = feed.Surface.Publish(
+            deviceContext: deviceContext,
+            gpu: gpu,
+            surface: in panelSurface
+        );
         feed.StarvedPulls = 0;
         feed.LastFrameVersion = version;
         feed.Live = true;
@@ -710,23 +947,38 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        var desired = (((m_roster.DeviceSlot(device: device.DeviceId) is { } slot) && m_seatCameraControls.TryGetValue(key: PlayerRoster.DisplayNumber(slot: slot), value: out var found))
+        var desired = (((m_roster.DeviceSlot(device: device.DeviceId) is { } slot) && m_seatCameraControls.TryGetValue(
+            key: PlayerRoster.DisplayNumber(slot: slot),
+            value: out var found
+        ))
             ? found
             : null
         );
 
-        if (Equals(objA: desired, objB: device.AppliedControls)) {
+        if (Equals(
+            objA: desired,
+            objB: device.AppliedControls
+        )) {
             return;
         }
 
         var surface = graph.Controls;
 
         foreach (var (control, _, select) in CameraControlMap) {
-            var value = ((desired is null) ? null : select(arg: desired));
-            var previous = ((device.AppliedControls is null) ? null : select(arg: device.AppliedControls));
+            var value = ((desired is null)
+                ? null
+                : select(arg: desired)
+            );
+            var previous = ((device.AppliedControls is null)
+                ? null
+                : select(arg: device.AppliedControls)
+            );
 
             if (value is { } manual) {
-                _ = surface.TrySet(control: control, value: manual);
+                _ = surface.TrySet(
+                    control: control,
+                    value: manual
+                );
             } else if (previous is not null) {
                 _ = surface.TryResetAuto(control: control);
             }
@@ -736,7 +988,10 @@ internal sealed partial class WorldScreenBinder {
         // restore for a removed row (its default is unknowable; authors flip values explicitly).
         if (desired?.Vendor is { } vendorRows) {
             foreach (var row in vendorRows) {
-                _ = surface.TryVendorWrite(selector: ((uint)row.Id), value: row.Value);
+                _ = surface.TryVendorWrite(
+                    selector: ((uint)row.Id),
+                    value: row.Value
+                );
             }
         }
 
@@ -745,46 +1000,92 @@ internal sealed partial class WorldScreenBinder {
     private void DescribeCameraFeed(StringBuilder builder, CameraDevice device, CameraFeed feed) {
         var sensorName = SensorName(sensor: feed.Sensor);
 
-        if ((feed.Stream is not { } stream) || (device.Graph is not { } graph)) {
-            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{sensorName} {device.Tier}{((feed.Fault is { } fault) ? $" '{fault}'" : "")}");
+        if (
+            (feed.Stream is not { } stream) ||
+            (device.Graph is not { } graph)
+        ) {
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{sensorName} {device.Tier}{((feed.Fault is { } fault)
+                ? $" '{fault}'"
+                : "")}"
+            );
 
             return;
         }
 
         var native = stream.NativeFormat;
-        var transport = $" (native {native.Subtype}{((native.RateHz > 0.0) ? $"@{native.RateHz.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}" : "")}{((native.Mode is { } mode) ? $"; {mode}" : "")})";
+        var transport = $" (native {native.Subtype}{((native.RateHz > 0.0)
+            ? $"@{native.RateHz.ToString(
+                format: "0.###",
+                provider: CultureInfo.InvariantCulture
+            )}"
+            : "")}{((native.Mode is { } mode)
+            ? $"; {mode}"
+            : "")})";
 
         _ = builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"{sensorName} {stream.Width}x{stream.Height}{transport}{(feed.Live ? "" : ((feed.Fault is { } liveFault) ? $" '{liveFault}'" : " (no frames)"))}"
+            handler: $"{sensorName} {stream.Width}x{stream.Height}{transport}{(feed.Live
+            ? ""
+            : ((feed.Fault is { } liveFault)
+                ? $" '{liveFault}'"
+                : " (no frames)"))}"
         );
 
-        var controls = (((m_roster.DeviceSlot(device: device.DeviceId) is { } slot) && m_seatCameraControls.TryGetValue(key: PlayerRoster.DisplayNumber(slot: slot), value: out var found)) ? found : null);
+        var controls = (((m_roster.DeviceSlot(device: device.DeviceId) is { } slot) && m_seatCameraControls.TryGetValue(
+            key: PlayerRoster.DisplayNumber(slot: slot),
+            value: out var found
+        ))
+            ? found
+            : null
+        );
         var surface = graph.Controls;
 
         foreach (var (control, label, select) in CameraControlMap) {
-            if (!surface.TryGetRange(control: control, range: out var range)) {
+            if (!surface.TryGetRange(
+                control: control,
+                range: out var range
+            )) {
                 continue;
             }
 
-            _ = surface.TryGet(auto: out var auto, control: control, value: out var value);
+            _ = surface.TryGet(
+                auto: out var auto,
+                control: control,
+                value: out var value
+            );
 
-            var authored = ((controls is null) ? null : select(arg: controls));
+            var authored = ((controls is null)
+                ? null
+                : select(arg: controls)
+            );
 
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
-                handler: $" — {label} {value}({(auto ? "auto" : "manual")}) [{range.Minimum}..{range.Maximum}]{(range.SupportsAuto ? "+auto" : "")} authored {((authored is { } a) ? a.ToString(provider: CultureInfo.InvariantCulture) : "none")}"
+                handler: $" — {label} {value}({(auto
+                ? "auto"
+                : "manual")}) [{range.Minimum}..{range.Maximum}]{(range.SupportsAuto
+                ? "+auto"
+                : "")} authored {((authored is { } a)
+                ? a.ToString(provider: CultureInfo.InvariantCulture)
+                : "none")}"
             );
         }
 
         // The authored vendor rows read back by selector — semantics-free, so the echo is the raw byte pair.
         if (controls?.Vendor is { } vendorRows) {
             foreach (var row in vendorRows) {
-                var reads = surface.TryVendorRead(selector: ((uint)row.Id), value: out var current);
+                var reads = surface.TryVendorRead(
+                    selector: ((uint)row.Id),
+                    value: out var current
+                );
 
                 _ = builder.Append(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $" — vendor({row.Id}) {(reads ? current.ToString(provider: CultureInfo.InvariantCulture) : "unreadable")} authored {row.Value}"
+                    handler: $" — vendor({row.Id}) {(reads
+                    ? current.ToString(provider: CultureInfo.InvariantCulture)
+                    : "unreadable")} authored {row.Value}"
                 );
             }
         }
@@ -794,11 +1095,18 @@ internal sealed partial class WorldScreenBinder {
     private CameraFeed EnsureCameraFeed(CameraDevice device, WorldCameraSensor sensor, WorldFeedProfile profile) {
         var key = (device.DeviceId, sensor);
 
-        if (m_cameraFeeds.TryGetValue(key: key, value: out var existing)) {
+        if (m_cameraFeeds.TryGetValue(
+            key: key,
+            value: out var existing
+        )) {
             return existing;
         }
 
-        var feed = new CameraFeed(profile: profile, sensor: sensor, surface: new CpuSurfaceSource()) {
+        var feed = new CameraFeed(
+            profile: profile,
+            sensor: sensor,
+            surface: new CpuSurfaceSource()
+        ) {
             Fault = "camera opening",
         };
 
@@ -811,7 +1119,10 @@ internal sealed partial class WorldScreenBinder {
     // Tears one device's open graph down and detaches every one of its feeds; a fault, when given, is what the feeds
     // report until the next open lands.
     private static void CloseCameraGraphFor(CameraDevice device, string? fault) {
-        DisposeOffThread(shared: device.Shared, pixels: device.Pixels);
+        DisposeOffThread(
+            shared: device.Shared,
+            pixels: device.Pixels
+        );
         device.Shared = null;
         device.Pixels = null;
         device.AppliedControls = null;
@@ -823,7 +1134,10 @@ internal sealed partial class WorldScreenBinder {
     // The final ownership door for a physical device, shared by hot-unplug and binder shutdown. An open already in
     // flight cannot be cancelled through the platform seam, so its successful result is disposed whenever it lands.
     private static void DisposeCameraDevice(CameraDevice device, string? fault) {
-        CloseCameraGraphFor(device: device, fault: fault);
+        CloseCameraGraphFor(
+            device: device,
+            fault: fault
+        );
 
         if (device.Opening is { } opening) {
             device.Opening = null;
@@ -853,7 +1167,10 @@ internal sealed partial class WorldScreenBinder {
     // milliseconds the presentation thread must never spend. The graph is disposable from any thread (an interlocked
     // once-only door), so teardown runs on the pool and the frame that retired the camera proceeds at once.
     private static void DisposeOffThread(ICameraGraph<ICameraSharedStream>? shared, ICameraGraph<ICameraPixelStream>? pixels) {
-        if ((shared is null) && (pixels is null)) {
+        if (
+            (shared is null) &&
+            (pixels is null)
+        ) {
             return;
         }
 
@@ -863,7 +1180,10 @@ internal sealed partial class WorldScreenBinder {
         });
     }
     private static void DisposeCameraOpenResult(CameraOpenResult result) {
-        DisposeOffThread(shared: result.Shared, pixels: result.Pixels);
+        DisposeOffThread(
+            shared: result.Shared,
+            pixels: result.Pixels
+        );
     }
     // The shared tier's rings are render-device-owned: drop every device's graph with them so the next publish
     // reopens on the live device (a CPU-pixel graph survives device loss untouched). An open in flight adopts against
@@ -871,7 +1191,10 @@ internal sealed partial class WorldScreenBinder {
     private void CameraDeviceLost() {
         foreach (var device in m_cameraDeviceOrder) {
             if (device.Shared is not null) {
-                CloseCameraGraphFor(device: device, fault: null);
+                CloseCameraGraphFor(
+                    device: device,
+                    fault: null
+                );
                 device.Countdown = 0;
             }
 
@@ -887,7 +1210,10 @@ internal sealed partial class WorldScreenBinder {
     private void DisposeCamera() {
         m_cameraDeviceScanner.Dispose();
         foreach (var device in m_cameraDeviceOrder) {
-            DisposeCameraDevice(device: device, fault: null);
+            DisposeCameraDevice(
+                device: device,
+                fault: null
+            );
         }
 
         m_cameraDevices.Clear();
@@ -957,7 +1283,10 @@ internal sealed partial class WorldScreenBinder {
             parts[index] = $"{stream.Sensor.ToString().ToLowerInvariant()} {stream.Width}x{stream.Height}";
         }
 
-        return string.Join(separator: " + ", value: parts);
+        return string.Join(
+            separator: " + ",
+            value: parts
+        );
     }
     private static bool HasUnpublishedStream(ICameraGraph<ICameraStream> graph) {
         foreach (var stream in graph.Streams) {
@@ -1015,32 +1344,26 @@ internal sealed partial class WorldScreenBinder {
     private sealed class CameraDevice(InputDeviceId deviceId, string platformId, string name, IReadOnlyList<CameraSensor> sensors) {
         public WorldCameraControls? AppliedControls { get; set; }
         public int Countdown { get; set; }
-
-        public InputDeviceId DeviceId { get; } = deviceId;
-        public List<CameraFeed> Feeds { get; } = [];
-
         public ICameraGraph<ICameraStream>? Graph => (((ICameraGraph<ICameraStream>?)Shared) ?? Pixels);
-
-        public string Name { get; set; } = name;
-
         public Task<CameraOpenResult>? Opening { get; set; }
         public ICameraGraph<ICameraPixelStream>? Pixels { get; set; }
-
-        public string PlatformId { get; } = platformId;
-
         public bool SensorsChanged { get; set; }
-
-        public IReadOnlyList<CameraSensor> Sensors { get; set; } = sensors;
-
         public ICameraGraph<ICameraSharedStream>? Shared { get; set; }
         public bool SharedRefused { get; set; }
         public string Tier => ((Shared is not null)
             ? "gpu"
             : ((Pixels is not null)
                 ? "cpu"
-                : ((Opening is not null) ? "opening" : "unopened")
-            )
-        );
+                : ((Opening is not null)
+                    ? "opening"
+                    : "unopened"
+        )));
+
+        public InputDeviceId DeviceId { get; } = deviceId;
+        public List<CameraFeed> Feeds { get; } = [];
+        public string Name { get; set; } = name;
+        public string PlatformId { get; } = platformId;
+        public IReadOnlyList<CameraSensor> Sensors { get; set; } = sensors;
     }
     private readonly record struct CameraOpenResult(ICameraGraph<ICameraSharedStream>? Shared, ICameraGraph<ICameraPixelStream>? Pixels, WorldCameraSensor[] Dropped);
     // One sensor's shared feed: its stream on whichever tier the device opened, the render resources that tier needs
@@ -1049,34 +1372,79 @@ internal sealed partial class WorldScreenBinder {
     private sealed class CameraFeed(WorldFeedProfile profile, WorldCameraSensor sensor, CpuSurfaceSource surface) : IDisposable {
         private readonly PullCadence m_cadence = new(rateHz: profile.RefreshRateHz);
 
-        private Action<int>? m_releaseCpuFrame;
+        public long LastFrameVersion { get; set; } = -1L;
+        public uint OutputHeight { get; } = checked((uint)profile.Height);
+        public uint OutputWidth { get; } = checked((uint)profile.Width);
+        public WorldFeedProfile Profile { get; } = profile;
+        public WorldCameraSensor Sensor { get; } = sensor;
+        public CpuSurfaceSource Surface { get; } = surface;
+
         private int m_outstandingCpuFrames;
+        private Action<int>? m_releaseCpuFrame;
         private bool m_retired;
         private bool m_surfaceDisposed;
 
         public string? Fault { get; set; }
         public CameraGpuTargetSet? GpuTargets { get; set; }
-
-        public long LastFrameVersion { get; set; } = -1L;
-
         public Vector3 Light { get; set; }
         public bool Live { get; set; }
-
-        public uint OutputHeight { get; } = checked((uint)profile.Height);
-        public uint OutputWidth { get; } = checked((uint)profile.Width);
-
         public byte[]? PanelPixels { get; set; }
         public ICameraPixelStream? PixelStream { get; private set; }
-
-        public WorldFeedProfile Profile { get; } = profile;
-        public WorldCameraSensor Sensor { get; } = sensor;
-
         public ICameraSharedStream? SharedStream { get; private set; }
         public int StarvedPulls { get; set; }
         public ICameraStream? Stream => (((ICameraStream?)SharedStream) ?? PixelStream);
 
-        public CpuSurfaceSource Surface { get; } = surface;
+        private void DisposeSurface() {
+            if (m_surfaceDisposed) {
+                return;
+            }
 
+            m_surfaceDisposed = true;
+            Surface.Dispose();
+        }
+        private void ReleaseCpuFrame(int token) {
+            _ = token;
+            --m_outstandingCpuFrames;
+
+            if (
+                m_retired &&
+                (0 == m_outstandingCpuFrames)
+            ) {
+                DisposeSurface();
+            }
+        }
+
+        public SdfScreenSourceFrame AcquireFrame() {
+            if (
+                !Live ||
+                m_retired
+            ) {
+                return 0;
+            }
+
+            if (GpuTargets is { } targets) {
+                // The latest completed copy's image view, acquired until the SDF frame that samples it retires. The
+                // target set also defers its own destruction across a graph close while any such frame remains live.
+                return (targets.TryAcquire(frame: out var frame)
+                    ? frame
+                    : 0
+                );
+            }
+
+            var handle = Surface.CurrentHandle;
+
+            if (0 == handle) {
+                return 0;
+            }
+
+            m_releaseCpuFrame ??= ReleaseCpuFrame;
+            ++m_outstandingCpuFrames;
+
+            return new SdfScreenSourceFrame(
+                ImageViewHandle: handle,
+                Release: m_releaseCpuFrame
+            );
+        }
         public void Attach(ICameraStream stream) {
             SharedStream = (stream as ICameraSharedStream);
             PixelStream = (stream as ICameraPixelStream);
@@ -1108,37 +1476,15 @@ internal sealed partial class WorldScreenBinder {
                 DisposeSurface();
             }
         }
-        public SdfScreenSourceFrame AcquireFrame() {
-            if (!Live || m_retired) {
-                return 0;
-            }
-
-            if (GpuTargets is { } targets) {
-                // The latest completed copy's image view, acquired until the SDF frame that samples it retires. The
-                // target set also defers its own destruction across a graph close while any such frame remains live.
-                return (targets.TryAcquire(frame: out var frame) ? frame : 0);
-            }
-
-            var handle = Surface.CurrentHandle;
-
-            if (0 == handle) {
-                return 0;
-            }
-
-            m_releaseCpuFrame ??= ReleaseCpuFrame;
-            ++m_outstandingCpuFrames;
-
-            return new SdfScreenSourceFrame(
-                ImageViewHandle: handle,
-                Release: m_releaseCpuFrame
-            );
-        }
         public nint Handle() {
             if (!Live) {
                 return 0;
             }
 
-            if ((SharedStream is { LatestSlot: >= 0 and var slot }) && (GpuTargets is { } targets)) {
+            if (
+                (SharedStream is { LatestSlot: >= 0 and var slot }) &&
+                (GpuTargets is { } targets)
+            ) {
                 return targets.Handle(slot: slot);
             }
 
@@ -1154,23 +1500,6 @@ internal sealed partial class WorldScreenBinder {
             targets?.Retire();
         }
         public bool ShouldPull() => m_cadence.ShouldPull();
-
-        private void DisposeSurface() {
-            if (m_surfaceDisposed) {
-                return;
-            }
-
-            m_surfaceDisposed = true;
-            Surface.Dispose();
-        }
-        private void ReleaseCpuFrame(int token) {
-            _ = token;
-            --m_outstandingCpuFrames;
-
-            if (m_retired && (0 == m_outstandingCpuFrames)) {
-                DisposeSurface();
-            }
-        }
     }
     // One platform producer's render-device-owned target ring — a camera stream's or a probe kernel output's. A
     // screen-source frame acquires both the ring slot (so the producer cannot overwrite it) and this set's lifetime
@@ -1205,50 +1534,6 @@ internal sealed partial class WorldScreenBinder {
             }
         }
 
-        public void Retire() {
-            m_retired = true;
-
-            if (0 == m_outstanding) {
-                DisposeResources();
-            }
-        }
-        public nint Handle(int slot) {
-            if ((slot < 0) || (slot >= m_images.Count)) {
-                return 0;
-            }
-
-            return (((m_importedViews is { } views) && (slot < views.Length))
-                ? views[slot]
-                : m_images[slot].ImageViewHandle
-            );
-        }
-        public bool TryAcquire(out SdfScreenSourceFrame frame) {
-            if (m_retired || !m_stream.TryAcquireLatest(slot: out var slot)) {
-                frame = default;
-
-                return false;
-            }
-
-            if ((slot < 0) || (slot >= m_images.Count)) {
-                m_stream.Release(slot: slot);
-                frame = default;
-
-                return false;
-            }
-
-            ++m_outstanding;
-
-            var handle = Handle(slot: slot);
-
-            frame = new SdfScreenSourceFrame(
-                ImageViewHandle: handle,
-                Release: m_release,
-                ReleaseToken: slot
-            );
-
-            return true;
-        }
-
         private void DisposeResources() {
             if (m_disposed) {
                 return;
@@ -1270,9 +1555,65 @@ internal sealed partial class WorldScreenBinder {
             m_stream.Release(slot: slot);
             --m_outstanding;
 
-            if (m_retired && (0 == m_outstanding)) {
+            if (
+                m_retired &&
+                (0 == m_outstanding)
+            ) {
                 DisposeResources();
             }
+        }
+
+        public nint Handle(int slot) {
+            if (
+                (slot < 0) ||
+                (slot >= m_images.Count)
+            ) {
+                return 0;
+            }
+
+            return (((m_importedViews is { } views) && (slot < views.Length))
+                ? views[slot]
+                : m_images[slot].ImageViewHandle
+            );
+        }
+        public void Retire() {
+            m_retired = true;
+
+            if (0 == m_outstanding) {
+                DisposeResources();
+            }
+        }
+        public bool TryAcquire(out SdfScreenSourceFrame frame) {
+            if (
+                m_retired ||
+                !m_stream.TryAcquireLatest(slot: out var slot)
+            ) {
+                frame = default;
+
+                return false;
+            }
+
+            if (
+                (slot < 0) ||
+                (slot >= m_images.Count)
+            ) {
+                m_stream.Release(slot: slot);
+                frame = default;
+
+                return false;
+            }
+
+            ++m_outstanding;
+
+            var handle = Handle(slot: slot);
+
+            frame = new SdfScreenSourceFrame(
+                ImageViewHandle: handle,
+                Release: m_release,
+                ReleaseToken: slot
+            );
+
+            return true;
         }
     }
 }

@@ -40,16 +40,23 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
 
         try {
             Assert.Equal(
-                actual: link.Submit(deltaTicks: 1UL, inputs: [default, default]),
+                actual: link.Submit(
+                    deltaTicks: 1UL,
+                    inputs: [default, default]
+                ),
                 expected: QueuedMachineSubmission.Accepted
             );
             Assert.True(condition: groupCore!.WaitUntilEnteredRunCycles(millisecondsTimeout: GateTimeoutMilliseconds));
             firstDispose.Start();
             secondDispose.Start();
 
-            var deadline = Environment.TickCount64 + PollWindowMilliseconds;
+            var deadline = (Environment.TickCount64 + PollWindowMilliseconds);
+
             while (Environment.TickCount64 < deadline) {
-                if (firstCore.Disposed || secondCore.Disposed) {
+                if (
+                    firstCore.Disposed ||
+                    secondCore.Disposed
+                ) {
                     observedDisposeWhileMidStep = true;
                     break;
                 }
@@ -63,7 +70,7 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
 
         var firstJoined = firstDispose.Join(millisecondsTimeout: GateTimeoutMilliseconds);
         var secondJoined = secondDispose.Join(millisecondsTimeout: GateTimeoutMilliseconds);
-        var bothDisposed = firstJoined && secondJoined;
+        var bothDisposed = (firstJoined && secondJoined);
 
         Assert.True(
             condition: bothDisposed,
@@ -84,9 +91,10 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
 
     private sealed class TestGroupCore : IMachineGroupCore {
         private readonly TestQueuedCore m_first;
+        private readonly TestQueuedCore m_second;
+
         private readonly ManualResetEventSlim m_gateEntered = new(initialState: false);
         private readonly ManualResetEventSlim m_gateRelease = new(initialState: false);
-        private readonly TestQueuedCore m_second;
 
         public TestGroupCore(IReadOnlyList<IQueuedMachineCore> lent) {
             m_first = ((TestQueuedCore)lent[0]);
@@ -147,20 +155,25 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
         protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) => m_core;
     }
     private sealed class TestQueuedCore : IQueuedMachineCore {
-        private readonly uint[] m_framebuffer = [0U];
-
+        public string CheckpointIdentity => "test/linked-core";
         public long CycleCount => 0L;
         public ulong CyclesPerSecond => 1UL;
-        private int m_disposed;
-        public bool Disposed => Volatile.Read(ref m_disposed) != 0;
+        public bool Disposed => (Volatile.Read(location: ref m_disposed) != 0);
         public ReadOnlySpan<uint> Framebuffer => m_framebuffer;
         public long NativeFrameIndex => 0L;
+
+        private readonly uint[] m_framebuffer = [0U];
+
+        private int m_disposed;
 
         public void ApplyInput(in MachinePadState input) { }
         public int CaptureState(ref byte[] buffer) => 0;
         public void ConfigureAudio(int sampleRate) { }
         public ITimeTravelLookahead<MachinePadState> CreateLookahead() => throw new NotSupportedException();
-        public void Dispose() => Interlocked.Exchange(ref m_disposed, 1);
+        public void Dispose() => Interlocked.Exchange(
+            location1: ref m_disposed,
+            value: 1
+        );
         public int DrainAudioSamples(Span<short> destination) => 0;
         public void FlushSave(bool force) { }
         public void RestoreState(byte[] buffer, int length) { }

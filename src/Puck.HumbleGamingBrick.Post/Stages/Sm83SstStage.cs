@@ -50,6 +50,47 @@ internal sealed class Sm83SstStage : IPostStage<PostContext> {
     public PostTier Tier =>
         PostTier.B;
 
+    private static FamilyResult RunFamily(Sm83SstHarness harness, string path) {
+        var start = Stopwatch.GetTimestamp();
+        var familyName = Path.GetFileNameWithoutExtension(path: path);
+        var vectors = Sm83SstVectorFile.Load(path: path);
+
+        if (ConflictSkippedFamilies.TryGetValue(
+            key: familyName,
+            value: out var reason
+        )) {
+            return new FamilyResult(
+                Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
+                Failed: 0,
+                FirstFailure: null,
+                Name: familyName,
+                SkipReason: reason,
+                Vectors: vectors.Count
+            );
+        }
+
+        var failed = 0;
+        string? firstFailure = null;
+
+        foreach (var vector in vectors) {
+            var result = harness.Run(vector: vector);
+
+            if (!result.Passed) {
+                ++failed;
+                firstFailure ??= $"{vector.Name}: {result.Detail}";
+            }
+        }
+
+        return new FamilyResult(
+            Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
+            Failed: failed,
+            FirstFailure: firstFailure,
+            Name: familyName,
+            SkipReason: null,
+            Vectors: vectors.Count
+        );
+    }
+
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var families = Sm83SstCorpus.Families(root: context.SstRoot);
@@ -108,22 +149,23 @@ internal sealed class Sm83SstStage : IPostStage<PostContext> {
 
             cases.Add(item: new PostCaseResult(
                 Detail: ((result.Failed == 0)
-                    ? $"{result.Vectors} vectors"
-                    : $"{result.Failed}/{result.Vectors} failed; first: {result.FirstFailure}"),
+                ? $"{result.Vectors} vectors"
+                : $"{result.Failed}/{result.Vectors} failed; first: {result.FirstFailure}"),
                 Duration: result.Duration,
                 Name: result.Name,
                 Verdict: ((result.Failed == 0)
-                    ? PostCaseVerdict.Pass
-                    : PostCaseVerdict.Mismatch)
+                ? PostCaseVerdict.Pass
+                : PostCaseVerdict.Mismatch)
             ));
         }
 
         var skipNote = ((skippedFamilies.Count > 0)
             ? $"; {skippedFamilies.Count} documented oracle-conflict skips: {string.Join(
-            separator: ", ",
-            values: skippedFamilies
-        )}"
-            : string.Empty);
+                separator: ", ",
+                values: skippedFamilies
+            )}"
+            : string.Empty
+        );
         var detail = $"{vectorsPassed}/{vectorsRun} vectors passed across {familiesRun} families{skipNote}";
 
         return ((failures.Count == 0)
@@ -137,47 +179,7 @@ internal sealed class Sm83SstStage : IPostStage<PostContext> {
                     separator: ", ",
                     values: failures
                 )}"
-            ));
-    }
-
-    private static FamilyResult RunFamily(Sm83SstHarness harness, string path) {
-        var start = Stopwatch.GetTimestamp();
-        var familyName = Path.GetFileNameWithoutExtension(path: path);
-        var vectors = Sm83SstVectorFile.Load(path: path);
-
-        if (ConflictSkippedFamilies.TryGetValue(
-            key: familyName,
-            value: out var reason
-        )) {
-            return new FamilyResult(
-                Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
-                Failed: 0,
-                FirstFailure: null,
-                Name: familyName,
-                SkipReason: reason,
-                Vectors: vectors.Count
-            );
-        }
-
-        var failed = 0;
-        string? firstFailure = null;
-
-        foreach (var vector in vectors) {
-            var result = harness.Run(vector: vector);
-
-            if (!result.Passed) {
-                ++failed;
-                firstFailure ??= $"{vector.Name}: {result.Detail}";
-            }
-        }
-
-        return new FamilyResult(
-            Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
-            Failed: failed,
-            FirstFailure: firstFailure,
-            Name: familyName,
-            SkipReason: null,
-            Vectors: vectors.Count
+            )
         );
     }
 }

@@ -1,10 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 using Puck.Commands;
+using Puck.GamingBricks.Forge;
 using Puck.Hosting;
 using Puck.Input;
 using Puck.Launcher;
@@ -21,8 +23,10 @@ using Puck.Shaders;
 using Puck.World.Addons;
 using Puck.World.Audio;
 using Puck.World.Client;
+using Puck.World.Machines;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.World.Transpiler.Composition;
 
 namespace Puck.World;
 
@@ -47,11 +51,92 @@ namespace Puck.World;
 /// genuinely need a live render/pointer, which only <see cref="AddWorldPresentation"/> can supply.</para>
 /// </summary>
 internal static class WorldBootComposition {
+    private static WorldPipelineRuntime BuildPipelineRuntime(IServiceProvider sp, bool hostsOnDirectX, uint width, uint height) {
+        var definition = sp.GetRequiredService<WorldDefinition>();
+        var documentDirectory = ((Path.GetDirectoryName(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath) is { Length: > 0 } directory)
+            ? directory
+            : AppContext.BaseDirectory
+        );
+        var compiler = new ShaderCompiler(
+            cacheDirectory: Path.Combine(
+                path1: WorldStateRoot.Resolve(),
+                path2: "pipelines"
+            ),
+            toolchainDirectory: definition.Views.ShaderToolchain
+        );
+        var runtime = new WorldPipelineRuntime(
+            loader: new ShaderPipelineLoader(compiler: compiler),
+            documentDirectory: documentDirectory
+        );
+
+        // The iMouse source: the process's one pointer store, read NON-destructively (position + primary button —
+        // never the drained motion/wheel accumulators WorldSeatViewInput owns), on the seat the pointer rides. An
+        // offscreen boot registers no pointer, so its pipelines see iMouse zero.
+        if (
+            (sp.GetService<WorldPointer>() is { } pointer) &&
+            (sp.GetService<PlayerRoster>() is { } roster)
+        ) {
+            runtime.ReadPointer = () => {
+                var slot = WorldPointerSlot.Resolve(roster: roster);
+
+                return new WorldPipelinePointerSample(
+                    ClientPosition: pointer.Position(slot: slot),
+                    HasPosition: pointer.HasPosition(slot: slot),
+                    Pressed: pointer.IsButtonDown(
+                        button: 0,
+                        slot: slot
+                    )
+                );
+            };
+        }
+
+        var gpu = sp.GetRequiredService<IGpuComputeServices>();
+        var deviceContext = sp.GetRequiredService<IGpuDeviceContext>();
+
+        // The same node shape for a pipeline loaded after boot (pipeline.load naming a new row) as for a boot-time row.
+        runtime.CreateNode = name => new ShaderPipelineRenderNode(
+            name: name,
+            gpu: gpu,
+            deviceContext: deviceContext,
+            hostsOnDirectX: hostsOnDirectX,
+            width: width,
+            height: height,
+            graphics: WorldPostRenderExtensionServices.Build(serviceProvider: sp)
+        );
+
+        runtime.Report = (name, message) => Console.Error.WriteLine(value: $"[pipeline: {name} {message}]");
+        runtime.RegisterNode = (name, node) => sp.GetRequiredService<WorldRenderProbe>().Node?.RegisterChild(
+            name: name,
+            node: node
+        );
+        runtime.RemoveNode = name => sp.GetRequiredService<WorldRenderProbe>().Node?.RemoveChild(name: name);
+        runtime.Reconcile(rows: definition.Views.Pipelines);
+        return runtime;
+    }
+    // host.icon resolved the way every other document-relative path in this file is: against the world document's own
+    // directory, so an author's icon travels beside their world file rather than having to be installed next to the
+    // engine. Rooted paths pass through untouched. An unauthored icon stays null all the way down, which is what tells
+    // the platform backend to wear the host executable's own icon resource (Puck.World.csproj's <ApplicationIcon>) —
+    // the same puck.ico Explorer and a pinned shortcut already show, with no file to find at runtime.
+    private static string? ResolveAuthoredIcon(string? icon, string documentPath) {
+        if (string.IsNullOrWhiteSpace(value: icon)) {
+            return null;
+        }
+
+        if (Path.IsPathRooted(path: icon)) {
+            return icon;
+        }
+
+        return Path.Combine(
+            path1: ((Path.GetDirectoryName(path: documentPath) is { Length: > 0 } directory)
+            ? directory
+            : AppContext.BaseDirectory),
+            path2: icon
+        );
+    }
+
     /// <summary>
-    /// The authoritative core: profiles, roster, server, grants, population, addon runtime, replay tape, the
-    /// submission/output hub (via <see cref="WorldServer"/>), the console's tick barrier, every server-safe
-    /// console module, and the whole editor verb surface (command-vocabulary parity — see the class remarks).
-    /// Registered in every boot shape.
+    /// The authoritative core registers every server-safe service in every boot shape.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
@@ -63,8 +148,8 @@ internal static class WorldBootComposition {
         // read it live.
         services.AddWorldOwnedWorlds();
         services.AddSingleton<WorldServiceExtensions>();
-        services.AddHostedService(static sp => sp.GetRequiredService<WorldServiceExtensions>());
-        services.AddSingleton<ICommandModule>(static sp => new WorldServiceExtensionCommandModule(() => sp.GetRequiredService<WorldServiceExtensions>()));
+        services.AddHostedService(implementationFactory: static sp => sp.GetRequiredService<WorldServiceExtensions>());
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldServiceExtensionCommandModule(extensions: () => sp.GetRequiredService<WorldServiceExtensions>()));
 
         // The participant roster (up to four players, one avatar + viewport each; player 1 always joined, seated on
         // the boot profile) and its console/keyboard verb surface, plus the real-time profile/settings verbs
@@ -253,15 +338,6 @@ internal static class WorldBootComposition {
         // faults by name (no camera GPU tier) while a parameter binding finds no composed pass to write.
         services.AddWorldProbes();
 
-        // The screen-machine engines — read from WorldScreenMachineEngines.All, the ONLY place a concrete engine type
-        // is named in World (WorldDataHookInstaller reads the SAME list to install the load-time registered-key
-        // check, so the two can never drift). A declared or inserted machine screen resolves against this
-        // DI-registered set by engine id. Core because Server.WorldMachineHost (below) needs them at construction
-        // regardless of boot shape; nothing here opens a GPU device.
-        foreach (var engine in WorldScreenMachineEngines.All) {
-            services.AddSingleton<IScreenMachineEngine>(implementationInstance: engine);
-        }
-
         // The reserved derived-face slot range (None-sourced placeholders, so a creation FACE appearing at a later
         // delivery re-points a slot that already exists — the render provider key set is frozen at boot) —
         // shared by WorldMachineHost and WorldScreenBinder below so BOTH see the identical index set.
@@ -285,15 +361,16 @@ internal static class WorldBootComposition {
             return hub;
         });
 
-        // The authoritative screen-machine host — owns every booted IScreenMachine, in EVERY boot shape: registered
+        // The authoritative screen-machine host — owns every booted IMachineRuntime, in EVERY boot shape: registered
         // here (not under AddWorldPresentation) so a headless boot's cabinets run exactly like a windowed one's. A
         // PEER singleton to WorldServer (which takes it as a constructor parameter), never a private field WorldServer
         // builds, so the container disposes the machines it holds.
         services.AddSingleton(implementationFactory: static sp => new WorldMachineHost(
             screens: ExpandedScreens(definition: sp.GetRequiredService<WorldDefinition>()),
-            engines: sp.GetServices<IScreenMachineEngine>(),
+            catalog: sp.GetRequiredService<WorldMachineCatalog>(),
             documentPath: sp.GetRequiredService<WorldDefinitionSource>().SourcePath,
-            narrationHub: sp.GetRequiredService<WorldOutputHub>()
+            narrationHub: sp.GetRequiredService<WorldOutputHub>(),
+            contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
         ));
         // WorldServer's own constructor asks the container for IWorldMachineHost (its parameter type — Server
         // carries no reference to the concrete host); this shares the SAME peer singleton the line above registers,
@@ -301,13 +378,14 @@ internal static class WorldBootComposition {
         services.AddSingleton<IWorldMachineHost>(implementationFactory: static sp => sp.GetRequiredService<WorldMachineHost>());
         // The screen-machine host builder every offline re-drive (WorldReplayTape/WorldReplayInspector/
         // WorldReplaySnapshot) and a spawned instance's own empty host (WorldInstanceHost) construct through —
-        // Puck.World.Server carries no reference to Puck.World.Addons.Machines' WorldMachineHost, so it cannot build
+        // Puck.World.Server carries no reference to Puck.World.Machines' WorldMachineHost, so it cannot build
         // one itself. Mirrors the addon seam's identical factory shape (below).
-        services.AddSingleton<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(implementationInstance: static (screens, engines, documentPath, narrationHub) => new WorldMachineHost(
+        services.AddSingleton<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(implementationFactory: static sp => (screens, engines, documentPath, narrationHub) => new WorldMachineHost(
             screens: screens,
-            engines: engines,
+            catalog: sp.GetRequiredService<WorldMachineCatalog>(),
             documentPath: documentPath,
-            narrationHub: narrationHub
+            narrationHub: narrationHub,
+            contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
         ));
 
         // The screen binder — owns the declared screens' CPU-fed GPU sources (test patterns, the shared webcam,
@@ -368,7 +446,12 @@ internal static class WorldBootComposition {
         // the module registers each minted correlation id, and WorldPostBuildWiring's EchoTap subscriber prints the
         // per-verb refusal line.
         services.AddSingleton<WorldDeferredVerbEchoes>();
+        // ONE read-modify-whole-row window guard, shared by the row door and the sculpt door: a sculpt's whole-row
+        // resubmission of a row a literal/list/step edit already buffered this tick window is refused by name, not
+        // silently reverted.
+        services.AddSingleton<WorldRowStepWindowGuard>();
         services.AddSingleton<ICommandModule, WorldRowCommandModule>();
+        services.AddSingleton<ICommandModule, WorldSculptCommandModule>();
         // The contact/solidity verb surface — world.collision.probe/.status and the world.contacts read. Authoring
         // the field or a kit's collider goes through world.row.set collision/world.row.set kits.
         services.AddSingleton<ICommandModule, WorldCollisionCommandModule>();
@@ -381,6 +464,10 @@ internal static class WorldBootComposition {
         // The CURVES section's census read-back — world.curves. Rows are authored through
         // world.row.set curves/world.row.remove curves.
         services.AddSingleton<ICommandModule, WorldCurveCommandModule>();
+        services.AddSingleton<ICommandModule, WorldMachineCommandModule>();
+        // The render.lighting read-back — world.lighting. The fields themselves are authored through
+        // world.row.set render.
+        services.AddSingleton<ICommandModule, WorldLightingCommandModule>();
         // The inhabitation + creation-facet READ-BACK surface — world.inhabitants, world.faces,
         // world.attachments, world.portals. The facets themselves are authored through
         // world.row.set placements <json>.
@@ -434,18 +521,21 @@ internal static class WorldBootComposition {
             liveServer: sp.GetRequiredService<WorldServer>(),
             profiles: sp.GetRequiredService<WorldOwnedWorlds>(),
             transport: sp.GetRequiredService<LoopbackTransport>(),
-            engines: sp.GetServices<IScreenMachineEngine>(),
-            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+            engines: sp.GetServices<IMachineEngine>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
             addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>()
         ));
         // The tape's read-back (replay.inspect) — walks a saved tape and, with --poses, re-drives it through the
         // same shadow drive the tape's verify uses.
         services.AddSingleton(implementationFactory: static sp => new WorldReplayInspector(
             profiles: sp.GetRequiredService<WorldOwnedWorlds>(),
-            engines: sp.GetServices<IScreenMachineEngine>(),
-            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
-            addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>()
+            engines: sp.GetServices<IMachineEngine>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+            addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>(),
+            documents: sp.GetRequiredService<IWorldDocumentSource>()
         ));
+        // The one source every live document swap and replay re-read goes through: a .puck origin lowers here.
+        services.AddSingleton<IWorldDocumentSource, PuckDocumentComposer>();
         services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
 
         // The console's sequencing primitive: the tick barrier world.wait arms (published by the shared server-step
@@ -528,7 +618,7 @@ internal static class WorldBootComposition {
             router: sp.GetRequiredService<Func<InputRouter>>()
         ));
 
-        // The process's running world instances (docs/vision.md's "Multi-world ticking in one process" row):
+        // The process's running world instances (docs/architecture/worlds.md's "Multi-world ticking in one process" row):
         // the boot world plus every instance started at runtime through the console, stepped by both boot shapes'
         // IFixedStepSimulation.Step. CORE (not presentation-only): an instance beside the boot world is render-less
         // by construction, so it works identically headless or windowed. The engine is boot-free at construction —
@@ -541,8 +631,10 @@ internal static class WorldBootComposition {
                 machineId: sp.GetRequiredService<WorldOwnedWorlds>().MachineId,
                 stateRoot: WorldStateRoot.Resolve(),
                 applicationStopping: sp.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping,
-                machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
-                admitsSpawn: true
+                machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+                admitsSpawn: true,
+                catalogFingerprint: MachineCatalogFingerprint(machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()),
+                machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()
             );
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
             var bootServer = sp.GetRequiredService<WorldServer>();
@@ -557,7 +649,11 @@ internal static class WorldBootComposition {
                     Subject: bootServer.AuthorityIdentity,
                     Network: sp.GetRequiredService<WorldPeerNetwork>()
                 ),
-                documentOrigin: new WorldFileOrigin(resolvedPath: bootOrigin.SourcePath)
+                documentOrigin: new WorldFileOrigin(
+                    resolvedPath: bootOrigin.SourcePath,
+                    catalogFingerprint: MachineCatalogFingerprint(machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()),
+                    catalog: sp.GetRequiredService<WorldMachineCatalog>()
+                )
             ) {
                 Tape = sp.GetRequiredService<WorldReplayTape>(),
             };
@@ -614,8 +710,10 @@ internal static class WorldBootComposition {
         // windowed compositions retain one vocabulary; the handler refuses by name when no presentation exists.
         // The seat console is terminal-owned and registered beside quit, outside this world module.
         services.AddSingleton<ICommandModule, WorldUiCommandModule>();
-        services.AddSingleton<ICommandModule>(static sp => new WorldControlCommandModule(
-            () => sp.GetRequiredService<TextCommandSource>(), sp.GetService<WorldRenderProbe>()));
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldControlCommandModule(
+            () => sp.GetRequiredService<TextCommandSource>(),
+            sp.GetService<WorldRenderProbe>()
+        ));
 
         // The radial action menu's verb surface (player.wheel.ring/.select/.commit/.cancel + world.view.wheel) — see
         // AddWorldPresentation below for WorldWheelFeed/WheelStore, the genuinely presentation-only pointer/viewport
@@ -633,6 +731,181 @@ internal static class WorldBootComposition {
         // composer are both core, so view.override and world.view.state genuinely work headless; WorldCursorFeed is
         // OPTIONAL (default null) and world.view.pointer refuses by name at use when it is absent.
         services.AddSingleton<ICommandModule, WorldViewCommandModule>();
+
+        // The shader-pipeline verb surface — pipeline.load/.reload/.watch/.time/.status. CORE-registered for the same
+        // command-vocabulary-parity reason as WorldViewCommandModule above; pipeline.load's row upsert is core so it
+        // genuinely works headless, and WorldRenderProbe is OPTIONAL (default null) so every other verb refuses by
+        // name at use when it is absent (compiling/swapping a pipeline needs a live render tree).
+        services.AddSingleton<ICommandModule, WorldPipelineCommandModule>();
+
+        return services;
+    }
+    /// <summary>Registers one already-built host catalog and its typed engine/provider services.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="machineCatalog">The immutable catalog selected before world composition.</param>
+    /// <returns>The same service collection.</returns>
+    public static IServiceCollection AddWorldMachineCatalog(this IServiceCollection services, WorldMachineCatalog machineCatalog) {
+        ArgumentNullException.ThrowIfNull(argument: services);
+        ArgumentNullException.ThrowIfNull(argument: machineCatalog);
+        services.AddSingleton(implementationInstance: machineCatalog);
+        services.TryAddSingleton<IMachineContentAdmissionPolicy>(instance: MachineContentAdmissionPolicy.Open(assetAdmission: MachineAssetAdmission.Allow));
+        foreach (var engine in machineCatalog.Engines.Values) {
+            services.AddSingleton(implementationInstance: engine);
+        }
+        foreach (var provider in machineCatalog.ContentProviders.Values) {
+            services.AddSingleton(implementationInstance: provider);
+            if (provider is ICartridgeCompiler compiler) {
+                services.AddSingleton(implementationInstance: compiler);
+            }
+        }
+        return services;
+    }
+    /// <summary>
+    /// Layers a real GPU device and the composed-frame render pipeline over the authoritative core — the world
+    /// render ALONE (no unified overlay/console-mirror/binding-bar, so no glyph atlas, HUD store, console-session
+    /// bank, wheel, pointer, cursor, or audio-render-device registration), with NO window and NO swap chain: see
+    /// <see cref="WorldOffscreenGpuActivation"/> for the per-backend device bring-up. Registered only when
+    /// <c>WorldHostSettings.Offscreen</c> is <see langword="true"/>; <c>world.screenshot</c> (core-registered) works
+    /// unchanged because it reaches the render node chain's own <c>RequestCapture</c>, never a presenter or swap
+    /// chain. Every presentation-only console module (<see cref="WorldCommandModule"/>, audio, recording, gamepads)
+    /// stays unregistered and refuses as unknown, exactly like the <c>none</c> shape; diegetic View-type screens
+    /// (the jumbotron pool <c>AddWorldPresentation</c>'s render-root factory stands up via
+    /// <c>WorldScreenBinder.ConfigureViews</c>) are a known gap this shape does not compose.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="hostsOnDirectX">Whether the resolved backend is Direct3D 12 (else Vulkan).</param>
+    /// <returns>The same service collection, for chaining.</returns>
+    public static IServiceCollection AddWorldOffscreenPresentation(this IServiceCollection services, bool hostsOnDirectX) {
+        ArgumentNullException.ThrowIfNull(argument: services);
+
+        services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings, WorldDefinitionSource>(configureOptions: static (options, hostSettings, source) => {
+            options.Height = ((uint)hostSettings.Height);
+            options.IconPath = ResolveAuthoredIcon(
+                icon: hostSettings.Icon,
+                documentPath: source.SourcePath
+            );
+            options.Mode = NativeWindowMode.PlatformWindow;
+            options.Title = (hostSettings.Title ?? WorldApplicationDefaults.WindowTitle);
+            options.Width = ((uint)hostSettings.Width);
+        });
+
+        if (OperatingSystem.IsWindows()) {
+            services.AddWindowsHostedPresentation(hostsOnDirectX: hostsOnDirectX);
+        } else {
+            services.AddLinuxHostedPresentation();
+        }
+
+        // Resolved eagerly by the IRenderNode factory below, before anything touches the GPU — see its own remarks
+        // for the per-backend bring-up (surfaceless Direct3D 12; a never-shown window for Vulkan).
+        services.AddSingleton<WorldOffscreenGpuActivation>();
+
+        services.AddSingleton(implementationFactory: static sp => {
+            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
+
+            return new OffscreenRenderOptions(
+                Height: ((uint)hostSettings.Height),
+                Width: ((uint)hostSettings.Width)
+            );
+        });
+
+        // The render probe, and the plain per-frame state a bare world render (no overlay) still composes through:
+        // per-seat viewport rects, markers, the icon table (the SDF document emitter's material palette reads it),
+        // and the SDF document intake itself. None of these touch a window or the GPU.
+        services.AddSingleton<WorldRenderProbe>();
+        services.AddSingleton<WorldSeatViewports>();
+        services.AddSingleton<MarkerStore>();
+        services.AddSingleton(implementationFactory: static sp => new WorldIconTable(definition: sp.GetRequiredService<WorldDefinition>()));
+        services.AddSingleton<WorldSdfDocumentEmitter>();
+        services.AddSingleton<ICommandModule, WorldSdfCommandModule>();
+        // world.host — the RESOLVED presentation column reports "offscreen" (see WorldHostCommandModule.DescribeHost).
+        services.AddSingleton<ICommandModule, WorldHostCommandModule>();
+
+        // See the windowed factory's own remarks (AddWorldAuthoritativeCore) — the same shared runtime, built once
+        // GPU services are live (WorldOffscreenGpuActivation runs before this factory resolves, at the same point
+        // its own device-bring-up already does).
+        services.AddSingleton(implementationFactory: sp => {
+            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
+
+            return BuildPipelineRuntime(
+                sp: sp,
+                hostsOnDirectX: hostSettings.HostsOnDirectX,
+                width: ((uint)hostSettings.Width),
+                height: ((uint)hostSettings.Height)
+            );
+        });
+
+        services.AddSingleton(implementationFactory: sp => new WorldFramePresenter(
+            frameRate: sp.GetRequiredService<FrameRateMonitor>(),
+            client: sp.GetRequiredService<WorldClient>(),
+            simulation: sp.GetRequiredService<HeadlessWorldSimulation>(),
+            settings: sp.GetRequiredService<WorldRenderSettings>(),
+            binder: sp.GetRequiredService<WorldScreenBinder>(),
+            envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
+            seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
+            animator: sp.GetRequiredService<WorldStampPool>(),
+            audio: sp.GetRequiredService<WorldAudioDirector>(),
+            anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
+            speech: sp.GetRequiredService<WorldSpeechClock>(),
+            overlayFacts: sp.GetRequiredService<IOverlayPredicateEvaluator>(),
+            composition: sp.GetRequiredService<WorldCompositionState>(),
+            composer: sp.GetRequiredService<WorldViewComposer>(),
+            sdfDocuments: sp.GetRequiredService<WorldSdfDocumentEmitter>(),
+            viewports: sp.GetRequiredService<WorldSeatViewports>(),
+            continuum: sp.GetRequiredService<WorldContinuum>(),
+            text: sp.GetRequiredService<WorldTextCatalog>(),
+            adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
+            markers: sp.GetRequiredService<MarkerStore>(),
+            resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
+            pipelines: sp.GetRequiredService<WorldPipelineRuntime>()
+        ));
+
+        services.AddSingleton<IRenderNode>(implementationFactory: sp => {
+            // Brings the GPU device up before anything below asks for one.
+            _ = sp.GetRequiredService<WorldOffscreenGpuActivation>();
+
+            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
+            var width = ((uint)hostSettings.Width);
+            var height = ((uint)hostSettings.Height);
+            var binder = sp.GetRequiredService<WorldScreenBinder>();
+            var viewGpuServices = new SdfViewGpuServices(
+                Gpu: sp.GetRequiredService<IGpuComputeServices>(),
+                TimingFactory: (sp.GetService(serviceType: typeof(IGpuTimingPoolFactory)) as IGpuTimingPoolFactory),
+                TimingRecorder: (sp.GetService(serviceType: typeof(IGpuTimingRecorder)) as IGpuTimingRecorder)
+            );
+            var frameSource = sp.GetRequiredService<WorldFramePresenter>();
+            // No Decorate: the composed frame is the world render alone (see this method's own remarks) — the
+            // outermost node stays SdfEngineNode itself, so world.screenshot's capture reaches it directly.
+            var render = SdfWorldRenderBuilder.Build(
+                services: viewGpuServices,
+                spec: new SdfWorldRenderSpec(
+                    FrameSource: frameSource,
+                    Height: height,
+                    Width: width
+                ) {
+                    Children = sp.GetRequiredService<WorldPipelineRuntime>().Entries.ToDictionary(
+                    keySelector: static entry => entry.Key,
+                    elementSelector: static entry => ((IRenderNode)entry.Value.Node)
+                ),
+                    DynamicTransformCapacity = frameSource.DynamicTransformCapacity,
+                    HostsOnDirectX = hostSettings.HostsOnDirectX,
+                    InstanceCapacity = frameSource.InstanceCapacity,
+                    ProgramWordCapacity = frameSource.ProgramWordCapacity,
+                    RayQuery = hostSettings.RayQuery,
+                    ScreenLights = binder.ScreenLights,
+                    ScreenSourceFrames = binder.ScreenSources,
+                    ViewportCapacity = PlayerRoster.MaxSlots,
+                }
+            );
+            var probe = sp.GetRequiredService<WorldRenderProbe>();
+
+            probe.Node = render.Producer;
+            probe.Render = render;
+
+            return new WorldRenderTeardown(
+                inner: render.Root,
+                binder
+            );
+        });
 
         return services;
     }
@@ -652,13 +925,17 @@ internal static class WorldBootComposition {
     public static IServiceCollection AddWorldPresentation(this IServiceCollection services, bool hostsOnDirectX) {
         ArgumentNullException.ThrowIfNull(argument: services);
 
-        services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings>(configureOptions: static (options, hostSettings) => {
+        services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings, WorldDefinitionSource>(configureOptions: static (options, hostSettings, source) => {
             options.Height = ((uint)hostSettings.Height);
             // The world draws its own pointer (CursorWriter); the OS cursor stays hidden over the client area.
             options.HideMouseCursor = true;
+            options.IconPath = ResolveAuthoredIcon(
+                icon: hostSettings.Icon,
+                documentPath: source.SourcePath
+            );
             options.Mode = NativeWindowMode.PlatformWindow;
             options.StartFullscreen = hostSettings.Fullscreen;
-            options.Title = WorldApplicationDefaults.WindowTitle;
+            options.Title = (hostSettings.Title ?? WorldApplicationDefaults.WindowTitle);
             options.Width = ((uint)hostSettings.Width);
         });
         services.AddSingleton(implementationFactory: static sp => new PresentationOptions {
@@ -694,7 +971,7 @@ internal static class WorldBootComposition {
         // audio.emitters. The rows are written through world.row.set/world.row.remove over
         // speakers/tunes/patches/audio. Presentation-only: injects the audio device render service directly.
         services.AddSingleton<ICommandModule, WorldAudioCommandModule>();
-        // The recording graph (puck.recording.v1) — native capture for streaming/upload workflows. Presentation-only:
+        // The recording graph (puck.recording.configuration.v1) — native capture for streaming/upload workflows. Presentation-only:
         // AddWindowsRecordingPlatform/AddLinuxRecordingPlatform register the encoder ladder, audio-source factory,
         // and shared session clock. The launcher drives the generic FrameCaptureController with the exact root
         // surface immediately before presentation; the world command module owns the concrete recording session it
@@ -835,9 +1112,7 @@ internal static class WorldBootComposition {
         // view/probe/capture) to the opaque key a HUD Frame element's overlay slot addresses its source by.
         // Registered as itself (WorldHudFeed calls KeyFor when building a Frame element) AND as the interface
         // (OverlayServices.Build resolves it below), so both consumers share the one key table.
-        services.AddSingleton<WorldOverlayFrameSources>(implementationFactory: static sp => new WorldOverlayFrameSources(
-            binder: sp.GetRequiredService<WorldScreenBinder>()
-        ));
+        services.AddSingleton<WorldOverlayFrameSources>(implementationFactory: static sp => new WorldOverlayFrameSources(binder: sp.GetRequiredService<WorldScreenBinder>()));
         services.AddSingleton<IOverlayFrameSources>(implementationFactory: static sp => sp.GetRequiredService<WorldOverlayFrameSources>());
         services.AddSingleton(implementationFactory: static sp => new WorldHudFeed(
             client: sp.GetRequiredService<WorldClient>(),
@@ -893,6 +1168,20 @@ internal static class WorldBootComposition {
             ? "directx"
             : "vulkan"));
 
+        // The shader-pipeline runtime: one ShaderPipelineRenderNode + boot compile per views.pipelines row, shared by the frame
+        // presenter (resizes/feeds each node per produced frame) and the render root below (keys
+        // SdfWorldRenderSpec.Children by the same names) — see BuildPipelineRuntime's remarks.
+        services.AddSingleton(implementationFactory: sp => {
+            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
+
+            return BuildPipelineRuntime(
+                sp: sp,
+                hostsOnDirectX: hostSettings.HostsOnDirectX,
+                width: ((uint)hostSettings.Width),
+                height: ((uint)hostSettings.Height)
+            );
+        });
+
         // The composed frame source, registered on its own rather than built inside the render-root factory below:
         // it touches no GPU, and its constructor runs the ONE capacity probe, so the boot can resolve it before any
         // hosted service starts (WorldPostBuildWiring) and report an over-envelope world as an ordinary named boot
@@ -918,7 +1207,8 @@ internal static class WorldBootComposition {
             text: sp.GetRequiredService<WorldTextCatalog>(),
             adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
             markers: sp.GetRequiredService<MarkerStore>(),
-            resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon
+            resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
+            pipelines: sp.GetRequiredService<WorldPipelineRuntime>()
         ));
 
         // The render root: the shared SDF world assembly over the grass-and-boulders scene. The built Producer (the
@@ -966,6 +1256,10 @@ internal static class WorldBootComposition {
                     Height: height,
                     Width: width
                 ) {
+                    Children = sp.GetRequiredService<WorldPipelineRuntime>().Entries.ToDictionary(
+                    keySelector: static entry => entry.Key,
+                    elementSelector: static entry => ((IRenderNode)entry.Value.Node)
+                ),
                     // The post-render extension chain composes FIRST, over the bare SDF producer — before the
                     // unified overlay wraps it and before the glyph-atlas early return below, so a missing atlas
                     // never silently drops an authored extension (world content gets the extension's effect; HUD/
@@ -1006,7 +1300,10 @@ internal static class WorldBootComposition {
                                     services: postRenderServices,
                                     width: width
                                 );
-                                sp.GetRequiredService<WorldPostRenderExtensionPasses>().Add(id: entry.Id, pass: ((FullscreenPassNode)composed));
+                                sp.GetRequiredService<WorldPostRenderExtensionPasses>().Add(
+                                    id: entry.Id,
+                                    pass: ((FullscreenPassNode)composed)
+                                );
                             }
                         }
 
@@ -1133,126 +1430,48 @@ internal static class WorldBootComposition {
 
         return services;
     }
-    /// <summary>
-    /// Layers a real GPU device and the composed-frame render pipeline over the authoritative core — the world
-    /// render ALONE (no unified overlay/console-mirror/binding-bar, so no glyph atlas, HUD store, console-session
-    /// bank, wheel, pointer, cursor, or audio-render-device registration), with NO window and NO swap chain: see
-    /// <see cref="WorldOffscreenGpuActivation"/> for the per-backend device bring-up. Registered only when
-    /// <c>WorldHostSettings.Offscreen</c> is <see langword="true"/>; <c>world.screenshot</c> (core-registered) works
-    /// unchanged because it reaches the render node chain's own <c>RequestCapture</c>, never a presenter or swap
-    /// chain. Every presentation-only console module (<see cref="WorldCommandModule"/>, audio, recording, gamepads)
-    /// stays unregistered and refuses as unknown, exactly like the <c>none</c> shape; diegetic View-type screens
-    /// (the jumbotron pool <c>AddWorldPresentation</c>'s render-root factory stands up via
-    /// <c>WorldScreenBinder.ConfigureViews</c>) are a known gap this shape does not compose.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="hostsOnDirectX">Whether the resolved backend is Direct3D 12 (else Vulkan).</param>
-    /// <returns>The same service collection, for chaining.</returns>
-    public static IServiceCollection AddWorldOffscreenPresentation(this IServiceCollection services, bool hostsOnDirectX) {
-        ArgumentNullException.ThrowIfNull(argument: services);
+    /// <summary>Builds the immutable machine catalog once for this host, before its world document composes.</summary>
+    /// <returns>The host-local catalog containing static and optional machine extensions.</returns>
+    public static WorldMachineCatalog BuildMachineCatalog() {
+        // Static bundles and installed extensions use the same host-local registration path.
+        var machineRegistry = new WorldMachineExtensionRegistry();
 
-        services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings>(configureOptions: static (options, hostSettings) => {
-            options.Height = ((uint)hostSettings.Height);
-            options.Mode = NativeWindowMode.PlatformWindow;
-            options.Title = WorldApplicationDefaults.WindowTitle;
-            options.Width = ((uint)hostSettings.Width);
-        });
+        new Puck.HumbleGamingBrick.Forge.HumbleGamingBrickExtension().Initialize(registry: machineRegistry);
+        new Puck.AdvancedGamingBrick.Forge.AdvancedGamingBrickExtension().Initialize(registry: machineRegistry);
 
-        if (OperatingSystem.IsWindows()) {
-            services.AddWindowsHostedPresentation(hostsOnDirectX: hostsOnDirectX);
-        } else {
-            services.AddLinuxHostedPresentation();
-        }
+        // Discover optional dynamic extensions.
+        var appExtensions = Path.Combine(
+            path1: AppContext.BaseDirectory,
+            path2: "extensions"
+        );
 
-        // Resolved eagerly by the IRenderNode factory below, before anything touches the GPU — see its own remarks
-        // for the per-backend bring-up (surfaceless Direct3D 12; a never-shown window for Vulkan).
-        services.AddSingleton<WorldOffscreenGpuActivation>();
+        if (Directory.Exists(path: appExtensions)) {
+            var serverRegistry = new DesktopWorldExtensionRegistry();
 
-        services.AddSingleton(implementationFactory: static sp => {
-            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
-
-            return new OffscreenRenderOptions(
-                Height: ((uint)hostSettings.Height),
-                Width: ((uint)hostSettings.Width)
-            );
-        });
-
-        // The render probe, and the plain per-frame state a bare world render (no overlay) still composes through:
-        // per-seat viewport rects, markers, the icon table (the SDF document emitter's material palette reads it),
-        // and the SDF document intake itself. None of these touch a window or the GPU.
-        services.AddSingleton<WorldRenderProbe>();
-        services.AddSingleton<WorldSeatViewports>();
-        services.AddSingleton<MarkerStore>();
-        services.AddSingleton(implementationFactory: static sp => new WorldIconTable(definition: sp.GetRequiredService<WorldDefinition>()));
-        services.AddSingleton<WorldSdfDocumentEmitter>();
-        services.AddSingleton<ICommandModule, WorldSdfCommandModule>();
-        // world.host — the RESOLVED presentation column reports "offscreen" (see WorldHostCommandModule.DescribeHost).
-        services.AddSingleton<ICommandModule, WorldHostCommandModule>();
-
-        services.AddSingleton(implementationFactory: sp => new WorldFramePresenter(
-            frameRate: sp.GetRequiredService<FrameRateMonitor>(),
-            client: sp.GetRequiredService<WorldClient>(),
-            simulation: sp.GetRequiredService<HeadlessWorldSimulation>(),
-            settings: sp.GetRequiredService<WorldRenderSettings>(),
-            binder: sp.GetRequiredService<WorldScreenBinder>(),
-            envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
-            seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
-            animator: sp.GetRequiredService<WorldStampPool>(),
-            audio: sp.GetRequiredService<WorldAudioDirector>(),
-            anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
-            speech: sp.GetRequiredService<WorldSpeechClock>(),
-            overlayFacts: sp.GetRequiredService<IOverlayPredicateEvaluator>(),
-            composition: sp.GetRequiredService<WorldCompositionState>(),
-            composer: sp.GetRequiredService<WorldViewComposer>(),
-            sdfDocuments: sp.GetRequiredService<WorldSdfDocumentEmitter>(),
-            viewports: sp.GetRequiredService<WorldSeatViewports>(),
-            continuum: sp.GetRequiredService<WorldContinuum>(),
-            text: sp.GetRequiredService<WorldTextCatalog>(),
-            adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
-            markers: sp.GetRequiredService<MarkerStore>(),
-            resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon
-        ));
-
-        services.AddSingleton<IRenderNode>(implementationFactory: sp => {
-            // Brings the GPU device up before anything below asks for one.
-            _ = sp.GetRequiredService<WorldOffscreenGpuActivation>();
-
-            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
-            var width = ((uint)hostSettings.Width);
-            var height = ((uint)hostSettings.Height);
-            var binder = sp.GetRequiredService<WorldScreenBinder>();
-            var viewGpuServices = new SdfViewGpuServices(
-                Gpu: sp.GetRequiredService<IGpuComputeServices>(),
-                TimingFactory: (sp.GetService(serviceType: typeof(IGpuTimingPoolFactory)) as IGpuTimingPoolFactory),
-                TimingRecorder: (sp.GetService(serviceType: typeof(IGpuTimingRecorder)) as IGpuTimingRecorder)
-            );
-            var frameSource = sp.GetRequiredService<WorldFramePresenter>();
-            // No Decorate: the composed frame is the world render alone (see this method's own remarks) — the
-            // outermost node stays SdfEngineNode itself, so world.screenshot's capture reaches it directly.
-            var render = SdfWorldRenderBuilder.Build(
-                services: viewGpuServices,
-                spec: new SdfWorldRenderSpec(FrameSource: frameSource, Height: height, Width: width) {
-                    DynamicTransformCapacity = frameSource.DynamicTransformCapacity,
-                    HostsOnDirectX = hostSettings.HostsOnDirectX,
-                    InstanceCapacity = frameSource.InstanceCapacity,
-                    ProgramWordCapacity = frameSource.ProgramWordCapacity,
-                    RayQuery = hostSettings.RayQuery,
-                    ScreenLights = binder.ScreenLights,
-                    ScreenSourceFrames = binder.ScreenSources,
-                    ViewportCapacity = PlayerRoster.MaxSlots,
+            WorldExtensionLoader.LoadFromDirectory(
+                directoryPath: appExtensions,
+                serverRegistry: serverRegistry,
+                onExtensionLoaded: ext => {
+                    if (ext is Puck.Abstractions.Machines.IMachineExtension brickExtension) {
+                        brickExtension.Initialize(registry: machineRegistry);
+                    }
                 }
             );
-            var probe = sp.GetRequiredService<WorldRenderProbe>();
+        }
 
-            probe.Node = render.Producer;
-            probe.Render = render;
+        return machineRegistry.Build();
+    }
+    /// <summary>Computes the stable metadata fingerprint for one host-local catalog.</summary>
+    public static string MachineCatalogFingerprint(WorldMachineCatalog machineCatalog) {
+        ArgumentNullException.ThrowIfNull(argument: machineCatalog);
+        return machineCatalog.CompositionFingerprint;
+    }
 
-            return new WorldRenderTeardown(
-                inner: render.Root,
-                binder
-            );
-        });
-
-        return services;
+    private sealed class DesktopWorldExtensionRegistry : IWorldExtensionRegistry {
+        public void RegisterAuthentication(WorldAuthenticationProvider provider) => WorldConnectionAuthentication.Register(provider: provider);
+        public void RegisterHealthCheck(string path, Func<bool, (string ContentType, string Body)> handler) { }
+        public void RegisterOperation(WorldExtensionProviderType provider) => WorldServiceExtensions.Register(providerType: provider);
+        public void RegisterRetirement(WorldSiloRetirementProvider provider) { }
+        public void RegisterStorage(WorldSiloStorageProvider provider) { }
     }
 }

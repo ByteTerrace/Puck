@@ -9,6 +9,16 @@ namespace Puck.Attestation.Tests;
 public sealed class TrustListOwnershipTests {
     private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(seconds: Epoch);
 
+    private static void MutateExposedMemory(ReadOnlyMemory<byte> memory) {
+        Assert.True(condition: MemoryMarshal.TryGetArray(
+            memory: memory,
+            segment: out var segment
+        ));
+        Assert.NotNull(@object: segment.Array);
+
+        segment.Array[segment.Offset] ^= 0xFF;
+    }
+
     [Fact]
     public void CallerOwnedInputsAndDetachedViews_CannotMutateVerifierState() {
         var codec = new CborAttestationCodec();
@@ -23,9 +33,15 @@ public sealed class TrustListOwnershipTests {
             MaximumAge: null
         );
         var callerOwnedEntries = new List<TrustListEntry> { entry };
-        var trust = new TrustList(entries: callerOwnedEntries, defaultMaximumAge: TimeSpan.FromHours(hours: 1));
+        var trust = new TrustList(
+            entries: callerOwnedEntries,
+            defaultMaximumAge: TimeSpan.FromHours(hours: 1)
+        );
         var exposedEntry = trust.Entries[0];
-        var foundEntry = Assert.IsType<TrustListEntry>(@object: trust.FindDirectSigner(domain: keys.Domain, subject: keys.Subject));
+        var foundEntry = Assert.IsType<TrustListEntry>(@object: trust.FindDirectSigner(
+            domain: keys.Domain,
+            subject: keys.Subject
+        ));
 
         callerOwnedEntries.Clear();
         callerOwnedReach.Clear();
@@ -55,13 +71,9 @@ public sealed class TrustListOwnershipTests {
             trustList: trust
         );
 
-        Assert.True(condition: result.Admits(slot: "slot:wallet"), userMessage: result.RefusalReason);
-    }
-
-    private static void MutateExposedMemory(ReadOnlyMemory<byte> memory) {
-        Assert.True(condition: MemoryMarshal.TryGetArray(memory: memory, segment: out var segment));
-        Assert.NotNull(@object: segment.Array);
-
-        segment.Array[segment.Offset] ^= 0xFF;
+        Assert.True(
+            condition: result.Admits(slot: "slot:wallet"),
+            userMessage: result.RefusalReason
+        );
     }
 }

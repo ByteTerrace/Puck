@@ -1,0 +1,17 @@
+{
+  "source": "src/Puck.Text/Assets/Fonts/source/JetBrainsMono-Regular.ttf (JetBrains Mono, OFL-1.1; see JetBrainsMono-LICENSE.txt)",
+  "sha256": "e6fd0d7e91550b3ed2b735d4312474362c4716edc4fc0577a0f61ed782d5aed1",
+  "tool": "fontTools 4.53.0",
+  "command": "python -c \"from fontTools.ttLib import TTFont; f=TTFont('JetBrainsMono-Regular.ttf'); cmap=f.getBestCmap(); h=f['head']; hh=f['hhea']; hm=f['hmtx']; print(f.getGlyphOrder()[:40]); print(cmap[0x41], f.getGlyphID(cmap[0x41]), cmap[0x20], f.getGlyphID(cmap[0x20])); print(h.unitsPerEm, hm[cmap[0x41]][0]/h.unitsPerEm, hm[cmap[0x20]][0]/h.unitsPerEm, hh.ascent/h.unitsPerEm, hh.descent/h.unitsPerEm, (hh.ascent-hh.descent+hh.lineGap)/h.unitsPerEm, f['post'].underlinePosition/h.unitsPerEm, f['post'].underlineThickness/h.unitsPerEm)\"",
+  "options": "fontTools TTFont table read; cmap best mapping; no rasterizer or shaping",
+  "UnitsPerEm": 1000,
+  "GlyphIdA": 1,
+  "GlyphIdSpace": 821,
+  "AdvanceA": 0.6,
+  "AdvanceSpace": 0.6,
+  "Ascender": 1.02,
+  "Descender": -0.3,
+  "LineHeight": 1.32,
+  "UnderlineY": -0.155,
+  "UnderlineThickness": 0.05
+}

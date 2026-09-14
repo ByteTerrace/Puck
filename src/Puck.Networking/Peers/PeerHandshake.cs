@@ -11,6 +11,36 @@ namespace Puck.Networking.Peers;
 /// <see cref="PeerFrameKind.HelloRefused"/> frame through <see cref="RefuseAsync"/>; only a connection the peer
 /// closed first is returned silently, since there is nobody left to tell.</summary>
 internal static class PeerHandshake {
+    /// <summary>Decodes a <see cref="PeerFrameKind.HelloRefused"/> frame into the refusal this side reports: the
+    /// peer's name as <see cref="PeerRefusal.RefusedByPeer"/>, or <see cref="PeerRefusal.HandshakeMalformed"/> when
+    /// the frame's body does not hold exactly one known refusal byte. Decodes only: the handshake sends the
+    /// malformed case to the peer through <see cref="ReadRefusedFrameAsync"/>, and <see cref="PeerLink"/>, whose
+    /// read loop can receive one after both proofs were sent, renames it to its own
+    /// <see cref="PeerRefusal.FrameMalformed"/>.</summary>
+    /// <param name="frame">The frame, already known to carry the refused kind.</param>
+    /// <returns>The failure to report.</returns>
+    internal static PeerFailure ReadRefusal(WireFrameRead frame) {
+        var reader = new WireReader(bytes: frame.Body.Span);
+        var refusal = reader.ReadByte();
+
+        if (
+            !reader.TryFinish(failure: out var wireFailure) ||
+            !Enum.IsDefined(value: ((PeerRefusal)refusal))
+        ) {
+            return new PeerFailure(
+                Detail: (wireFailure.IsRefusal
+                ? wireFailure.ToString()
+                : $"the peer's refusal frame names an unknown refusal ({refusal})"),
+                Refusal: PeerRefusal.HandshakeMalformed
+            );
+        }
+
+        return new PeerFailure(
+            Detail: $"the peer refused this side's handshake as {((PeerRefusal)refusal)}",
+            Refusal: PeerRefusal.RefusedByPeer
+        );
+    }
+
     /// <summary>Turns a <see cref="PeerFrameKind.HelloRefused"/> frame the handshake received into the refusal
     /// this side reports: the peer's own name (<see cref="PeerRefusal.RefusedByPeer"/>) is returned as it stands,
     /// since the peer that sent it is already refusing and draining, while a body that does not decode is this
@@ -88,37 +118,6 @@ internal static class PeerHandshake {
             ),
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
-    }
-
-    /// <summary>Decodes a <see cref="PeerFrameKind.HelloRefused"/> frame into the refusal this side reports: the
-    /// peer's name as <see cref="PeerRefusal.RefusedByPeer"/>, or <see cref="PeerRefusal.HandshakeMalformed"/> when
-    /// the frame's body does not hold exactly one known refusal byte. Decodes only: the handshake sends the
-    /// malformed case to the peer through <see cref="ReadRefusedFrameAsync"/>, and <see cref="PeerLink"/>, whose
-    /// read loop can receive one after both proofs were sent, renames it to its own
-    /// <see cref="PeerRefusal.FrameMalformed"/>.</summary>
-    /// <param name="frame">The frame, already known to carry the refused kind.</param>
-    /// <returns>The failure to report.</returns>
-    internal static PeerFailure ReadRefusal(WireFrameRead frame) {
-        var reader = new WireReader(bytes: frame.Body.Span);
-        var refusal = reader.ReadByte();
-
-        if (
-            !reader.TryFinish(failure: out var wireFailure) ||
-            !Enum.IsDefined(value: ((PeerRefusal)refusal))
-        ) {
-            return new PeerFailure(
-                Detail: (wireFailure.IsRefusal
-                    ? wireFailure.ToString()
-                    : $"the peer's refusal frame names an unknown refusal ({refusal})"
-                ),
-                Refusal: PeerRefusal.HandshakeMalformed
-            );
-        }
-
-        return new PeerFailure(
-            Detail: $"the peer refused this side's handshake as {((PeerRefusal)refusal)}",
-            Refusal: PeerRefusal.RefusedByPeer
-        );
     }
 
     /// <summary>Runs the handshake to completion or refusal.</summary>
@@ -384,11 +383,11 @@ internal static class PeerHandshake {
             connection: connection,
             local: local,
             now: now,
-            timeProvider: timeProvider,
             onClosed: onClosed,
             remoteId: remoteId,
             remoteSubjectPublicKeyInfo: peerSubjectPublicKeyInfo,
-            stream: stream
+            stream: stream,
+            timeProvider: timeProvider
         );
 
         return (link, default);

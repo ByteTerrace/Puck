@@ -8,14 +8,14 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </summary>
 internal sealed class SaveRoundTripStage : IPostStage<PostContext> {
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "save-round-trip";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -23,6 +23,7 @@ internal sealed class SaveRoundTripStage : IPostStage<PostContext> {
 
         return (pass
             ? PostStageOutcome.Pass(detail: detail)
-            : PostStageOutcome.Fail(detail: detail));
+            : PostStageOutcome.Fail(detail: detail)
+        );
     }
 }

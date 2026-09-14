@@ -29,21 +29,13 @@ public static class WorldAgentServiceCollectionExtensions {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: mailboxCapacity);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: maximumOperationsPerFrame);
 
-        services.AddSingleton<IPrincipalServerLink>(
-            implementationFactory: static provider => provider.GetRequiredService<LoopbackTransport>()
-        );
-        services.AddSingleton(
-            implementationFactory: _ => new WorldAgentMailbox(
-                capacity: mailboxCapacity,
-                maximumOperationsPerFrame: maximumOperationsPerFrame
-            )
-        );
-        services.AddSingleton<IWorldAgentDispatcher>(
-            implementationFactory: static provider => provider.GetRequiredService<WorldAgentMailbox>()
-        );
-        services.AddSingleton<ISnapshotInputCapture>(
-            implementationFactory: static provider => provider.GetRequiredService<WorldAgentMailbox>()
-        );
+        services.AddSingleton<IPrincipalServerLink>(implementationFactory: static provider => provider.GetRequiredService<LoopbackTransport>());
+        services.AddSingleton(implementationFactory: _ => new WorldAgentMailbox(
+            capacity: mailboxCapacity,
+            maximumOperationsPerFrame: maximumOperationsPerFrame
+        ));
+        services.AddSingleton<IWorldAgentDispatcher>(implementationFactory: static provider => provider.GetRequiredService<WorldAgentMailbox>());
+        services.AddSingleton<ISnapshotInputCapture>(implementationFactory: static provider => provider.GetRequiredService<WorldAgentMailbox>());
 
         return services;
     }

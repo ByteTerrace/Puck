@@ -13,7 +13,7 @@
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     }
   ],
   "channels": [
@@ -1728,8 +1728,7 @@
         "kind": "Int",
         "max": 50400,
         "min": 0,
-        "name": "attackCooldown",
-        "nonNegative": true
+        "name": "attackCooldown"
       },
       {
         "capacity": 8,
@@ -1870,8 +1869,7 @@
         "kind": "Int",
         "max": 201600,
         "min": 0,
-        "name": "burning",
-        "nonNegative": true
+        "name": "burning"
       },
       {
         "capacity": 8,
@@ -1889,8 +1887,7 @@
         "kind": "Int",
         "max": 201600,
         "min": 0,
-        "name": "frozen",
-        "nonNegative": true
+        "name": "frozen"
       },
       {
         "capacity": 8,
@@ -1922,8 +1919,7 @@
         "kind": "Int",
         "max": 201600,
         "min": 0,
-        "name": "hitRecently",
-        "nonNegative": true
+        "name": "hitRecently"
       },
       {
         "capacity": 8,
@@ -1960,8 +1956,7 @@
         "kind": "Int",
         "max": 151200,
         "min": 0,
-        "name": "respawnIn",
-        "nonNegative": true
+        "name": "respawnIn"
       },
       {
         "capacity": 8,

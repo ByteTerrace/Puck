@@ -163,9 +163,9 @@ public readonly record struct WindowInputEvent(
     public static WindowInputEvent PointerWheel(float notches, InputDeviceId deviceId = default) {
         return PointerWheel(
             notches: new Vector2(
-            x: 0f,
-            y: notches
-        ),
+                x: 0f,
+                y: notches
+            ),
             deviceId: deviceId
         );
     }

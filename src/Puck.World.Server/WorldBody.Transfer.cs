@@ -313,13 +313,25 @@ public sealed partial class WorldBody {
             ticksPerSecond: EngineTicksPerSecond
         );
         m_planarFollower = new SecondOrderState3(
-            X: SecondOrderState.FromRawBits(positionRaw: state.PlanarFollowerPositionRawX, velocityRaw: state.PlanarFollowerVelocityRawX),
-            Y: SecondOrderState.FromRawBits(positionRaw: state.PlanarFollowerPositionRawY, velocityRaw: state.PlanarFollowerVelocityRawY),
-            Z: SecondOrderState.FromRawBits(positionRaw: state.PlanarFollowerPositionRawZ, velocityRaw: state.PlanarFollowerVelocityRawZ)
+            X: SecondOrderState.FromRawBits(
+                positionRaw: state.PlanarFollowerPositionRawX,
+                velocityRaw: state.PlanarFollowerVelocityRawX
+            ),
+            Y: SecondOrderState.FromRawBits(
+                positionRaw: state.PlanarFollowerPositionRawY,
+                velocityRaw: state.PlanarFollowerVelocityRawY
+            ),
+            Z: SecondOrderState.FromRawBits(
+                positionRaw: state.PlanarFollowerPositionRawZ,
+                velocityRaw: state.PlanarFollowerVelocityRawZ
+            )
         );
         m_planarPreviousTarget = state.PlanarFollowerPreviousTarget;
         m_planarFollowerSeeded = true;
-        m_verticalFollower = SecondOrderState.FromRawBits(positionRaw: state.VerticalFollowerPositionRaw, velocityRaw: state.VerticalFollowerVelocityRaw);
+        m_verticalFollower = SecondOrderState.FromRawBits(
+            positionRaw: state.VerticalFollowerPositionRaw,
+            velocityRaw: state.VerticalFollowerVelocityRaw
+        );
         m_verticalPreviousTarget = state.VerticalFollowerPreviousTarget;
         m_verticalFollowerSeeded = true;
         m_overlayAccumulator = FixedVector3RateAccumulator.FromRemainders(
@@ -444,7 +456,7 @@ public sealed partial class WorldBody {
     /// authority step begins.</summary>
     public void ClearPendingContinuum() => m_pendingContinuum = null;
 
-    /// <summary>The subset of a body's own dynamic state that is perceivable — the in-flight rule docs/vision.md's
+    /// <summary>The subset of a body's own dynamic state that is perceivable — the in-flight rule docs/architecture/worlds.md's
     /// "In-flight state at transfer" names ("drop and re-derive what the engine can recompute; carry what the player
     /// can perceive") applied to a same-process transfer's abort/restore path
     /// (<see cref="Puck.World.Server.WorldPopulation.TryDetachSeatForTransfer"/>/<see cref="Puck.World.Server.WorldPopulation.RestoreDetachedSeat"/>),

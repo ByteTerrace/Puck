@@ -30,7 +30,10 @@ public class WhtForwardVsNaive {
             var sum = 0L;
 
             for (var n = 0; (n < Length); ++n) {
-                sum += ((0 == (System.Numerics.BitOperations.PopCount(value: ((uint)(n & k))) & 1)) ? m_input[n] : -m_input[n]);
+                sum += ((0 == (System.Numerics.BitOperations.PopCount(value: ((uint)(n & k))) & 1))
+                    ? m_input[n]
+                    : -m_input[n]
+                );
             }
 
             sink ^= sum;
@@ -40,7 +43,10 @@ public class WhtForwardVsNaive {
     }
     [Benchmark]
     public long Network() {
-        m_input.CopyTo(array: m_scratch, index: 0);
+        m_input.CopyTo(
+            array: m_scratch,
+            index: 0
+        );
         WalshHadamardTransform.Forward<long>(values: m_scratch);
 
         return m_scratch[0];
@@ -75,13 +81,25 @@ public class WhtForwardInverse {
         WalshHadamardTransform.Forward<long>(values: m_largeInverseInput);
     }
     [IterationSetup(Target = nameof(ForwardSmall))]
-    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(array: m_smallValues, index: 0);
+    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(
+        array: m_smallValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(InverseSmall))]
-    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(array: m_smallValues, index: 0);
+    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(
+        array: m_smallValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(ForwardLarge))]
-    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(array: m_largeValues, index: 0);
+    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(
+        array: m_largeValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(InverseLarge))]
-    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(array: m_largeValues, index: 0);
+    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(
+        array: m_largeValues,
+        index: 0
+    );
     [Benchmark]
     public long ForwardSmall() {
         WalshHadamardTransform.Forward<long>(values: m_smallValues);

@@ -52,7 +52,8 @@ public sealed partial class Sm83 {
     private void AluAdc(byte value) {
         var carry = (CarryFlagSet
             ? 1
-            : 0);
+            : 0
+        );
         var result = ((m_a + value) + carry);
 
         SetFlags(
@@ -79,7 +80,8 @@ public sealed partial class Sm83 {
     private void AluSbc(byte value) {
         var carry = (CarryFlagSet
             ? 1
-            : 0);
+            : 0
+        );
         var result = ((m_a - value) - carry);
 
         SetFlags(
@@ -234,8 +236,8 @@ public sealed partial class Sm83 {
         m_f = ((byte)((m_f & FlagZero) | FlagCarry));
     private void ComplementCarryFlag() =>
         m_f = ((byte)((m_f & FlagZero) | (CarryFlagSet
-        ? 0
-        : FlagCarry)));
+            ? 0
+            : FlagCarry)));
     private void RotateAccumulatorLeftCircular() {
         var carry = (m_a >> 7) & 1;
 
@@ -263,7 +265,8 @@ public sealed partial class Sm83 {
     private void RotateAccumulatorLeft() {
         var carryIn = (CarryFlagSet
             ? 1
-            : 0);
+            : 0
+        );
         var carryOut = (m_a >> 7) & 1;
 
         m_a = ((byte)((m_a << 1) | carryIn));
@@ -278,7 +281,8 @@ public sealed partial class Sm83 {
     private void RotateAccumulatorRight() {
         var carryIn = (CarryFlagSet
             ? 1
-            : 0);
+            : 0
+        );
         var carryOut = m_a & 1;
 
         m_a = ((byte)((m_a >> 1) | (carryIn << 7)));
@@ -309,14 +313,16 @@ public sealed partial class Sm83 {
                 carryOut = (value >> 7) & 1;
                 result = (value << 1) | (CarryFlagSet
                     ? 1
-                    : 0);
+                    : 0
+                );
 
                 break;
             case 3: // RR
                 carryOut = value & 1;
                 result = (value >> 1) | (CarryFlagSet
                     ? 0x80
-                    : 0);
+                    : 0
+                );
 
                 break;
             case 4: // SLA
@@ -354,6 +360,6 @@ public sealed partial class Sm83 {
     }
     private void TestBit(int bit, byte value) =>
         m_f = ((byte)((m_f & FlagCarry) | FlagHalfCarry | ((((value >> bit) & 1) == 0)
-        ? FlagZero
-        : 0)));
+            ? FlagZero
+            : 0)));
 }

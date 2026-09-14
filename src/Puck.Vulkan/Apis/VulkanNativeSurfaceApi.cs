@@ -14,6 +14,36 @@ public unsafe sealed class VulkanNativeSurfaceApi : IVulkanSurfaceApi {
     private const uint VkStructureTypeWin32SurfaceCreateInfoKhr = 1000009000;
     private const uint VkStructureTypeXcbSurfaceCreateInfoKhr = 1000005000;
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_pointers = new();
+
+    private InstancePointers GetPointers(nint instanceHandle) {
+        return m_pointers.GetOrAdd(
+            key: instanceHandle,
+            valueFactory: static handle => new InstancePointers {
+                CreateViSurfaceNn = ((delegate* unmanaged[Cdecl]<nint, in VkViSurfaceCreateInfoNn, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+                functionName: "vkCreateViSurfaceNN"u8,
+                instanceHandle: handle
+            )),
+                CreateWaylandSurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkWaylandSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+                functionName: "vkCreateWaylandSurfaceKHR"u8,
+                instanceHandle: handle
+            )),
+                CreateWin32SurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkWin32SurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+                functionName: "vkCreateWin32SurfaceKHR"u8,
+                instanceHandle: handle
+            )),
+                CreateXcbSurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkXcbSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(
+                functionName: "vkCreateXcbSurfaceKHR"u8,
+                instanceHandle: handle
+            )),
+                DestroySurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkDestroySurfaceKHR"u8,
+                instanceHandle: handle
+            )),
+            }
+        );
+    }
+
     /// <inheritdoc/>
     public VkResult CreateViSurface(
         nint instanceHandle,
@@ -179,20 +209,5 @@ public unsafe sealed class VulkanNativeSurfaceApi : IVulkanSurfaceApi {
         public delegate* unmanaged[Cdecl]<nint, in VkWin32SurfaceCreateInfoKhr, nint, out nint, VkResult> CreateWin32SurfaceKhr;
         public delegate* unmanaged[Cdecl]<nint, in VkXcbSurfaceCreateInfoKhr, nint, out nint, VkResult> CreateXcbSurfaceKhr;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroySurfaceKhr;
-    }
-
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_pointers = new();
-
-    private InstancePointers GetPointers(nint instanceHandle) {
-        return m_pointers.GetOrAdd(
-            key: instanceHandle,
-            valueFactory: static handle => new InstancePointers {
-                CreateViSurfaceNn = ((delegate* unmanaged[Cdecl]<nint, in VkViSurfaceCreateInfoNn, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkCreateViSurfaceNN"u8, instanceHandle: handle)),
-                CreateWaylandSurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkWaylandSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkCreateWaylandSurfaceKHR"u8, instanceHandle: handle)),
-                CreateWin32SurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkWin32SurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkCreateWin32SurfaceKHR"u8, instanceHandle: handle)),
-                CreateXcbSurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkXcbSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkCreateXcbSurfaceKHR"u8, instanceHandle: handle)),
-                DestroySurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkDestroySurfaceKHR"u8, instanceHandle: handle)),
-            }
-        );
     }
 }

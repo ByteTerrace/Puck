@@ -7,12 +7,64 @@ namespace Puck.World.Browser.Engine;
 /// (see <c>ValidatorMessagePathRatchetTests</c>).</param>
 /// <param name="Message">The message, with a split-off path token's own leading text removed.</param>
 public readonly record struct BrowserErrorPath(string? Path, string Message);
-
 /// <summary>Splits a validator message's leading path token from its prose — a heuristic reading of the shape most
 /// <see cref="Puck.World.WorldDefinitionValidator"/> messages already carry (<c>"bodies.localSeats -1 is outside
 /// 0..4."</c>), not a change to how those messages are worded. A message that opens with plain prose
 /// (<c>"an addon requires a name."</c>) carries no path; splitting stays honest about that rather than guessing one.</summary>
 public static class BrowserErrorPaths {
+    // A path token is one or more dotted/bracketed segments of ordinary identifier characters
+    // (letters/digits/underscore, an optional [n] index) — e.g. "bodies.localSeats" or "screens[0].index" — ending at
+    // the first space, quote, or end of string. A single bare word ("addon", "an") is not treated as a path: every
+    // real path in this validator carries at least one '.' or one '[' (see WorldDefinitionValidator's own message
+    // shapes), so a lone leading word is prose, not a path.
+    private static int ScanPathToken(string message) {
+        var sawSeparator = false;
+        var index = 0;
+
+        while (index < message.Length) {
+            var c = message[index];
+
+            if (
+                char.IsAsciiLetterOrDigit(c: c) ||
+                (c is '_')
+            ) {
+                index++;
+
+                continue;
+            }
+
+            if (c is '.') {
+                sawSeparator = true;
+                index++;
+
+                continue;
+            }
+
+            if (c is '[') {
+                var close = message.IndexOf(
+                    startIndex: index,
+                    value: ']'
+                );
+
+                if (close < 0) {
+                    break;
+                }
+
+                sawSeparator = true;
+                index = (close + 1);
+
+                continue;
+            }
+
+            break;
+        }
+
+        return (sawSeparator
+            ? index
+            : 0
+        );
+    }
+
     /// <summary>Splits <paramref name="message"/>'s leading path token, when it has one.</summary>
     /// <param name="message">One collected validator message.</param>
     /// <returns>The split path and remaining message.</returns>
@@ -22,13 +74,21 @@ public static class BrowserErrorPaths {
         var end = ScanPathToken(message: message);
 
         if (end <= 0) {
-            return new BrowserErrorPath(Path: null, Message: message);
+            return new BrowserErrorPath(
+                Message: message,
+                Path: null
+            );
         }
 
         var path = message[..end];
         var rest = message[end..].TrimStart(trimChar: ' ');
 
-        return new BrowserErrorPath(Path: path, Message: (rest.Length > 0 ? rest : message));
+        return new BrowserErrorPath(
+            Path: path,
+            Message: ((rest.Length > 0)
+            ? rest
+            : message)
+        );
     }
     /// <summary>Splits and re-prefixes every collected message for a fragment composed under a host document,
     /// stripping the <c>&lt;alias&gt;_</c> namespace <see cref="Puck.World.WorldModuleNamespace"/> applied so the
@@ -44,55 +104,15 @@ public static class BrowserErrorPaths {
         var result = new List<BrowserErrorPath>();
 
         foreach (var message in messages) {
-            var stripped = message.Replace(oldValue: prefix, newValue: string.Empty, comparisonType: StringComparison.Ordinal);
+            var stripped = message.Replace(
+                comparisonType: StringComparison.Ordinal,
+                newValue: string.Empty,
+                oldValue: prefix
+            );
 
             result.Add(item: Split(message: stripped));
         }
 
         return result;
-    }
-
-    // A path token is one or more dotted/bracketed segments of ordinary identifier characters
-    // (letters/digits/underscore, an optional [n] index) — e.g. "bodies.localSeats" or "screens[0].index" — ending at
-    // the first space, quote, or end of string. A single bare word ("addon", "an") is not treated as a path: every
-    // real path in this validator carries at least one '.' or one '[' (see WorldDefinitionValidator's own message
-    // shapes), so a lone leading word is prose, not a path.
-    private static int ScanPathToken(string message) {
-        var sawSeparator = false;
-        var index = 0;
-
-        while (index < message.Length) {
-            var c = message[index];
-
-            if (char.IsAsciiLetterOrDigit(c: c) || (c is '_')) {
-                index++;
-
-                continue;
-            }
-
-            if (c is '.') {
-                sawSeparator = true;
-                index++;
-
-                continue;
-            }
-
-            if (c is '[') {
-                var close = message.IndexOf(value: ']', startIndex: index);
-
-                if (close < 0) {
-                    break;
-                }
-
-                sawSeparator = true;
-                index = (close + 1);
-
-                continue;
-            }
-
-            break;
-        }
-
-        return (sawSeparator ? index : 0);
     }
 }

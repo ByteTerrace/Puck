@@ -18,13 +18,13 @@ internal static class GambatteCgbPalette {
     /// <param name="pixel">A packed pixel whose channels were expanded from 5-bit hardware values.</param>
     /// <returns>The packed <c>0x00RRGGBB</c> pixel gambatte's own formula produces for the same 5-bit source.</returns>
     public static uint Transform(uint pixel) {
-        var r = (((int)(pixel >> 16) & 0xFF) >> 3);
-        var g = (((int)(pixel >> 8) & 0xFF) >> 3);
-        var b = (((int)pixel & 0xFF) >> 3);
-        var red = (((r * 13) + (g * 2) + b) >> 1);
+        var r = ((((int)(pixel >> 16)) & 0xFF) >> 3);
+        var g = ((((int)(pixel >> 8)) & 0xFF) >> 3);
+        var b = ((((int)pixel) & 0xFF) >> 3);
+        var red = ((((r * 13) + (g * 2)) + b) >> 1);
         var green = (((g * 3) + b) * 2);
-        var blue = (((r * 3) + (g * 2) + (b * 11)) >> 1);
+        var blue = ((((r * 3) + (g * 2)) + (b * 11)) >> 1);
 
-        return (((uint)red << 16) | ((uint)green << 8) | (uint)blue);
+        return (((uint)red) << 16) | (((uint)green) << 8) | ((uint)blue);
     }
 }

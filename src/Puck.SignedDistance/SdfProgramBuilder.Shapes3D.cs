@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
-    public SdfProgramBuilder Box(Vector3 halfExtents, float round, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+    public SdfProgramBuilder Box(Vector3 halfExtents, float round, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
         // The decoder is `q = abs(p) - (halfExtents - round); length(max(q, 0)) + min(max(q), 0) - round`. A negative
         // half-extent turns the box inside out, and a negative round is a corner INSET the shape has no spelling for —
         // RoundedRectangle, the 2D sibling, already clamps its corner radius to [0, min(half-extents)], which is the
@@ -27,6 +27,7 @@ public sealed partial class SdfProgramBuilder {
 
         return Shape(
             blend: blend,
+            detail: detail,
             dimensions: new Vector4(
                 value: halfExtents,
                 w: round
@@ -36,7 +37,7 @@ public sealed partial class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    public SdfProgramBuilder Capsule(Vector3 endpoint, float radius, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+    public SdfProgramBuilder Capsule(Vector3 endpoint, float radius, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
         // The endpoint is a signed local-space offset (the segment's far end), so only finiteness is refused; the
         // radius closes the segment into a capsule exactly as Sphere's does — `length(...) - radius`.
         RequireFinite(
@@ -70,6 +71,7 @@ public sealed partial class SdfProgramBuilder {
 
         return Shape(
             blend: blend,
+            detail: detail,
             // Data1.y carries the HOST-BAKED 1/dot(endpoint, endpoint): shapes evaluate millions of times per frame
             // while programs build once, and the shared multiply keeps both backends' shader codegen identical where a
             // per-eval divide contracted differently (KEEP IN SYNC with sdfCapsule in Assets/Shaders/Sdf/sdf-vm.hlsli).
@@ -86,7 +88,7 @@ public sealed partial class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    public SdfProgramBuilder Cylinder(float radius, float halfHeight, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+    public SdfProgramBuilder Cylinder(float radius, float halfHeight, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float rounding = 0f, bool detail = false) {
         // The decoder subtracts both from magnitudes — `float2(length(p.xz), abs(p.y)) - float2(radius, halfHeight)` —
         // so a negative one leaves that axis with no surface, and the cull bound reads them as a right triangle's legs.
         RequireNonNegative(
@@ -110,12 +112,32 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
+        RequireFinite(
+            value: rounding,
+            paramName: nameof(rounding),
+            subject: "An edge-rounding radius"
+        );
+
+        // The rounded cylinder is the inset cylinder offset back out by r (the kernel subtracts Data1.w), so both
+        // rims fillet and the authored radius and half-height stay the solid's outer extent.
+        var round = SdfProgramBuilder.ClampRounding(
+            rounding: rounding,
+            profileInradius: MathF.Min(
+                x: radius,
+                y: halfHeight
+            ),
+            lift: SdfLift.Extrude,
+            liftAmount: halfHeight
+        );
+
         return Shape(
             blend: blend,
+            derived3: round,
+            detail: detail,
             dimensions: new Vector4(
                 w: 0f,
-                x: radius,
-                y: halfHeight,
+                x: (radius - round),
+                y: (halfHeight - round),
                 z: 0f
             ),
             material: material,
@@ -123,7 +145,7 @@ public sealed partial class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    public SdfProgramBuilder Ellipsoid(Vector3 radii, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+    public SdfProgramBuilder Ellipsoid(Vector3 radii, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
         // The sign is absorbed by the Vector3.Abs clamp below (and the 1e-4 floor keeps the reciprocal finite), so
         // only NaN/infinity — which neither absorbs — are refused.
         RequireFinite(
@@ -145,6 +167,7 @@ public sealed partial class SdfProgramBuilder {
             derived1: inverse.X,
             derived2: inverse.Y,
             derived3: inverse.Z,
+            detail: detail,
             dimensions: new Vector4(
                 value: clamped,
                 w: 0f
@@ -154,7 +177,90 @@ public sealed partial class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    public SdfProgramBuilder Plane(Vector3 normal, float offset, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+    /// <summary>Adds a superellipsoid — <c>q = pow(abs(p)/r, e); d = (pow(q.x+q.y+q.z, 1/e) - 1) * min(r)</c> — unit
+    /// radii the ellipsoid formula generalizes with an exponent <paramref name="exponent"/> in
+    /// [<see cref="MinSuperellipsoidExponent"/>, <see cref="MaxSuperellipsoidExponent"/>]: e = 2 (
+    /// <see cref="MinSuperellipsoidExponent"/>) reduces the formula to the plain ellipsoid's field exactly, so this
+    /// emits <see cref="Ellipsoid(Vector3, int, SdfBlendOp, float, bool)"/> directly at that exponent rather than a
+    /// second, redundant field — a program built at e = 2 is byte-for-bit what <see cref="Ellipsoid"/> alone would
+    /// emit. Larger e rounds the surface toward a box (a "squircle"/rounded-cube family).
+    /// <para>The field is EXACTLY 1-Lipschitz for every radius and every exponent in the admitted range — no
+    /// <c>AnalyzeLipschitz</c> step clamp is needed, unlike the approximate <see cref="Ellipsoid"/> shape #6. The
+    /// scaled gauge <c>N(p) = min(r)·(Σ|pᵢ/rᵢ|^e)^(1/e)</c> is positively homogeneous of degree 1
+    /// (<c>N(tp) = t·N(p)</c> for <c>t &gt; 0</c>), so its gradient is scale-invariant along every ray from the
+    /// origin and the sup of <c>|∇d|</c> over all of space equals its sup on the field's own zero-level surface
+    /// (<c>S(p) = Σ|pᵢ/rᵢ|^e = 1</c>). On that surface, writing <c>yᵢ = |pᵢ|/rᵢ</c> (so <c>Σyᵢ^e = 1</c>),
+    /// <c>|∇d|² = min(r)²·Σ yᵢ^(2e−2)/rᵢ²</c>; <c>h(y) = Σ yᵢ^(2e−2)/rᵢ²</c> is convex on the convex body
+    /// <c>{Σyᵢ^e ≤ 1, y ≥ 0}</c> (every term a power ≥ 2 of <c>y</c>), so its maximum lies on that body's boundary,
+    /// and a dense numeric sweep of the boundary — every exponent 2 through 8, radius ratios to 100:1, 2 and 3 axes —
+    /// finds that maximum is always exactly <c>1/min(r)²</c>, attained at the vertex where the single smallest-radius
+    /// axis carries the whole unit budget (<c>y</c> = that axis's unit vector): <c>|∇d| = min(r)·√(1/min(r)²) = 1</c>
+    /// exactly, independent of e and of every other radius. <c>SuperellipsoidLawTests</c> proves this
+    /// numerically over a grid of exponents, radius ratios, and surface points, both on- and off-axis.</para></summary>
+    /// <param name="radii">The three semi-axis radii; signs are absorbed (<see cref="MathF.Abs(float)"/>) and each is
+    /// floored at a small positive epsilon, matching <see cref="Ellipsoid(Vector3, int, SdfBlendOp, float, bool)"/>.</param>
+    /// <param name="exponent">The generalizing exponent, finite in [<see cref="MinSuperellipsoidExponent"/>,
+    /// <see cref="MaxSuperellipsoidExponent"/>].</param>
+    /// <param name="material">The material index assigned to the shape.</param>
+    /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
+    /// <param name="smooth">The blend smoothing radius.</param>
+    /// <param name="detail">Whether the shape participates only in hit material and normal evaluation, without
+    /// changing the marched surface or contact field. Preserved at every admitted exponent.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radii"/> is not finite, <paramref name="exponent"/>
+    /// is not finite or lies outside the admitted interval, <paramref name="material"/> is negative,
+    /// <paramref name="blend"/> is not a defined <see cref="SdfBlendOp"/>, or <paramref name="smooth"/> is not
+    /// finite.</exception>
+    public SdfProgramBuilder Superellipsoid(Vector3 radii, float exponent, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
+        RequireFinite(
+            value: radii,
+            paramName: nameof(radii),
+            subject: "A superellipsoid radius"
+        );
+
+        if (
+            !float.IsFinite(f: exponent) ||
+            (exponent < MinSuperellipsoidExponent) ||
+            (exponent > MaxSuperellipsoidExponent)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(exponent),
+                message: $"A superellipsoid exponent must be finite in [{MinSuperellipsoidExponent}, {MaxSuperellipsoidExponent}] — the interval the field's 1-Lipschitz proof covers."
+            );
+        }
+
+        var clamped = Vector3.Max(
+            value1: Vector3.Abs(value: radii),
+            value2: new Vector3(value: 0.0001f)
+        );
+
+        if (exponent == MinSuperellipsoidExponent) {
+            return Ellipsoid(
+                blend: blend,
+                detail: detail,
+                material: material,
+                radii: clamped,
+                smooth: smooth
+            );
+        }
+
+        var inverse = (Vector3.One / clamped);
+
+        return Shape(
+            blend: blend,
+            derived1: inverse.X,
+            derived2: inverse.Y,
+            derived3: inverse.Z,
+            detail: detail,
+            dimensions: new Vector4(
+                value: clamped,
+                w: exponent
+            ),
+            material: material,
+            shape: SdfShapeType.Superellipsoid,
+            smooth: smooth
+        );
+    }
+    public SdfProgramBuilder Plane(Vector3 normal, float offset, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
         // Normalized host-side, so a zero normal packs NaN; the offset is signed by construction (it slides the plane).
         RequireDirection(
             value: normal,
@@ -169,6 +275,7 @@ public sealed partial class SdfProgramBuilder {
 
         return Shape(
             blend: blend,
+            detail: detail,
             dimensions: new Vector4(
                 value: Vector3.Normalize(value: normal),
                 w: offset
@@ -178,7 +285,7 @@ public sealed partial class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    public SdfProgramBuilder RoundCone(float lowerRadius, float upperRadius, float height, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+    public SdfProgramBuilder RoundCone(float lowerRadius, float upperRadius, float height, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
         // Both radii are sphere radii in the decoder (`length(q) - lowerRadius`, `length(q - (0, height)) - upperRadius`)
         // — the same argument as Sphere. The height must be non-negative because the slope below is baked against
         // MathF.Max(height, 0.0001f) while the decoder places the top cap at the RAW +height: a negative height puts
@@ -243,6 +350,7 @@ public sealed partial class SdfProgramBuilder {
                 x: (1f - (slope * slope)),
                 y: 0f
             )),
+            detail: detail,
             dimensions: new Vector4(
                 w: slope,
                 x: lowerRadius,
@@ -576,11 +684,13 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="material">The material identifier.</param>
     /// <param name="blend">The blend against the accumulated field.</param>
     /// <param name="smooth">The radius used by smooth and chamfer blends.</param>
+    /// <param name="detail">Whether the shape is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>) — skipped by
+    /// every march/step-bound consumer and included only at an already-found hit.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is not finite and non-negative, or
     /// <paramref name="material"/> is negative, <paramref name="blend"/> is not a defined <see cref="SdfBlendOp"/>, or
     /// <paramref name="smooth"/> is not finite.</exception>
-    public SdfProgramBuilder Sphere(float radius, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+    public SdfProgramBuilder Sphere(float radius, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
         // The decoder is `length(p) - radius`, so a negative radius leaves the field strictly positive: the sphere has
         // no surface at all, while the program still spends an instruction, a cull bound (TryGetLocalBound packs
         // MathF.Abs of this very lane) and a Lipschitz reach on it. Zero is allowed — a degenerate point.
@@ -592,6 +702,7 @@ public sealed partial class SdfProgramBuilder {
 
         return Shape(
             blend: blend,
+            detail: detail,
             dimensions: new Vector4(
                 w: 0f,
                 x: radius,
@@ -603,7 +714,7 @@ public sealed partial class SdfProgramBuilder {
             smooth: smooth
         );
     }
-    public SdfProgramBuilder Torus(float majorRadius, float minorRadius, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+    public SdfProgramBuilder Torus(float majorRadius, float minorRadius, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
         // The decoder is `length(float2(length(p.xz) - major, p.y)) - minor`: both are radii of the revolved circle,
         // and TryGetLocalBound packs MathF.Abs of each, so a negative one both mis-shapes the ring and desynchronizes
         // the shape from its own cull bound.
@@ -633,6 +744,7 @@ public sealed partial class SdfProgramBuilder {
 
         return Shape(
             blend: blend,
+            detail: detail,
             dimensions: new Vector4(
                 w: 0f,
                 x: majorRadius,
@@ -654,11 +766,13 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="material">The material index assigned to the shape.</param>
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
+    /// <param name="detail">Whether the shape is SHADING-ONLY (<see cref="SdfInstruction.Detail"/>) — skipped by
+    /// every march/step-bound consumer and included only at an already-found hit.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> or <paramref name="halfSeparation"/> is
     /// not finite, the derived tip half-height (see remarks) is not finite, <paramref name="material"/> is negative,
     /// <paramref name="blend"/> is not a defined <see cref="SdfBlendOp"/>, or <paramref name="smooth"/> is not
     /// finite.</exception>
-    public SdfProgramBuilder Vesica(float radius, float halfSeparation, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
+    public SdfProgramBuilder Vesica(float radius, float halfSeparation, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false) {
         // Both signs are absorbed by the MathF.Abs pair below, so only finiteness is refused.
         RequireFinite(
             value: radius,
@@ -693,6 +807,7 @@ public sealed partial class SdfProgramBuilder {
 
         return Shape(
             blend: blend,
+            detail: detail,
             dimensions: new Vector4(
                 w: 0f,
                 x: r,

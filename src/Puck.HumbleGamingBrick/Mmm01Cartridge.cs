@@ -28,8 +28,8 @@ public sealed class Mmm01Cartridge : CartridgeBase {
     private bool m_ramEnabled;
     private int m_romBankHigh;
     private int m_romBankLow;
-    private int m_romBankMid;
     private int m_romBankMask;
+    private int m_romBankMid;
 
     /// <summary>Creates an MMM01 cartridge at reset: unlocked with the menu banks mapped and RAM disabled.</summary>
     /// <param name="rom">The full ROM image.</param>
@@ -52,6 +52,95 @@ public sealed class Mmm01Cartridge : CartridgeBase {
     /// <inheritdoc/>
     protected override bool RamAccessible =>
         (Header.HasRam && m_ramEnabled);
+
+    // The bank the switchable 0x4000-0x7FFF region reads: the menu's last bank while unlocked, else the full low bits
+    // with the mid/high bits — bumped by one when it would duplicate the fixed region (the MBC1-style zero-adjust).
+    private int ResolveHighRomBank() {
+        if (!m_locked) {
+            return -1;
+        }
+
+        var middleBits = (m_multiplexMode
+            ? m_ramBankLow
+            : m_romBankMid
+        );
+        var highBank = m_romBankLow | (middleBits << 5) | (m_romBankHigh << 7);
+
+        return ((highBank == ResolveLowRomBank())
+            ? (highBank + 1)
+            : highBank
+        );
+    }
+    // The bank the fixed 0x0000-0x3FFF region reads: the menu's second-to-last bank while unlocked (negative, wrapped
+    // by the caller), else the mask-frozen base with the mid/high bits — multiplex swaps the RAM-bank register into
+    // the mid position, except in MBC1 mode where the fixed region drops the mid bits entirely.
+    private int ResolveLowRomBank() {
+        if (!m_locked) {
+            return -2;
+        }
+
+        var middleBits = (m_multiplexMode
+            ? (m_mbc1Mode
+                ? 0
+                : m_ramBankLow)
+            : m_romBankMid
+        );
+
+        return (m_romBankLow & (m_romBankMask << 1)) | (middleBits << 5) | (m_romBankHigh << 7);
+    }
+    private int ResolveRamBank() {
+        if (!m_locked) {
+            return 0;
+        }
+
+        return (m_multiplexMode
+            ? m_romBankMid | (m_ramBankHigh << 2)
+            : m_ramBankLow | (m_ramBankHigh << 2)
+        );
+    }
+
+    /// <inheritdoc/>
+    protected override void LoadRegisters(StateReader reader) {
+        m_locked = reader.ReadBoolean();
+        m_mbc1Mode = reader.ReadBoolean();
+        m_mbc1ModeDisable = reader.ReadBoolean();
+        m_multiplexMode = reader.ReadBoolean();
+        m_ramBankHigh = reader.ReadInt32();
+        m_ramBankLow = reader.ReadInt32();
+        m_ramBankMask = reader.ReadInt32();
+        m_ramEnabled = reader.ReadBoolean();
+        m_romBankHigh = reader.ReadInt32();
+        m_romBankLow = reader.ReadInt32();
+        m_romBankMid = reader.ReadInt32();
+        m_romBankMask = reader.ReadInt32();
+    }
+    /// <inheritdoc/>
+    protected override int MapRamOffset(ushort address) =>
+        (((ResolveRamBank() & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
+    /// <inheritdoc/>
+    protected override int MapRomOffset(ushort address) {
+        var bank = ((address <= MemoryMap.RomBank0End)
+            ? ResolveLowRomBank()
+            : ResolveHighRomBank()
+        );
+
+        return (((bank & m_romBankWrapMask) * RomBankSize) + (address & (RomBankSize - 1)));
+    }
+    /// <inheritdoc/>
+    protected override void SaveRegisters(StateWriter writer) {
+        writer.WriteBoolean(value: m_locked);
+        writer.WriteBoolean(value: m_mbc1Mode);
+        writer.WriteBoolean(value: m_mbc1ModeDisable);
+        writer.WriteBoolean(value: m_multiplexMode);
+        writer.WriteInt32(value: m_ramBankHigh);
+        writer.WriteInt32(value: m_ramBankLow);
+        writer.WriteInt32(value: m_ramBankMask);
+        writer.WriteBoolean(value: m_ramEnabled);
+        writer.WriteInt32(value: m_romBankHigh);
+        writer.WriteInt32(value: m_romBankLow);
+        writer.WriteInt32(value: m_romBankMid);
+        writer.WriteInt32(value: m_romBankMask);
+    }
 
     /// <inheritdoc/>
     public override void WriteControl(ushort address, byte value) {
@@ -95,89 +184,5 @@ public sealed class Mmm01Cartridge : CartridgeBase {
 
                 break;
         }
-    }
-
-    /// <inheritdoc/>
-    protected override int MapRomOffset(ushort address) {
-        var bank = ((address <= MemoryMap.RomBank0End)
-            ? ResolveLowRomBank()
-            : ResolveHighRomBank());
-
-        return (((bank & m_romBankWrapMask) * RomBankSize) + (address & (RomBankSize - 1)));
-    }
-    /// <inheritdoc/>
-    protected override int MapRamOffset(ushort address) =>
-        (((ResolveRamBank() & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
-    /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBoolean(value: m_locked);
-        writer.WriteBoolean(value: m_mbc1Mode);
-        writer.WriteBoolean(value: m_mbc1ModeDisable);
-        writer.WriteBoolean(value: m_multiplexMode);
-        writer.WriteInt32(value: m_ramBankHigh);
-        writer.WriteInt32(value: m_ramBankLow);
-        writer.WriteInt32(value: m_ramBankMask);
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_romBankHigh);
-        writer.WriteInt32(value: m_romBankLow);
-        writer.WriteInt32(value: m_romBankMid);
-        writer.WriteInt32(value: m_romBankMask);
-    }
-    /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_locked = reader.ReadBoolean();
-        m_mbc1Mode = reader.ReadBoolean();
-        m_mbc1ModeDisable = reader.ReadBoolean();
-        m_multiplexMode = reader.ReadBoolean();
-        m_ramBankHigh = reader.ReadInt32();
-        m_ramBankLow = reader.ReadInt32();
-        m_ramBankMask = reader.ReadInt32();
-        m_ramEnabled = reader.ReadBoolean();
-        m_romBankHigh = reader.ReadInt32();
-        m_romBankLow = reader.ReadInt32();
-        m_romBankMid = reader.ReadInt32();
-        m_romBankMask = reader.ReadInt32();
-    }
-
-    // The bank the fixed 0x0000-0x3FFF region reads: the menu's second-to-last bank while unlocked (negative, wrapped
-    // by the caller), else the mask-frozen base with the mid/high bits — multiplex swaps the RAM-bank register into
-    // the mid position, except in MBC1 mode where the fixed region drops the mid bits entirely.
-    private int ResolveLowRomBank() {
-        if (!m_locked) {
-            return -2;
-        }
-
-        var middleBits = (m_multiplexMode
-            ? (m_mbc1Mode
-                ? 0
-                : m_ramBankLow)
-            : m_romBankMid);
-
-        return (m_romBankLow & (m_romBankMask << 1)) | (middleBits << 5) | (m_romBankHigh << 7);
-    }
-    // The bank the switchable 0x4000-0x7FFF region reads: the menu's last bank while unlocked, else the full low bits
-    // with the mid/high bits — bumped by one when it would duplicate the fixed region (the MBC1-style zero-adjust).
-    private int ResolveHighRomBank() {
-        if (!m_locked) {
-            return -1;
-        }
-
-        var middleBits = (m_multiplexMode
-            ? m_ramBankLow
-            : m_romBankMid);
-        var highBank = m_romBankLow | (middleBits << 5) | (m_romBankHigh << 7);
-
-        return ((highBank == ResolveLowRomBank())
-            ? (highBank + 1)
-            : highBank);
-    }
-    private int ResolveRamBank() {
-        if (!m_locked) {
-            return 0;
-        }
-
-        return (m_multiplexMode
-            ? m_romBankMid | (m_ramBankHigh << 2)
-            : m_ramBankLow | (m_ramBankHigh << 2));
     }
 }

@@ -118,6 +118,18 @@ public sealed class SerialLinkSession : IDisposable {
             SecondCredit: (m_second.Clock.CycleCount - m_secondTarget)
         );
 
+    /// <summary>Severs the cable: both serial ports lose their peer and the machines step independently again. The
+    /// machines themselves are untouched (they are owned by the caller, not the session).</summary>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        m_disposed = true;
+
+        SerialComponent.Disconnect(port: m_firstPort);
+        SerialComponent.Disconnect(port: m_secondPort);
+    }
     /// <summary>Re-anchors both pacing targets at <c>CycleCount − credit</c> without touching the cable — the
     /// restore-side counterpart of <see cref="PacingCredits"/>, for a link that has just restored both machines into
     /// the live session rather than reconnecting fresh ones.</summary>
@@ -192,17 +204,5 @@ public sealed class SerialLinkSession : IDisposable {
         Dispose();
 
         return token;
-    }
-    /// <summary>Severs the cable: both serial ports lose their peer and the machines step independently again. The
-    /// machines themselves are untouched (they are owned by the caller, not the session).</summary>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-
-        SerialComponent.Disconnect(port: m_firstPort);
-        SerialComponent.Disconnect(port: m_secondPort);
     }
 }

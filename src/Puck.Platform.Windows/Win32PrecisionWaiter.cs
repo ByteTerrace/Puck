@@ -12,12 +12,17 @@ public sealed class Win32PrecisionWaiter : IPrecisionWaiter, IDisposable {
         m_timer = timer;
     }
 
+    /// <inheritdoc/>
+    public void Dispose() {
+        m_timer.Dispose();
+    }
     /// <summary>Creates a standalone precision waiter, or <see langword="null"/> where the platform/OS version does
     /// not support a high-resolution waitable timer (the caller falls back to a coarse sleep).</summary>
     public static Win32PrecisionWaiter? TryCreate() {
         return ((Win32HighResolutionWaitableTimer.TryCreate() is { } timer)
             ? new Win32PrecisionWaiter(timer: timer)
-            : null);
+            : null
+        );
     }
     /// <inheritdoc/>
     public bool TryWait(TimeSpan duration) {
@@ -25,10 +30,9 @@ public sealed class Win32PrecisionWaiter : IPrecisionWaiter, IDisposable {
             return true;
         }
 
-        return m_timer.WaitOne(cancellationWaitHandle: null, dueTime: duration);
-    }
-    /// <inheritdoc/>
-    public void Dispose() {
-        m_timer.Dispose();
+        return m_timer.WaitOne(
+            cancellationWaitHandle: null,
+            dueTime: duration
+        );
     }
 }

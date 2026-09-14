@@ -53,10 +53,16 @@ internal static partial class Oracles {
 
         // Every operand above is a Q32 raw (real value · 2^32), so cross is Q64 and speedSquared^1.5 is Q96 — the
         // quotient needs the 2^32 = Q96/Q64 scale restored to read back as the real, unscaled curvature.
-        const double scale = 4294967296.0; // 2^32
+        const double Scale = 4294967296.0; // 2^32
 
-        var k0 = ((((double)cross0) / Math.Pow(x: ((double)speedSquared0), y: 1.5)) * scale);
-        var k1 = ((((double)cross1) / Math.Pow(x: ((double)speedSquared1), y: 1.5)) * scale);
+        var k0 = ((((double)cross0) / Math.Pow(
+            x: ((double)speedSquared0),
+            y: 1.5
+        )) * Scale);
+        var k1 = ((((double)cross1) / Math.Pow(
+            x: ((double)speedSquared1),
+            y: 1.5
+        )) * Scale);
 
         return (k0, k1);
     }
@@ -115,7 +121,10 @@ internal static partial class Oracles {
             var next = (cumulative + chord);
 
             if (next >= targetArcLength) {
-                var fraction = ((chord > 0.0) ? ((targetArcLength - cumulative) / chord) : 0.0);
+                var fraction = ((chord > 0.0)
+                    ? ((targetArcLength - cumulative) / chord)
+                    : 0.0
+                );
 
                 return ((previousX + (fraction * (x - previousX))), (previousZ + (fraction * (z - previousZ))));
             }
@@ -144,16 +153,19 @@ internal static partial class Oracles {
 
         var lo = (((double)CurvatureSpline.MinTangentLength.Value) / 65536.0);
         var hi = (CurvatureSpline.MaxTangentChordRatio * chordLength);
-        const int steps = 40000;
+        const int Steps = 40000;
         var previous = Q(l0: lo);
         var roots = new List<double>();
 
-        for (var i = 1; (i <= steps); ++i) {
-            var t = (lo + (((hi - lo) * i) / steps));
+        for (var i = 1; (i <= Steps); ++i) {
+            var t = (lo + (((hi - lo) * i) / Steps));
             var current = Q(l0: t);
 
-            if ((previous == 0.0) || ((previous < 0.0) != (current < 0.0))) {
-                var a = (lo + (((hi - lo) * (i - 1)) / steps));
+            if (
+                (previous == 0.0) ||
+                ((previous < 0.0) != (current < 0.0))
+            ) {
+                var a = (lo + (((hi - lo) * (i - 1)) / Steps));
                 var b = t;
 
                 for (var bisect = 0; (bisect < 80); ++bisect) {
@@ -174,7 +186,12 @@ internal static partial class Oracles {
         foreach (var l0 in roots) {
             var l1 = ((s0 - (((1.5 * kappa0) * l0) * l0)) / w);
 
-            if ((l0 >= lo) && (l1 >= lo) && ((l0 * l0) <= capSquared) && ((l1 * l1) <= capSquared)) {
+            if (
+                (l0 >= lo) &&
+                (l1 >= lo) &&
+                ((l0 * l0) <= capSquared) &&
+                ((l1 * l1) <= capSquared)
+            ) {
                 admissible.Add(item: (l0, l1));
             }
         }

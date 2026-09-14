@@ -70,8 +70,7 @@ public readonly record struct PeerFailure(PeerRefusal Refusal, string Detail) {
         : (string.IsNullOrEmpty(value: Detail)
             ? "ok"
             : Detail
-        )
-    );
+    ));
 }
 /// <summary>The exception <see cref="Peer.DialAsync"/> raises when the handshake it ran was refused, timed out, or
 /// faulted (or its transport never connected), and <see cref="PeerLink.SendAsync"/> raises on a link that is no

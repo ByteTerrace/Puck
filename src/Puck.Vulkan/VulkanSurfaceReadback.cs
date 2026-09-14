@@ -26,10 +26,10 @@ public sealed class VulkanSurfaceReadback : IDisposable {
     private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
 
+    private uint m_bytesPerPixel;
     private VulkanCommandResources? m_commandResources;
     private VulkanLogicalDevice? m_device;
     private bool m_disposed;
-    private uint m_bytesPerPixel;
     private nint m_fence;
     private uint m_format;
     private uint m_height;
@@ -63,6 +63,190 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         m_queueSubmitter = queueSubmitter;
     }
 
+    private void DisposeResources() {
+        // The fence belongs to the current (old) device — destroy it before m_device is reassigned to a new one.
+        if (
+            (m_device is not null) &&
+            (0 != m_fence)
+        ) {
+            m_frameSynchronizationApi.DestroyFence(
+                deviceHandle: m_device.Handle,
+                fenceHandle: m_fence
+            );
+            m_fence = 0;
+        }
+
+        m_readInFlight = false;
+        m_commandResources?.Dispose();
+        m_commandResources = null;
+        m_readbackBuffer?.Dispose();
+        m_readbackBuffer = null;
+    }
+    private void EnsureResources(IVulkanDeviceContext deviceContext, uint width, uint height, uint vulkanFormat, uint bytesPerPixel) {
+        var device = deviceContext.LogicalDevice;
+
+        if (
+            (m_readbackBuffer is not null) &&
+            (m_device is not null) &&
+            (m_device.Handle == device.Handle) &&
+            (m_width == width) &&
+            (m_height == height) &&
+            (m_format == vulkanFormat)
+        ) {
+            return;
+        }
+
+        DisposeResources();
+
+        var instance = deviceContext.Instance;
+
+        m_commandResources = m_commandResourcesFactory.Create(
+            commandBufferCount: 1,
+            logicalDevice: device
+        );
+        m_bytesPerPixel = bytesPerPixel;
+        m_device = device;
+        m_format = vulkanFormat;
+        m_height = height;
+        m_readbackBuffer = m_frameReadbackApi.CreateBuffer(request: new VulkanFrameReadbackBufferCreateRequest(
+            DeviceHandle: device.Handle,
+            InstanceHandle: instance.Handle,
+            PhysicalDeviceHandle: device.PhysicalDevice.Handle,
+            SizeBytes: ((((ulong)width) * height) * bytesPerPixel)
+        ));
+        m_width = width;
+        // The completion fence for the pipelined SubmitRead path — device-scoped, so a device/extent change rebuilds
+        // it alongside the buffer (DisposeResources destroyed the old one just above). Unused by the blocking Read path.
+        m_frameSynchronizationApi.CreateFence(
+            request: new VulkanFrameSynchronizationCreateRequest(
+                DeviceHandle: device.Handle,
+                StartSignaled: false
+            ),
+            fenceHandle: out m_fence
+        ).ThrowIfFailed(operation: "vkCreateFence");
+    }
+    // The source-state tuple must match the descriptor/producer contract; a mismatched old layout is undefined
+    // behavior on Vulkan and a mismatched resource state is undefined behavior on Direct3D 12.
+    private void RecordReadback(nint commandBufferHandle, nint sourceImageHandle, GpuImageLayout sourceLayout) {
+        var device = m_device!;
+
+        var (vulkanSourceLayout, sourceAccessMask, sourceStageMask) = sourceLayout switch {
+            // The producer-side External handoff is still VkImageLayout.GENERAL; unlike a working General storage
+            // image, however, Record left it scoped for the completed producer write's read-only handoff.
+            GpuImageLayout.External => (
+                VulkanImageLayout.General,
+                VulkanAccessFlags.ShaderRead,
+                VulkanPipelineStageFlags.ComputeShader
+            ),
+            GpuImageLayout.General => (
+                VulkanImageLayout.General,
+                VulkanAccessFlags.ShaderRead | VulkanAccessFlags.ShaderWrite,
+                VulkanPipelineStageFlags.ComputeShader
+            ),
+            GpuImageLayout.ShaderReadOnly => (
+                VulkanImageLayout.ShaderReadOnlyOptimal,
+                VulkanAccessFlags.ShaderRead,
+                VulkanPipelineStageFlags.FragmentShader
+            ),
+            _ => throw new ArgumentOutOfRangeException(
+            paramName: nameof(sourceLayout),
+            actualValue: sourceLayout,
+            message: "Readback requires an External, General, or ShaderReadOnly source image."
+        ),
+        };
+
+        m_commandBufferRecordingApi.BeginCommandBuffer(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: device.Handle
+        ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
+        m_commandBufferRecordingApi.TransitionImageLayout(
+            baseMipLevel: 0,
+            commandBufferHandle: commandBufferHandle,
+            destinationAccessMask: VulkanAccessFlags.TransferRead,
+            destinationStageMask: VulkanPipelineStageFlags.Transfer,
+            deviceHandle: device.Handle,
+            imageHandle: sourceImageHandle,
+            mipLevelCount: 1,
+            newLayout: VulkanImageLayout.TransferSourceOptimal,
+            oldLayout: vulkanSourceLayout,
+            sourceAccessMask: sourceAccessMask,
+            sourceStageMask: sourceStageMask
+        );
+        m_commandBufferRecordingApi.CopyImageToBuffer(
+            bufferHandle: m_readbackBuffer!.BufferHandle,
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: device.Handle,
+            height: m_height,
+            imageHandle: sourceImageHandle,
+            imageLayout: VulkanImageLayout.TransferSourceOptimal,
+            width: m_width
+        );
+        m_commandBufferRecordingApi.TransitionImageLayout(
+            baseMipLevel: 0,
+            commandBufferHandle: commandBufferHandle,
+            destinationAccessMask: sourceAccessMask,
+            destinationStageMask: sourceStageMask,
+            deviceHandle: device.Handle,
+            imageHandle: sourceImageHandle,
+            mipLevelCount: 1,
+            newLayout: vulkanSourceLayout,
+            oldLayout: VulkanImageLayout.TransferSourceOptimal,
+            sourceAccessMask: VulkanAccessFlags.TransferRead,
+            sourceStageMask: VulkanPipelineStageFlags.Transfer
+        );
+        m_commandBufferRecordingApi.EndCommandBuffer(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: device.Handle
+        ).ThrowIfFailed(operation: "vkEndCommandBuffer");
+    }
+
+    /// <summary>Waits for device idle, then frees the readback buffer and command resources. Safe to call more than once.</summary>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        m_disposed = true;
+        m_device?.TryWaitIdle();
+        DisposeResources();
+    }
+    /// <summary>Polls, without blocking, whether the outstanding <see cref="SubmitRead"/>'s copy has completed. Returns
+    /// <see langword="false"/> when no read is in flight, the copy has not finished, or the device is torn down/lost;
+    /// <see langword="true"/> once the fence is signaled. Never throws (it is polled from the render loop).</summary>
+    /// <returns>Whether the last <see cref="SubmitRead"/> has completed.</returns>
+    public bool IsReadComplete() {
+        if (
+            m_disposed ||
+            (m_device is null) ||
+            (0 == m_fence) ||
+            !m_readInFlight
+        ) {
+            return false;
+        }
+
+        // A signaled fence => Success; still-pending => Timeout; a lost device => a negative code — all mapped to a
+        // fail-safe boolean, never a throw into the render loop.
+        return (m_frameSynchronizationApi.WaitForFence(
+            deviceHandle: m_device.Handle,
+            fenceHandle: m_fence,
+            timeout: 0UL
+        ) == VkResult.Success);
+    }
+    /// <summary>Returns the pixels the last completed <see cref="SubmitRead"/> copied (the same reusable staging view
+    /// <see cref="Read"/> returns — copy it before the next submit if it must outlive one) and clears the in-flight
+    /// state so a new <see cref="SubmitRead"/> may be issued.</summary>
+    /// <returns>The tightly packed pixel data from the last completed read.</returns>
+    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
+    public ReadOnlyMemory<byte> MapPixels() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        m_readInFlight = false;
+
+        return m_frameReadbackApi.ReadBuffer(buffer: m_readbackBuffer!);
+    }
     /// <summary>Reads a color image back into tightly packed CPU pixels.</summary>
     /// <param name="deviceContext">The device the source image lives on.</param>
     /// <param name="sourceImageHandle">The native <c>VkImage</c> handle to read.</param>
@@ -180,7 +364,10 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         Span<nint> commandBuffers = [commandBufferHandle];
 
         // Reset the reusable fence, then submit fenced WITHOUT waiting; IsReadComplete polls this fence.
-        m_frameSynchronizationApi.ResetFence(deviceHandle: device.Handle, fenceHandle: m_fence).ThrowIfFailed(operation: "vkResetFences");
+        m_frameSynchronizationApi.ResetFence(
+            deviceHandle: device.Handle,
+            fenceHandle: m_fence
+        ).ThrowIfFailed(operation: "vkResetFences");
         m_queueSubmitter.Submit(
             commandBufferHandles: commandBuffers,
             deviceHandle: device.Handle,
@@ -188,180 +375,5 @@ public sealed class VulkanSurfaceReadback : IDisposable {
             graphicsQueue: device.GraphicsQueue
         );
         m_readInFlight = true;
-    }
-    /// <summary>Polls, without blocking, whether the outstanding <see cref="SubmitRead"/>'s copy has completed. Returns
-    /// <see langword="false"/> when no read is in flight, the copy has not finished, or the device is torn down/lost;
-    /// <see langword="true"/> once the fence is signaled. Never throws (it is polled from the render loop).</summary>
-    /// <returns>Whether the last <see cref="SubmitRead"/> has completed.</returns>
-    public bool IsReadComplete() {
-        if (
-            m_disposed ||
-            (m_device is null) ||
-            (0 == m_fence) ||
-            !m_readInFlight
-        ) {
-            return false;
-        }
-
-        // A signaled fence => Success; still-pending => Timeout; a lost device => a negative code — all mapped to a
-        // fail-safe boolean, never a throw into the render loop.
-        return (m_frameSynchronizationApi.WaitForFence(deviceHandle: m_device.Handle, fenceHandle: m_fence, timeout: 0UL) == VkResult.Success);
-    }
-    /// <summary>Returns the pixels the last completed <see cref="SubmitRead"/> copied (the same reusable staging view
-    /// <see cref="Read"/> returns — copy it before the next submit if it must outlive one) and clears the in-flight
-    /// state so a new <see cref="SubmitRead"/> may be issued.</summary>
-    /// <returns>The tightly packed pixel data from the last completed read.</returns>
-    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    public ReadOnlyMemory<byte> MapPixels() {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        m_readInFlight = false;
-
-        return m_frameReadbackApi.ReadBuffer(buffer: m_readbackBuffer!);
-    }
-
-    // The source-state tuple must match the descriptor/producer contract; a mismatched old layout is undefined
-    // behavior on Vulkan and a mismatched resource state is undefined behavior on Direct3D 12.
-    private void RecordReadback(nint commandBufferHandle, nint sourceImageHandle, GpuImageLayout sourceLayout) {
-        var device = m_device!;
-
-        var (vulkanSourceLayout, sourceAccessMask, sourceStageMask) = sourceLayout switch {
-            // The producer-side External handoff is still VkImageLayout.GENERAL; unlike a working General storage
-            // image, however, Record left it scoped for the completed producer write's read-only handoff.
-            GpuImageLayout.External => (
-                VulkanImageLayout.General,
-                VulkanAccessFlags.ShaderRead,
-                VulkanPipelineStageFlags.ComputeShader
-            ),
-            GpuImageLayout.General => (
-                VulkanImageLayout.General,
-                VulkanAccessFlags.ShaderRead | VulkanAccessFlags.ShaderWrite,
-                VulkanPipelineStageFlags.ComputeShader
-            ),
-            GpuImageLayout.ShaderReadOnly => (
-                VulkanImageLayout.ShaderReadOnlyOptimal,
-                VulkanAccessFlags.ShaderRead,
-                VulkanPipelineStageFlags.FragmentShader
-            ),
-            _ => throw new ArgumentOutOfRangeException(
-                paramName: nameof(sourceLayout),
-                actualValue: sourceLayout,
-                message: "Readback requires an External, General, or ShaderReadOnly source image."
-            ),
-        };
-
-        m_commandBufferRecordingApi.BeginCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: device.Handle
-        ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
-        m_commandBufferRecordingApi.TransitionImageLayout(
-            baseMipLevel: 0,
-            commandBufferHandle: commandBufferHandle,
-            destinationAccessMask: VulkanAccessFlags.TransferRead,
-            destinationStageMask: VulkanPipelineStageFlags.Transfer,
-            deviceHandle: device.Handle,
-            imageHandle: sourceImageHandle,
-            mipLevelCount: 1,
-            newLayout: VulkanImageLayout.TransferSourceOptimal,
-            oldLayout: vulkanSourceLayout,
-            sourceAccessMask: sourceAccessMask,
-            sourceStageMask: sourceStageMask
-        );
-        m_commandBufferRecordingApi.CopyImageToBuffer(
-            bufferHandle: m_readbackBuffer!.BufferHandle,
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: device.Handle,
-            height: m_height,
-            imageHandle: sourceImageHandle,
-            imageLayout: VulkanImageLayout.TransferSourceOptimal,
-            width: m_width
-        );
-        m_commandBufferRecordingApi.TransitionImageLayout(
-            baseMipLevel: 0,
-            commandBufferHandle: commandBufferHandle,
-            destinationAccessMask: sourceAccessMask,
-            destinationStageMask: sourceStageMask,
-            deviceHandle: device.Handle,
-            imageHandle: sourceImageHandle,
-            mipLevelCount: 1,
-            newLayout: vulkanSourceLayout,
-            oldLayout: VulkanImageLayout.TransferSourceOptimal,
-            sourceAccessMask: VulkanAccessFlags.TransferRead,
-            sourceStageMask: VulkanPipelineStageFlags.Transfer
-        );
-        m_commandBufferRecordingApi.EndCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: device.Handle
-        ).ThrowIfFailed(operation: "vkEndCommandBuffer");
-    }
-    private void EnsureResources(IVulkanDeviceContext deviceContext, uint width, uint height, uint vulkanFormat, uint bytesPerPixel) {
-        var device = deviceContext.LogicalDevice;
-
-        if (
-            (m_readbackBuffer is not null) &&
-            (m_device is not null) &&
-            (m_device.Handle == device.Handle) &&
-            (m_width == width) &&
-            (m_height == height) &&
-            (m_format == vulkanFormat)
-        ) {
-            return;
-        }
-
-        DisposeResources();
-
-        var instance = deviceContext.Instance;
-
-        m_commandResources = m_commandResourcesFactory.Create(
-            commandBufferCount: 1,
-            logicalDevice: device
-        );
-        m_bytesPerPixel = bytesPerPixel;
-        m_device = device;
-        m_format = vulkanFormat;
-        m_height = height;
-        m_readbackBuffer = m_frameReadbackApi.CreateBuffer(request: new VulkanFrameReadbackBufferCreateRequest(
-            DeviceHandle: device.Handle,
-            InstanceHandle: instance.Handle,
-            PhysicalDeviceHandle: device.PhysicalDevice.Handle,
-            SizeBytes: ((((ulong)width) * height) * bytesPerPixel)
-        ));
-        m_width = width;
-        // The completion fence for the pipelined SubmitRead path — device-scoped, so a device/extent change rebuilds
-        // it alongside the buffer (DisposeResources destroyed the old one just above). Unused by the blocking Read path.
-        m_frameSynchronizationApi.CreateFence(
-            request: new VulkanFrameSynchronizationCreateRequest(DeviceHandle: device.Handle, StartSignaled: false),
-            fenceHandle: out m_fence
-        ).ThrowIfFailed(operation: "vkCreateFence");
-    }
-    private void DisposeResources() {
-        // The fence belongs to the current (old) device — destroy it before m_device is reassigned to a new one.
-        if (
-            (m_device is not null) &&
-            (0 != m_fence)
-        ) {
-            m_frameSynchronizationApi.DestroyFence(deviceHandle: m_device.Handle, fenceHandle: m_fence);
-            m_fence = 0;
-        }
-
-        m_readInFlight = false;
-        m_commandResources?.Dispose();
-        m_commandResources = null;
-        m_readbackBuffer?.Dispose();
-        m_readbackBuffer = null;
-    }
-
-    /// <summary>Waits for device idle, then frees the readback buffer and command resources. Safe to call more than once.</summary>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-        m_device?.TryWaitIdle();
-        DisposeResources();
     }
 }

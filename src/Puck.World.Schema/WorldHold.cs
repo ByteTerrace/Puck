@@ -124,42 +124,6 @@ public sealed record WorldHold(
 public static class WorldHoldFactory {
     private const double DegreesToRadians = (Math.PI / 180.0);
 
-    /// <summary>Compiles a medium's displacement law, or the inert zeroed law for a row that carries none.</summary>
-    /// <param name="medium">The authored law, or <see langword="null"/>.</param>
-    /// <returns>The compiled law.</returns>
-    public static FixedBodyMedium CompileMedium(WorldHoldMedium? medium) => ((medium is { } law)
-        ? new FixedBodyMedium(
-            EquilibriumOffset: FixedQ4816.FromDouble(value: law.EquilibriumOffset),
-            IdleDrift: FixedQ4816.FromDouble(value: law.IdleDrift),
-            SettleRate: FixedQ4816.FromDouble(value: law.SettleRate)
-        )
-        : default
-    );
-    /// <summary>Compiles a row's vertical arc, or the inert zeroed arc for a row that carries none.</summary>
-    /// <param name="gravity">The authored arc, or <see langword="null"/>.</param>
-    /// <returns>The compiled arc.</returns>
-    public static FixedBodyHoldGravity CompileGravity(WorldHoldGravity? gravity) => ((gravity is { } arc)
-        ? new FixedBodyHoldGravity(
-            Fall: FixedQ4816.FromDouble(value: arc.Fall),
-            Rise: FixedQ4816.FromDouble(value: arc.Rise)
-        )
-        : default
-    );
-    /// <summary>Compiles a row's vertical-channel envelope, or the inert zeroed envelope for a row with no vertical
-    /// law. An unauthored rise speed compiles to <see cref="FixedQ4816.MaxValue"/> — the sentinel a gravity/lift
-    /// row's own arc, which never clamps a rise, reads as "uncapped".</summary>
-    /// <param name="envelope">The authored bound, or <see langword="null"/>.</param>
-    /// <returns>The compiled bound.</returns>
-    public static FixedVerticalEnvelope CompileEnvelope(WorldHoldEnvelope? envelope) => ((envelope is { } bound)
-        ? new FixedVerticalEnvelope(
-            RiseSpeed: ((bound.RiseSpeed is { } rise)
-                ? FixedQ4816.FromDouble(value: rise)
-                : FixedQ4816.MaxValue
-            ),
-            SinkSpeed: FixedQ4816.FromDouble(value: bound.SinkSpeed)
-        )
-        : default
-    );
     /// <summary>Compiles one authored hold list against a world's channel table.</summary>
     /// <param name="holds">The authored rows in preference order, or <see langword="null"/> for a kit authoring
     /// none.</param>
@@ -204,9 +168,8 @@ public static class WorldHoldFactory {
                 Reach: FixedQ4816.FromDouble(value: hold.Reach),
                 ReleaseOrdinal: releaseOrdinal,
                 ReleaseThreshold: ((releaseOrdinal >= 0)
-                    ? channels.Threshold(ordinal: releaseOrdinal)
-                    : FixedQ4816.Zero
-                ),
+                ? channels.Threshold(ordinal: releaseOrdinal)
+                : FixedQ4816.Zero),
                 Medium: CompileMedium(medium: hold.Medium),
                 Speed: FixedQ4816.FromDouble(value: (hold.Speed ?? 0f)),
                 SpendPerSecond: FixedQ4816.FromDouble(value: (hold.Spend?.RatePerSecond ?? 0f)),
@@ -218,6 +181,41 @@ public static class WorldHoldFactory {
 
         return compiled;
     }
+    /// <summary>Compiles a row's vertical-channel envelope, or the inert zeroed envelope for a row with no vertical
+    /// law. An unauthored rise speed compiles to <see cref="FixedQ4816.MaxValue"/> — the sentinel a gravity/lift
+    /// row's own arc, which never clamps a rise, reads as "uncapped".</summary>
+    /// <param name="envelope">The authored bound, or <see langword="null"/>.</param>
+    /// <returns>The compiled bound.</returns>
+    public static FixedVerticalEnvelope CompileEnvelope(WorldHoldEnvelope? envelope) => ((envelope is { } bound)
+        ? new FixedVerticalEnvelope(
+            RiseSpeed: ((bound.RiseSpeed is { } rise)
+            ? FixedQ4816.FromDouble(value: rise)
+            : FixedQ4816.MaxValue),
+            SinkSpeed: FixedQ4816.FromDouble(value: bound.SinkSpeed)
+        )
+        : default
+    );
+    /// <summary>Compiles a row's vertical arc, or the inert zeroed arc for a row that carries none.</summary>
+    /// <param name="gravity">The authored arc, or <see langword="null"/>.</param>
+    /// <returns>The compiled arc.</returns>
+    public static FixedBodyHoldGravity CompileGravity(WorldHoldGravity? gravity) => ((gravity is { } arc)
+        ? new FixedBodyHoldGravity(
+            Fall: FixedQ4816.FromDouble(value: arc.Fall),
+            Rise: FixedQ4816.FromDouble(value: arc.Rise)
+        )
+        : default
+    );
+    /// <summary>Compiles a medium's displacement law, or the inert zeroed law for a row that carries none.</summary>
+    /// <param name="medium">The authored law, or <see langword="null"/>.</param>
+    /// <returns>The compiled law.</returns>
+    public static FixedBodyMedium CompileMedium(WorldHoldMedium? medium) => ((medium is { } law)
+        ? new FixedBodyMedium(
+            EquilibriumOffset: FixedQ4816.FromDouble(value: law.EquilibriumOffset),
+            IdleDrift: FixedQ4816.FromDouble(value: law.IdleDrift),
+            SettleRate: FixedQ4816.FromDouble(value: law.SettleRate)
+        )
+        : default
+    );
     /// <summary>Gets the fastest vertical speed any hold row in a kit's hold list can reach — the greater of its
     /// own <see cref="WorldHoldEnvelope.RiseSpeed"/> and <see cref="WorldHoldEnvelope.SinkSpeed"/>, across every
     /// row, or zero for a kit authoring no envelope at all. What a document-wide speed ceiling reads.</summary>
@@ -231,10 +229,16 @@ public static class WorldHoldFactory {
                 continue;
             }
 
-            fastest = Math.Max(val1: fastest, val2: envelope.SinkSpeed);
+            fastest = Math.Max(
+                val1: fastest,
+                val2: envelope.SinkSpeed
+            );
 
             if (envelope.RiseSpeed is { } rise) {
-                fastest = Math.Max(val1: fastest, val2: rise);
+                fastest = Math.Max(
+                    val1: fastest,
+                    val2: rise
+                );
             }
         }
 
@@ -250,7 +254,10 @@ public static class WorldHoldFactory {
 
         foreach (var hold in (holds ?? [])) {
             if (hold?.Gravity is { } gravity) {
-                fall = Math.Max(val1: fall, val2: gravity.Fall);
+                fall = Math.Max(
+                    val1: fall,
+                    val2: gravity.Fall
+                );
             }
         }
 

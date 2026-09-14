@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.Abstractions.Machines;
 
 /// <summary>
-/// A validated normalized standard-controller image for one <see cref="IScreenMachine.Step"/>. Stick and tilt axes are
+/// A validated normalized standard-controller image for an <see cref="IMachineInputPort"/>. Stick and tilt axes are
 /// finite values in -1..1 and triggers are finite values in 0..1. The default value is the neutral image.
 /// </summary>
 public readonly record struct MachinePadState {

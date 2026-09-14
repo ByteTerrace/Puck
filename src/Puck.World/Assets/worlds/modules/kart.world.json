@@ -23,7 +23,7 @@
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     }
   ],
   "curves": [
@@ -604,26 +604,26 @@
     "world": [
       {
         "kind": "Int",
+        "min": 0,
         "name": "gateStage",
-        "nonNegative": true,
         "value": 0
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "lap",
-        "nonNegative": true,
         "value": 0
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "lapTicks",
-        "nonNegative": true,
         "value": 0
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "lapStart",
-        "nonNegative": true,
         "value": 0
       }
     ]

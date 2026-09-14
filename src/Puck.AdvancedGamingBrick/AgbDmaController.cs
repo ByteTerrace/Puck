@@ -129,7 +129,8 @@ public sealed partial class AgbDmaController : IAgbDmaController {
     public void OnFifo(int fifo, IAgbBus bus) {
         var fifoDestination = ((fifo == 0)
             ? 0x040000A0u
-            : 0x040000A4u);
+            : 0x040000A4u
+        );
 
         var stall = bus.BeginDmaStall();
 
@@ -238,13 +239,16 @@ public sealed partial class AgbDmaController : IAgbDmaController {
     private void ActivateChannel(int channel) {
         var maximum = ((channel == 3)
             ? 0x10000u
-            : 0x4000u);
+            : 0x4000u
+        );
 
         // Channels 0–2 implement only fourteen count bits; mask before interpreting zero as the maximum.
         var count = m_count[channel] & (maximum - 1u);
+
         m_remaining[channel] = ((count == 0u)
             ? maximum
-            : count);
+            : count
+        );
     }
     private void RunDmaLoop(IAgbBus bus) {
         if (m_running) {
@@ -276,12 +280,14 @@ public sealed partial class AgbDmaController : IAgbDmaController {
             var word = ((control & 0x400) != 0);
             var unit = (word
                 ? 4u
-                : 2u);
+                : 2u
+            );
             var sourceControl = (control >> 7) & 0x3;
             var destinationControl = (control >> 5) & 0x3;
             var access = ((ch != m_activeChannel)
                 ? BusAccessType.NonSequential
-                : BusAccessType.Sequential);
+                : BusAccessType.Sequential
+            );
 
             m_activeChannel = ch;
 
@@ -384,8 +390,10 @@ public sealed partial class AgbDmaController : IAgbDmaController {
     };
     private static uint SourceMask(int channel) => ((channel == 0)
         ? 0x07FFFFFFu
-        : 0x0FFFFFFFu);
+        : 0x0FFFFFFFu
+    );
     private static uint DestinationMask(int channel) => ((channel == 3)
         ? 0x0FFFFFFFu
-        : 0x07FFFFFFu);
+        : 0x07FFFFFFu
+    );
 }

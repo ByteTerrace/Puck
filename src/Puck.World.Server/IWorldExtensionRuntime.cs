@@ -9,7 +9,6 @@ public enum WorldExtensionReplayPolicy {
     /// <summary>No authoritative contributions; local output is outside the state replay guarantee.</summary>
     PresentationOnly,
 }
-
 /// <summary>The common runtime lifetime and replay contract, independent of language or hosting mechanism.</summary>
 /// <remarks>Runtime-specific interfaces add their own execution methods. This contract grants no authority and
 /// does not make arbitrary in-process code a sandbox. External effects require a durable operation journal.</remarks>

@@ -1,4 +1,5 @@
 using System.Text;
+using Puck.Abstractions.Machines;
 
 namespace Puck.World;
 
@@ -43,130 +44,6 @@ public static class WorldDefinitionLoader {
         path3: "puck.world.json"
     );
 
-    /// <summary>Loads composed bytes while asynchronously resolving the document's declared neighbours.</summary>
-    /// <param name="utf8">The already composed document bytes.</param>
-    /// <param name="sourceName">The source echoed in refusals.</param>
-    /// <param name="instanceIdentity">The running instance's draw identity.</param>
-    /// <param name="resolve">Reads each neighbour without blocking a scheduler thread.</param>
-    /// <param name="cancellationToken">Cancels the load and neighbour reads.</param>
-    /// <returns>The validated, draw-resolved document or its named refusal.</returns>
-    public static async ValueTask<(WorldDefinition? Definition, string Reason)> LoadAsync(
-        ReadOnlyMemory<byte> utf8, string sourceName, string instanceIdentity,
-        Func<string, CancellationToken, ValueTask<WorldNeighbourResolution>> resolve, CancellationToken cancellationToken
-    ) {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!TryDecode(json: out var json, reason: out var reason, sourceName: sourceName, utf8: utf8) ||
-            !WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, json: json, reason: out reason, sourceName: sourceName)) { return (null, reason); }
-        var neighbours = new ResolvedNeighbours();
-
-        foreach (var reference in (parsed!.References ?? [])) {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (reference is null) { continue; } // Full validation below names malformed reference rows.
-            var key = reference.NeighbourKey;
-
-            if ((key is not null) && !neighbours.Values.ContainsKey(key: key)) {
-                neighbours.Values.Add(key: key, value: await resolve(key, cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
-            }
-        }
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!WorldDefinitionValidator.TryValidate(definition: parsed, neighbours: neighbours, reason: out reason)) { return (null, $"{sourceName} document validation refused: {reason}"); }
-        return (TryResolveDrawsAndRevalidate(definition: parsed, instanceIdentity: instanceIdentity, neighbours: neighbours, reason: out reason, resolved: out var definition, sourceName: sourceName)
-            ? (definition, string.Empty) : (null, reason));
-    }
-
-    private sealed class ResolvedNeighbours : IWorldNeighbourResolver {
-        internal Dictionary<string, WorldNeighbourResolution> Values { get; } = new(comparer: StringComparer.Ordinal);
-
-        public WorldNeighbourResolution Resolve(string document) => (Values.TryGetValue(key: document, value: out var value)
-            ? value : WorldNeighbourResolution.Unavailable(reason: $"'{document}' was not declared by the loaded world"));
-    }
-
-    // The step every load path shares after its own parse+first-validate: resolve first-fill draws, then re-validate
-    // the drawn result. A resolved draw writes a value the validator has already been told the site's domain admits,
-    // so a post-draw refusal can only fire if a domain narrowing went soft — loud rather than a silent bad boot. The
-    // SAME resolver (or null) the caller supplied proves a boot document's own adjacencies here too; a second pass in
-    // WorldPostBuildWiring.Install re-validates once the storage-backed resolver (if any) is also wired, so a
-    // neighbour reachable only through the cloud still gets proven, not just one reachable on disk.
-    private static bool TryResolveDrawsAndRevalidate(WorldDefinition definition, string sourceName, string instanceIdentity, IWorldNeighbourResolver? neighbours, out WorldDefinition? resolved, out string reason) {
-        if (!WorldDrawBootResolver.TryResolve(
-            definition: definition,
-            instanceIdentity: instanceIdentity,
-            reason: out reason,
-            resolved: out var drawn
-        )) {
-            resolved = null;
-            reason = $"{sourceName} draw refused: {reason}";
-
-            return false;
-        }
-
-        // A reference into a draw site could not fill at parse (the cell had no value yet); the drawn document
-        // is the first one that can answer it.
-        if (!WorldStateDocumentValues.TryResolve(
-            definition: drawn,
-            reason: out var referenceReason
-        )) {
-            resolved = null;
-            reason = $"{sourceName} could not resolve a state reference after its draws resolved: {referenceReason}";
-
-            return false;
-        }
-
-        if (!WorldDefinitionValidator.TryValidate(
-            definition: drawn,
-            neighbours: neighbours,
-            reason: out var resolvedReason
-        )) {
-            resolved = null;
-            reason = $"{sourceName} produced an invalid document after its draws resolved: {resolvedReason}";
-
-            return false;
-        }
-
-        resolved = drawn;
-        reason = string.Empty;
-
-        return true;
-    }
-
-    /// <summary>Loads and validates a world document from already-read, already-composed UTF-8 JSON bytes — the
-    /// bytes-level twin of <see cref="TryLoadFile"/>, for a document that arrived from somewhere other than a local
-    /// file (a hosted world's blob-store read). The bytes must already be basis-free: an authored
-    /// <see cref="WorldDocumentBasis.BasisMemberName"/> member refuses by name, since this entry has no directory
-    /// to resolve a chain reference against.</summary>
-    /// <param name="utf8">The document's raw, already-composed UTF-8 JSON bytes.</param>
-    /// <param name="sourceName">The bytes' own source name, echoed in every refusal.</param>
-    /// <param name="definition">The loaded, draw-resolved definition on success; <see langword="null"/> on failure.</param>
-    /// <param name="reason">The one-line failure reason, or empty on success.</param>
-    /// <param name="instanceIdentity">The running instance's own identity — the draw seed ladder's instance rung.</param>
-    /// <param name="neighbours">The injected neighbour resolver a cross-document adjacency proof reads.</param>
-    /// <returns><see langword="true"/> when the bytes loaded and validated.</returns>
-    public static bool TryLoad(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null) {
-        definition = null;
-
-        if (!TryDecode(json: out var json, reason: out reason, sourceName: sourceName, utf8: utf8)) { return false; }
-
-        if (!WorldDefinitionFileSource.TryParseComposed(
-            definition: out var parsed,
-            json: json,
-            neighbours: neighbours,
-            reason: out reason,
-            sourceName: sourceName,
-            validateAdjacencyClaims: true
-        )) {
-            return false;
-        }
-
-        return TryResolveDrawsAndRevalidate(
-            definition: parsed!,
-            instanceIdentity: instanceIdentity,
-            neighbours: neighbours,
-            reason: out reason,
-            resolved: out definition,
-            sourceName: sourceName
-        );
-    }
-
     private static bool TryDecode(ReadOnlyMemory<byte> utf8, string sourceName, out string json, out string reason) {
         json = string.Empty;
 
@@ -196,7 +73,170 @@ public static class WorldDefinitionLoader {
         reason = string.Empty;
         return true;
     }
+    // The step every load path shares after its own parse+first-validate: resolve first-fill draws, then re-validate
+    // the drawn result. A resolved draw writes a value the validator has already been told the site's domain admits,
+    // so a post-draw refusal can only fire if a domain narrowing went soft — loud rather than a silent bad boot. The
+    // SAME resolver (or null) the caller supplied proves a boot document's own adjacencies here too; a second pass in
+    // WorldPostBuildWiring.Install re-validates once the storage-backed resolver (if any) is also wired, so a
+    // neighbour reachable only through the cloud still gets proven, not just one reachable on disk.
+    private static bool TryResolveDrawsAndRevalidate(WorldDefinition definition, string sourceName, string instanceIdentity, IWorldNeighbourResolver? neighbours, out WorldDefinition? resolved, out string reason, IMachineValidationCatalog? catalog = null) {
+        if (!WorldDrawBootResolver.TryResolve(
+            definition: definition,
+            instanceIdentity: instanceIdentity,
+            reason: out reason,
+            resolved: out var drawn
+        )) {
+            resolved = null;
+            reason = $"{sourceName} draw refused: {reason}";
 
+            return false;
+        }
+
+        // A reference into a draw site could not fill at parse (the cell had no value yet); the drawn document
+        // is the first one that can answer it.
+        if (!WorldStateDocumentValues.TryResolve(
+            definition: drawn,
+            reason: out var referenceReason
+        )) {
+            resolved = null;
+            reason = $"{sourceName} could not resolve a state reference after its draws resolved: {referenceReason}";
+
+            return false;
+        }
+
+        if (!WorldDefinitionValidator.TryValidate(
+            definition: drawn,
+            machines: catalog,
+            neighbours: neighbours,
+            reason: out var resolvedReason
+        )) {
+            resolved = null;
+            reason = $"{sourceName} produced an invalid document after its draws resolved: {resolvedReason}";
+
+            return false;
+        }
+
+        resolved = drawn;
+        reason = string.Empty;
+
+        return true;
+    }
+
+    /// <summary>Loads composed bytes while asynchronously resolving the document's declared neighbours.</summary>
+    /// <param name="utf8">The already composed document bytes.</param>
+    /// <param name="sourceName">The source echoed in refusals.</param>
+    /// <param name="instanceIdentity">The running instance's draw identity.</param>
+    /// <param name="resolve">Reads each neighbour without blocking a scheduler thread.</param>
+    /// <param name="cancellationToken">Cancels the load and neighbour reads.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
+    /// <param name="catalog">The selected host machine catalog, or null when provider semantics are deferred.</param>
+    /// <returns>The validated, draw-resolved document or its named refusal.</returns>
+    public static async ValueTask<(WorldDefinition? Definition, string Reason)> LoadAsync(
+        ReadOnlyMemory<byte> utf8, string sourceName, string instanceIdentity,
+        Func<string, CancellationToken, ValueTask<WorldNeighbourResolution>> resolve, CancellationToken cancellationToken,
+        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null
+    ) {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (
+            !TryDecode(
+            json: out var json,
+            reason: out var reason,
+            sourceName: sourceName,
+            utf8: utf8
+        ) ||
+            !WorldDefinitionFileSource.TryParseDocument(
+            definition: out var parsed,
+            json: json,
+            reason: out reason,
+            sourceName: sourceName
+        )
+        ) { return (null, reason); }
+        var neighbours = new ResolvedNeighbours();
+
+        foreach (var reference in (parsed!.References ?? [])) {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (reference is null) { continue; } // Full validation below names malformed reference rows.
+            var key = reference.NeighbourKey;
+
+            if (
+                (key is not null) &&
+                !neighbours.Values.ContainsKey(key: key)
+            ) {
+                neighbours.Values.Add(
+                    key: key,
+                    value: await resolve(
+                        key,
+                        cancellationToken
+                    ).ConfigureAwait(continueOnCapturedContext: false)
+                );
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!WorldDefinitionValidator.TryValidate(
+            definition: parsed,
+            machines: catalog,
+            neighbours: neighbours,
+            reason: out reason
+        )) { return (null, $"{sourceName} document validation refused: {reason}"); }
+        return (TryResolveDrawsAndRevalidate(
+            catalog: catalog,
+            definition: parsed,
+            instanceIdentity: instanceIdentity,
+            neighbours: neighbours,
+            reason: out reason,
+            resolved: out var definition,
+            sourceName: sourceName
+        )
+            ? (definition, string.Empty)
+            : (null, reason)
+        );
+    }
+    /// <summary>Loads and validates a world document from already-read, already-composed UTF-8 JSON bytes — the
+    /// bytes-level twin of <see cref="TryLoadFile"/>, for a document that arrived from somewhere other than a local
+    /// file (a hosted world's blob-store read). The bytes must already be basis-free: an authored
+    /// <see cref="WorldDocumentBasis.BasisMemberName"/> member refuses by name, since this entry has no directory
+    /// to resolve a chain reference against.</summary>
+    /// <param name="utf8">The document's raw, already-composed UTF-8 JSON bytes.</param>
+    /// <param name="sourceName">The bytes' own source name, echoed in every refusal.</param>
+    /// <param name="definition">The loaded, draw-resolved definition on success; <see langword="null"/> on failure.</param>
+    /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <param name="instanceIdentity">The running instance's own identity — the draw seed ladder's instance rung.</param>
+    /// <param name="neighbours">The injected neighbour resolver a cross-document adjacency proof reads.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
+    /// <param name="catalog">The selected host machine catalog, or null when provider semantics are deferred.</param>
+    /// <returns><see langword="true"/> when the bytes loaded and validated.</returns>
+    public static bool TryLoad(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
+        definition = null;
+
+        if (!TryDecode(
+            json: out var json,
+            reason: out reason,
+            sourceName: sourceName,
+            utf8: utf8
+        )) { return false; }
+
+        if (!WorldDefinitionFileSource.TryParseComposed(
+            catalog: catalog,
+            definition: out var parsed,
+            json: json,
+            neighbours: neighbours,
+            reason: out reason,
+            sourceName: sourceName,
+            validateAdjacencyClaims: true
+        )) {
+            return false;
+        }
+
+        return TryResolveDrawsAndRevalidate(
+            catalog: catalog,
+            definition: parsed!,
+            instanceIdentity: instanceIdentity,
+            neighbours: neighbours,
+            reason: out reason,
+            resolved: out definition,
+            sourceName: sourceName
+        );
+    }
     /// <summary>Loads and validates a world document from a file — the public seam the runtime <c>world.load</c> verb
     /// reuses so it never reimplements the deserialize → schema-check → validate path. Any failure yields a one-line
     /// reason (line endings collapsed) and <see langword="false"/>, and the three failure classes are named apart:
@@ -219,14 +259,18 @@ public static class WorldDefinitionLoader {
     /// <see cref="WorldDefinitionValidator.Validate"/>). <see langword="null"/> (the default) is the honest answer
     /// for a caller with no reachable resolver — an authored adjacency then refuses by name
     /// for want of proof, exactly like every other call site of the underlying validator.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
+    /// <param name="catalog">The selected host machine catalog, or null when provider semantics are deferred.</param>
     /// <returns><see langword="true"/> when the file loaded and validated.</returns>
-    public static bool TryLoadFile(string path, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null) {
+    public static bool TryLoadFile(string path, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         if (!WorldDefinitionFileSource.TryLoad(
             contentHash: out _,
             definition: out var loaded,
             neighbours: neighbours,
             path: path,
-            reason: out reason
+            reason: out reason,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog
         )) {
             definition = null;
 
@@ -234,6 +278,7 @@ public static class WorldDefinitionLoader {
         }
 
         return TryResolveDrawsAndRevalidate(
+            catalog: catalog,
             definition: loaded!,
             instanceIdentity: instanceIdentity,
             neighbours: neighbours,
@@ -248,8 +293,10 @@ public static class WorldDefinitionLoader {
     /// file.</param>
     /// <param name="source">The resolved definition and its origin, when this returns <see langword="true"/>.</param>
     /// <param name="failure">The one-line boot-failure message, or empty on success.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
+    /// <param name="catalog">The selected host machine catalog, or null when provider semantics are deferred.</param>
     /// <returns><see langword="true"/> when the boot may proceed.</returns>
-    public static bool TryResolve(string? explicitPath, out WorldDefinitionSource source, out string failure) {
+    public static bool TryResolve(string? explicitPath, out WorldDefinitionSource source, out string failure, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         var explicitly = !string.IsNullOrWhiteSpace(value: explicitPath);
 
         string path;
@@ -278,13 +325,19 @@ public static class WorldDefinitionLoader {
             ? resolvedDirectory
             : AppContext.BaseDirectory
         );
-        var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => directory);
+        var neighbours = new WorldFileNeighbourResolver(
+            baseDirectory: () => directory,
+            catalog: catalog,
+            catalogFingerprint: catalogFingerprint
+        );
 
         if (TryLoadFile(
             path: path,
             definition: out var loaded,
             reason: out var reason,
-            neighbours: neighbours
+            neighbours: neighbours,
+            catalogFingerprint: catalogFingerprint,
+            catalog: catalog
         )) {
             Console.Error.WriteLine(value: $"[world] definition: {path} ({(explicitly
                 ? "--world"
@@ -303,5 +356,17 @@ public static class WorldDefinitionLoader {
         failure = $"[world] definition refused: {reason}";
 
         return false;
+    }
+
+    private sealed class ResolvedNeighbours : IWorldNeighbourResolver {
+        internal Dictionary<string, WorldNeighbourResolution> Values { get; } = new(comparer: StringComparer.Ordinal);
+
+        public WorldNeighbourResolution Resolve(string document) => (Values.TryGetValue(
+            key: document,
+            value: out var value
+        )
+            ? value
+            : WorldNeighbourResolution.Unavailable(reason: $"'{document}' was not declared by the loaded world")
+        );
     }
 }

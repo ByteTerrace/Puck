@@ -8,9 +8,10 @@ public readonly partial record struct FixedQ4816 {
     internal const long SinCosTwoPiQ60 = 7244019458077122842L; // round(2π · 2^60)
     internal const ulong SinCosInvTwoPiQ96High = 683565275UL;
     internal const ulong SinCosInvTwoPiQ96Low = 10633286012715521524UL;
+
     internal static UInt128 SinCosInvTwoPiQ96 {
         [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-        get => ((((UInt128)SinCosInvTwoPiQ96High) << 64) | SinCosInvTwoPiQ96Low);
+        get => (((UInt128)SinCosInvTwoPiQ96High) << 64) | SinCosInvTwoPiQ96Low;
     }
 
     // Taylor coefficients for |residual| ≤ π/256: sine through degree five, cosine through degree four.
@@ -46,15 +47,25 @@ public readonly partial record struct FixedQ4816 {
     /// <returns>The cosine, in <c>[−1, 1]</c>, exactly the cosine component of <see cref="SinCos"/>.</returns>
     /// <remarks>Reconstructs only the requested component. Prefer <see cref="SinCos"/> when both are needed.</remarks>
     public static FixedQ4816 Cos(FixedQ4816 angle) =>
-        new(Value: SinCosComponent(fractionalTurns: ReduceSinCosAngle(angle: angle.Value, fractionBitCount: FractionBitCount), cosine: true));
-
+        new(Value: SinCosComponent(
+            fractionalTurns: ReduceSinCosAngle(
+                angle: angle.Value,
+                fractionBitCount: FractionBitCount
+            ),
+            cosine: true
+        ));
     /// <summary>Computes the sine of <paramref name="angle"/>, given in fixed-point radians.</summary>
     /// <param name="angle">The angle in radians.</param>
     /// <returns>The sine, in <c>[−1, 1]</c>, exactly the sine component of <see cref="SinCos"/>.</returns>
     /// <remarks>Reconstructs only the requested component. Prefer <see cref="SinCos"/> when both are needed.</remarks>
     public static FixedQ4816 Sin(FixedQ4816 angle) =>
-        new(Value: SinCosComponent(fractionalTurns: ReduceSinCosAngle(angle: angle.Value, fractionBitCount: FractionBitCount), cosine: false));
-
+        new(Value: SinCosComponent(
+            fractionalTurns: ReduceSinCosAngle(
+                angle: angle.Value,
+                fractionBitCount: FractionBitCount
+            ),
+            cosine: false
+        ));
     /// <summary>Computes the sine and cosine of <paramref name="angle"/> in one pass.</summary>
     /// <param name="angle">The angle in radians; any representable value is accepted.</param>
     /// <returns>The pair <c>(Sin, Cos)</c>, each in <c>[−1, 1]</c>.</returns>
@@ -62,8 +73,10 @@ public readonly partial record struct FixedQ4816 {
     /// correction. Absolute error is bounded by 0.50000001 raw Q16 ULP across the full carrier; this is an error
     /// envelope, not a guarantee of correctly rounded output. Sine is exactly odd and cosine exactly even.</remarks>
     public static (FixedQ4816 Sin, FixedQ4816 Cos) SinCos(FixedQ4816 angle) =>
-        SinCosFromTurns(fractionalTurns: ReduceSinCosAngle(angle: angle.Value, fractionBitCount: FractionBitCount));
-
+        SinCosFromTurns(fractionalTurns: ReduceSinCosAngle(
+            angle: angle.Value,
+            fractionBitCount: FractionBitCount
+        ));
     /// <summary>Computes sine and cosine directly from a binary fraction of one turn.</summary>
     /// <param name="fractionalTurns">The phase modulo one turn, scaled by 2^64. Zero is zero turns and
     /// <c>1UL &lt;&lt; 62</c> is one quarter turn; unsigned wrapping implements whole-turn periodicity.</param>
@@ -75,15 +88,19 @@ public readonly partial record struct FixedQ4816 {
 
     /// <summary>Evaluates the exact half of a Q16 angle, including its low raw bit.</summary>
     internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosHalfAngle(FixedQ4816 angle) =>
-        SinCosFromTurns(fractionalTurns: ReduceSinCosAngle(angle: angle.Value, fractionBitCount: (FractionBitCount + 1)));
-
+        SinCosFromTurns(fractionalTurns: ReduceSinCosAngle(
+            angle: angle.Value,
+            fractionBitCount: (FractionBitCount + 1)
+        ));
     /// <summary>Evaluates an angle carried at Q32 without first rounding it to Q16.</summary>
     internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosQ32(long angleQ32) =>
-        SinCosFromTurns(fractionalTurns: ReduceSinCosAngle(angle: angleQ32, fractionBitCount: (2 * FractionBitCount)));
-
+        SinCosFromTurns(fractionalTurns: ReduceSinCosAngle(
+            angle: angleQ32,
+            fractionBitCount: (2 * FractionBitCount)
+        ));
     /// <summary>Evaluates a nonnegative Q16 angle over the full unsigned raw range.</summary>
     internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosRaw(ulong rawAngle) =>
-        SinCosFromTurns(fractionalTurns: unchecked((long)((ulong)(unchecked(((UInt128)rawAngle) * SinCosInvTwoPiQ96) >> 48))));
+        SinCosFromTurns(fractionalTurns: unchecked((long)((ulong)(unchecked((((UInt128)rawAngle) * SinCosInvTwoPiQ96)) >> 48))));
 
     // C = round(2^96/2π). Only product bits [32+f, 95+f] are needed; f is 16, 17 or 32, so wrapping the
     // UInt128 product discards no contributing bit. Its modulo is exact; the irrational reciprocal is approximate.
@@ -93,44 +110,86 @@ public readonly partial record struct FixedQ4816 {
     private static long ReduceSinCosAngle(long angle, int fractionBitCount) {
         var sign = (angle >> 63);
         var magnitude = unchecked((ulong)((angle ^ sign) - sign));
-        var turns = unchecked((long)((ulong)(unchecked(((UInt128)magnitude) * SinCosInvTwoPiQ96) >> (32 + fractionBitCount))));
+        var turns = unchecked((long)((ulong)(unchecked((((UInt128)magnitude) * SinCosInvTwoPiQ96)) >> (32 + fractionBitCount))));
 
         return unchecked(((turns ^ sign) - sign));
     }
-
     private static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosFromTurns(long fractionalTurns) {
         var (sin, cos) = SinCosCore(fractionalTurns: fractionalTurns);
 
         return (new(Value: NarrowSinCosQ60(value: sin)), new(Value: NarrowSinCosQ60(value: cos)));
     }
-
     // The same reduction and reconstruction arithmetic as the pair, with two reconstruction multiplies instead
     // of four. Do not implement cosine by offsetting the phase here: independently rounded residuals could differ
     // at the last Q60 bit, making projection equality depend on which side of a Q16 midpoint that bit falls.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     private static long SinCosComponent(long fractionalTurns, bool cosine) {
-        var quadrant = SinCosResidual(fractionalTurns: fractionalTurns, index: out var index, sin: out var sin, cos: out var cos);
+        var quadrant = SinCosResidual(
+            cos: out var cos,
+            fractionalTurns: fractionalTurns,
+            index: out var index,
+            sin: out var sin
+        );
         var value = (cosine
-            ? (BigMulShift60(x: SinCosTableQ60[64 - index], y: cos) - BigMulShift60(x: SinCosTableQ60[index], y: sin))
-            : (BigMulShift60(x: SinCosTableQ60[index], y: cos) + BigMulShift60(x: SinCosTableQ60[64 - index], y: sin)));
-        var negative = (((quadrant + (cosine ? 1 : 0)) & 2) != 0);
+            ? (BigMulShift60(
+                x: SinCosTableQ60[(64 - index)],
+                y: cos
+            ) - BigMulShift60(
+                x: SinCosTableQ60[index],
+                y: sin
+            ))
+            : (BigMulShift60(
+                x: SinCosTableQ60[index],
+                y: cos
+            ) + BigMulShift60(
+                x: SinCosTableQ60[(64 - index)],
+                y: sin
+            ))
+        );
+        var negative = (((quadrant + (cosine
+            ? 1
+            : 0)) & 2) != 0);
         var raw = NarrowSinCosQ60(value: value);
 
-        return (negative ? -raw : raw);
+        return (negative
+            ? -raw
+            : raw
+        );
     }
 
     // Full signed Q60 results: the Gaussian sampler multiplies by its radius before narrowing, so the shared core
     // must retain its guard precision. The table's complementary indices exploit sine/cosine octant symmetry.
     internal static (long SinQ60, long CosQ60) SinCosCore(long fractionalTurns) {
-        var quadrant = SinCosResidual(fractionalTurns: fractionalTurns, index: out var index, sin: out var sin, cos: out var cos);
+        var quadrant = SinCosResidual(
+            cos: out var cos,
+            fractionalTurns: fractionalTurns,
+            index: out var index,
+            sin: out var sin
+        );
         var tableSin = SinCosTableQ60[index];
-        var tableCos = SinCosTableQ60[64 - index];
-        var reconstructedSin = (BigMulShift60(x: tableSin, y: cos) + BigMulShift60(x: tableCos, y: sin));
-        var reconstructedCos = (BigMulShift60(x: tableCos, y: cos) - BigMulShift60(x: tableSin, y: sin));
+        var tableCos = SinCosTableQ60[(64 - index)];
+        var reconstructedSin = (BigMulShift60(
+            x: tableSin,
+            y: cos
+        ) + BigMulShift60(
+            x: tableCos,
+            y: sin
+        ));
+        var reconstructedCos = (BigMulShift60(
+            x: tableCos,
+            y: cos
+        ) - BigMulShift60(
+            x: tableSin,
+            y: sin
+        ));
 
         return (
-            (((quadrant & 2) != 0) ? -reconstructedSin : reconstructedSin),
-            ((((quadrant + 1) & 2) != 0) ? -reconstructedCos : reconstructedCos)
+            (((quadrant & 2) != 0)
+            ? -reconstructedSin
+            : reconstructedSin),
+            ((((quadrant + 1) & 2) != 0)
+            ? -reconstructedCos
+            : reconstructedCos)
         );
     }
 
@@ -143,27 +202,56 @@ public readonly partial record struct FixedQ4816 {
     private static int SinCosResidual(long fractionalTurns, out int index, out long sin, out long cos) {
         var phase = unchecked((ulong)fractionalTurns);
         var quadrant = ((int)(phase >> 62));
-        var offset = (phase & (((ulong)SinCosQuarterTurnQ64) - 1UL));
-        var position = (((quadrant & 1) != 0) ? (((ulong)SinCosQuarterTurnQ64) - offset) : offset);
+        var offset = phase & (((ulong)SinCosQuarterTurnQ64) - 1UL);
+        var position = (((quadrant & 1) != 0)
+            ? (((ulong)SinCosQuarterTurnQ64) - offset)
+            : offset
+        );
+
         index = ((int)((position + (1UL << 55)) >> 56));
         var residual = (((long)position) - (((long)index) << 56));
-        var x = Math.BigMul(a: residual, b: SinCosTwoPiQ60, low: out _);
-        var u = BigMulShift60(x: x, y: x);
-        sin = (x + BigMulShift60(x: BigMulShift60(x: x, y: u), y: (SinPolyC1Q60 + BigMulShift60(x: u, y: SinPolyC2Q60))));
-        cos = ((1L << SinCosFractionBitCount) + BigMulShift60(x: u, y: (CosPolyC1Q60 + BigMulShift60(x: u, y: CosPolyC2Q60))));
+        var x = Math.BigMul(
+            a: residual,
+            b: SinCosTwoPiQ60,
+            low: out _
+        );
+        var u = BigMulShift60(
+            x: x,
+            y: x
+        );
+
+        sin = (x + BigMulShift60(
+            x: BigMulShift60(
+                x: x,
+                y: u
+            ),
+            y: (SinPolyC1Q60 + BigMulShift60(
+                x: u,
+                y: SinPolyC2Q60
+            ))
+        ));
+        cos = ((1L << SinCosFractionBitCount) + BigMulShift60(
+            x: u,
+            y: (CosPolyC1Q60 + BigMulShift60(
+                x: u,
+                y: CosPolyC2Q60
+            ))
+        ));
 
         return quadrant;
     }
-
     // Signed (x·y) >> 60. The bounded residuals and unit-scale coefficients fit the signed product.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     private static long BigMulShift60(long x, long y) {
         // The explicit halves keep .NET 10's inliner from leaving Int128 shift/multiply helper calls in the singles.
-        var high = Math.BigMul(a: x, b: y, low: out var low);
+        var high = Math.BigMul(
+            a: x,
+            b: y,
+            low: out var low
+        );
 
-        return ((high << 4) | ((long)(((ulong)low) >> 60)));
+        return (high << 4) | ((long)(((ulong)low) >> 60));
     }
-
     // Add half minus one plus the retained parity: below half never carries, above half always carries, and a
     // tie carries exactly when the retained integer is odd. Magnitude + bias fits ulong even for |long.MinValue|.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
@@ -171,7 +259,7 @@ public readonly partial record struct FixedQ4816 {
         const int Shift = (SinCosFractionBitCount - FractionBitCount);
         var sign = (value >> 63);
         var magnitude = unchecked((ulong)((value ^ sign) - sign));
-        var rounded = ((long)((magnitude + ((1UL << (Shift - 1)) - 1UL) + ((magnitude >> Shift) & 1UL)) >> Shift));
+        var rounded = ((long)(((magnitude + ((1UL << (Shift - 1)) - 1UL)) + ((magnitude >> Shift) & 1UL)) >> Shift));
 
         return ((rounded ^ sign) - sign);
     }

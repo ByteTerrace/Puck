@@ -39,7 +39,10 @@ public sealed class VulkanGpuTimingPool : IGpuTimingPool {
         }
 
         m_disposed = true;
-        m_queryPoolApi.DestroyQueryPool(deviceHandle: m_deviceHandle, queryPoolHandle: m_poolHandle);
+        m_queryPoolApi.DestroyQueryPool(
+            deviceHandle: m_deviceHandle,
+            queryPoolHandle: m_poolHandle
+        );
         m_poolHandle = 0;
     }
 }

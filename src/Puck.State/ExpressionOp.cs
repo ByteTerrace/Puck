@@ -1,6 +1,12 @@
+using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
+
 namespace Puck.State;
 
-/// <summary>One opcode in a compiled numeric world-rule expression.</summary>
+/// <summary>One opcode in a compiled numeric world-rule expression, and the one vocabulary any document that spells
+/// an arithmetic operation reads from — a cartridge's <c>set</c> step names its combining operation here rather than
+/// restating the list, so the two can never grow apart.</summary>
+[JsonConverter(typeof(StrictEnumConverter<ExpressionOp>))]
 public enum ExpressionOp : byte {
     /// <summary>Push a compile-time literal.</summary>
     Constant,
@@ -232,6 +238,9 @@ public enum ExpressionOp : byte {
     ArrangementAt,
     /// <summary>The element at position i of the permutation of 0..n−1 at a lexicographic rank.</summary>
     ArrangementMember,
+    Floor,
+    Ceiling,
+    Round,
     /// <summary>A 64-bit mask with one bit at the bottom of each block; the width must divide 64.</summary>
     ReplicationMask,
     /// <summary>A pattern repeated across 64 bits; the width must divide 64 and the pattern must fit its block.</summary>

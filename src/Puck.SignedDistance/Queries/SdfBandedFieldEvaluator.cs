@@ -19,11 +19,11 @@ namespace Puck.SignedDistance.Queries;
 /// evaluator everywhere.</para>
 /// </remarks>
 public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
-    private readonly SdfFieldEvaluator m_exact;
-    private readonly SdfDistanceGrid m_grid;
     // The smallest advance a bound sample can produce, in world units: the slack scaled to a safe advance, floored at
     // one tick. Sizes the bound budget of a march from its reach.
     private readonly FixedQ4816 m_boundStepFloor;
+    private readonly SdfFieldEvaluator m_exact;
+    private readonly SdfDistanceGrid m_grid;
 
     /// <summary>Creates a banded evaluator.</summary>
     /// <param name="exact">The exact evaluator the grid was baked from.</param>
@@ -35,7 +35,10 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
     public SdfBandedFieldEvaluator(SdfFieldEvaluator exact, SdfDistanceGrid grid, FixedQ4816 contactReach) {
         ArgumentNullException.ThrowIfNull(argument: exact);
         ArgumentNullException.ThrowIfNull(argument: grid);
-        ArgumentOutOfRangeException.ThrowIfLessThan(other: FixedQ4816.Zero, value: contactReach);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: FixedQ4816.Zero,
+            value: contactReach
+        );
 
         m_exact = exact;
         m_grid = grid;
@@ -50,6 +53,9 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
         );
     }
 
+    /// <inheritdoc/>
+    QueryCapabilities IWorldQuery.Capabilities => ((IWorldQuery)m_exact).Capabilities;
+
     /// <summary>Gets the field value below which <see cref="TryDistance"/> always answers the exact evaluator.</summary>
     public FixedQ4816 Band { get; }
     /// <inheritdoc/>
@@ -60,8 +66,6 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
     public SdfFieldEvaluator Exact => m_exact;
     /// <summary>Gets the grid.</summary>
     public SdfDistanceGrid Grid => m_grid;
-    /// <inheritdoc/>
-    QueryCapabilities IWorldQuery.Capabilities => ((IWorldQuery)m_exact).Capabilities;
 
     // The number of bound samples a march of the given reach can spend: one per bound-step floor, plus one for the
     // sample at the reach itself.
@@ -70,7 +74,7 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return ((steps >= int.MaxValue)
             ? int.MaxValue
-            : ((int)steps + 1)
+            : (((int)steps) + 1)
         );
     }
     private MarchOutcome March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
@@ -120,9 +124,9 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator {
         return (
             (lowerBound >= threshold) &&
             ((SdfFieldMarch.ScaleDistanceDown(
-                distance: lowerBound,
-                scale: m_exact.StepScale
-            ) - radius) >= FixedQ4816.Epsilon)
+            distance: lowerBound,
+            scale: m_exact.StepScale
+        ) - radius) >= FixedQ4816.Epsilon)
         );
     }
 

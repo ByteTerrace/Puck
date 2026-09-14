@@ -41,66 +41,58 @@ internal sealed class ScriptedTradeContinueStage : IPostStage<PostContext> {
     public PostTier Tier =>
         PostTier.C;
 
-    /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        var romPath = context.TradeRomPath;
-
-        if (romPath is null) {
-            return PostStageOutcome.Skip(detail: "no trade-cart ROM (pass --trade-rom with the cross-generation trade cartridge)");
+    // Compares a later run against the reference: both final snapshots must match. Snapshot equality also checks Identity
+    // (free rigor: refuses a model/ROM mismatch).
+    private static string? Difference(ScenarioResult expected, ScenarioResult actual, string leg) {
+        if (!expected.StateA.ContentEquals(other: actual.StateA)) {
+            return $"the {leg} side-A final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.StateA,
+                b: actual.StateA
+            )}";
         }
 
-        var rom = File.ReadAllBytes(path: romPath);
-
-        // Expected crafted leads, derived from the factory rather than hard-coded, so a factory change can't silently
-        // drift this gate.
-        var expectedLeadA = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideA));
-        var expectedLeadB = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideB));
-
-        var reference = RunScenario(
-            churnAtStep: -1,
-            rom: rom
-        );
-
-        if (Judge(
-            expectedLeadA: expectedLeadA,
-            expectedLeadB: expectedLeadB,
-            result: reference
-        ) is { } failure) {
-            return PostStageOutcome.Fail(detail: failure);
+        if (!expected.StateB.ContentEquals(other: actual.StateB)) {
+            return $"the {leg} side-B final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.StateB,
+                b: actual.StateB
+            )}";
         }
 
-        // Determinism: a second fresh run on the same budget schedule reproduces both final snapshots.
-        var replay = RunScenario(
-            churnAtStep: -1,
-            rom: rom
-        );
-
-        if (Difference(
-            actual: replay,
-            expected: reference,
-            leg: "replay"
-        ) is { } replayFailure) {
-            return PostStageOutcome.Fail(detail: replayFailure);
-        }
-
-        // Churn transparency: suspend/snapshot/restore/reconnect at a transfer-idle boundary mid-boot, continue the
-        // identical budgets, and demand identical final snapshots from the credit-preserving resume.
-        var churned = RunScenario(
-            churnAtStep: ChurnStep,
-            rom: rom
-        );
-
-        if (Difference(
-            actual: churned,
-            expected: reference,
-            leg: "churn"
-        ) is { } churnFailure) {
-            return PostStageOutcome.Fail(detail: churnFailure);
-        }
-
-        return PostStageOutcome.Pass(detail: $"{CartridgeTitleReader.CartridgeTitle(rom: rom)} cgb↔cgb: both crafted saves CONTINUE-accepted onto the POKECENTER_2F Cable Club floor (leads 0x{reference.LeadA:X2}/0x{reference.LeadB:X2}, checksums valid), replay-identical and churn-identical over {ScriptedTradeHarness.ContinueSettledFrame} frames (severed transfer-idle at budget step {ChurnStep}, {reference.StateA.Size}+{reference.StateB.Size} state bytes). The overworld is navigable + the receptionist interactable via the crafted object structs (see TradeSaveFactory.WriteObjects); the scripted link through TRADE_CENTER is gated by link-lock.");
+        return null;
     }
+    private static bool IsTransferIdle(MachineInstance machine) =>
+        ((machine.GetRequiredService<ISystemBus>().ReadByte(address: SerialControlAddress) & 0x80) == 0);
+    // Crafted-save acceptance requires both machines to load CONTINUE onto the Cable Club floor, carry
+    // the crafted lead species (distinct per side), and each exported SRAM's primary checksum + check bytes are
+    // self-consistent.
+    private static string? Judge(ScenarioResult result, byte expectedLeadA, byte expectedLeadB) {
+        if (
+            !result.ReachedA ||
+            !result.ReachedB
+        ) {
+            return $"a crafted save did not CONTINUE onto the POKECENTER_2F Cable Club floor (side A reached={result.ReachedA}, side B reached={result.ReachedB})";
+        }
 
+        if (
+            (result.LeadA != expectedLeadA) ||
+            (result.LeadB != expectedLeadB)
+        ) {
+            return $"the loaded lead species drifted from the crafted parties (side A 0x{result.LeadA:X2} expected 0x{expectedLeadA:X2}, side B 0x{result.LeadB:X2} expected 0x{expectedLeadB:X2})";
+        }
+
+        if (result.LeadA == result.LeadB) {
+            return $"both sides loaded the same lead species 0x{result.LeadA:X2}; the crafted trainers must carry distinct leads for an observable trade";
+        }
+
+        if (
+            !result.ChecksumOkA ||
+            !result.ChecksumOkB
+        ) {
+            return $"a crafted save's primary checksum/check bytes are inconsistent after CONTINUE (side A ok={result.ChecksumOkA}, side B ok={result.ChecksumOkB})";
+        }
+
+        return null;
+    }
     // One complete scenario on the fixed per-frame budget schedule. With churnAtStep >= 0 the session is suspended at that
     // boundary (transfer-idle before any receptionist link starts), both machines snapshotted and restored into fresh
     // machines, and the cable reconnected with the resume token before the remaining frames run.
@@ -185,58 +177,66 @@ internal sealed class ScriptedTradeContinueStage : IPostStage<PostContext> {
             machineB.Dispose();
         }
     }
-    // Crafted-save acceptance requires both machines to load CONTINUE onto the Cable Club floor, carry
-    // the crafted lead species (distinct per side), and each exported SRAM's primary checksum + check bytes are
-    // self-consistent.
-    private static string? Judge(ScenarioResult result, byte expectedLeadA, byte expectedLeadB) {
-        if (
-            !result.ReachedA ||
-            !result.ReachedB
-        ) {
-            return $"a crafted save did not CONTINUE onto the POKECENTER_2F Cable Club floor (side A reached={result.ReachedA}, side B reached={result.ReachedB})";
+
+    /// <inheritdoc/>
+    public PostStageOutcome Run(PostContext context) {
+        var romPath = context.TradeRomPath;
+
+        if (romPath is null) {
+            return PostStageOutcome.Skip(detail: "no trade-cart ROM (pass --trade-rom with the cross-generation trade cartridge)");
         }
 
-        if (
-            (result.LeadA != expectedLeadA) ||
-            (result.LeadB != expectedLeadB)
-        ) {
-            return $"the loaded lead species drifted from the crafted parties (side A 0x{result.LeadA:X2} expected 0x{expectedLeadA:X2}, side B 0x{result.LeadB:X2} expected 0x{expectedLeadB:X2})";
+        var rom = File.ReadAllBytes(path: romPath);
+
+        // Expected crafted leads, derived from the factory rather than hard-coded, so a factory change can't silently
+        // drift this gate.
+        var expectedLeadA = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideA));
+        var expectedLeadB = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideB));
+
+        var reference = RunScenario(
+            churnAtStep: -1,
+            rom: rom
+        );
+
+        if (Judge(
+            expectedLeadA: expectedLeadA,
+            expectedLeadB: expectedLeadB,
+            result: reference
+        ) is { } failure) {
+            return PostStageOutcome.Fail(detail: failure);
         }
 
-        if (result.LeadA == result.LeadB) {
-            return $"both sides loaded the same lead species 0x{result.LeadA:X2}; the crafted trainers must carry distinct leads for an observable trade";
+        // Determinism: a second fresh run on the same budget schedule reproduces both final snapshots.
+        var replay = RunScenario(
+            churnAtStep: -1,
+            rom: rom
+        );
+
+        if (Difference(
+            actual: replay,
+            expected: reference,
+            leg: "replay"
+        ) is { } replayFailure) {
+            return PostStageOutcome.Fail(detail: replayFailure);
         }
 
-        if (
-            !result.ChecksumOkA ||
-            !result.ChecksumOkB
-        ) {
-            return $"a crafted save's primary checksum/check bytes are inconsistent after CONTINUE (side A ok={result.ChecksumOkA}, side B ok={result.ChecksumOkB})";
+        // Churn transparency: suspend/snapshot/restore/reconnect at a transfer-idle boundary mid-boot, continue the
+        // identical budgets, and demand identical final snapshots from the credit-preserving resume.
+        var churned = RunScenario(
+            churnAtStep: ChurnStep,
+            rom: rom
+        );
+
+        if (Difference(
+            actual: churned,
+            expected: reference,
+            leg: "churn"
+        ) is { } churnFailure) {
+            return PostStageOutcome.Fail(detail: churnFailure);
         }
 
-        return null;
+        return PostStageOutcome.Pass(detail: $"{CartridgeTitleReader.CartridgeTitle(rom: rom)} cgb↔cgb: both crafted saves CONTINUE-accepted onto the POKECENTER_2F Cable Club floor (leads 0x{reference.LeadA:X2}/0x{reference.LeadB:X2}, checksums valid), replay-identical and churn-identical over {ScriptedTradeHarness.ContinueSettledFrame} frames (severed transfer-idle at budget step {ChurnStep}, {reference.StateA.Size}+{reference.StateB.Size} state bytes). The overworld is navigable + the receptionist interactable via the crafted object structs (see TradeSaveFactory.WriteObjects); the scripted link through TRADE_CENTER is gated by link-lock.");
     }
-    // Compares a later run against the reference: both final snapshots must match. Snapshot equality also checks Identity
-    // (free rigor: refuses a model/ROM mismatch).
-    private static string? Difference(ScenarioResult expected, ScenarioResult actual, string leg) {
-        if (!expected.StateA.ContentEquals(other: actual.StateA)) {
-            return $"the {leg} side-A final state diverged — {HashDivergenceProbe.DescribeDivergence(
-                a: expected.StateA,
-                b: actual.StateA
-            )}";
-        }
-
-        if (!expected.StateB.ContentEquals(other: actual.StateB)) {
-            return $"the {leg} side-B final state diverged — {HashDivergenceProbe.DescribeDivergence(
-                a: expected.StateB,
-                b: actual.StateB
-            )}";
-        }
-
-        return null;
-    }
-    private static bool IsTransferIdle(MachineInstance machine) =>
-        ((machine.GetRequiredService<ISystemBus>().ReadByte(address: SerialControlAddress) & 0x80) == 0);
 
     private readonly record struct ScenarioResult(
         byte LeadA,

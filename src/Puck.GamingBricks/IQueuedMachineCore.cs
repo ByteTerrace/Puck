@@ -13,6 +13,9 @@ namespace Puck.GamingBricks;
 /// <see cref="QueuedMachineWorker.Eject"/>.
 /// </summary>
 public interface IQueuedMachineCore : ITimeTravelMachineCore<MachinePadState>, IDisposable {
+    /// <summary>Gets the full identity of the checkpoint encoding, immutable images, and behavioral configuration.
+    /// A different identity refuses restoration before changing the core.</summary>
+    string CheckpointIdentity { get; }
     /// <summary>Gets the core's current machine-cycle rate — constant hardware for a fixed-rate core, or a value that
     /// tracks a live clock-multiplier latch. The worker converts each segment's engine-tick budget against this through a
     /// remainder-carrying accumulator, so a varying rate carries no drift.</summary>

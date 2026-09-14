@@ -22,9 +22,11 @@ public sealed partial class WorldBody {
     /// never have come from a validated cell.</summary>
     /// <param name="value">The candidate scale.</param>
     internal void SetScale(FixedQ4816 value) {
-        m_scale = ((value > FixedQ4816.Zero) ? value : FixedQ4816.One);
+        m_scale = ((value > FixedQ4816.Zero)
+            ? value
+            : FixedQ4816.One
+        );
     }
-
     /// <summary>Scales the kit-shared compiled collider's volumes uniformly about the body root for this body's live
     /// <see cref="Scale"/> — written into the caller's own stackalloc'd scratch span, never onto the heap and never
     /// mutated in place (<paramref name="volumes"/> is shared by every body wearing this kit). The common case
@@ -56,6 +58,7 @@ public sealed partial class WorldBody {
 
         return destination;
     }
+
     // The one seat-time turn-rate resolve, mirroring ResolveMoveSpeed: the seated profile's claimed rate, else the
     // kit's own, scaled by this body's live Scale.
     private FixedQ4816 ResolveTurnRate() => ((Profile?.FixedTurnSpeed ?? m_tuning.Turn.Rate) * m_scale);

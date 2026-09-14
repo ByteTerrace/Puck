@@ -90,7 +90,7 @@ public sealed partial class VulkanGpuExportableRenderTarget : IGpuExportableRend
             Height: height,
             InstanceHandle: instance.Handle,
             PhysicalDeviceHandle: logicalDevice.PhysicalDevice.Handle,
-            UsageFlags: VulkanImageUsageFlags.ColorAttachment | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource,
+            UsageFlags: VulkanImageUsageFlags.ColorAttachment | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource | VulkanImageUsageFlags.TransferDestination,
             Width: width
         ));
 
@@ -161,7 +161,10 @@ public sealed partial class VulkanGpuExportableRenderTarget : IGpuExportableRend
 
     /// <inheritdoc/>
     public void FinalizeForExport() {
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
 
         // The producer's Sampled render pass leaves the image in SHADER_READ_ONLY_OPTIMAL; transition it to GENERAL
         // — the cross-Vulkan handoff layout an importer re-transitions from — and drain the queue so the importing

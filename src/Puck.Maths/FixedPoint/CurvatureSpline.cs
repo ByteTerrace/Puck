@@ -31,8 +31,8 @@ public enum CurvatureSplineRefusal : byte {
 public sealed class CurvatureSplineException : ArgumentException {
     internal CurvatureSplineException(CurvatureSplineRefusal refusal, int segmentIndex, string detail)
         : base(message: ((segmentIndex >= 0)
-            ? $"Curvature spline refused {refusal} at segment {segmentIndex}: {detail}"
-            : $"Curvature spline refused {refusal}: {detail}")) {
+        ? $"Curvature spline refused {refusal} at segment {segmentIndex}: {detail}"
+        : $"Curvature spline refused {refusal}: {detail}")) {
         Refusal = refusal;
         SegmentIndex = segmentIndex;
     }
@@ -71,22 +71,12 @@ public readonly record struct CurvatureSplineSample(FixedVector3 Position, Fixed
 /// (Q32), rounded once from the exact solve — the seam a presentation float twin converts from, and the shape the
 /// law suite reads back to check continuity and the deterministic branch pick.</summary>
 public readonly record struct CurvatureSplineSegment {
-    /// <summary>The shared start knot's planar control point, Q32.</summary>
-    public required long P0X { get; init; }
-    /// <inheritdoc cref="P0X"/>
-    public required long P0Z { get; init; }
-    /// <summary>The derived first interior control point, Q32.</summary>
-    public required long P1X { get; init; }
-    /// <inheritdoc cref="P1X"/>
-    public required long P1Z { get; init; }
-    /// <summary>The derived second interior control point, Q32.</summary>
-    public required long P2X { get; init; }
-    /// <inheritdoc cref="P2X"/>
-    public required long P2Z { get; init; }
-    /// <summary>The shared end knot's planar control point, Q32.</summary>
-    public required long P3X { get; init; }
-    /// <inheritdoc cref="P3X"/>
-    public required long P3Z { get; init; }
+    /// <summary>The cumulative Simpson arc-length table over this segment's parameter <c>t</c> (<c>ArcTable[0] ==
+    /// 0</c>, <c>ArcTable[^1] == LengthRaw</c>), each entry Q32 and strictly increasing. The panel count — always a
+    /// power of two, starting at 64 — is derived per segment by <see cref="CurvatureSpline.Compile"/>, doubled until
+    /// the table's own estimated error falls under its scaled bound
+    /// (<see cref="CurvatureSpline.ArcLengthRelativeErrorShift"/>); it is not a fixed 64 for every segment.</summary>
+    public required long[] ArcTable { get; init; }
     /// <summary>The quadratic derivative control point at <c>t = 0</c>, Q32.</summary>
     public required long D0X { get; init; }
     /// <inheritdoc cref="D0X"/>
@@ -107,26 +97,36 @@ public readonly record struct CurvatureSplineSegment {
     public required long E1X { get; init; }
     /// <inheritdoc cref="E1X"/>
     public required long E1Z { get; init; }
+    /// <summary>The constant elevation grade <c>dY/ds</c> over this segment (linear in arc length), Q32.</summary>
+    public required long GradeRaw { get; init; }
+    /// <summary>This segment's own arc length — equal to the last <see cref="ArcTable"/> entry, Q32.</summary>
+    public required long LengthRaw { get; init; }
+    /// <summary>The shared start knot's planar control point, Q32.</summary>
+    public required long P0X { get; init; }
+    /// <inheritdoc cref="P0X"/>
+    public required long P0Z { get; init; }
+    /// <summary>The derived first interior control point, Q32.</summary>
+    public required long P1X { get; init; }
+    /// <inheritdoc cref="P1X"/>
+    public required long P1Z { get; init; }
+    /// <summary>The derived second interior control point, Q32.</summary>
+    public required long P2X { get; init; }
+    /// <inheritdoc cref="P2X"/>
+    public required long P2Z { get; init; }
+    /// <summary>The shared end knot's planar control point, Q32.</summary>
+    public required long P3X { get; init; }
+    /// <inheritdoc cref="P3X"/>
+    public required long P3Z { get; init; }
+    /// <summary>The global arc station this segment starts at, Q32.</summary>
+    public required long StationRaw { get; init; }
     /// <summary>The derived start tangent length <c>l0</c>, Q32.</summary>
     public required long Tangent0LengthRaw { get; init; }
     /// <summary>The derived end tangent length <c>l1</c>, Q32.</summary>
     public required long Tangent1LengthRaw { get; init; }
-    /// <summary>The global arc station this segment starts at, Q32.</summary>
-    public required long StationRaw { get; init; }
-    /// <summary>This segment's own arc length — equal to the last <see cref="ArcTable"/> entry, Q32.</summary>
-    public required long LengthRaw { get; init; }
     /// <summary>The start knot's elevation, promoted exactly to Q32.</summary>
     public required long Y0Raw { get; init; }
     /// <summary>The end knot's elevation, promoted exactly to Q32.</summary>
     public required long Y1Raw { get; init; }
-    /// <summary>The constant elevation grade <c>dY/ds</c> over this segment (linear in arc length), Q32.</summary>
-    public required long GradeRaw { get; init; }
-    /// <summary>The cumulative Simpson arc-length table over this segment's parameter <c>t</c> (<c>ArcTable[0] ==
-    /// 0</c>, <c>ArcTable[^1] == LengthRaw</c>), each entry Q32 and strictly increasing. The panel count — always a
-    /// power of two, starting at 64 — is derived per segment by <see cref="CurvatureSpline.Compile"/>, doubled until
-    /// the table's own estimated error falls under its scaled bound
-    /// (<see cref="CurvatureSpline.ArcLengthRelativeErrorShift"/>); it is not a fixed 64 for every segment.</summary>
-    public required long[] ArcTable { get; init; }
 }
 /// <summary>
 /// The curvature-first spline primitive: authors declare knot positions, tangent directions and signed endpoint
@@ -137,6 +137,19 @@ public readonly record struct CurvatureSplineSegment {
 /// arithmetic, never on a per-tick path.
 /// </summary>
 public static class CurvatureSpline {
+    /// <summary>The floor <see cref="ArcLengthRelativeErrorShift"/>'s own scaled bound never drops below, Q32 raw —
+    /// one Q16 unit, the coarsest scale any <see cref="FixedQ4816"/>-typed consumer of a compiled raw (a position, a
+    /// station) could ever observe, so a very short segment is never asked for an unreachable absolute precision.
+    /// <see cref="CurvatureSplineRefusal.ArcLengthErrorUnbounded"/> refuses a segment whose table cannot reach
+    /// either bound within 65,536 panels.</summary>
+    public const long ArcLengthMinimumErrorBoundRaw = (1L << 16);
+    /// <summary>The relative error a segment's <see cref="CurvatureSplineSegment.ArcTable"/>'s Richardson-estimated
+    /// Simpson-quadrature or linear-interpolation error must fall under before <see cref="Compile"/> accepts its
+    /// panel count, expressed as a right shift applied to the segment's own (estimated) arc length — scale-aware,
+    /// since a segment's length ranges from a few units up to <see cref="MaxCoordinate"/>'s own reach, and a fixed
+    /// absolute bound tight enough to matter at the small end is unreachable within any sane panel budget at the
+    /// large end (Simpson's own error term scales with the integrand's magnitude, not just the panel width).</summary>
+    public const int ArcLengthRelativeErrorShift = 20;
     /// <summary>The fraction bit count every compiled raw is carried at (<c>32</c>) — the
     /// <see cref="SecondOrderDynamics.CoefficientFractionBitCount"/> precedent.</summary>
     public const int CoefficientFractionBitCount = 32;
@@ -163,19 +176,32 @@ public static class CurvatureSpline {
     /// the arc-length integrand and the runtime tangent normalization away from the origin.</summary>
     public static readonly FixedQ4816 MinSpeedFloor = FixedQ4816.FromRawBits(value: 1024L); // 1/64
 
-    /// <summary>The relative error a segment's <see cref="CurvatureSplineSegment.ArcTable"/>'s Richardson-estimated
-    /// Simpson-quadrature or linear-interpolation error must fall under before <see cref="Compile"/> accepts its
-    /// panel count, expressed as a right shift applied to the segment's own (estimated) arc length — scale-aware,
-    /// since a segment's length ranges from a few units up to <see cref="MaxCoordinate"/>'s own reach, and a fixed
-    /// absolute bound tight enough to matter at the small end is unreachable within any sane panel budget at the
-    /// large end (Simpson's own error term scales with the integrand's magnitude, not just the panel width).</summary>
-    public const int ArcLengthRelativeErrorShift = 20;
-    /// <summary>The floor <see cref="ArcLengthRelativeErrorShift"/>'s own scaled bound never drops below, Q32 raw —
-    /// one Q16 unit, the coarsest scale any <see cref="FixedQ4816"/>-typed consumer of a compiled raw (a position, a
-    /// station) could ever observe, so a very short segment is never asked for an unreachable absolute precision.
-    /// <see cref="CurvatureSplineRefusal.ArcLengthErrorUnbounded"/> refuses a segment whose table cannot reach
-    /// either bound within 65,536 panels.</summary>
-    public const long ArcLengthMinimumErrorBoundRaw = (1L << 16);
+    private static void ValidateKnotRange(CurvatureSplineKnot knot, int knotIndex) {
+        if (
+            (knot.X.Value > MaxCoordinate.Value) ||
+            (knot.X.Value < -MaxCoordinate.Value) ||
+            (knot.Z.Value > MaxCoordinate.Value) ||
+            (knot.Z.Value < -MaxCoordinate.Value) ||
+            (knot.Elevation.Value > MaxCoordinate.Value) ||
+            (knot.Elevation.Value < -MaxCoordinate.Value)
+        ) {
+            throw new CurvatureSplineException(
+                detail: $"a coordinate leaves ±{MaxCoordinate}.",
+                refusal: CurvatureSplineRefusal.KnotOutOfRange,
+                segmentIndex: knotIndex
+            );
+        }
+        if (
+            (knot.Curvature.Value > MaxCurvature.Value) ||
+            (knot.Curvature.Value < -MaxCurvature.Value)
+        ) {
+            throw new CurvatureSplineException(
+                detail: $"the curvature leaves ±{MaxCurvature}.",
+                refusal: CurvatureSplineRefusal.KnotOutOfRange,
+                segmentIndex: knotIndex
+            );
+        }
+    }
 
     /// <summary>Compiles authored knots into a curvature-continuous spline.</summary>
     /// <param name="knots">The authored knots, in curve order.</param>
@@ -185,49 +211,67 @@ public static class CurvatureSpline {
     public static CompiledCurvatureSpline Compile(ReadOnlySpan<CurvatureSplineKnot> knots, bool closed) {
         var knotCount = knots.Length;
 
-        if ((closed && (knotCount < 3)) || (!closed && (knotCount < 2))) {
-            throw new CurvatureSplineException(detail: $"a {(closed ? "closed" : "open")} curve needs at least {(closed ? 3 : 2)} knots; {knotCount} were declared.", refusal: CurvatureSplineRefusal.TooFewKnots, segmentIndex: -1);
+        if (
+            (closed && (knotCount < 3)) ||
+            (!closed && (knotCount < 2))
+        ) {
+            throw new CurvatureSplineException(
+                detail: $"a {(closed
+                ? "closed"
+                : "open")} curve needs at least {(closed
+                ? 3
+                : 2)} knots; {knotCount} were declared.",
+                refusal: CurvatureSplineRefusal.TooFewKnots,
+                segmentIndex: -1
+            );
         }
 
         for (var i = 0; (i < knotCount); ++i) {
-            ValidateKnotRange(knot: knots[i], knotIndex: i);
+            ValidateKnotRange(
+                knot: knots[i],
+                knotIndex: i
+            );
         }
 
-        var segmentCount = (closed ? knotCount : (knotCount - 1));
+        var segmentCount = (closed
+            ? knotCount
+            : (knotCount - 1)
+        );
         var segments = new CurvatureSplineSegment[segmentCount];
         var station = 0L;
 
         for (var segment = 0; (segment < segmentCount); ++segment) {
             var start = knots[segment];
-            var end = knots[(closed ? ((segment + 1) % knotCount) : (segment + 1))];
-            var compiled = CurvatureSplineExactMath.CompileSegment(end: end, segmentIndex: segment, start: start);
+            var end = knots[(closed
+                ? ((segment + 1) % knotCount)
+                : (segment + 1))];
+            var compiled = CurvatureSplineExactMath.CompileSegment(
+                end: end,
+                segmentIndex: segment,
+                start: start
+            );
 
             compiled = (compiled with { StationRaw = station });
 
             var nextStation = unchecked((station + compiled.LengthRaw));
 
             if (nextStation < station) {
-                throw new CurvatureSplineException(detail: "the cumulative arc-length station overflowed the Q32 raw carrier.", refusal: CurvatureSplineRefusal.CarrierOverflow, segmentIndex: segment);
+                throw new CurvatureSplineException(
+                    detail: "the cumulative arc-length station overflowed the Q32 raw carrier.",
+                    refusal: CurvatureSplineRefusal.CarrierOverflow,
+                    segmentIndex: segment
+                );
             }
 
             station = nextStation;
             segments[segment] = compiled;
         }
 
-        return new CompiledCurvatureSpline(closed: closed, segments: segments, totalLengthRaw: station);
-    }
-
-    private static void ValidateKnotRange(CurvatureSplineKnot knot, int knotIndex) {
-        if (
-            (knot.X.Value > MaxCoordinate.Value) || (knot.X.Value < -MaxCoordinate.Value) ||
-            (knot.Z.Value > MaxCoordinate.Value) || (knot.Z.Value < -MaxCoordinate.Value) ||
-            (knot.Elevation.Value > MaxCoordinate.Value) || (knot.Elevation.Value < -MaxCoordinate.Value)
-        ) {
-            throw new CurvatureSplineException(detail: $"a coordinate leaves ±{MaxCoordinate}.", refusal: CurvatureSplineRefusal.KnotOutOfRange, segmentIndex: knotIndex);
-        }
-        if ((knot.Curvature.Value > MaxCurvature.Value) || (knot.Curvature.Value < -MaxCurvature.Value)) {
-            throw new CurvatureSplineException(detail: $"the curvature leaves ±{MaxCurvature}.", refusal: CurvatureSplineRefusal.KnotOutOfRange, segmentIndex: knotIndex);
-        }
+        return new CompiledCurvatureSpline(
+            closed: closed,
+            segments: segments,
+            totalLengthRaw: station
+        );
     }
 }
 /// <summary>The compiled, curvature-continuous form of an authored curve — zero-allocation, exception-free evaluation
@@ -235,10 +279,10 @@ public static class CurvatureSpline {
 public sealed class CompiledCurvatureSpline {
     private const int NarrowingShift = (CurvatureSpline.CoefficientFractionBitCount - FixedQ4816.FractionBitCount); // Q32 -> Q16
 
-    private readonly CurvatureSplineSegment[] _segments;
+    private readonly CurvatureSplineSegment[] m_segments;
 
     internal CompiledCurvatureSpline(CurvatureSplineSegment[] segments, bool closed, long totalLengthRaw) {
-        _segments = segments;
+        m_segments = segments;
         Closed = closed;
         TotalLengthRaw = totalLengthRaw;
         TotalLength = NarrowToQ16(raw: totalLengthRaw);
@@ -248,98 +292,46 @@ public sealed class CompiledCurvatureSpline {
     public bool Closed { get; }
     /// <summary>Gets the number of compiled segments (knot count for a closed curve; knot count minus one for an
     /// open one).</summary>
-    public int SegmentCount => _segments.Length;
+    public int SegmentCount => m_segments.Length;
     /// <summary>Gets the total arc length of the curve.</summary>
     public FixedQ4816 TotalLength { get; }
     /// <summary>Gets the total arc length, Q32 raw — the twin-sync and law seam.</summary>
     public long TotalLengthRaw { get; }
 
-    /// <summary>Gets one compiled segment's raw data — the twin-sync and law seam.</summary>
-    /// <param name="index">The segment index, from zero to <see cref="SegmentCount"/> minus one.</param>
-    public CurvatureSplineSegment GetSegment(int index) => _segments[index];
-    /// <summary>Gets the arc station of a knot.</summary>
-    /// <param name="index">The knot index. Ranges to <see cref="SegmentCount"/> inclusive: for an open curve that is
-    /// the last authored knot; for a closed curve it is the wraparound back to knot zero, at
-    /// <see cref="TotalLength"/>.</param>
-    public FixedQ4816 KnotStation(int index) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: index);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: index, other: SegmentCount);
+    // Cubic de Casteljau at a Q32 fraction `tRaw` (0 = t0, 2^32 = t1) — one rounding per lerp, through the shared
+    // FixedQ4816.RoundProduct kernel, so every narrowing in the evaluate path rounds the same way.
+    private static long DeCasteljau(long p0, long p1, long p2, long p3, long tRaw) {
+        var q0 = Lerp(
+            a: p0,
+            b: p1,
+            tRaw: tRaw
+        );
+        var q1 = Lerp(
+            a: p1,
+            b: p2,
+            tRaw: tRaw
+        );
+        var q2 = Lerp(
+            a: p2,
+            b: p3,
+            tRaw: tRaw
+        );
+        var r0 = Lerp(
+            a: q0,
+            b: q1,
+            tRaw: tRaw
+        );
+        var r1 = Lerp(
+            a: q1,
+            b: q2,
+            tRaw: tRaw
+        );
 
-        return NarrowToQ16(raw: ((index == SegmentCount) ? TotalLengthRaw : _segments[index].StationRaw));
-    }
-    /// <summary>Evaluates the curve at an arc length expressed at the compiled solve's own Q32 station scale — the
-    /// station <see cref="CurvatureSplineSegment.StationRaw"/>/<see cref="TotalLengthRaw"/> and every
-    /// <see cref="CurvatureSplineSegment.ArcTable"/> entry already carry. This is the seam a per-tick raw accumulator
-    /// (a curve-follow producer's own travelled arc, held at Q32 precisely so a sub-Q16 authored rate still
-    /// accumulates instead of rounding to a standstill) must call directly: narrowing such an accumulator to
-    /// <see cref="FixedQ4816"/> (Q16) BEFORE evaluating loses up to 65,535 Q32 raws of precision on every call, which
-    /// silently shifts where an open curve's endpoint clamp engages and where a closed curve's modulus wrap lands
-    /// whenever <see cref="TotalLengthRaw"/> is not itself a multiple of <c>2^16</c> — true of almost every compiled
-    /// curve, since the Simpson arc-length integral has no reason to land on a Q16 boundary. <see cref="Evaluate"/>
-    /// is the Q16-typed convenience overload for authored/UI-scale callers; it promotes exactly (no rounding) and
-    /// delegates here, which owns the one wrap/clamp/lookup implementation both overloads share.</summary>
-    /// <param name="arcRaw">The Q32 arc-length raw to sample. A closed curve wraps modulo <see cref="TotalLengthRaw"/>
-    /// (the canonical non-negative residue); an open curve clamps to <c>[0, TotalLengthRaw]</c>. Total over every
-    /// input — never throws, never returns a non-finite component.</param>
-    /// <returns>The sampled position, tangent, elevation grade, and curvature.</returns>
-    public CurvatureSplineSample EvaluateRaw(long arcRaw) {
-        var local = WrapOrClamp(argument: ((Int128)arcRaw));
-
-        return LookupAndSample(local: local);
-    }
-    /// <summary>Evaluates the curve at an arc length. Promotes <paramref name="arcLength"/> to the compiled solve's
-    /// own Q32 station scale EXACTLY (a left shift; no rounding) and delegates to <see cref="EvaluateRaw"/>, which
-    /// owns wrap/clamp/lookup. A caller already holding a Q32 raw — a curve-follow producer's per-tick accumulator —
-    /// must call <see cref="EvaluateRaw"/> directly rather than narrow to <see cref="FixedQ4816"/> first; see
-    /// <see cref="EvaluateRaw"/>'s own remarks for why that narrowing is lossy at the wrap/clamp boundary.</summary>
-    /// <param name="arcLength">The arc length to sample. A closed curve wraps modulo <see cref="TotalLength"/> (the
-    /// canonical non-negative residue); an open curve clamps to <c>[0, TotalLength]</c>. Total over every input —
-    /// never throws, never returns a non-finite component.</param>
-    /// <returns>The sampled position, tangent, elevation grade, and curvature.</returns>
-    public CurvatureSplineSample Evaluate(FixedQ4816 arcLength) {
-        var argument = (((Int128)arcLength.Value) << NarrowingShift); // exact Q16 -> Q32 promotion, no rounding.
-        var bounded = WrapOrClamp(argument: argument); // pre-bounded in Int128 so the narrow to `long` below is safe.
-
-        return EvaluateRaw(arcRaw: bounded);
-    }
-
-    // The one wrap ((closed)) / clamp ((open)) implementation both Evaluate and EvaluateRaw stand on, worked in
-    // Int128 so a Q16 argument's exact promotion (up to 2^16 wider than a Q32 raw already close to the long carrier's
-    // own extremes) cannot silently truncate before it is reduced inside [0, TotalLengthRaw]. The post-reduction
-    // value is always safe to narrow: TotalLengthRaw itself is bounded far below long's range by CurvatureSpline's
-    // own authoring caps (MaxCoordinate/MaxTangentChordRatio; see their remarks).
-    private long WrapOrClamp(Int128 argument) {
-        if (Closed) {
-            var modulus = ((Int128)TotalLengthRaw);
-
-            if (modulus <= Int128.Zero) { return 0L; }
-
-            var wrapped = (argument % modulus);
-
-            if (wrapped < Int128.Zero) { wrapped += modulus; }
-
-            return ((long)wrapped);
-        }
-
-        return ((long)((argument < Int128.Zero) ? Int128.Zero : ((argument > TotalLengthRaw) ? ((Int128)TotalLengthRaw) : argument)));
-    }
-    private CurvatureSplineSample LookupAndSample(long local) {
-        // Stations ascend strictly, so the last segment whose station is at or below the local arc length is found by
-        // bisection over the same ascending table Compile wrote.
-        var lo = 0;
-        var hi = (_segments.Length - 1);
-
-        while (lo < hi) {
-            var mid = (lo + (((hi - lo) + 1) >> 1));
-
-            if (local >= _segments[mid].StationRaw) { lo = mid; } else { hi = (mid - 1); }
-        }
-
-        var segment = _segments[lo];
-        var withinSegment = (local - segment.StationRaw);
-        var t = InvertArcTable(table: segment.ArcTable, withinSegment: withinSegment);
-
-        return SampleAt(segment: segment, tRaw: t, withinSegmentRaw: withinSegment);
+        return Lerp(
+            a: r0,
+            b: r1,
+            tRaw: tRaw
+        );
     }
     private static long InvertArcTable(long[] table, long withinSegment) {
         var lo = 0;
@@ -357,12 +349,15 @@ public sealed class CompiledCurvatureSpline {
         var bracketHi = table[(lo + 1)];
         var span = (bracketHi - bracketLo);
 
-        if (!FusedArithmetic.TryDivideMagnitudeRounded(
+        if (
+            !FusedArithmetic.TryDivideMagnitudeRounded(
             denominatorMagnitude: ((UInt128)span),
             fractionBitCount: 32,
             numeratorMagnitude: ((UInt128)(withinSegment - bracketLo)),
             quotient: out var fraction
-        ) || (fraction > (1UL << 32))) {
+        ) ||
+            (fraction > (1UL << 32))
+        ) {
             fraction = 0UL; // unreachable given the compile-time monotonicity guarantee; a total, finite fallback.
         }
 
@@ -376,17 +371,109 @@ public sealed class CompiledCurvatureSpline {
         var remainder = numerator & mask;
         var half = (1L << (panelShift - 1));
 
-        if ((remainder > half) || ((remainder == half) && ((quotientPart & 1L) != 0L))) { ++quotientPart; }
+        if (
+            (remainder > half) ||
+            ((remainder == half) && ((quotientPart & 1L) != 0L))
+        ) { ++quotientPart; }
 
         return quotientPart;
     }
+    private static long Lerp(long a, long b, long tRaw) =>
+        (a + FixedQ4816.RoundProduct(
+            fractionBitCount: 32,
+            product: (((Int128)(b - a)) * tRaw)
+        ));
+    private static long LinearAt(long a0, long a1, long tRaw) =>
+        Lerp(
+            a: a0,
+            b: a1,
+            tRaw: tRaw
+        );
+    private CurvatureSplineSample LookupAndSample(long local) {
+        // Stations ascend strictly, so the last segment whose station is at or below the local arc length is found by
+        // bisection over the same ascending table Compile wrote.
+        var lo = 0;
+        var hi = (m_segments.Length - 1);
+
+        while (lo < hi) {
+            var mid = (lo + (((hi - lo) + 1) >> 1));
+
+            if (local >= m_segments[mid].StationRaw) { lo = mid; } else { hi = (mid - 1); }
+        }
+
+        var segment = m_segments[lo];
+        var withinSegment = (local - segment.StationRaw);
+        var t = InvertArcTable(
+            table: segment.ArcTable,
+            withinSegment: withinSegment
+        );
+
+        return SampleAt(
+            segment: segment,
+            tRaw: t,
+            withinSegmentRaw: withinSegment
+        );
+    }
+    private static FixedQ4816 NarrowToQ16(long raw) =>
+        FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
+            fractionBitCount: NarrowingShift,
+            product: ((Int128)raw)
+        ));
+    private static long QuadraticAt(long a0, long a1, long a2, long tRaw) {
+        var q0 = Lerp(
+            a: a0,
+            b: a1,
+            tRaw: tRaw
+        );
+        var q1 = Lerp(
+            a: a1,
+            b: a2,
+            tRaw: tRaw
+        );
+
+        return Lerp(
+            a: q0,
+            b: q1,
+            tRaw: tRaw
+        );
+    }
     private CurvatureSplineSample SampleAt(CurvatureSplineSegment segment, long tRaw, long withinSegmentRaw) {
-        var positionX = DeCasteljau(p0: segment.P0X, p1: segment.P1X, p2: segment.P2X, p3: segment.P3X, tRaw: tRaw);
-        var positionZ = DeCasteljau(p0: segment.P0Z, p1: segment.P1Z, p2: segment.P2Z, p3: segment.P3Z, tRaw: tRaw);
-        var velocityX = QuadraticAt(a0: segment.D0X, a1: segment.D1X, a2: segment.D2X, tRaw: tRaw);
-        var velocityZ = QuadraticAt(a0: segment.D0Z, a1: segment.D1Z, a2: segment.D2Z, tRaw: tRaw);
-        var accelerationX = LinearAt(a0: segment.E0X, a1: segment.E1X, tRaw: tRaw);
-        var accelerationZ = LinearAt(a0: segment.E0Z, a1: segment.E1Z, tRaw: tRaw);
+        var positionX = DeCasteljau(
+            p0: segment.P0X,
+            p1: segment.P1X,
+            p2: segment.P2X,
+            p3: segment.P3X,
+            tRaw: tRaw
+        );
+        var positionZ = DeCasteljau(
+            p0: segment.P0Z,
+            p1: segment.P1Z,
+            p2: segment.P2Z,
+            p3: segment.P3Z,
+            tRaw: tRaw
+        );
+        var velocityX = QuadraticAt(
+            a0: segment.D0X,
+            a1: segment.D1X,
+            a2: segment.D2X,
+            tRaw: tRaw
+        );
+        var velocityZ = QuadraticAt(
+            a0: segment.D0Z,
+            a1: segment.D1Z,
+            a2: segment.D2Z,
+            tRaw: tRaw
+        );
+        var accelerationX = LinearAt(
+            a0: segment.E0X,
+            a1: segment.E1X,
+            tRaw: tRaw
+        );
+        var accelerationZ = LinearAt(
+            a0: segment.E0Z,
+            a1: segment.E1Z,
+            tRaw: tRaw
+        );
 
         var (unitTangentX, unitTangentZ, curvature) = TangentAndCurvature(
             accelerationX: accelerationX,
@@ -395,13 +482,24 @@ public sealed class CompiledCurvatureSpline {
             velocityZ: velocityZ
         );
 
-        var yRaw = (segment.Y0Raw + FixedQ4816.RoundProduct(product: (((Int128)segment.GradeRaw) * withinSegmentRaw), fractionBitCount: 32));
+        var yRaw = (segment.Y0Raw + FixedQ4816.RoundProduct(
+            product: (((Int128)segment.GradeRaw) * withinSegmentRaw),
+            fractionBitCount: 32
+        ));
 
         return new(
             Curvature: curvature,
             Grade: NarrowToQ16(raw: segment.GradeRaw),
-            Position: new(X: NarrowToQ16(raw: positionX), Y: NarrowToQ16(raw: yRaw), Z: NarrowToQ16(raw: positionZ)),
-            Tangent: new(X: unitTangentX, Y: FixedQ4816.Zero, Z: unitTangentZ)
+            Position: new(
+                X: NarrowToQ16(raw: positionX),
+                Y: NarrowToQ16(raw: yRaw),
+                Z: NarrowToQ16(raw: positionZ)
+            ),
+            Tangent: new(
+                X: unitTangentX,
+                Y: FixedQ4816.Zero,
+                Z: unitTangentZ
+            )
         );
     }
     // The unit tangent and the signed curvature κ = (v × a) / |v|³ from the Q32 velocity and acceleration, each output
@@ -448,12 +546,17 @@ public sealed class CompiledCurvatureSpline {
         var speedSquared = (FusedArithmetic.SquareMagnitude(value: velocityX) + FusedArithmetic.SquareMagnitude(value: velocityZ));
         var negative = (cross < Int128.Zero);
 
-        if (!FusedArithmetic.TryDivideMagnitudeRounded(
+        if (
+            !FusedArithmetic.TryDivideMagnitudeRounded(
             denominatorMagnitude: speedSquared,
             fractionBitCount: 18,
-            numeratorMagnitude: ((UInt128)(negative ? -cross : cross)),
+            numeratorMagnitude: ((UInt128)(negative
+            ? -cross
+            : cross)),
             quotient: out var curvatureMagnitude
-        ) || (curvatureMagnitude > ((UInt128)long.MaxValue))) {
+        ) ||
+            (curvatureMagnitude > ((UInt128)long.MaxValue))
+        ) {
             curvatureMagnitude = UInt128.Zero; // unreachable inside the compiled speed floor; a total, finite fallback.
         }
 
@@ -462,30 +565,87 @@ public sealed class CompiledCurvatureSpline {
         return (
             FixedQ4816.FromRawBits(value: tangentX),
             FixedQ4816.FromRawBits(value: tangentZ),
-            FixedQ4816.FromRawBits(value: (negative ? -curvatureRaw : curvatureRaw))
+            FixedQ4816.FromRawBits(value: (negative
+            ? -curvatureRaw
+            : curvatureRaw))
         );
     }
-    // Cubic de Casteljau at a Q32 fraction `tRaw` (0 = t0, 2^32 = t1) — one rounding per lerp, through the shared
-    // FixedQ4816.RoundProduct kernel, so every narrowing in the evaluate path rounds the same way.
-    private static long DeCasteljau(long p0, long p1, long p2, long p3, long tRaw) {
-        var q0 = Lerp(a: p0, b: p1, tRaw: tRaw);
-        var q1 = Lerp(a: p1, b: p2, tRaw: tRaw);
-        var q2 = Lerp(a: p2, b: p3, tRaw: tRaw);
-        var r0 = Lerp(a: q0, b: q1, tRaw: tRaw);
-        var r1 = Lerp(a: q1, b: q2, tRaw: tRaw);
+    // The one wrap ((closed)) / clamp ((open)) implementation both Evaluate and EvaluateRaw stand on, worked in
+    // Int128 so a Q16 argument's exact promotion (up to 2^16 wider than a Q32 raw already close to the long carrier's
+    // own extremes) cannot silently truncate before it is reduced inside [0, TotalLengthRaw]. The post-reduction
+    // value is always safe to narrow: TotalLengthRaw itself is bounded far below long's range by CurvatureSpline's
+    // own authoring caps (MaxCoordinate/MaxTangentChordRatio; see their remarks).
+    private long WrapOrClamp(Int128 argument) {
+        if (Closed) {
+            var modulus = ((Int128)TotalLengthRaw);
 
-        return Lerp(a: r0, b: r1, tRaw: tRaw);
-    }
-    private static long QuadraticAt(long a0, long a1, long a2, long tRaw) {
-        var q0 = Lerp(a: a0, b: a1, tRaw: tRaw);
-        var q1 = Lerp(a: a1, b: a2, tRaw: tRaw);
+            if (modulus <= Int128.Zero) { return 0L; }
 
-        return Lerp(a: q0, b: q1, tRaw: tRaw);
+            var wrapped = (argument % modulus);
+
+            if (wrapped < Int128.Zero) { wrapped += modulus; }
+
+            return ((long)wrapped);
+        }
+
+        return ((long)((argument < Int128.Zero)
+            ? Int128.Zero
+            : ((argument > TotalLengthRaw)
+                ? ((Int128)TotalLengthRaw)
+                : argument)));
     }
-    private static long LinearAt(long a0, long a1, long tRaw) =>
-        Lerp(a: a0, b: a1, tRaw: tRaw);
-    private static long Lerp(long a, long b, long tRaw) =>
-        (a + FixedQ4816.RoundProduct(fractionBitCount: 32, product: (((Int128)(b - a)) * tRaw)));
-    private static FixedQ4816 NarrowToQ16(long raw) =>
-        FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(fractionBitCount: NarrowingShift, product: ((Int128)raw)));
+
+    /// <summary>Evaluates the curve at an arc length. Promotes <paramref name="arcLength"/> to the compiled solve's
+    /// own Q32 station scale EXACTLY (a left shift; no rounding) and delegates to <see cref="EvaluateRaw"/>, which
+    /// owns wrap/clamp/lookup. A caller already holding a Q32 raw — a curve-follow producer's per-tick accumulator —
+    /// must call <see cref="EvaluateRaw"/> directly rather than narrow to <see cref="FixedQ4816"/> first; see
+    /// <see cref="EvaluateRaw"/>'s own remarks for why that narrowing is lossy at the wrap/clamp boundary.</summary>
+    /// <param name="arcLength">The arc length to sample. A closed curve wraps modulo <see cref="TotalLength"/> (the
+    /// canonical non-negative residue); an open curve clamps to <c>[0, TotalLength]</c>. Total over every input —
+    /// never throws, never returns a non-finite component.</param>
+    /// <returns>The sampled position, tangent, elevation grade, and curvature.</returns>
+    public CurvatureSplineSample Evaluate(FixedQ4816 arcLength) {
+        var argument = (((Int128)arcLength.Value) << NarrowingShift); // exact Q16 -> Q32 promotion, no rounding.
+        var bounded = WrapOrClamp(argument: argument); // pre-bounded in Int128 so the narrow to `long` below is safe.
+
+        return EvaluateRaw(arcRaw: bounded);
+    }
+    /// <summary>Evaluates the curve at an arc length expressed at the compiled solve's own Q32 station scale — the
+    /// station <see cref="CurvatureSplineSegment.StationRaw"/>/<see cref="TotalLengthRaw"/> and every
+    /// <see cref="CurvatureSplineSegment.ArcTable"/> entry already carry. This is the seam a per-tick raw accumulator
+    /// (a curve-follow producer's own travelled arc, held at Q32 precisely so a sub-Q16 authored rate still
+    /// accumulates instead of rounding to a standstill) must call directly: narrowing such an accumulator to
+    /// <see cref="FixedQ4816"/> (Q16) BEFORE evaluating loses up to 65,535 Q32 raws of precision on every call, which
+    /// silently shifts where an open curve's endpoint clamp engages and where a closed curve's modulus wrap lands
+    /// whenever <see cref="TotalLengthRaw"/> is not itself a multiple of <c>2^16</c> — true of almost every compiled
+    /// curve, since the Simpson arc-length integral has no reason to land on a Q16 boundary. <see cref="Evaluate"/>
+    /// is the Q16-typed convenience overload for authored/UI-scale callers; it promotes exactly (no rounding) and
+    /// delegates here, which owns the one wrap/clamp/lookup implementation both overloads share.</summary>
+    /// <param name="arcRaw">The Q32 arc-length raw to sample. A closed curve wraps modulo <see cref="TotalLengthRaw"/>
+    /// (the canonical non-negative residue); an open curve clamps to <c>[0, TotalLengthRaw]</c>. Total over every
+    /// input — never throws, never returns a non-finite component.</param>
+    /// <returns>The sampled position, tangent, elevation grade, and curvature.</returns>
+    public CurvatureSplineSample EvaluateRaw(long arcRaw) {
+        var local = WrapOrClamp(argument: ((Int128)arcRaw));
+
+        return LookupAndSample(local: local);
+    }
+    /// <summary>Gets one compiled segment's raw data — the twin-sync and law seam.</summary>
+    /// <param name="index">The segment index, from zero to <see cref="SegmentCount"/> minus one.</param>
+    public CurvatureSplineSegment GetSegment(int index) => m_segments[index];
+    /// <summary>Gets the arc station of a knot.</summary>
+    /// <param name="index">The knot index. Ranges to <see cref="SegmentCount"/> inclusive: for an open curve that is
+    /// the last authored knot; for a closed curve it is the wraparound back to knot zero, at
+    /// <see cref="TotalLength"/>.</param>
+    public FixedQ4816 KnotStation(int index) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: index);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: index,
+            other: SegmentCount
+        );
+
+        return NarrowToQ16(raw: ((index == SegmentCount)
+            ? TotalLengthRaw
+            : m_segments[index].StationRaw));
+    }
 }

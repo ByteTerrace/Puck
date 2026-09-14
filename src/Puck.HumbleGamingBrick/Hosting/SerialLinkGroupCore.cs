@@ -21,10 +21,11 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
     private readonly SerialComponent m_secondPort;
     private readonly Action<byte>? m_secondPreviousObserver;
     private readonly SerialLinkSession m_session;
-    private readonly StateWriter m_writer = new(capacity: 65_536);
 
-    private bool m_disposed;
     private long m_completedTransfers;
+    private bool m_disposed;
+
+    private readonly StateWriter m_writer = new(capacity: 65_536);
     private byte[] m_firstScratch = [];
     private byte[] m_secondScratch = [];
     private ulong m_trafficFingerprint = FnvOffsetBasis;
@@ -74,6 +75,43 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
     /// <inheritdoc/>
     public ulong TrafficFingerprint =>
         Volatile.Read(location: ref m_trafficFingerprint);
+
+    // The only writer is the group's own execution thread (transfer completion fires from inside RunCycles), so the
+    // increment/fold itself needs no interlock; the write is volatile only so CompletedTransfers/TrafficFingerprint's
+    // Volatile.Read from another thread observes it.
+    private void Fold(byte value) {
+        Volatile.Write(
+            location: ref m_completedTransfers,
+            value: (m_completedTransfers + 1)
+        );
+        Volatile.Write(
+            location: ref m_trafficFingerprint,
+            value: ((m_trafficFingerprint ^ value) * FnvPrime)
+        );
+    }
+    private static void Grow(ref byte[] buffer, int length) {
+        if (buffer.Length < length) {
+            buffer = new byte[length];
+        }
+    }
+    // The two sides fold under distinct tags so a fingerprint distinguishes which port received a byte, not merely that
+    // one did.
+    private void OnFirstTransferCompleted(byte value) {
+        Fold(value: value);
+        Volatile.Write(
+            location: ref m_trafficFingerprint,
+            value: ((m_trafficFingerprint ^ 0x01UL) * FnvPrime)
+        );
+        m_firstPreviousObserver?.Invoke(obj: value);
+    }
+    private void OnSecondTransferCompleted(byte value) {
+        Fold(value: value);
+        Volatile.Write(
+            location: ref m_trafficFingerprint,
+            value: ((m_trafficFingerprint ^ 0x02UL) * FnvPrime)
+        );
+        m_secondPreviousObserver?.Invoke(obj: value);
+    }
 
     /// <inheritdoc/>
     public void ApplyInput(in MachineLinkPads input) {
@@ -178,41 +216,4 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
     /// <inheritdoc/>
     public void RunCycles(long cycles) =>
         m_session.Run(tCycles: ((ulong)cycles));
-
-    private static void Grow(ref byte[] buffer, int length) {
-        if (buffer.Length < length) {
-            buffer = new byte[length];
-        }
-    }
-    // The only writer is the group's own execution thread (transfer completion fires from inside RunCycles), so the
-    // increment/fold itself needs no interlock; the write is volatile only so CompletedTransfers/TrafficFingerprint's
-    // Volatile.Read from another thread observes it.
-    private void Fold(byte value) {
-        Volatile.Write(
-            location: ref m_completedTransfers,
-            value: (m_completedTransfers + 1)
-        );
-        Volatile.Write(
-            location: ref m_trafficFingerprint,
-            value: ((m_trafficFingerprint ^ value) * FnvPrime)
-        );
-    }
-    // The two sides fold under distinct tags so a fingerprint distinguishes which port received a byte, not merely that
-    // one did.
-    private void OnFirstTransferCompleted(byte value) {
-        Fold(value: value);
-        Volatile.Write(
-            location: ref m_trafficFingerprint,
-            value: ((m_trafficFingerprint ^ 0x01UL) * FnvPrime)
-        );
-        m_firstPreviousObserver?.Invoke(obj: value);
-    }
-    private void OnSecondTransferCompleted(byte value) {
-        Fold(value: value);
-        Volatile.Write(
-            location: ref m_trafficFingerprint,
-            value: ((m_trafficFingerprint ^ 0x02UL) * FnvPrime)
-        );
-        m_secondPreviousObserver?.Invoke(obj: value);
-    }
 }

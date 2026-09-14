@@ -9,6 +9,19 @@ namespace Puck.GamingBricks;
 /// into "component 'bus', byte offset 8192" is one shared implementation over a snapshot's flat bytes and section table.
 /// </summary>
 public static class SnapshotDivergence {
+    private static SnapshotSection? FindSection(IReadOnlyList<SnapshotSection> sections, int offset) {
+        foreach (var section in sections) {
+            if (
+                (offset >= section.Offset) &&
+                (offset < (section.Offset + section.Length))
+            ) {
+                return section;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Walks two snapshots' flat bytes to the first differing byte and maps that absolute offset back to its owning
     /// section via the section table. Returns <see langword="null"/> when the byte contents are identical (a caller
@@ -28,11 +41,17 @@ public static class SnapshotDivergence {
     ) {
         ArgumentNullException.ThrowIfNull(argument: sections);
 
-        var shared = Math.Min(val1: a.Length, val2: b.Length);
+        var shared = Math.Min(
+            val1: a.Length,
+            val2: b.Length
+        );
 
         for (var offset = 0; (offset < shared); ++offset) {
             if (a[offset] != b[offset]) {
-                var section = FindSection(offset: offset, sections: sections);
+                var section = FindSection(
+                    offset: offset,
+                    sections: sections
+                );
 
                 return ((section?.Name ?? "(unsectioned)"), (offset - (section?.Offset ?? 0)), offset);
             }
@@ -40,42 +59,9 @@ public static class SnapshotDivergence {
 
         return ((a.Length != b.Length)
             ? ("(length)", shared, shared)
-            : null);
+            : null
+        );
     }
-    /// <summary>Formats a short hex window of a snapshot's bytes around one offset, bracketing the byte at
-    /// <paramref name="offset"/> — the both-sides detail a divergence report prints under its one-line localization.</summary>
-    /// <param name="label">A one-character label for the side (e.g. <c>"A"</c>).</param>
-    /// <param name="data">The snapshot bytes.</param>
-    /// <param name="offset">The absolute offset to center and bracket.</param>
-    /// <returns>The formatted window line.</returns>
-    public static string FormatHexWindow(string label, ReadOnlySpan<byte> data, int offset) {
-        const int WindowBefore = 4;
-        const int WindowAfter = 12;
-        var start = Math.Max(val1: 0, val2: (offset - WindowBefore));
-        var end = Math.Min(val1: data.Length, val2: (offset + WindowAfter));
-        var line = new StringBuilder(capacity: ((end - start) * 3));
-
-        for (var index = start; (index < end); ++index) {
-            if (index == offset) {
-                _ = line.Append(value: '[').Append(value: data[index].ToString(format: "X2")).Append(value: ']');
-            } else {
-                _ = line.Append(value: ' ').Append(value: data[index].ToString(format: "X2"));
-            }
-        }
-
-        return $"    {label} @0x{start:X6}: {line}";
-    }
-
-    private static SnapshotSection? FindSection(IReadOnlyList<SnapshotSection> sections, int offset) {
-        foreach (var section in sections) {
-            if ((offset >= section.Offset) && (offset < (section.Offset + section.Length))) {
-                return section;
-            }
-        }
-
-        return null;
-    }
-
     /// <summary>Looks up the section named <paramref name="name"/> in <paramref name="sections"/> — the by-name
     /// counterpart to the by-offset lookup a divergence localizer uses when perturbing a specific known component.</summary>
     /// <param name="sections">The section table to search.</param>
@@ -89,5 +75,34 @@ public static class SnapshotDivergence {
         }
 
         throw new InvalidOperationException(message: $"snapshot has no '{name}' section");
+    }
+    /// <summary>Formats a short hex window of a snapshot's bytes around one offset, bracketing the byte at
+    /// <paramref name="offset"/> — the both-sides detail a divergence report prints under its one-line localization.</summary>
+    /// <param name="label">A one-character label for the side (e.g. <c>"A"</c>).</param>
+    /// <param name="data">The snapshot bytes.</param>
+    /// <param name="offset">The absolute offset to center and bracket.</param>
+    /// <returns>The formatted window line.</returns>
+    public static string FormatHexWindow(string label, ReadOnlySpan<byte> data, int offset) {
+        const int WindowBefore = 4;
+        const int WindowAfter = 12;
+        var start = Math.Max(
+            val1: 0,
+            val2: (offset - WindowBefore)
+        );
+        var end = Math.Min(
+            val1: data.Length,
+            val2: (offset + WindowAfter)
+        );
+        var line = new StringBuilder(capacity: ((end - start) * 3));
+
+        for (var index = start; (index < end); ++index) {
+            if (index == offset) {
+                _ = line.Append(value: '[').Append(value: data[index].ToString(format: "X2")).Append(value: ']');
+            } else {
+                _ = line.Append(value: ' ').Append(value: data[index].ToString(format: "X2"));
+            }
+        }
+
+        return $"    {label} @0x{start:X6}: {line}";
     }
 }

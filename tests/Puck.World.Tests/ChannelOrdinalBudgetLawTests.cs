@@ -10,12 +10,28 @@ public sealed class ChannelOrdinalBudgetLawTests {
     private static WorldDefinition Document(int channels, int registers) {
         var rows = new WorldChannel[channels];
 
-        rows[0] = new WorldChannel(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance);
-        rows[1] = new WorldChannel(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe);
-        rows[2] = new WorldChannel(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn);
+        rows[0] = new WorldChannel(
+            Name: "forward",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveAdvance
+        );
+        rows[1] = new WorldChannel(
+            Name: "strafe",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveStrafe
+        );
+        rows[2] = new WorldChannel(
+            Name: "turn",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.Turn
+        );
 
         for (var index = 3; (index < channels); index++) {
-            rows[index] = new WorldChannel(Name: $"filler{index}", Shape: ChannelShape.Unipolar, Composition: true);
+            rows[index] = new WorldChannel(
+                Name: $"filler{index}",
+                Shape: ChannelShape.Unipolar,
+                Composition: true
+            );
         }
 
         var registerRows = new WorldTargetRegister[registers];
@@ -46,8 +62,14 @@ public sealed class ChannelOrdinalBudgetLawTests {
     public void ChannelsPlusRegistersPastTheCeiling_Refuses_ControlAtTheCeilingClean() {
         Laws.RefusalWithControl(
             lawId: "channels.shared-ordinal-budget",
-            deniedOutcome: static () => TryValidate(definition: Document(channels: ChannelLimits.MaxChannels, registers: 2)),
-            controlOutcome: static () => TryValidate(definition: Document(channels: (ChannelLimits.MaxChannels - 2), registers: 2))
+            deniedOutcome: static () => TryValidate(definition: Document(
+                channels: ChannelLimits.MaxChannels,
+                registers: 2
+            )),
+            controlOutcome: static () => TryValidate(definition: Document(
+                channels: (ChannelLimits.MaxChannels - 2),
+                registers: 2
+            ))
         );
     }
     /// <summary>The refusal names the ceiling rather than surfacing as an index fault, at any over-budget count.</summary>
@@ -58,7 +80,10 @@ public sealed class ChannelOrdinalBudgetLawTests {
     [InlineData(64, 64)]
     public void EveryOverBudgetCount_NamesTheCeiling(int channels, int registers) {
         Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: Document(channels: channels, registers: registers),
+            definition: Document(
+                channels: channels,
+                registers: registers
+            ),
             neighbours: null,
             reason: out var reason
         ));

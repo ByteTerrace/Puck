@@ -3,13 +3,16 @@ using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
-/// <summary>One resolved window slot this frame — a normalized rect plus its occupant. A <see cref="Camera"/> of
-/// <see langword="null"/> shows the seat at <see cref="SeatOrder"/> (its position among the joined seats); a named camera
-/// renders that authored view into the rect.</summary>
+/// <summary>One resolved window slot this frame — a normalized rect plus its occupant. A <see cref="Camera"/> and
+/// <see cref="Pipeline"/> both <see langword="null"/> shows the seat at <see cref="SeatOrder"/> (its position among the
+/// joined seats); a named camera renders that authored view into the rect; a named pipeline renders a compiled shader
+/// pipeline instead (see <see cref="Puck.World.WorldViewPipeline"/>) — the three are mutually exclusive.</summary>
 /// <param name="Region">The eased normalized rect.</param>
-/// <param name="SeatOrder">The 0-based seat position for a seat slot, or -1 for a camera slot.</param>
-/// <param name="Camera">The authored camera name for a camera slot, or <see langword="null"/> for a seat slot.</param>
-public readonly record struct WorldComposedSlot(NormalizedRect Region, int SeatOrder, string? Camera);
+/// <param name="SeatOrder">The 0-based seat position for a seat slot, or -1 for a camera/pipeline slot.</param>
+/// <param name="Camera">The authored camera name for a camera slot, or <see langword="null"/> for a seat/pipeline slot.</param>
+/// <param name="Pipeline">The authored <c>views.pipelines</c> row name for a pipeline slot, or <see langword="null"/> for a
+/// seat/camera slot.</param>
+public readonly record struct WorldComposedSlot(NormalizedRect Region, int SeatOrder, string? Camera, string? Pipeline = null);
 /// <summary>
 /// Owns layout SELECTION and TRANSITION for the main window — the data-side replacement for the compiled layout switch.
 /// Given the session shape and the authored <see cref="WorldViewDefaults"/>, it selects one layout (the live override,
@@ -51,15 +54,6 @@ public sealed class WorldViewComposer {
     /// <summary>This frame's resolved slots (a reused buffer, valid until the next <see cref="Compose"/>).</summary>
     public IReadOnlyList<WorldComposedSlot> Slots => m_slots;
 
-    /// <summary>Returns the authored layout name at a 1-based document ordinal from the most recent composition, or
-    /// <see langword="null"/> when no authored layout sits there — the <c>view.override</c> bound dispatch's
-    /// ordinal-to-name resolution.</summary>
-    /// <param name="ordinal">The 1-based <c>views.layouts</c> row ordinal.</param>
-    public string? AuthoredLayoutName(int ordinal) => (((ordinal >= 1) && (ordinal <= m_authoredLayoutNames.Count))
-        ? m_authoredLayoutNames[(ordinal - 1)]
-        : null
-    );
-
     // Every camera-bearing slot resolves to the live camera override (SelectCamera) when one is set.
     private void ApplyCameraOverride(string? cameraOverride) {
         if (cameraOverride is not { } camera) {
@@ -76,6 +70,16 @@ public sealed class WorldViewComposer {
         into.Clear();
 
         foreach (var slot in slots) {
+            if (slot.Pipeline is { } pipeline) {
+                into.Add(item: new ViewBinding(
+                    View: ViewId.None,
+                    Region: slot.Region,
+                    Child: pipeline
+                ));
+
+                continue;
+            }
+
             var id = ((slot.Camera is { } camera)
                 ? new ViewId(Value: CameraId(name: camera))
                 : new ViewId(Value: (-(slot.SeatOrder + 1)))
@@ -112,6 +116,17 @@ public sealed class WorldViewComposer {
         m_slots.Clear();
 
         foreach (var binding in m_currentBindings) {
+            if (binding.Child is { } pipeline) {
+                m_slots.Add(item: new WorldComposedSlot(
+                    Region: binding.Region,
+                    SeatOrder: -1,
+                    Camera: null,
+                    Pipeline: pipeline
+                ));
+
+                continue;
+            }
+
             var value = binding.View.Value;
 
             m_slots.Add(item: ((value < 0)
@@ -182,7 +197,14 @@ public sealed class WorldViewComposer {
                 Height: slot.Height
             );
 
-            if (slot.Camera is null) {
+            if (slot.Pipeline is { } pipeline) {
+                m_targetSlots.Add(item: new WorldComposedSlot(
+                    Camera: null,
+                    Pipeline: pipeline,
+                    Region: region,
+                    SeatOrder: -1
+                ));
+            } else if (slot.Camera is null) {
                 m_targetSlots.Add(item: new WorldComposedSlot(
                     Region: region,
                     SeatOrder: seatOrder++,
@@ -241,6 +263,14 @@ public sealed class WorldViewComposer {
         return (BuiltinName, BuiltinName, BuiltinTransitionSeconds, BuiltinTransitionRenderScale);
     }
 
+    /// <summary>Returns the authored layout name at a 1-based document ordinal from the most recent composition, or
+    /// <see langword="null"/> when no authored layout sits there — the <c>view.override</c> bound dispatch's
+    /// ordinal-to-name resolution.</summary>
+    /// <param name="ordinal">The 1-based <c>views.layouts</c> row ordinal.</param>
+    public string? AuthoredLayoutName(int ordinal) => (((ordinal >= 1) && (ordinal <= m_authoredLayoutNames.Count))
+        ? m_authoredLayoutNames[(ordinal - 1)]
+        : null
+    );
     /// <summary>Composes the window for this frame.</summary>
     /// <param name="joinedCount">The joined local-seat count.</param>
     /// <param name="views">The resolved view defaults (authored or built-in).</param>

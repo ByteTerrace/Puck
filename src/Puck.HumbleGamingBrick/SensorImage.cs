@@ -8,22 +8,22 @@ namespace Puck.HumbleGamingBrick;
 /// reading one set of names.
 /// </summary>
 public static class SensorImage {
-    /// <summary>The sensor plane width in pixels (and the captured image width).</summary>
-    public const int Width = 128;
     /// <summary>The sensor plane height in pixels (and the captured image height).</summary>
     public const int Height = 112;
     /// <summary>The number of grayscale bytes in one sensor plane (<see cref="Width"/> × <see cref="Height"/>).</summary>
     public const int PixelCount = (Width * Height);
-    /// <summary>The number of <c>8</c>×<c>8</c> tiles across the image (<see cref="Width"/> ÷ 8).</summary>
-    public const int TilesWide = (Width / 8);
-    /// <summary>The number of <c>8</c>×<c>8</c> tiles down the image (<see cref="Height"/> ÷ 8).</summary>
-    public const int TilesTall = (Height / 8);
-    /// <summary>The size of one 2bpp tile in bytes (8 rows × 2 bitplane bytes).</summary>
-    public const int TileByteCount = 16;
     /// <summary>The save-RAM offset (within bank&#160;0) where the deposited image begins — <c>0xA100</c> minus the
     /// <c>0xA000</c> window base, i.e. one tile-row page in from the start of the bank.</summary>
     public const int RamOffset = 0x0100;
+    /// <summary>The size of one 2bpp tile in bytes (8 rows × 2 bitplane bytes).</summary>
+    public const int TileByteCount = 16;
     /// <summary>The total byte length of the deposited tiled image (<see cref="TilesWide"/> × <see cref="TilesTall"/> ×
     /// <see cref="TileByteCount"/>).</summary>
     public const int TiledByteCount = ((TilesWide * TilesTall) * TileByteCount);
+    /// <summary>The number of <c>8</c>×<c>8</c> tiles down the image (<see cref="Height"/> ÷ 8).</summary>
+    public const int TilesTall = (Height / 8);
+    /// <summary>The number of <c>8</c>×<c>8</c> tiles across the image (<see cref="Width"/> ÷ 8).</summary>
+    public const int TilesWide = (Width / 8);
+    /// <summary>The sensor plane width in pixels (and the captured image width).</summary>
+    public const int Width = 128;
 }

@@ -14,17 +14,23 @@ public sealed class RoutedRowComposerLawTests {
     [Fact]
     public void ComposesTheSameMutationTheLocalGrammarWould_AndRefusesTheServerReadingPaths() {
         // Control: a placements row composes to the identical UpsertPlacement the local verb submits.
-        Assert.True(condition: WorldRowCommandModule.TryComposeRoutedSet(
-            error: out var composeError,
-            json: """{"id":"probe","prototypeId":"ball","position":[1,0,2],"yawDegrees":0,"scale":1}""",
-            mutation: out var composed,
-            path: "placements",
-            principal: WorldPrincipal.Console
-        ), userMessage: composeError);
+        Assert.True(
+            condition: WorldRowCommandModule.TryComposeRoutedSet(
+                error: out var composeError,
+                json: """{"id":"probe","prototypeId":"ball","position":[1,0,2],"yawDegrees":0,"scale":1}""",
+                mutation: out var composed,
+                path: "placements",
+                principal: WorldPrincipal.Console
+            ),
+            userMessage: composeError
+        );
 
         var upsert = Assert.IsType<WorldMutation.UpsertPlacement>(@object: composed);
 
-        Assert.Equal(expected: "probe", actual: upsert.Placement.Id);
+        Assert.Equal(
+            expected: "probe",
+            actual: upsert.Placement.Id
+        );
 
         // Denial 1: a section whose mutation reads the addressed world's own live document is refused by name.
         Assert.False(condition: WorldRowCommandModule.TryComposeRoutedSet(
@@ -34,7 +40,11 @@ public sealed class RoutedRowComposerLawTests {
             path: "inputHold",
             principal: WorldPrincipal.Console
         ));
-        Assert.Contains(actualString: liveDocumentError, comparisonType: StringComparison.Ordinal, expectedSubstring: "addressed world's own live document");
+        Assert.Contains(
+            actualString: liveDocumentError,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "addressed world's own live document"
+        );
 
         // Denial 2: an unknown path is refused naming the admissible siblings, never a silent no-op.
         Assert.False(condition: WorldRowCommandModule.TryComposeRoutedSet(
@@ -44,6 +54,10 @@ public sealed class RoutedRowComposerLawTests {
             path: "nonsense",
             principal: WorldPrincipal.Console
         ));
-        Assert.Contains(actualString: unknownError, comparisonType: StringComparison.Ordinal, expectedSubstring: "placements");
+        Assert.Contains(
+            actualString: unknownError,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "placements"
+        );
     }
 }

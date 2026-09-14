@@ -8,7 +8,6 @@ public static class StateTransferCapacity {
     /// the ceiling an uncapacitied <see cref="StateDomain.KeysOf"/> pile row's own cell count is bounded by.</summary>
     public const int MaxTransferCount = TopologyCompilation.MaxCells;
 }
-
 /// <summary>Marks a plain integer row as a guarded submission stamp: the row's own generation
 /// <see cref="Sequence"/>, the sole state a <see cref="PhaseGuard"/> checks and the mutation pipeline advances.
 /// Nothing about who may act, in what order, or under what deadline is engine knowledge any more — a turn order, a
@@ -22,7 +21,6 @@ public static class StateTransferCapacity {
 /// succeeds; never written directly.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StatePhase(long Sequence = 0);
-
 /// <summary>Admission guard for a submitted gameplay operation: reduces a turn-taking protocol to the one thing the
 /// engine still enforces, a monotonic sequence a submission must match. See <see cref="StatePhase"/> for what
 /// a match does on success.</summary>

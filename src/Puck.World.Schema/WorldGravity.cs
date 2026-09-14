@@ -179,134 +179,6 @@ public readonly record struct FixedWorldGravity(
         HasGlobalSolve
     );
 
-    /// <summary>Compiles the authored section against the placements its attractors name.</summary>
-    /// <param name="gravity">The authored section.</param>
-    /// <param name="placements">The placement rows an attractor resolves its position from.</param>
-    /// <returns>The compiled field; <see cref="Inert"/> when no global or bounded local field is declared.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="gravity"/> is <see langword="null"/>.</exception>
-    public static FixedWorldGravity Compile(WorldGravity gravity, IReadOnlyList<WorldPlacement> placements) {
-        ArgumentNullException.ThrowIfNull(gravity);
-
-        if (!gravity.IsActive) {
-            return Inert;
-        }
-
-        var frames = WorldPlacementFrameCompilation.Compile(placements: placements);
-        var uniform = FixedVector3.FromVector3(value: gravity.UniformAcceleration);
-        var areas = CompileAreas(
-            areas: gravity.Areas,
-            frames: frames,
-            placements: placements
-        );
-
-        var sourceCount = ((gravity.Attractors?.Count ?? 0) + (gravity.Points?.Count ?? 0));
-
-        if (!(gravity.GravitationalConstant > 0f)) {
-            return Inert with {
-                Areas = areas,
-                Uniform = uniform,
-            };
-        }
-
-        var attractors = new List<GravityBody>(capacity: sourceCount);
-
-        foreach (var attractor in (gravity.Attractors ?? [])) {
-            // An attractor naming no live placement contributes nothing rather than throwing: the validator already
-            // refuses the unresolved id, so reaching here means the row was removed after validation.
-            if (WorldDefinitionRows.FindPlacement(
-                id: attractor.PlacementId,
-                placements: placements
-            ) is not { } placement) {
-                continue;
-            }
-
-            attractors.Add(item: new GravityBody(
-                Mass: FixedQ4816.FromDouble(value: attractor.Mass),
-                Position: FixedVector3.FromVector3(value: frames[placement.Id].Position)
-            ));
-        }
-
-        foreach (var point in (gravity.Points ?? [])) {
-            if (
-                (point is null) ||
-                (WorldDefinitionRows.FindPlacement(
-                    id: point.PlacementId,
-                    placements: placements
-                ) is not { } placement) ||
-                !TryCompilePointMass(
-                    gravitationalConstant: gravity.GravitationalConstant,
-                    mass: out var mass,
-                    point: point,
-                    softeningLength: gravity.SofteningLength
-                )
-            ) {
-                continue;
-            }
-
-            attractors.Add(item: new GravityBody(
-                Mass: mass,
-                Position: FixedVector3.FromVector3(value: frames[placement.Id].Position)
-            ));
-        }
-
-        return new FixedWorldGravity(
-            Attractors: [.. attractors],
-            Kind: gravity.Solver switch {
-                WorldGravitySolver.FastMonopole => GravitySolverKind.FastMonopole,
-                WorldGravitySolver.AdaptiveFmm => GravitySolverKind.AdaptiveFmm,
-                _ => GravitySolverKind.Pairwise,
-            },
-            Parameters: new GravityParameters(
-                GravitationalConstant: FixedQ4816.FromDouble(value: gravity.GravitationalConstant),
-                SofteningLength: FixedQ4816.FromDouble(value: gravity.SofteningLength)
-            ),
-            Uniform: uniform,
-            Areas: areas
-        );
-    }
-
-    private static FixedWorldGravityArea[] CompileAreas(IReadOnlyList<WorldGravityArea>? areas, IReadOnlyDictionary<string, CompiledPlacementFrame> frames, IReadOnlyList<WorldPlacement> placements) {
-        if (areas is not { Count: > 0 }) {
-            return [];
-        }
-
-        var compiled = new List<FixedWorldGravityArea>(capacity: areas.Count);
-
-        for (var authoredIndex = 0; (authoredIndex < areas.Count); authoredIndex++) {
-            var area = areas[authoredIndex];
-
-            if (
-                (area is null) ||
-                (WorldDefinitionRows.FindPlacement(
-                    id: area.PlacementId,
-                    placements: placements
-                ) is not { } placement) ||
-                !FixedWorldGravityArea.TryCompile(
-                    area: area,
-                    authoredIndex: authoredIndex,
-                    compiled: out var lowered,
-                    frame: frames[placement.Id],
-                    placement: placement
-                )
-            ) {
-                continue;
-            }
-
-            compiled.Add(item: lowered);
-        }
-
-        compiled.Sort(comparison: static (left, right) => {
-            var priority = left.Priority.CompareTo(value: right.Priority);
-
-            return ((priority != 0)
-                ? priority
-                : left.AuthoredIndex.CompareTo(value: right.AuthoredIndex)
-            );
-        });
-
-        return [.. compiled];
-    }
-
     // The point preset promises the ACTUAL softened-kernel acceleration at its reference radius. Keeping this
     // derivation in fixed point means validation, compilation, and the per-tick solver agree about every rounding
     // boundary; it also makes every overflow a named authoring refusal instead of a first-tick failure.
@@ -388,6 +260,134 @@ public readonly record struct FixedWorldGravity(
             return false;
         }
     }
+
+    private static FixedWorldGravityArea[] CompileAreas(IReadOnlyList<WorldGravityArea>? areas, IReadOnlyDictionary<string, CompiledPlacementFrame> frames, IReadOnlyList<WorldPlacement> placements) {
+        if (areas is not { Count: > 0 }) {
+            return [];
+        }
+
+        var compiled = new List<FixedWorldGravityArea>(capacity: areas.Count);
+
+        for (var authoredIndex = 0; (authoredIndex < areas.Count); authoredIndex++) {
+            var area = areas[authoredIndex];
+
+            if (
+                (area is null) ||
+                (WorldDefinitionRows.FindPlacement(
+                id: area.PlacementId,
+                placements: placements
+            ) is not { } placement) ||
+                !FixedWorldGravityArea.TryCompile(
+                area: area,
+                authoredIndex: authoredIndex,
+                compiled: out var lowered,
+                frame: frames[placement.Id],
+                placement: placement
+            )
+            ) {
+                continue;
+            }
+
+            compiled.Add(item: lowered);
+        }
+
+        compiled.Sort(comparison: static (left, right) => {
+            var priority = left.Priority.CompareTo(value: right.Priority);
+
+            return ((priority != 0)
+                ? priority
+                : left.AuthoredIndex.CompareTo(value: right.AuthoredIndex)
+            );
+        });
+
+        return [.. compiled];
+    }
+
+    /// <summary>Compiles the authored section against the placements its attractors name.</summary>
+    /// <param name="gravity">The authored section.</param>
+    /// <param name="placements">The placement rows an attractor resolves its position from.</param>
+    /// <returns>The compiled field; <see cref="Inert"/> when no global or bounded local field is declared.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="gravity"/> is <see langword="null"/>.</exception>
+    public static FixedWorldGravity Compile(WorldGravity gravity, IReadOnlyList<WorldPlacement> placements) {
+        ArgumentNullException.ThrowIfNull(gravity);
+
+        if (!gravity.IsActive) {
+            return Inert;
+        }
+
+        var frames = WorldPlacementFrameCompilation.Compile(placements: placements);
+        var uniform = FixedVector3.FromVector3(value: gravity.UniformAcceleration);
+        var areas = CompileAreas(
+            areas: gravity.Areas,
+            frames: frames,
+            placements: placements
+        );
+
+        var sourceCount = ((gravity.Attractors?.Count ?? 0) + (gravity.Points?.Count ?? 0));
+
+        if (!(gravity.GravitationalConstant > 0f)) {
+            return Inert with {
+                Areas = areas,
+                Uniform = uniform,
+            };
+        }
+
+        var attractors = new List<GravityBody>(capacity: sourceCount);
+
+        foreach (var attractor in (gravity.Attractors ?? [])) {
+            // An attractor naming no live placement contributes nothing rather than throwing: the validator already
+            // refuses the unresolved id, so reaching here means the row was removed after validation.
+            if (WorldDefinitionRows.FindPlacement(
+                id: attractor.PlacementId,
+                placements: placements
+            ) is not { } placement) {
+                continue;
+            }
+
+            attractors.Add(item: new GravityBody(
+                Mass: FixedQ4816.FromDouble(value: attractor.Mass),
+                Position: FixedVector3.FromVector3(value: frames[placement.Id].Position)
+            ));
+        }
+
+        foreach (var point in (gravity.Points ?? [])) {
+            if (
+                (point is null) ||
+                (WorldDefinitionRows.FindPlacement(
+                id: point.PlacementId,
+                placements: placements
+            ) is not { } placement) ||
+                !TryCompilePointMass(
+                gravitationalConstant: gravity.GravitationalConstant,
+                mass: out var mass,
+                point: point,
+                softeningLength: gravity.SofteningLength
+            )
+            ) {
+                continue;
+            }
+
+            attractors.Add(item: new GravityBody(
+                Mass: mass,
+                Position: FixedVector3.FromVector3(value: frames[placement.Id].Position)
+            ));
+        }
+
+        return new FixedWorldGravity(
+            Attractors: [.. attractors],
+            Kind: gravity.Solver switch {
+                WorldGravitySolver.FastMonopole => GravitySolverKind.FastMonopole,
+                WorldGravitySolver.AdaptiveFmm => GravitySolverKind.AdaptiveFmm,
+                _ => GravitySolverKind.Pairwise,
+            },
+            Parameters: new GravityParameters(
+                GravitationalConstant: FixedQ4816.FromDouble(value: gravity.GravitationalConstant),
+                SofteningLength: FixedQ4816.FromDouble(value: gravity.SofteningLength)
+            ),
+            Uniform: uniform,
+            Areas: areas
+        );
+    }
 }
 /// <summary>The compiled analytic bound kind for a local gravity area.</summary>
 public enum FixedWorldGravityAreaBoundsKind : byte {
@@ -434,51 +434,11 @@ public readonly record struct FixedWorldGravityArea(
     FixedQ4816 AuthoredYawRadians,
     WorldPlacementAttach? Attach
 ) {
-    private static readonly FixedVector3 s_up = new(
+    private static readonly FixedVector3 Up = new(
         X: FixedQ4816.Zero,
         Y: FixedQ4816.One,
         Z: FixedQ4816.Zero
     );
-
-    private static bool IsFixedRepresentable(float value) => (
-        float.IsFinite(f: value) &&
-        (((double)value) >= ((double)FixedQ4816.MinValue)) &&
-        (((double)value) <= ((double)FixedQ4816.MaxValue))
-    );
-    private static bool IsFixedRepresentable(Vector3 value) => (
-        IsFixedRepresentable(value: value.X) &&
-        IsFixedRepresentable(value: value.Y) &&
-        IsFixedRepresentable(value: value.Z)
-    );
-
-    /// <summary>Gets the area's authored static yaw rotation.</summary>
-    public FixedQuaternion AuthoredRotation => FixedQuaternion.FromAxisAngle(
-        angle: AuthoredYawRadians,
-        axis: s_up
-    );
-
-    /// <summary>Returns whether a world-space point lies inside the analytic bound, including its boundary.</summary>
-    public bool Contains(FixedVector3 point, FixedVector3 center, FixedQuaternion rotation) {
-        var delta = (point - center);
-
-        if (BoundsKind == FixedWorldGravityAreaBoundsKind.Sphere) {
-            return (delta.TryLengthSquared(squaredLength: out var squaredDistance) && (squaredDistance <= RadiusSquared));
-        }
-
-        var local = rotation.Conjugate().Rotate(vector: delta);
-
-        return (
-            (local.X >= -HalfExtents.X) && (local.X <= HalfExtents.X) &&
-            (local.Y >= -HalfExtents.Y) && (local.Y <= HalfExtents.Y) &&
-            (local.Z >= -HalfExtents.Z) && (local.Z <= HalfExtents.Z)
-        );
-    }
-    /// <summary>Evaluates the area's world-space acceleration at a point already known to match its bound.</summary>
-    public FixedVector3 AccelerationAt(FixedVector3 point, FixedVector3 center, FixedQuaternion rotation) =>
-        ((AccelerationKind == FixedWorldGravityAreaAccelerationKind.Directional)
-            ? rotation.Rotate(vector: LocalAcceleration)
-            : ((center - point).Normalize() * RadialMagnitude)
-        );
 
     /// <summary>Attempts to lower an authored area through the fixed-point analytic evaluator.</summary>
     internal static bool TryCompile(WorldGravityArea area, WorldPlacement placement, CompiledPlacementFrame frame, int authoredIndex, out FixedWorldGravityArea compiled) {
@@ -504,7 +464,10 @@ public readonly record struct FixedWorldGravityArea(
 
             switch (area.Bounds) {
                 case WorldGravityAreaBounds.SphereBounds sphere: {
-                        if (!IsFixedRepresentable(value: sphere.Radius) || !(sphere.Radius > 0f)) {
+                        if (
+                            !IsFixedRepresentable(value: sphere.Radius) ||
+                            !(sphere.Radius > 0f)
+                        ) {
                             return false;
                         }
 
@@ -564,7 +527,10 @@ public readonly record struct FixedWorldGravityArea(
                     accelerationKind = FixedWorldGravityAreaAccelerationKind.Directional;
                     break;
                 case WorldGravityAreaAcceleration.Radial radial:
-                    if (!IsFixedRepresentable(value: radial.Magnitude) || !(radial.Magnitude > 0f)) {
+                    if (
+                        !IsFixedRepresentable(value: radial.Magnitude) ||
+                        !(radial.Magnitude > 0f)
+                    ) {
                         return false;
                     }
 
@@ -582,7 +548,7 @@ public readonly record struct FixedWorldGravityArea(
             // never a first-tick exception. Attached yaws use the same unit-quaternion operation at runtime.
             var rotation = FixedQuaternion.FromAxisAngle(
                 angle: yaw,
-                axis: s_up
+                axis: Up
             );
 
             _ = ((accelerationKind == FixedWorldGravityAreaAccelerationKind.Directional)
@@ -613,4 +579,50 @@ public readonly record struct FixedWorldGravityArea(
             return false;
         }
     }
+
+    private static bool IsFixedRepresentable(float value) => (
+        float.IsFinite(f: value) &&
+        (((double)value) >= ((double)FixedQ4816.MinValue)) &&
+        (((double)value) <= ((double)FixedQ4816.MaxValue))
+    );
+    private static bool IsFixedRepresentable(Vector3 value) => (
+        IsFixedRepresentable(value: value.X) &&
+        IsFixedRepresentable(value: value.Y) &&
+        IsFixedRepresentable(value: value.Z)
+    );
+
+    /// <summary>Evaluates the area's world-space acceleration at a point already known to match its bound.</summary>
+    public FixedVector3 AccelerationAt(FixedVector3 point, FixedVector3 center, FixedQuaternion rotation) =>
+        ((AccelerationKind == FixedWorldGravityAreaAccelerationKind.Directional)
+            ? rotation.Rotate(vector: LocalAcceleration)
+            : ((center - point).Normalize() * RadialMagnitude)
+        );
+    /// <summary>Returns whether a world-space point lies inside the analytic bound, including its boundary.</summary>
+    public bool Contains(FixedVector3 point, FixedVector3 center, FixedQuaternion rotation) {
+        var delta = (point - center);
+
+        if (BoundsKind == FixedWorldGravityAreaBoundsKind.Sphere) {
+            return (
+                delta.TryLengthSquared(squaredLength: out var squaredDistance) &&
+                (squaredDistance <= RadiusSquared)
+            );
+        }
+
+        var local = rotation.Conjugate().Rotate(vector: delta);
+
+        return (
+            (local.X >= -HalfExtents.X) &&
+            (local.X <= HalfExtents.X) &&
+            (local.Y >= -HalfExtents.Y) &&
+            (local.Y <= HalfExtents.Y) &&
+            (local.Z >= -HalfExtents.Z) &&
+            (local.Z <= HalfExtents.Z)
+        );
+    }
+
+    /// <summary>Gets the area's authored static yaw rotation.</summary>
+    public FixedQuaternion AuthoredRotation => FixedQuaternion.FromAxisAngle(
+        angle: AuthoredYawRadians,
+        axis: Up
+    );
 }

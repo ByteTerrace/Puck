@@ -89,9 +89,9 @@ public static class WorldJsonPayload {
             if (
                 (parsed is WorldDefinition definition) &&
                 !WorldStateDocumentValues.TryResolve(
+                deferDrawSites: deferDrawSites,
                 definition: definition,
-                reason: out var spatialReason,
-                deferDrawSites: deferDrawSites
+                reason: out var spatialReason
             )
             ) {
                 throw new InvalidOperationException(message: spatialReason);

@@ -1,6 +1,6 @@
 ---
 name: gaming-bricks
-description: Guides changes to Puck's deterministic GB, GBC, and GBA GamingBrick emulators and their Post batteries. Use for CPU, PPU, APU, timer, serial, DMA, cartridge, peripheral, link-cable, snapshot, replay, emulator-host integration, conformance ROM, co-simulation, or accuracy work under Puck.HumbleGamingBrick or Puck.AdvancedGamingBrick. Preserves the shared SM83 architecture, integer timing, cross-generation bit lock, oracle discipline, and stage routing. Excludes general engine, renderer, and world design.
+description: Guides changes to Puck's deterministic GB, GBC, and GBA GamingBrick emulators and their Post batteries. Use for CPU, PPU, APU, timer, serial, DMA, cartridge hardware behavior, peripheral, link-cable, snapshot, replay, emulator-host integration, conformance ROM, co-simulation, or accuracy work under Puck.HumbleGamingBrick or Puck.AdvancedGamingBrick. Preserves the shared SM83 architecture, integer timing, cross-generation bit lock, oracle discipline, and stage routing. Excludes general engine, renderer, and world design, and defers to rom-forge for cartridge document authoring and the native CGB/AGB compilers.
 ---
 
 # Gaming Bricks
@@ -18,8 +18,12 @@ Post stages are authoritative; update stale skill guidance in the same change.
   preserve them across forks and include behavioral options in typed snapshot identity.
 - Preserve direct embedding through the public synchronous `AdvancedGamingBrickCore`
   and `HumbleGamingBrickCore` APIs and default factory composition. The shared
-  `Puck.GamingBricks` README owns the host contract; both Post `embedding` stages
+  [Machine hosting runtime](../../../docs/emulation/shared/machine-hosting.md) owns
+  the host contract; both Post `embedding` stages
   exercise it without a worker, renderer or audio device.
+- Keep firmware identity separate from startup mode. `MachineBootMode.Fast` skips startup without discarding the
+  selected image; AGB still executes runtime BIOS services from that image. Explicit low-level diagnostic inputs
+  remain supported. Bundled images are generated ahead of packaging, never by a runtime-to-Forge dependency.
 - Keep floating point and host timing beyond a one-way presentation seam.
 - Express console differences through capability gates, not forked SM83 cores.
 - Preserve snapshot, replay, fork, and cross-machine link determinism.
@@ -54,12 +58,23 @@ Post stages are authoritative; update stale skill guidance in the same change.
   for clock and event ordering, serial and timer edges, snapshots, GB PPU
   timing, oracle conflicts, and the documented GBA ready-line gap.
 - Read the
+  [`Puck.GamingBricks.Post` README](../../../src/Puck.GamingBricks.Post/README.md)
+  first when a change touches stage or verdict semantics rather than one
+  brick's own context — the shared battery scaffold both Post projects close
+  over: `PostBattery<TContext>`, `IPostStage<TContext>`, `PostVerdict`,
+  `PostTier`, `HashDivergenceReport`, `CorpusManifest`, `CoreEmbeddingProbe`.
+- Read the
   [Humble Post README](../../../src/Puck.HumbleGamingBrick.Post/README.md) for
   current tiers, assets, SM83 corpus behavior, BESS, and GB diagnostics.
 - Read the
   [Advanced Post README](../../../src/Puck.AdvancedGamingBrick.Post/README.md)
   for current tiers, assets, ARM/GBA diagnostics, co-simulation normalization,
   and the accuracy workflow.
+- For a rendered side-by-side accuracy comparison rather than a Post stage,
+  boot `src/Puck.World/Assets/worlds/tools/hgb-compare.puck` (a reference ROM
+  and an authored cartridge on two screens) or `hgb-mirror.puck` (a cartridge's
+  live memory bound into world state beside an SDF diorama reading the same
+  state) with `--world <path>.puck`; both are evidence, not gates.
 
 ## Route adjacent work
 
@@ -70,3 +85,4 @@ Post stages are authoritative; update stale skill guidance in the same change.
 | [`content-search`](../content-search/SKILL.md) | Finding stage names, registers, opcodes, ROM identifiers, or timing constants textually. |
 | [`symbol-analysis`](../symbol-analysis/SKILL.md) | Resolving semantic C# references, implementations, or rename and deletion safety. |
 | [`puck-world`](../puck-world/SKILL.md) | Integrating an emulator into world/session behavior beyond the emulator-host seam. |
+| [`rom-forge`](../rom-forge/SKILL.md) | Authoring or compiling the cartridge under test — `puck.cartridge.v1`, the `.puck` DSL, or the native CGB/AGB compilers, rather than the emulator core executing it. |

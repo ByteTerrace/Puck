@@ -12,6 +12,10 @@ public enum AgbBiosKind {
     /// cartridges, with no SWI services or IRQ dispatch; unsuitable for cycle parity.</summary>
     ReplacementStub,
 
+    /// <summary>The byte-verified bundled Puck firmware. This identifies the image, not retail cycle parity or
+    /// an assertion that every runtime service has passed commercial compatibility testing.</summary>
+    Puck,
+
     /// <summary>A non-zero image that is not the verified retail BIOS (an open-source replacement, a wrong dump, or a
     /// corrupted file) — usable for direct boot but NOT for cycle parity.</summary>
     Unknown,
@@ -20,15 +24,15 @@ public enum AgbBiosKind {
 /// description. This is a host-side identification aid (computed at machine assembly, never on the emulated path), so
 /// a SHA-1 content hash is used for a stable, recognisable fingerprint.</summary>
 public readonly struct AgbBiosIdentity {
-    /// <summary>The BIOS classification.</summary>
-    public AgbBiosKind Kind { get; init; }
-    /// <summary>The lowercase hexadecimal SHA-1 of the image (40 chars), or empty for a wrong-sized image.</summary>
-    public string Sha1 { get; init; }
     /// <summary>A short human-readable description of the image (kind + hash prefix).</summary>
     public string Description { get; init; }
     /// <summary>Whether this image is trustworthy for cycle-parity / co-simulation work (only the verified retail
     /// BIOS is). Parity/co-sim diagnostics warn — the documented "phantom cycle drift" trap — when this is false.</summary>
     public bool IsCycleParityTrustworthy => (Kind == AgbBiosKind.RealVerified);
+    /// <summary>The BIOS classification.</summary>
+    public AgbBiosKind Kind { get; init; }
+    /// <summary>The lowercase hexadecimal SHA-1 of the image (40 chars), or empty for a wrong-sized image.</summary>
+    public string Sha1 { get; init; }
 
     /// <inheritdoc/>
     public override string ToString() => Description;
@@ -37,7 +41,7 @@ public readonly struct AgbBiosIdentity {
 /// against a non-retail image. This makes false cycle-drift reports loud and cheap to detect at machine assembly.</summary>
 public static class AgbBiosProfile {
     // The retail Advanced GamingBrick BIOS (16 KiB) SHA-1. Public, checkable, and the only image the cycle-parity /
-    // co-simulation tooling should trust. (Citations for external reference dumps live in ACKNOWLEDGMENTS.md.)
+    // co-simulation tooling should trust. (Citations for external reference dumps live in docs/citations.md.)
     private const string RetailBiosSha1 = "300c20df6731a33952ded8c436f7f186d25d3492";
 
     /// <summary>Classifies a BIOS image by its content hash.</summary>
@@ -70,6 +74,14 @@ public static class AgbBiosProfile {
             return new AgbBiosIdentity {
                 Description = "replacement (zeroed stub)",
                 Kind = AgbBiosKind.ReplacementStub,
+                Sha1 = sha1,
+            };
+        }
+
+        if (AgbFirmware.Matches(image: image)) {
+            return new AgbBiosIdentity {
+                Description = "Puck firmware (bundled image verified)",
+                Kind = AgbBiosKind.Puck,
                 Sha1 = sha1,
             };
         }

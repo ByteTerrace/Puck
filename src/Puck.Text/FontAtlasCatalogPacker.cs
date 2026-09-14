@@ -9,7 +9,7 @@ public static class FontAtlasCatalogPacker {
         var destinationRowBytes = checked((destinationWidth * 4));
 
         for (var row = 0; (row < source.Height); row++) {
-            source.RgbaPixels.AsSpan(
+            source.RgbaPixels.Slice(
                 length: sourceRowBytes,
                 start: (row * sourceRowBytes)
             ).CopyTo(destination: destination.AsSpan(
@@ -134,9 +134,9 @@ public static class FontAtlasCatalogPacker {
             );
         }
 
-        var imageData = new FontAtlasImageData(
-            rgbaPixels: rgba,
+        var imageData = FontAtlasImageData.TakeOwnership(
             height: height,
+            rgbaPixels: rgba,
             width: width
         );
 

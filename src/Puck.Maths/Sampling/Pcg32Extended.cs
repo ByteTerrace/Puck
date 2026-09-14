@@ -32,22 +32,21 @@ namespace Puck.Maths;
 /// </para>
 /// </remarks>
 public struct Pcg32Extended : IDrawGenerator {
-    private const string KError = "k must be a power of two in [2, 1024]";
-    private const string ExtensionIndexError = "index must be within the extension array";
-
     // AdvancePow2 is fixed at 16 across every published k-variant (pcg32_k2 through pcg32_k16384 alike): the
     // extension table ticks once every 2^16 draws regardless of how many words it holds.
     private const int AdvancePow2 = 16;
-    private const ulong TickMask = ((1UL << AdvancePow2) - 1UL);
-
+    private const uint ExtIncrementBase = 2891336453U;
     // The RXS-M-XS mixin's 32-bit constants (pcg-cpp's default_multiplier<uint32_t>, default_increment<uint32_t>,
     // mcg_multiplier<uint32_t> and mcg_unmultiplier<uint32_t>): the "inside out" step every extension word takes.
     private const uint ExtMultiplier = 747796405U;
-    private const uint ExtIncrementBase = 2891336453U;
+    private const string ExtensionIndexError = "index must be within the extension array";
+    private const string KError = "k must be a power of two in [2, 1024]";
     private const uint McgMultiplier = 277803737U;
     private const uint McgUnmultiplier = 2897767785U;
+    private const ulong TickMask = ((1UL << AdvancePow2) - 1UL);
 
     private Pcg32XshRr m_base;
+
     private readonly uint[] m_extension;
     // The table length less one: the length is a power of two, so this masks a state's low bits straight into a
     // valid index, and holding it here keeps the draw from re-deriving it from the array header.
@@ -59,86 +58,104 @@ public struct Pcg32Extended : IDrawGenerator {
         m_indexMask = ((ulong)(extension.Length - 1));
     }
 
-    // A nearly-divisionless bounded draw, built on this type's own NextUInt32 rather than the base generator's —
-    // the identical shape Pcg32XshRr.Sample uses over its own raw draw.
-    private uint Sample(uint exclusiveHigh) {
-        var product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
-        var lowBits = unchecked((uint)product);
+    // O'Neill's affine skip (Brown's algorithm) over a 32-bit LCG — the same binary-exponentiation shape
+    // Pcg32XshRr.Advance uses over sixty-four bits, narrowed to the extension word's own carrier.
+    private static uint Advance32(uint state, uint delta, uint multiplier, uint increment) {
+        var accumulatedMultiplier = 1U;
+        var accumulatedIncrement = 0U;
+        var currentMultiplier = multiplier;
+        var currentIncrement = increment;
 
-        if (lowBits < exclusiveHigh) {
-            var threshold = unchecked((((uint)(-((int)exclusiveHigh))) % exclusiveHigh));
-
-            while (lowBits < threshold) {
-                product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
-                lowBits = unchecked((uint)product);
+        while (delta > 0U) {
+            if ((delta & 1U) != 0U) {
+                accumulatedMultiplier = unchecked((accumulatedMultiplier * currentMultiplier));
+                accumulatedIncrement = unchecked(((accumulatedIncrement * currentMultiplier) + currentIncrement));
             }
+
+            currentIncrement = unchecked(((currentMultiplier + 1U) * currentIncrement));
+            currentMultiplier = unchecked((currentMultiplier * currentMultiplier));
+            delta >>= 1;
         }
 
-        return ((uint)(product >> 32));
+        return unchecked(((accumulatedMultiplier * state) + accumulatedIncrement));
     }
-    // The RXS-M-XS output permutation over a 32-bit state (pcg-cpp's rxs_m_xs_mixin<uint32_t, uint32_t>::output).
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint RxsMxsOutput(uint internalValue) {
-        var reshift = ((internalValue >> 28) & 0xFU);
+    // The bulk table advance (pcg-cpp's extended<>::advance_table(delta, true)): the same mixed-radix increment,
+    // generalized to `delta` ticks at once, in O(k) time regardless of how large delta is.
+    private void AdvanceTableBy(ulong delta) {
+        var carry = 0UL;
 
-        internalValue = unchecked(internalValue ^ (internalValue >> unchecked((int)(4U + reshift))));
-        internalValue = unchecked(internalValue * McgMultiplier);
+        for (var index = 0; (index < m_extension.Length); ++index) {
+            var totalDelta = unchecked((carry + delta));
+            var truncatedDelta = unchecked((uint)totalDelta);
 
-        var result = internalValue;
+            carry = (totalDelta >> 32);
 
-        result ^= (result >> 22);
+            var crossed = ExternalAdvance(
+                delta: truncatedDelta,
+                word: ref m_extension[index],
+                wordNumber: (index + 1)
+            );
 
-        return result;
+            carry = unchecked((carry + (crossed
+                ? 1UL
+                : 0UL)));
+        }
     }
-    // The exact inverse of RxsMxsOutput (pcg-cpp's rxs_m_xs_mixin<uint32_t, uint32_t>::unoutput).
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint RxsMxsUnoutput(uint internalValue) {
-        internalValue = Unxorshift32(
-            shift: 22,
-            value: internalValue
-        );
-        internalValue = unchecked(internalValue * McgUnmultiplier);
+    // The no-arg table tick (pcg-cpp's extended<>::advance_table()): every word takes one mandatory step, plus a
+    // second when the previous word's step carried, so the whole table behaves as a mixed-radix counter incremented
+    // by exactly one.
+    private void AdvanceTableByOne() {
+        ref var word = ref MemoryMarshal.GetArrayDataReference(array: m_extension);
+        var carry = false;
 
-        var reshift = ((internalValue >> 28) & 0xFU);
+        for (var index = 0; (index < m_extension.Length); ++index) {
+            ref var current = ref Unsafe.Add(
+                elementOffset: index,
+                source: ref word
+            );
+            var wordNumber = (index + 1);
 
-        internalValue = Unxorshift32(
-            shift: unchecked((int)(4U + reshift)),
-            value: internalValue
-        );
+            if (carry) {
+                carry = ExternalStep(
+                    word: ref current,
+                    wordNumber: wordNumber
+                );
+            }
 
-        return internalValue;
+            var secondCarry = ExternalStep(
+                word: ref current,
+                wordNumber: wordNumber
+            );
+
+            carry = (carry || secondCarry);
+        }
     }
-    // Inverts x ^= x >> shift over a 32-bit word (pcg_extras::unxorshift). The forward map is I + S for the shift
-    // matrix S, nilpotent over GF(2) with S^n = 0 once n·shift reaches the word, so its inverse is the finite series
-    // I + S + S² + …, folded as (I + S)(I + S²)(I + S⁴)… — one xorshift per doubling of the shift.
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint Unxorshift32(uint value, int shift) {
-        for (; (shift < 32); shift <<= 1) {
-            value ^= (value >> shift);
+    // O'Neill's logarithmic discrete-log over a 32-bit LCG — the exact-match (unmasked) narrowing of the same
+    // algorithm Pcg32XshRr.Distance exposes over sixty-four bits.
+    private static uint Distance32(uint currentState, uint newState, uint multiplier, uint increment) {
+        var theBit = 1U;
+        var distance = 0U;
+        var currentMultiplier = multiplier;
+        var currentIncrement = increment;
+
+        while (currentState != newState) {
+            if (((currentState ^ newState) & theBit) != 0U) {
+                currentState = unchecked(((currentState * currentMultiplier) + currentIncrement));
+                distance |= theBit;
+            }
+
+            theBit <<= 1;
+            currentIncrement = unchecked(((currentMultiplier + 1U) * currentIncrement));
+            currentMultiplier = unchecked((currentMultiplier * currentMultiplier));
         }
 
-        return value;
-    }
-    // The per-word "inside out" single step (pcg-cpp's inside_out<>::external_step): unoutput, advance the hidden
-    // 32-bit state by one word-specific LCG step, output again. Returns whether the output landed on zero, which —
-    // because this permutation fixes zero (RxsMxsOutput(0) == 0) — signals a carry into the next word.
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool ExternalStep(ref uint word, int wordNumber) {
-        var state = RxsMxsUnoutput(internalValue: word);
-
-        state = unchecked((state * ExtMultiplier) + ExtIncrementBase + unchecked((uint)(wordNumber * 2)));
-
-        var result = RxsMxsOutput(internalValue: state);
-
-        word = result;
-
-        return (result == 0U);
+        return distance;
     }
     // The per-word bulk step (pcg-cpp's inside_out<>::external_advance): the same single-step formula generalized
     // to `delta` applications in one closed-form jump, via the 32-bit affine-skip and discrete-log helpers below.
     private static bool ExternalAdvance(ref uint word, int wordNumber, uint delta) {
         var state = RxsMxsUnoutput(internalValue: word);
-        var increment = unchecked(ExtIncrementBase + unchecked((uint)(wordNumber * 2)));
+        var increment = unchecked((ExtIncrementBase + unchecked((uint)(wordNumber * 2))));
         var distanceToZero = Distance32(
             currentState: state,
             increment: increment,
@@ -157,87 +174,80 @@ public struct Pcg32Extended : IDrawGenerator {
 
         return crossesZero;
     }
-    // O'Neill's affine skip (Brown's algorithm) over a 32-bit LCG — the same binary-exponentiation shape
-    // Pcg32XshRr.Advance uses over sixty-four bits, narrowed to the extension word's own carrier.
-    private static uint Advance32(uint state, uint delta, uint multiplier, uint increment) {
-        var accumulatedMultiplier = 1U;
-        var accumulatedIncrement = 0U;
-        var currentMultiplier = multiplier;
-        var currentIncrement = increment;
+    // The per-word "inside out" single step (pcg-cpp's inside_out<>::external_step): unoutput, advance the hidden
+    // 32-bit state by one word-specific LCG step, output again. Returns whether the output landed on zero, which —
+    // because this permutation fixes zero (RxsMxsOutput(0) == 0) — signals a carry into the next word.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool ExternalStep(ref uint word, int wordNumber) {
+        var state = RxsMxsUnoutput(internalValue: word);
 
-        while (delta > 0U) {
-            if ((delta & 1U) != 0U) {
-                accumulatedMultiplier = unchecked(accumulatedMultiplier * currentMultiplier);
-                accumulatedIncrement = unchecked((accumulatedIncrement * currentMultiplier) + currentIncrement);
-            }
+        state = unchecked((((state * ExtMultiplier) + ExtIncrementBase) + unchecked((uint)(wordNumber * 2))));
 
-            currentIncrement = unchecked((currentMultiplier + 1U) * currentIncrement);
-            currentMultiplier = unchecked(currentMultiplier * currentMultiplier);
-            delta >>= 1;
-        }
+        var result = RxsMxsOutput(internalValue: state);
 
-        return unchecked((accumulatedMultiplier * state) + accumulatedIncrement);
+        word = result;
+
+        return (result == 0U);
     }
-    // O'Neill's logarithmic discrete-log over a 32-bit LCG — the exact-match (unmasked) narrowing of the same
-    // algorithm Pcg32XshRr.Distance exposes over sixty-four bits.
-    private static uint Distance32(uint currentState, uint newState, uint multiplier, uint increment) {
-        var theBit = 1U;
-        var distance = 0U;
-        var currentMultiplier = multiplier;
-        var currentIncrement = increment;
+    // The RXS-M-XS output permutation over a 32-bit state (pcg-cpp's rxs_m_xs_mixin<uint32_t, uint32_t>::output).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint RxsMxsOutput(uint internalValue) {
+        var reshift = (internalValue >> 28) & 0xFU;
 
-        while (currentState != newState) {
-            if (((currentState ^ newState) & theBit) != 0U) {
-                currentState = unchecked((currentState * currentMultiplier) + currentIncrement);
-                distance |= theBit;
-            }
+        internalValue = unchecked(internalValue ^ (internalValue >> unchecked((int)(4U + reshift))));
+        internalValue = unchecked((internalValue * McgMultiplier));
 
-            theBit <<= 1;
-            currentIncrement = unchecked((currentMultiplier + 1U) * currentIncrement);
-            currentMultiplier = unchecked(currentMultiplier * currentMultiplier);
-        }
+        var result = internalValue;
 
-        return distance;
+        result ^= (result >> 22);
+
+        return result;
     }
-    // The no-arg table tick (pcg-cpp's extended<>::advance_table()): every word takes one mandatory step, plus a
-    // second when the previous word's step carried, so the whole table behaves as a mixed-radix counter incremented
-    // by exactly one.
-    private void AdvanceTableByOne() {
-        ref var word = ref MemoryMarshal.GetArrayDataReference(array: m_extension);
-        var carry = false;
+    // The exact inverse of RxsMxsOutput (pcg-cpp's rxs_m_xs_mixin<uint32_t, uint32_t>::unoutput).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint RxsMxsUnoutput(uint internalValue) {
+        internalValue = Unxorshift32(
+            shift: 22,
+            value: internalValue
+        );
+        internalValue = unchecked((internalValue * McgUnmultiplier));
 
-        for (var index = 0; (index < m_extension.Length); ++index) {
-            ref var current = ref Unsafe.Add(source: ref word, elementOffset: index);
-            var wordNumber = (index + 1);
+        var reshift = (internalValue >> 28) & 0xFU;
 
-            if (carry) {
-                carry = ExternalStep(word: ref current, wordNumber: wordNumber);
-            }
+        internalValue = Unxorshift32(
+            shift: unchecked((int)(4U + reshift)),
+            value: internalValue
+        );
 
-            var secondCarry = ExternalStep(word: ref current, wordNumber: wordNumber);
-
-            carry = (carry || secondCarry);
-        }
+        return internalValue;
     }
-    // The bulk table advance (pcg-cpp's extended<>::advance_table(delta, true)): the same mixed-radix increment,
-    // generalized to `delta` ticks at once, in O(k) time regardless of how large delta is.
-    private void AdvanceTableBy(ulong delta) {
-        var carry = 0UL;
+    // A nearly-divisionless bounded draw, built on this type's own NextUInt32 rather than the base generator's —
+    // the identical shape Pcg32XshRr.Sample uses over its own raw draw.
+    private uint Sample(uint exclusiveHigh) {
+        var product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
+        var lowBits = unchecked((uint)product);
 
-        for (var index = 0; (index < m_extension.Length); ++index) {
-            var totalDelta = unchecked(carry + delta);
-            var truncatedDelta = unchecked((uint)totalDelta);
+        if (lowBits < exclusiveHigh) {
+            var threshold = unchecked((((uint)(-((int)exclusiveHigh))) % exclusiveHigh));
 
-            carry = (totalDelta >> 32);
-
-            var crossed = ExternalAdvance(
-                delta: truncatedDelta,
-                word: ref m_extension[index],
-                wordNumber: (index + 1)
-            );
-
-            carry = unchecked(carry + (crossed ? 1UL : 0UL));
+            while (lowBits < threshold) {
+                product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
+                lowBits = unchecked((uint)product);
+            }
         }
+
+        return ((uint)(product >> 32));
+    }
+    // Inverts x ^= x >> shift over a 32-bit word (pcg_extras::unxorshift). The forward map is I + S for the shift
+    // matrix S, nilpotent over GF(2) with S^n = 0 once n·shift reaches the word, so its inverse is the finite series
+    // I + S + S² + …, folded as (I + S)(I + S²)(I + S⁴)… — one xorshift per doubling of the shift.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint Unxorshift32(uint value, int shift) {
+        for (; (shift < 32); shift <<= 1) {
+            value ^= (value >> shift);
+        }
+
+        return value;
     }
 
     /// <summary>Skips the generator forward by <paramref name="count"/> draws in logarithmic time: the base by the
@@ -258,7 +268,7 @@ public struct Pcg32Extended : IDrawGenerator {
         );
 
         if (maskedDistance < (count & TickMask)) {
-            ticks = unchecked(ticks + 1UL);
+            ticks = unchecked((ticks + 1UL));
         }
 
         if (ticks != 0UL) {
@@ -287,7 +297,11 @@ public struct Pcg32Extended : IDrawGenerator {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stream"/> exceeds
     /// <see cref="Pcg32XshRr.MaxStream"/>, or <paramref name="k"/> is not a power of two in <c>[2, 1024]</c>.</exception>
     public static Pcg32Extended Create(ulong state, ulong stream, int k) {
-        if ((k < 2) || (k > 1024) || ((k & (k - 1)) != 0)) {
+        if (
+            (k < 2) ||
+            (k > 1024) ||
+            ((k & (k - 1)) != 0)
+        ) {
             throw new ArgumentOutOfRangeException(
                 actualValue: k,
                 message: KError,
@@ -302,7 +316,7 @@ public struct Pcg32Extended : IDrawGenerator {
         var extension = new uint[k];
         var lhs = baseGenerator.NextUInt32();
         var rhs = baseGenerator.NextUInt32();
-        var xorDifference = unchecked(lhs - rhs);
+        var xorDifference = unchecked((lhs - rhs));
 
         for (var index = 0; (index < k); ++index) {
             extension[index] = unchecked(baseGenerator.NextUInt32() ^ xorDifference);
@@ -328,7 +342,11 @@ public struct Pcg32Extended : IDrawGenerator {
     public static Pcg32Extended CreateWithTable(ulong state, ulong stream, ReadOnlySpan<uint> table) {
         var k = table.Length;
 
-        if ((k < 2) || (k > 1024) || ((k & (k - 1)) != 0)) {
+        if (
+            (k < 2) ||
+            (k > 1024) ||
+            ((k & (k - 1)) != 0)
+        ) {
             throw new ArgumentOutOfRangeException(
                 actualValue: k,
                 message: KError,
@@ -349,7 +367,10 @@ public struct Pcg32Extended : IDrawGenerator {
     /// <returns>The raw word currently stored at <paramref name="index"/>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside <c>[0, k)</c>.</exception>
     public readonly uint GetExtension(int index) {
-        if ((index < 0) || (index >= m_extension.Length)) {
+        if (
+            (index < 0) ||
+            (index >= m_extension.Length)
+        ) {
             throw new ArgumentOutOfRangeException(
                 actualValue: index,
                 message: ExtensionIndexError,
@@ -411,7 +432,10 @@ public struct Pcg32Extended : IDrawGenerator {
     /// word's index is next selected — the base draw depends only on <see cref="Pcg32XshRr"/>'s own state, so it can
     /// be computed ahead of time from a byte-for-bit copy of the base generator's raw bits.</remarks>
     public readonly void SetExtension(int index, uint word) {
-        if ((index < 0) || (index >= m_extension.Length)) {
+        if (
+            (index < 0) ||
+            (index >= m_extension.Length)
+        ) {
             throw new ArgumentOutOfRangeException(
                 actualValue: index,
                 message: ExtensionIndexError,

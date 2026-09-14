@@ -71,10 +71,12 @@ internal sealed class LinkInputScript {
             var space = line.IndexOf(value: ' ');
             var frameToken = ((space < 0)
                 ? line
-                : line[..space]);
+                : line[..space]
+            );
             var buttonToken = ((space < 0)
                 ? "None"
-                : line[(space + 1)..].Trim());
+                : line[(space + 1)..].Trim()
+            );
 
             if (!int.TryParse(
                 result: out var frame,

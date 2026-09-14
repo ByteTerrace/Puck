@@ -75,8 +75,12 @@ public sealed unsafe class DirectXGpuTimingPoolFactory : IGpuTimingPoolFactory {
 
         // Direct3D 12 timestamps are full 64-bit; the period is the inverse of the queue tick frequency.
         return new GpuTimestampCapabilities(
-            PeriodNanoseconds: ((frequency > 0UL) ? (1_000_000_000.0 / frequency) : 0.0),
-            ValidBits: ((frequency > 0UL) ? 64u : 0u)
+            PeriodNanoseconds: ((frequency > 0UL)
+            ? (1_000_000_000.0 / frequency)
+            : 0.0),
+            ValidBits: ((frequency > 0UL)
+            ? 64u
+            : 0u)
         );
     }
 }

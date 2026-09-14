@@ -8,7 +8,7 @@ internal sealed partial class Diagnostics {
     // Names are best-effort annotations for the value stream written to 0x04; the raw index + value is
     // authoritative. The SIO interrupt test spins waiting for a link cable, so a headless run stalls there (after
     // ~32 results).
-    private readonly string[] AgsTestNames = [
+    private readonly string[] m_agsTestNames = [
         "mem: cpu_external_work_ram", "mem: cpu_internal_work_ram", "mem: palette_ram", "mem: vram", "mem: oam",
         "mem: cartridge_type_flag", "mem: prefetch_buffer", "mem: waitstate_wait_control", "mem: cartridge_ram_wait_control",
         "lcd: vcounter", "lcd: vcount_intr_flag", "lcd: hblank_intr_flag", "lcd: vblank_intr_flag", "lcd: vcount_status",
@@ -59,7 +59,8 @@ internal sealed partial class Diagnostics {
         // TracingAgbBus that wraps it. The compose callback runs before AddAdvancedGamingBrick's TryAdd, so ours wins.
         using var instance = AgbMachineFactory.Create(
             configuration: new AgbMachineConfiguration(
-                bios: BiosImage, options: MachineOptions,
+                bios: BiosImage,
+                options: MachineOptions,
                 rom: rom
             ),
             compose: services => {
@@ -135,9 +136,10 @@ internal sealed partial class Diagnostics {
 
         for (var i = 0; (i < results.Count); ++i) {
             var value = results[i];
-            var label = ((i < AgsTestNames.Length)
-                ? AgsTestNames[i]
-                : $"test #{i}");
+            var label = ((i < m_agsTestNames.Length)
+                ? m_agsTestNames[i]
+                : $"test #{i}"
+            );
             var ok = (value == 0u);
 
             if (ok) {
@@ -200,9 +202,10 @@ internal sealed partial class Diagnostics {
                 continue;
             }
 
-            var testLabel = ((testIdx < AgsTestNames.Length)
-                ? AgsTestNames[testIdx]
-                : $"test #{testIdx}");
+            var testLabel = ((testIdx < m_agsTestNames.Length)
+                ? m_agsTestNames[testIdx]
+                : $"test #{testIdx}"
+            );
 
             var ioWritesForTest = connectIoWrites.Where(predicate: r => (r.afterResults == testIdx)).ToArray();
 

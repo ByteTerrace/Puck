@@ -574,58 +574,6 @@ internal static class FixedPointConvert {
 
         return FromRaw<TSelf>(raw: unchecked((long)((ulong)wrapped)));
     }
-    // The integer lanes of the checked and saturating faces: a known BCL integer reaches the raw by one Int128 widening
-    // and one shift, never through decimal. The shift is exact whenever the source fits below the raw's integer bits,
-    // which is exactly the range test performed here.
-    private static bool TryFromIntegerChecked<TSelf, TOther>(TOther value, int fractionBitCount, out TSelf result)
-        where TSelf : struct
-        where TOther : INumberBase<TOther> {
-        if (!IsKnownBclInteger<TOther>()) {
-            result = default;
-
-            return false;
-        }
-
-        var widened = Int128.CreateChecked(value: value);
-
-        if (
-            (widened < (((Int128)long.MinValue) >> fractionBitCount)) ||
-            (widened > (((Int128)long.MaxValue) >> fractionBitCount))
-        ) {
-            throw new OverflowException(message: $"Value is outside the representable {typeof(TSelf).Name} range.");
-        }
-
-        result = FromRaw<TSelf>(raw: ((long)(widened << fractionBitCount)));
-
-        return true;
-    }
-    private static bool TryFromIntegerSaturating<TSelf, TOther>(TOther value, int fractionBitCount, out TSelf result)
-        where TSelf : struct
-        where TOther : INumberBase<TOther> {
-        if (!IsKnownBclInteger<TOther>()) {
-            result = default;
-
-            return false;
-        }
-
-        var widened = Int128.CreateSaturating(value: value);
-
-        if (widened < (((Int128)long.MinValue) >> fractionBitCount)) {
-            result = FromRaw<TSelf>(raw: long.MinValue);
-
-            return true;
-        }
-
-        if (widened > (((Int128)long.MaxValue) >> fractionBitCount)) {
-            result = FromRaw<TSelf>(raw: long.MaxValue);
-
-            return true;
-        }
-
-        result = FromRaw<TSelf>(raw: ((long)(widened << fractionBitCount)));
-
-        return true;
-    }
     private static TSelf FromDouble<TSelf>(double value)
         where TSelf : struct {
         if (typeof(TSelf) == typeof(FixedQ4816)) {
@@ -866,6 +814,58 @@ internal static class FixedPointConvert {
             : narrowedRaw));
 
         result = Unsafe.As<FixedQ4816, TOther>(source: ref converted);
+
+        return true;
+    }
+    // The integer lanes of the checked and saturating faces: a known BCL integer reaches the raw by one Int128 widening
+    // and one shift, never through decimal. The shift is exact whenever the source fits below the raw's integer bits,
+    // which is exactly the range test performed here.
+    private static bool TryFromIntegerChecked<TSelf, TOther>(TOther value, int fractionBitCount, out TSelf result)
+        where TSelf : struct
+        where TOther : INumberBase<TOther> {
+        if (!IsKnownBclInteger<TOther>()) {
+            result = default;
+
+            return false;
+        }
+
+        var widened = Int128.CreateChecked(value: value);
+
+        if (
+            (widened < (((Int128)long.MinValue) >> fractionBitCount)) ||
+            (widened > (((Int128)long.MaxValue) >> fractionBitCount))
+        ) {
+            throw new OverflowException(message: $"Value is outside the representable {typeof(TSelf).Name} range.");
+        }
+
+        result = FromRaw<TSelf>(raw: ((long)(widened << fractionBitCount)));
+
+        return true;
+    }
+    private static bool TryFromIntegerSaturating<TSelf, TOther>(TOther value, int fractionBitCount, out TSelf result)
+        where TSelf : struct
+        where TOther : INumberBase<TOther> {
+        if (!IsKnownBclInteger<TOther>()) {
+            result = default;
+
+            return false;
+        }
+
+        var widened = Int128.CreateSaturating(value: value);
+
+        if (widened < (((Int128)long.MinValue) >> fractionBitCount)) {
+            result = FromRaw<TSelf>(raw: long.MinValue);
+
+            return true;
+        }
+
+        if (widened > (((Int128)long.MaxValue) >> fractionBitCount)) {
+            result = FromRaw<TSelf>(raw: long.MaxValue);
+
+            return true;
+        }
+
+        result = FromRaw<TSelf>(raw: ((long)(widened << fractionBitCount)));
 
         return true;
     }

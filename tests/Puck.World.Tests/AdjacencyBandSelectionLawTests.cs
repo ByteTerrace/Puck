@@ -22,11 +22,16 @@ public sealed class AdjacencyBandSelectionLawTests {
             Type: SdfSolidPrimitive.Box,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
-            Scale: new Vector3(x: halfExtent, y: 0.1f, z: halfExtent),
+            Scale: new Vector3(
+                x: halfExtent,
+                y: 0.1f,
+                z: halfExtent
+            ),
             Material: 0,
             Blend: SdfBlendOp.Union,
             Smooth: 0f,
-            Group: 0);
+            Group: 0
+        );
         var canonical = CreationCanonicalizer.Canonicalize(
             document: new CreationDocument(
                 Schema: CreationDocument.CurrentSchema,
@@ -38,33 +43,181 @@ public sealed class AdjacencyBandSelectionLawTests {
             source: id
         );
 
-        return new WorldPrototype(Id: id, Document: canonical.Document, HashRaw: canonical.Hash);
+        return new WorldPrototype(
+            Id: id,
+            Document: canonical.Document,
+            HashRaw: canonical.Hash
+        );
     }
-    private static WorldPlacement Solid(string id, string prototype, Vector3 position) =>
-        new(Id: id, PrototypeId: prototype, Position: position, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f));
     // A south-facing seam at z = SeamZ whose band reaches deep enough to admit every row below.
     private static WorldFaceFrame Seam() => new WorldAdjacencyBoundary(
-        Center: new DocumentVector3(x: 0f, y: 0f, z: SeamZ),
+        Center: new DocumentVector3(
+            x: 0f,
+            y: 0f,
+            z: SeamZ
+        ),
         OutwardYawDegrees: 0f,
         OutwardPitchDegrees: 0f,
         Width: 48f,
         Height: 16f
     ).CompileFrame();
+    private static WorldPlacement Solid(string id, string prototype, Vector3 position) =>
+        new(
+            Id: id,
+            PrototypeId: prototype,
+            Position: position,
+            YawDegrees: 0f,
+            Scale: 1f,
+            Solid: new WorldSolid(Margin: 0f)
+        );
 
+    [Fact]
+    public void ARowOutsideTheBandIsNeverDelivered() {
+        var source = Fixtures.BuildDocument();
+        var far = Box(
+            halfExtent: FarBoxHalfExtent,
+            id: "post"
+        );
+        var definition = source with {
+            CreationsRaw = [far],
+            PlacementRowsRaw = [
+                Solid(
+                id: "inside",
+                prototype: far.Id,
+                position: new Vector3(
+                    x: 0f,
+                    y: 0f,
+                    z: (SeamZ - 2f)
+                )
+            ),
+                Solid(
+                id: "beyond-the-depth",
+                prototype: far.Id,
+                position: new Vector3(
+                    x: 0f,
+                    y: 0f,
+                    z: (SeamZ - 30f)
+                )
+            ),
+                Solid(
+                id: "beside-the-aperture",
+                prototype: far.Id,
+                position: new Vector3(
+                    x: 60f,
+                    y: 0f,
+                    z: SeamZ
+                )
+            ),
+            ],
+        };
+        var selection = WorldAdjacencyGeometry.Select(
+            definition: definition,
+            frame: Seam(),
+            overlapDepth: FixedQ4816.FromDouble(value: 4.0)
+        );
+
+        Assert.False(condition: selection.Truncated);
+        Assert.Equal(
+            actual: selection.Placements.Select(selector: static placement => placement.Id),
+            expected: ["inside"]
+        );
+    }
+    [Fact]
+    public void AnUnboundedShapeIsDeliveredBeforeEveryOtherRow() {
+        var source = Fixtures.BuildDocument();
+        var ground = Box(
+            halfExtent: SeamZ,
+            id: "ground"
+        );
+        var plane = CreationCanonicalizer.Canonicalize(
+            document: new CreationDocument(
+                Schema: CreationDocument.CurrentSchema,
+                Name: "net",
+                Palette: null,
+                Shapes: [new ShapeDocument(
+                        Id: 0,
+                        Name: "net",
+                        Type: SdfSolidPrimitive.Plane,
+                        Position: Vector3.Zero,
+                        Rotation: Quaternion.Identity,
+                        Scale: Vector3.One,
+                        Material: 0,
+                        Blend: SdfBlendOp.Union,
+                        Smooth: 0f,
+                        Group: 0
+                    )],
+                Frames: null
+            ),
+            source: "net"
+        );
+        var net = new WorldPrototype(
+            Id: "net",
+            Document: plane.Document,
+            HashRaw: plane.Hash
+        );
+        var definition = source with {
+            CreationsRaw = [ground, net],
+            PlacementRowsRaw = [
+                Solid(
+                id: "ground",
+                prototype: ground.Id,
+                position: Vector3.Zero
+            ),
+                Solid(
+                id: "net",
+                prototype: net.Id,
+                position: new Vector3(
+                    x: 0f,
+                    y: -16f,
+                    z: 0f
+                )
+            ),
+            ],
+        };
+        var selection = WorldAdjacencyGeometry.Select(
+            definition: definition,
+            frame: Seam(),
+            overlapDepth: FixedQ4816.FromDouble(value: 4.0)
+        );
+
+        Assert.False(condition: selection.Truncated);
+        Assert.Equal(
+            actual: selection.Placements.Select(selector: static placement => placement.Id),
+            expected: ["net", "ground"]
+        );
+    }
     [Fact]
     public void TheGroundMeetingTheSeamOutranksNearerRowsThatStopShortOfIt() {
         var source = Fixtures.BuildDocument();
-        var far = Box(id: "post", halfExtent: FarBoxHalfExtent);
-        var ground = Box(id: "ground", halfExtent: SeamZ);
+        var far = Box(
+            halfExtent: FarBoxHalfExtent,
+            id: "post"
+        );
+        var ground = Box(
+            halfExtent: SeamZ,
+            id: "ground"
+        );
         var rows = new List<WorldPlacement>();
 
         // More posts than the band budget, every one authored ahead of the ground and inside the band, none touching
         // the seam plane.
         for (var index = 0; (index < (WorldAdjacencyGeometry.MaximumPlacementsPerBand + 4)); index++) {
-            rows.Add(item: Solid(id: $"post{index}", prototype: far.Id, position: new Vector3(x: (index * 2f), y: 0f, z: (SeamZ - 10f))));
+            rows.Add(item: Solid(
+                id: $"post{index}",
+                prototype: far.Id,
+                position: new Vector3(
+                    x: (index * 2f),
+                    y: 0f,
+                    z: (SeamZ - 10f)
+                )
+            ));
         }
 
-        rows.Add(item: Solid(id: "ground", prototype: ground.Id, position: Vector3.Zero));
+        rows.Add(item: Solid(
+            id: "ground",
+            prototype: ground.Id,
+            position: Vector3.Zero
+        ));
 
         var definition = source with {
             CreationsRaw = [far, ground],
@@ -77,62 +230,22 @@ public sealed class AdjacencyBandSelectionLawTests {
         );
 
         Assert.True(condition: selection.Truncated);
-        Assert.Equal(actual: selection.Placements.Count, expected: WorldAdjacencyGeometry.MaximumPlacementsPerBand);
-        Assert.Equal(actual: selection.Placements[0].Id, expected: "ground");
+        Assert.Equal(
+            actual: selection.Placements.Count,
+            expected: WorldAdjacencyGeometry.MaximumPlacementsPerBand
+        );
+        Assert.Equal(
+            actual: selection.Placements[0].Id,
+            expected: "ground"
+        );
         // The remaining budget goes to the posts in document order.
-        Assert.Equal(actual: selection.Placements[1].Id, expected: "post0");
-        Assert.Equal(actual: selection.Placements[^1].Id, expected: $"post{(WorldAdjacencyGeometry.MaximumPlacementsPerBand - 2)}");
-    }
-    [Fact]
-    public void AnUnboundedShapeIsDeliveredBeforeEveryOtherRow() {
-        var source = Fixtures.BuildDocument();
-        var ground = Box(id: "ground", halfExtent: SeamZ);
-        var plane = CreationCanonicalizer.Canonicalize(
-            document: new CreationDocument(
-                Schema: CreationDocument.CurrentSchema,
-                Name: "net",
-                Palette: null,
-                Shapes: [new ShapeDocument(Id: 0, Name: "net", Type: SdfSolidPrimitive.Plane, Position: Vector3.Zero, Rotation: Quaternion.Identity, Scale: Vector3.One, Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0)],
-                Frames: null
-            ),
-            source: "net"
+        Assert.Equal(
+            actual: selection.Placements[1].Id,
+            expected: "post0"
         );
-        var net = new WorldPrototype(Id: "net", Document: plane.Document, HashRaw: plane.Hash);
-        var definition = source with {
-            CreationsRaw = [ground, net],
-            PlacementRowsRaw = [
-                Solid(id: "ground", prototype: ground.Id, position: Vector3.Zero),
-                Solid(id: "net", prototype: net.Id, position: new Vector3(x: 0f, y: -16f, z: 0f)),
-            ],
-        };
-        var selection = WorldAdjacencyGeometry.Select(
-            definition: definition,
-            frame: Seam(),
-            overlapDepth: FixedQ4816.FromDouble(value: 4.0)
+        Assert.Equal(
+            actual: selection.Placements[^1].Id,
+            expected: $"post{(WorldAdjacencyGeometry.MaximumPlacementsPerBand - 2)}"
         );
-
-        Assert.False(condition: selection.Truncated);
-        Assert.Equal(actual: selection.Placements.Select(selector: static placement => placement.Id), expected: ["net", "ground"]);
-    }
-    [Fact]
-    public void ARowOutsideTheBandIsNeverDelivered() {
-        var source = Fixtures.BuildDocument();
-        var far = Box(id: "post", halfExtent: FarBoxHalfExtent);
-        var definition = source with {
-            CreationsRaw = [far],
-            PlacementRowsRaw = [
-                Solid(id: "inside", prototype: far.Id, position: new Vector3(x: 0f, y: 0f, z: (SeamZ - 2f))),
-                Solid(id: "beyond-the-depth", prototype: far.Id, position: new Vector3(x: 0f, y: 0f, z: (SeamZ - 30f))),
-                Solid(id: "beside-the-aperture", prototype: far.Id, position: new Vector3(x: 60f, y: 0f, z: SeamZ)),
-            ],
-        };
-        var selection = WorldAdjacencyGeometry.Select(
-            definition: definition,
-            frame: Seam(),
-            overlapDepth: FixedQ4816.FromDouble(value: 4.0)
-        );
-
-        Assert.False(condition: selection.Truncated);
-        Assert.Equal(actual: selection.Placements.Select(selector: static placement => placement.Id), expected: ["inside"]);
     }
 }

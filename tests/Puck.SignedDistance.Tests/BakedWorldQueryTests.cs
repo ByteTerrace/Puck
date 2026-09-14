@@ -7,12 +7,6 @@ namespace Puck.SignedDistance.Tests;
 public sealed class BakedWorldQueryTests {
     private const long CellSizeRaw = 16384L;
 
-    private static BakedWorldQuery BlockedColumnQuery() =>
-        Query(
-            blocked: [(2, 0),],
-            height: 1,
-            width: 4
-        );
     private static WorldQueryArtifact Artifact(int width, int height, params (int Column, int Row)[] blocked) {
         var cellCount = (width * height);
         var words = new ulong[WorldQueryArtifact.BlockedWordCount(cellCount: cellCount)];
@@ -39,28 +33,11 @@ public sealed class BakedWorldQueryTests {
             width: width
         );
     }
-    private static FixedVector3 Direction(double x, double y, double z) =>
-        new(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        );
-    private static FixedQ4816 Fixed(double value) =>
-        FixedQ4816.FromDouble(value: value);
-    private static WorldQueryArtifact GroundPlane(float topY) =>
-        WorldQueryBaker.Bake(
-            blockers: [],
-            maxX: 2f,
-            maxZ: 2f,
-            minX: -2f,
-            minZ: -2f,
-            terrain: [new WorldQueryTerrainInput(
-                MaxX: 2f,
-                MaxZ: 2f,
-                MinX: -2f,
-                MinZ: -2f,
-                TopY: topY
-            ),]
+    private static BakedWorldQuery BlockedColumnQuery() =>
+        Query(
+            blocked: [(2, 0),],
+            height: 1,
+            width: 4
         );
     private static FixedPosition CellPosition(long cellX, long cellZ, double x, double y, double z) {
         Assert.True(condition: FixedPosition.TryCreate(
@@ -77,6 +54,29 @@ public sealed class BakedWorldQueryTests {
 
         return position;
     }
+    private static FixedVector3 Direction(double x, double y, double z) =>
+        new(
+            X: FixedQ4816.FromDouble(value: x),
+            Y: FixedQ4816.FromDouble(value: y),
+            Z: FixedQ4816.FromDouble(value: z)
+        );
+    private static FixedQ4816 Fixed(double value) =>
+        FixedQ4816.FromDouble(value: value);
+    private static WorldQueryArtifact GroundPlane(float topY) =>
+        WorldQueryBaker.Bake(
+            blockers: [],
+            maxX: 2f,
+            maxZ: 2f,
+            minX: -2f,
+            minZ: -2f,
+            terrain: [new WorldQueryTerrainInput(
+                    MaxX: 2f,
+                    MaxZ: 2f,
+                    MinX: -2f,
+                    MinZ: -2f,
+                    TopY: topY
+                ),]
+        );
     private static FixedPosition Position(double x, double z) =>
         Position(
             x: x,
@@ -166,22 +166,22 @@ public sealed class BakedWorldQueryTests {
         );
         var authored = WorldQueryBaker.Bake(
             blockers: [new WorldQueryBlockerInput(
-                MaxX: 1f,
-                MaxZ: 1f,
-                MinX: 0f,
-                MinZ: 0f
-            ),],
+                    MaxX: 1f,
+                    MaxZ: 1f,
+                    MinX: 0f,
+                    MinZ: 0f
+                ),],
             maxX: 2f,
             maxZ: 2f,
             minX: 0f,
             minZ: 0f,
             terrain: [new WorldQueryTerrainInput(
-                MaxX: 1f,
-                MaxZ: 1f,
-                MinX: 0f,
-                MinZ: 0f,
-                TopY: 0f
-            ),]
+                    MaxX: 1f,
+                    MaxZ: 1f,
+                    MinX: 0f,
+                    MinZ: 0f,
+                    TopY: 0f
+                ),]
         );
 
         Assert.False(condition: empty.HasBlocked);
@@ -207,6 +207,42 @@ public sealed class BakedWorldQueryTests {
         Assert.Equal(
             expected: 2,
             actual: artifact.Height
+        );
+    }
+    [Fact]
+    public void BakeRefusesAGridBoundTheCoordinateCarrierCanOnlySaturate() {
+        Assert.Throws<ArgumentException>(
+            paramName: "maxX",
+            testCode: () => WorldQueryBaker.Bake(
+                blockers: [],
+                maxX: float.MaxValue,
+                maxZ: 1f,
+                minX: 0f,
+                minZ: 0f,
+                terrain: []
+            )
+        );
+        Assert.Throws<ArgumentException>(
+            paramName: "minZ",
+            testCode: () => WorldQueryBaker.Bake(
+                blockers: [],
+                maxX: 1f,
+                maxZ: 1f,
+                minX: 0f,
+                minZ: float.MinValue,
+                terrain: []
+            )
+        );
+        Assert.Equal(
+            expected: 4,
+            actual: WorldQueryBaker.Bake(
+                blockers: [],
+                maxX: 1f,
+                maxZ: 1f,
+                minX: 0f,
+                minZ: 0f,
+                terrain: []
+            ).Width
         );
     }
     [Fact]
@@ -244,6 +280,161 @@ public sealed class BakedWorldQueryTests {
                 terrain: []
             ).Width
         );
+    }
+    [Fact]
+    public void BakeRefusesANonFiniteGridBound() {
+        Assert.Throws<ArgumentException>(
+            paramName: "maxX",
+            testCode: () => WorldQueryBaker.Bake(
+                blockers: [],
+                maxX: float.NaN,
+                maxZ: 1f,
+                minX: 0f,
+                minZ: 0f,
+                terrain: []
+            )
+        );
+        Assert.Equal(
+            expected: 4,
+            actual: WorldQueryBaker.Bake(
+                blockers: [],
+                maxX: 1f,
+                maxZ: 1f,
+                minX: 0f,
+                minZ: 0f,
+                terrain: []
+            ).Width
+        );
+    }
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    [Theory]
+    public void BakeRefusesANonFiniteTerrainHeight(float topY) {
+        Assert.Throws<ArgumentException>(testCode: () => WorldQueryBaker.Bake(
+            blockers: [],
+            maxX: 1f,
+            maxZ: 1f,
+            minX: 0f,
+            minZ: 0f,
+            terrain: [new WorldQueryTerrainInput(
+                    MaxX: 1f,
+                    MaxZ: 1f,
+                    MinX: 0f,
+                    MinZ: 0f,
+                    TopY: topY
+                ),]
+        ));
+        Assert.True(condition: WorldQueryBaker.Bake(
+            blockers: [],
+            maxX: 1f,
+            maxZ: 1f,
+            minX: 0f,
+            minZ: 0f,
+            terrain: [new WorldQueryTerrainInput(
+                    MaxX: 1f,
+                    MaxZ: 1f,
+                    MinX: 0f,
+                    MinZ: 0f,
+                    TopY: 3f
+                ),]
+        ).HasHeightfield);
+    }
+    [Fact]
+    public void BakeRefusesATerrainHeightThatQuantizesToTheNoGroundSentinel() {
+        Assert.Throws<ArgumentException>(testCode: () => WorldQueryBaker.Bake(
+            blockers: [],
+            maxX: 1f,
+            maxZ: 1f,
+            minX: 0f,
+            minZ: 0f,
+            terrain: [new WorldQueryTerrainInput(
+                    MaxX: 1f,
+                    MaxZ: 1f,
+                    MinX: 0f,
+                    MinZ: 0f,
+                    TopY: float.MinValue
+                ),]
+        ));
+
+        var deep = WorldQueryBaker.Bake(
+            blockers: [],
+            maxX: 1f,
+            maxZ: 1f,
+            minX: 0f,
+            minZ: 0f,
+            terrain: [new WorldQueryTerrainInput(
+                    MaxX: 1f,
+                    MaxZ: 1f,
+                    MinX: 0f,
+                    MinZ: 0f,
+                    TopY: -1e9f
+                ),]
+        );
+
+        Assert.True(condition: deep.HasHeightfield);
+        Assert.True(condition: deep.TryHeightRaw(
+            cellIndex: 0,
+            heightRaw: out var heightRaw
+        ));
+        Assert.Equal(
+            expected: FixedQ4816.FromDouble(value: -1e9).Value,
+            actual: heightRaw
+        );
+    }
+    [Fact]
+    public void BakeRefusesAnInvertedGridBound() {
+        Assert.Throws<ArgumentException>(
+            paramName: "maxX",
+            testCode: () => WorldQueryBaker.Bake(
+                blockers: [],
+                maxX: 0f,
+                maxZ: 1f,
+                minX: 1f,
+                minZ: 0f,
+                terrain: []
+            )
+        );
+        Assert.Equal(
+            expected: 4,
+            actual: WorldQueryBaker.Bake(
+                blockers: [],
+                maxX: 1f,
+                maxZ: 1f,
+                minX: 0f,
+                minZ: 0f,
+                terrain: []
+            ).Width
+        );
+    }
+    [Fact]
+    public void BakeRefusesAnInvertedRectangle() {
+        Assert.Throws<ArgumentException>(testCode: () => WorldQueryBaker.Bake(
+            blockers: [new WorldQueryBlockerInput(
+                    MaxX: 0f,
+                    MaxZ: 1f,
+                    MinX: 1f,
+                    MinZ: 0f
+                ),],
+            maxX: 1f,
+            maxZ: 1f,
+            minX: 0f,
+            minZ: 0f,
+            terrain: []
+        ));
+        Assert.True(condition: WorldQueryBaker.Bake(
+            blockers: [new WorldQueryBlockerInput(
+                    MaxX: 1f,
+                    MaxZ: 1f,
+                    MinX: 0f,
+                    MinZ: 0f
+                ),],
+            maxX: 1f,
+            maxZ: 1f,
+            minX: 0f,
+            minZ: 0f,
+            terrain: []
+        ).HasBlocked);
     }
     [Fact]
     public void BakeRefusesItsAllocationBudgetBeforeAllocatingLayers() {
@@ -297,197 +488,6 @@ public sealed class BakedWorldQueryTests {
         );
     }
     [Fact]
-    public void BakeRefusesAGridBoundTheCoordinateCarrierCanOnlySaturate() {
-        Assert.Throws<ArgumentException>(
-            paramName: "maxX",
-            testCode: () => WorldQueryBaker.Bake(
-                blockers: [],
-                maxX: float.MaxValue,
-                maxZ: 1f,
-                minX: 0f,
-                minZ: 0f,
-                terrain: []
-            )
-        );
-        Assert.Throws<ArgumentException>(
-            paramName: "minZ",
-            testCode: () => WorldQueryBaker.Bake(
-                blockers: [],
-                maxX: 1f,
-                maxZ: 1f,
-                minX: 0f,
-                minZ: float.MinValue,
-                terrain: []
-            )
-        );
-        Assert.Equal(
-            expected: 4,
-            actual: WorldQueryBaker.Bake(
-                blockers: [],
-                maxX: 1f,
-                maxZ: 1f,
-                minX: 0f,
-                minZ: 0f,
-                terrain: []
-            ).Width
-        );
-    }
-    [Fact]
-    public void BakeRefusesATerrainHeightThatQuantizesToTheNoGroundSentinel() {
-        Assert.Throws<ArgumentException>(testCode: () => WorldQueryBaker.Bake(
-            blockers: [],
-            maxX: 1f,
-            maxZ: 1f,
-            minX: 0f,
-            minZ: 0f,
-            terrain: [new WorldQueryTerrainInput(
-                MaxX: 1f,
-                MaxZ: 1f,
-                MinX: 0f,
-                MinZ: 0f,
-                TopY: float.MinValue
-            ),]
-        ));
-
-        var deep = WorldQueryBaker.Bake(
-            blockers: [],
-            maxX: 1f,
-            maxZ: 1f,
-            minX: 0f,
-            minZ: 0f,
-            terrain: [new WorldQueryTerrainInput(
-                MaxX: 1f,
-                MaxZ: 1f,
-                MinX: 0f,
-                MinZ: 0f,
-                TopY: -1e9f
-            ),]
-        );
-
-        Assert.True(condition: deep.HasHeightfield);
-        Assert.True(condition: deep.TryHeightRaw(
-            cellIndex: 0,
-            heightRaw: out var heightRaw
-        ));
-        Assert.Equal(
-            expected: FixedQ4816.FromDouble(value: -1e9).Value,
-            actual: heightRaw
-        );
-    }
-    [Fact]
-    public void BakeRefusesAnInvertedGridBound() {
-        Assert.Throws<ArgumentException>(
-            paramName: "maxX",
-            testCode: () => WorldQueryBaker.Bake(
-                blockers: [],
-                maxX: 0f,
-                maxZ: 1f,
-                minX: 1f,
-                minZ: 0f,
-                terrain: []
-            )
-        );
-        Assert.Equal(
-            expected: 4,
-            actual: WorldQueryBaker.Bake(
-                blockers: [],
-                maxX: 1f,
-                maxZ: 1f,
-                minX: 0f,
-                minZ: 0f,
-                terrain: []
-            ).Width
-        );
-    }
-    [Fact]
-    public void BakeRefusesAnInvertedRectangle() {
-        Assert.Throws<ArgumentException>(testCode: () => WorldQueryBaker.Bake(
-            blockers: [new WorldQueryBlockerInput(
-                MaxX: 0f,
-                MaxZ: 1f,
-                MinX: 1f,
-                MinZ: 0f
-            ),],
-            maxX: 1f,
-            maxZ: 1f,
-            minX: 0f,
-            minZ: 0f,
-            terrain: []
-        ));
-        Assert.True(condition: WorldQueryBaker.Bake(
-            blockers: [new WorldQueryBlockerInput(
-                MaxX: 1f,
-                MaxZ: 1f,
-                MinX: 0f,
-                MinZ: 0f
-            ),],
-            maxX: 1f,
-            maxZ: 1f,
-            minX: 0f,
-            minZ: 0f,
-            terrain: []
-        ).HasBlocked);
-    }
-    [InlineData(float.NaN)]
-    [InlineData(float.PositiveInfinity)]
-    [InlineData(float.NegativeInfinity)]
-    [Theory]
-    public void BakeRefusesANonFiniteTerrainHeight(float topY) {
-        Assert.Throws<ArgumentException>(testCode: () => WorldQueryBaker.Bake(
-            blockers: [],
-            maxX: 1f,
-            maxZ: 1f,
-            minX: 0f,
-            minZ: 0f,
-            terrain: [new WorldQueryTerrainInput(
-                MaxX: 1f,
-                MaxZ: 1f,
-                MinX: 0f,
-                MinZ: 0f,
-                TopY: topY
-            ),]
-        ));
-        Assert.True(condition: WorldQueryBaker.Bake(
-            blockers: [],
-            maxX: 1f,
-            maxZ: 1f,
-            minX: 0f,
-            minZ: 0f,
-            terrain: [new WorldQueryTerrainInput(
-                MaxX: 1f,
-                MaxZ: 1f,
-                MinX: 0f,
-                MinZ: 0f,
-                TopY: 3f
-            ),]
-        ).HasHeightfield);
-    }
-    [Fact]
-    public void BakeRefusesANonFiniteGridBound() {
-        Assert.Throws<ArgumentException>(
-            paramName: "maxX",
-            testCode: () => WorldQueryBaker.Bake(
-                blockers: [],
-                maxX: float.NaN,
-                maxZ: 1f,
-                minX: 0f,
-                minZ: 0f,
-                terrain: []
-            )
-        );
-        Assert.Equal(
-            expected: 4,
-            actual: WorldQueryBaker.Bake(
-                blockers: [],
-                maxX: 1f,
-                maxZ: 1f,
-                minX: 0f,
-                minZ: 0f,
-                terrain: []
-            ).Width
-        );
-    }
-    [Fact]
     public void CastsAgainstTheSameArtifactAreBitIdentical() {
         var artifact = Artifact(
             blocked: [(3, 2), (5, 5), (1, 6),],
@@ -534,6 +534,56 @@ public sealed class BakedWorldQueryTests {
                 expected: expected
             );
         }
+    }
+    [Fact]
+    public void ExtremeButRepresentableArtifactsDoNotOverflowQueryArithmetic() {
+        var widestCell = new BakedWorldQuery(artifact: new WorldQueryArtifact(
+            blocked: [1UL,],
+            cellSizeRaw: long.MaxValue,
+            height: 1,
+            heightRaw: [],
+            originXRaw: 0L,
+            originZRaw: 0L,
+            width: 1
+        ));
+
+        Assert.True(condition: widestCell.SphereCast(
+            dir: Direction(
+                x: 1.0,
+                y: 0.0,
+                z: 0.0
+            ),
+            hit: out var hit,
+            maxDist: FixedQ4816.Epsilon,
+            origin: FixedPosition.Zero,
+            radius: FixedQ4816.FromRawBits(value: long.MaxValue)
+        ));
+        Assert.Equal(
+            expected: FixedQ4816.Zero,
+            actual: hit.Distance
+        );
+
+        const long LargeCell = 4_000_000_000_000_000_000L;
+        var compensatedOrigin = long.MinValue;
+        var lastCellCenter = ((long)((((Int128)compensatedOrigin) + (3 * ((Int128)LargeCell))) + (LargeCell / 2)));
+        var compensated = new BakedWorldQuery(artifact: new WorldQueryArtifact(
+            blocked: [(1UL << 3),],
+            cellSizeRaw: LargeCell,
+            height: 1,
+            heightRaw: [],
+            originXRaw: compensatedOrigin,
+            originZRaw: 0L,
+            width: 4
+        ));
+
+        Assert.True(condition: compensated.Overlap(
+            center: FixedPosition.FromLocal(local: new FixedVector3(
+                X: FixedQ4816.FromRawBits(value: lastCellCenter),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.FromRawBits(value: 1L)
+            )),
+            radius: FixedQ4816.Zero
+        ));
     }
     [Fact]
     public void LineOfSightBlocksADegenerateSegmentInsideABlockedCell() {
@@ -611,51 +661,6 @@ public sealed class BakedWorldQueryTests {
         ));
     }
     [Fact]
-    public void LineOfSightUsesTheHeightfieldWhenTheBlockedLayerIsAbsent() {
-        var artifact = WorldQueryBaker.Bake(
-            blockers: [],
-            maxX: 5f,
-            maxZ: 5f,
-            minX: -5f,
-            minZ: -5f,
-            terrain: [new WorldQueryTerrainInput(
-                MaxX: 0.5f,
-                MaxZ: 5f,
-                MinX: 0f,
-                MinZ: -5f,
-                TopY: 1f
-            ),]
-        );
-        var query = new BakedWorldQuery(artifact: artifact);
-
-        Assert.False(condition: query.Capabilities.HasBlocked);
-        Assert.True(condition: query.Capabilities.HasHeightfield);
-        Assert.False(condition: query.LineOfSight(
-            from: Position(
-                x: -2.0,
-                y: 0.5,
-                z: 0.0
-            ),
-            to: Position(
-                x: 2.0,
-                y: 0.5,
-                z: 0.0
-            )
-        ));
-        Assert.True(condition: query.LineOfSight(
-            from: Position(
-                x: -2.0,
-                y: 2.0,
-                z: 0.0
-            ),
-            to: Position(
-                x: 2.0,
-                y: 2.0,
-                z: 0.0
-            )
-        ));
-    }
-    [Fact]
     public void LineOfSightReadsBothEndpointsInWorldSpace() {
         var query = new BakedWorldQuery(artifact: GroundPlane(topY: 0f));
 
@@ -690,6 +695,51 @@ public sealed class BakedWorldQueryTests {
         ));
     }
     [Fact]
+    public void LineOfSightUsesTheHeightfieldWhenTheBlockedLayerIsAbsent() {
+        var artifact = WorldQueryBaker.Bake(
+            blockers: [],
+            maxX: 5f,
+            maxZ: 5f,
+            minX: -5f,
+            minZ: -5f,
+            terrain: [new WorldQueryTerrainInput(
+                    MaxX: 0.5f,
+                    MaxZ: 5f,
+                    MinX: 0f,
+                    MinZ: -5f,
+                    TopY: 1f
+                ),]
+        );
+        var query = new BakedWorldQuery(artifact: artifact);
+
+        Assert.False(condition: query.Capabilities.HasBlocked);
+        Assert.True(condition: query.Capabilities.HasHeightfield);
+        Assert.False(condition: query.LineOfSight(
+            from: Position(
+                x: -2.0,
+                y: 0.5,
+                z: 0.0
+            ),
+            to: Position(
+                x: 2.0,
+                y: 0.5,
+                z: 0.0
+            )
+        ));
+        Assert.True(condition: query.LineOfSight(
+            from: Position(
+                x: -2.0,
+                y: 2.0,
+                z: 0.0
+            ),
+            to: Position(
+                x: 2.0,
+                y: 2.0,
+                z: 0.0
+            )
+        ));
+    }
+    [Fact]
     public void OverlapClampsTheDiscToTheArtifactRatherThanBailingOnAnOutsideCenter() {
         var query = Query(
             blocked: [(0, 0),],
@@ -711,20 +761,6 @@ public sealed class BakedWorldQueryTests {
             ),
             radius: Fixed(value: 0.5)
         ));
-    }
-    [Fact]
-    public void OverlapTreatsABlockedCellAsAreaRatherThanAsItsCenterPoint() {
-        var query = TwoCellQuery();
-
-        var overlaps = query.Overlap(
-            center: Position(
-                x: 0.30,
-                z: 0.125
-            ),
-            radius: FixedQ4816.Zero
-        );
-
-        Assert.True(condition: overlaps);
     }
     [Fact]
     public void OverlapConsultsTheHeightfieldNotOnlyTheBlockedLayer() {
@@ -760,22 +796,22 @@ public sealed class BakedWorldQueryTests {
     public void OverlapIsNeverLooserThanTheSweepThatSharesItsRadius() {
         var artifact = WorldQueryBaker.Bake(
             blockers: [new WorldQueryBlockerInput(
-                MaxX: 1.25f,
-                MaxZ: 0.75f,
-                MinX: 0.5f,
-                MinZ: 0.25f
-            ),],
+                    MaxX: 1.25f,
+                    MaxZ: 0.75f,
+                    MinX: 0.5f,
+                    MinZ: 0.25f
+                ),],
             maxX: 2f,
             maxZ: 2f,
             minX: -2f,
             minZ: -2f,
             terrain: [new WorldQueryTerrainInput(
-                MaxX: 0f,
-                MaxZ: 2f,
-                MinX: -2f,
-                MinZ: -2f,
-                TopY: 0.25f
-            ),]
+                    MaxX: 0f,
+                    MaxZ: 2f,
+                    MinX: -2f,
+                    MinZ: -2f,
+                    TopY: 0.25f
+                ),]
         );
         var query = new BakedWorldQuery(artifact: artifact);
         var random = new Random(Seed: 1607);
@@ -884,6 +920,20 @@ public sealed class BakedWorldQueryTests {
             ),
             radius: ceiling
         ));
+    }
+    [Fact]
+    public void OverlapTreatsABlockedCellAsAreaRatherThanAsItsCenterPoint() {
+        var query = TwoCellQuery();
+
+        var overlaps = query.Overlap(
+            center: Position(
+                x: 0.30,
+                z: 0.125
+            ),
+            radius: FixedQ4816.Zero
+        );
+
+        Assert.True(condition: overlaps);
     }
     [Fact]
     public void QueriesAnswerAgainstAnArtifactCarryingNeitherLayer() {
@@ -1501,51 +1551,5 @@ public sealed class BakedWorldQueryTests {
                 width: 1
             ).CellSizeRaw
         );
-    }
-    [Fact]
-    public void ExtremeButRepresentableArtifactsDoNotOverflowQueryArithmetic() {
-        var widestCell = new BakedWorldQuery(artifact: new WorldQueryArtifact(
-            blocked: [1UL,],
-            cellSizeRaw: long.MaxValue,
-            height: 1,
-            heightRaw: [],
-            originXRaw: 0L,
-            originZRaw: 0L,
-            width: 1
-        ));
-
-        Assert.True(condition: widestCell.SphereCast(
-            dir: Direction(x: 1.0, y: 0.0, z: 0.0),
-            hit: out var hit,
-            maxDist: FixedQ4816.Epsilon,
-            origin: FixedPosition.Zero,
-            radius: FixedQ4816.FromRawBits(value: long.MaxValue)
-        ));
-        Assert.Equal(
-            expected: FixedQ4816.Zero,
-            actual: hit.Distance
-        );
-
-        const long largeCell = 4_000_000_000_000_000_000L;
-        var compensatedOrigin = long.MinValue;
-        var lastCellCenter = ((long)((((Int128)compensatedOrigin) + (3 * ((Int128)largeCell))) + (largeCell / 2)));
-        var compensated = new BakedWorldQuery(artifact: new WorldQueryArtifact(
-            blocked: [(1UL << 3),],
-            cellSizeRaw: largeCell,
-            height: 1,
-            heightRaw: [],
-            originXRaw: compensatedOrigin,
-            originZRaw: 0L,
-            width: 4
-        ));
-
-        Assert.True(condition: compensated.Overlap(
-            center: FixedPosition.FromLocal(local: new FixedVector3(
-                X: FixedQ4816.FromRawBits(value: lastCellCenter),
-                Y: FixedQ4816.Zero,
-                Z: FixedQ4816.FromRawBits(value: 1L)
-            )),
-            radius: FixedQ4816.Zero
-        ));
     }
 }

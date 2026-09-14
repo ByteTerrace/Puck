@@ -47,13 +47,62 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
 
         return (checkpoint with {
             Grants = (grants with {
-                Budgets = [.. grants.Budgets.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
-                EventBudgets = [.. grants.EventBudgets.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
-                HoldCeilings = [.. grants.HoldCeilings.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
-                ChannelReach = [.. grants.ChannelReach.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
-                KindMasks = [.. grants.KindMasks.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
-                WriteMasks = [.. grants.WriteMasks.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Principal, subject: row.Subject), comparer: StringComparer.Ordinal)],
-                Exclusive = [.. grants.Exclusive.OrderBy(keySelector: static row => KeyOf(capability: row.Capability, principal: row.Holder, subject: row.Subject), comparer: StringComparer.Ordinal)],
+                Budgets = [.. grants.Budgets.OrderBy(
+                keySelector: static row => KeyOf(
+                    capability: row.Capability,
+                    principal: row.Principal,
+                    subject: row.Subject
+                ),
+                comparer: StringComparer.Ordinal
+            )],
+                EventBudgets = [.. grants.EventBudgets.OrderBy(
+                keySelector: static row => KeyOf(
+                    capability: row.Capability,
+                    principal: row.Principal,
+                    subject: row.Subject
+                ),
+                comparer: StringComparer.Ordinal
+            )],
+                HoldCeilings = [.. grants.HoldCeilings.OrderBy(
+                keySelector: static row => KeyOf(
+                    capability: row.Capability,
+                    principal: row.Principal,
+                    subject: row.Subject
+                ),
+                comparer: StringComparer.Ordinal
+            )],
+                ChannelReach = [.. grants.ChannelReach.OrderBy(
+                keySelector: static row => KeyOf(
+                    capability: row.Capability,
+                    principal: row.Principal,
+                    subject: row.Subject
+                ),
+                comparer: StringComparer.Ordinal
+            )],
+                KindMasks = [.. grants.KindMasks.OrderBy(
+                keySelector: static row => KeyOf(
+                    capability: row.Capability,
+                    principal: row.Principal,
+                    subject: row.Subject
+                ),
+                comparer: StringComparer.Ordinal
+            )],
+                WriteMasks = [.. grants.WriteMasks.OrderBy(
+                keySelector: static row => KeyOf(
+                    capability: row.Capability,
+                    principal: row.Principal,
+                    subject: row.Subject
+                ),
+                comparer: StringComparer.Ordinal
+            )],
+                Exclusive = [.. grants.Exclusive.OrderBy(
+                keySelector: static row => KeyOf(
+                    capability: row.Capability,
+                    principal: row.Holder,
+                    subject: row.Subject
+                ),
+                comparer: StringComparer.Ordinal
+            )],
             }),
         });
     }
@@ -64,11 +113,19 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         using var disposeA = rowA;
         using var disposeB = rowB;
 
-        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(host: host, rowA: rowA, rowB: rowB);
+        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(
+            host: host,
+            rowA: rowA,
+            rowB: rowB
+        );
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointA);
         var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
 
-        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(checkpointA: decodedA, checkpointB: decodedB, machineId: machineId);
+        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(
+            checkpointA: decodedA,
+            checkpointB: decodedB,
+            machineId: machineId
+        );
         using var disposeRestoredA = restoredA;
         using var disposeRestoredB = restoredB;
 
@@ -82,11 +139,31 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
             uninterruptedHost: host
         );
 
-        var (finalUninterruptedA, finalUninterruptedB) = HostRoundtripFixture.CaptureBoth(host: host, rowA: rowA, rowB: rowB);
-        var (finalRestoredA, finalRestoredB) = HostRoundtripFixture.CaptureBoth(host: restoredHost, rowA: restoredA, rowB: restoredB);
+        var (finalUninterruptedA, finalUninterruptedB) = HostRoundtripFixture.CaptureBoth(
+            host: host,
+            rowA: rowA,
+            rowB: rowB
+        );
+        var (finalRestoredA, finalRestoredB) = HostRoundtripFixture.CaptureBoth(
+            host: restoredHost,
+            rowA: restoredA,
+            rowB: restoredB
+        );
 
-        Assert.True(condition: DeepEqual.Compare(a: finalUninterruptedA, b: finalRestoredA), userMessage: DeepEqual.LastMismatchPath);
-        Assert.True(condition: DeepEqual.Compare(a: finalUninterruptedB, b: finalRestoredB), userMessage: DeepEqual.LastMismatchPath);
+        Assert.True(
+            condition: DeepEqual.Compare(
+                a: finalUninterruptedA,
+                b: finalRestoredA
+            ),
+            userMessage: DeepEqual.LastMismatchPath
+        );
+        Assert.True(
+            condition: DeepEqual.Compare(
+                a: finalUninterruptedB,
+                b: finalRestoredB
+            ),
+            userMessage: DeepEqual.LastMismatchPath
+        );
     }
     /// <summary>Scenario (ii): checkpoint both rows with a crossing reserved at the destination but IN DOUBT at the
     /// source (<see cref="HostRoundtripFixture.BuildInDoubtScenario"/>), restore both into a fresh host, and run the
@@ -100,14 +177,22 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         using var disposeA = rowA;
         using var disposeB = rowB;
 
-        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(host: host, rowA: rowA, rowB: rowB);
+        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(
+            host: host,
+            rowA: rowA,
+            rowB: rowB
+        );
 
         Assert.Single(collection: checkpointA.HostRow.InDoubtTransfers);
 
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointA);
         var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
 
-        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(checkpointA: decodedA, checkpointB: decodedB, machineId: machineId);
+        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(
+            checkpointA: decodedA,
+            checkpointB: decodedB,
+            machineId: machineId
+        );
         using var disposeRestoredA = restoredA;
         using var disposeRestoredB = restoredB;
 
@@ -124,11 +209,31 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         Assert.True(condition: rowB.Server.Population.IsActive(index: 0));
         Assert.True(condition: restoredB.Server.Population.IsActive(index: 0));
 
-        var (finalUninterruptedA, finalUninterruptedB) = HostRoundtripFixture.CaptureBoth(host: host, rowA: rowA, rowB: rowB);
-        var (finalRestoredA, finalRestoredB) = HostRoundtripFixture.CaptureBoth(host: restoredHost, rowA: restoredA, rowB: restoredB);
+        var (finalUninterruptedA, finalUninterruptedB) = HostRoundtripFixture.CaptureBoth(
+            host: host,
+            rowA: rowA,
+            rowB: rowB
+        );
+        var (finalRestoredA, finalRestoredB) = HostRoundtripFixture.CaptureBoth(
+            host: restoredHost,
+            rowA: restoredA,
+            rowB: restoredB
+        );
 
-        Assert.True(condition: DeepEqual.Compare(a: finalUninterruptedA, b: finalRestoredA), userMessage: DeepEqual.LastMismatchPath);
-        Assert.True(condition: DeepEqual.Compare(a: finalUninterruptedB, b: finalRestoredB), userMessage: DeepEqual.LastMismatchPath);
+        Assert.True(
+            condition: DeepEqual.Compare(
+                a: finalUninterruptedA,
+                b: finalRestoredA
+            ),
+            userMessage: DeepEqual.LastMismatchPath
+        );
+        Assert.True(
+            condition: DeepEqual.Compare(
+                a: finalUninterruptedB,
+                b: finalRestoredB
+            ),
+            userMessage: DeepEqual.LastMismatchPath
+        );
     }
     /// <summary>Scenario (i)'s own trade-off, resolved: a PEER-range crossing (never reached by the local-seat
     /// scenario above) restores its destination entry PARKED (<c>WorldPopulation.Restore</c>'s own rule for a
@@ -151,7 +256,11 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         using var disposeA = rowA;
         using var disposeB = rowB;
 
-        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(host: host, rowA: rowA, rowB: rowB);
+        var (checkpointA, checkpointB) = HostRoundtripFixture.CaptureBoth(
+            host: host,
+            rowA: rowA,
+            rowB: rowB
+        );
         var destinationEntry = checkpointB.Population.Entries.Single(predicate: e => (e.Index == peerSlot));
 
         Assert.True(condition: destinationEntry.IsRemoteHuman);
@@ -160,7 +269,11 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointA);
         var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
 
-        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(checkpointA: decodedA, checkpointB: decodedB, machineId: machineId);
+        var (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(
+            checkpointA: decodedA,
+            checkpointB: decodedB,
+            machineId: machineId
+        );
         using var disposeRestoredA = restoredA;
         using var disposeRestoredB = restoredB;
 
@@ -200,7 +313,10 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
             remintedRows++;
         }
 
-        Assert.True(condition: (remintedRows > 0), userMessage: "the scenario's arrival verdict must carry at least one template, or the release/re-mint half of this law asserts nothing");
+        Assert.True(
+            condition: (remintedRows > 0),
+            userMessage: "the scenario's arrival verdict must carry at least one template, or the release/re-mint half of this law asserts nothing"
+        );
 
         HostRoundtripFixture.RunIdenticalTail(
             restoredA: restoredA,
@@ -212,10 +328,24 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
             uninterruptedHost: host
         );
 
-        var (finalUninterruptedA, finalUninterruptedB) = HostRoundtripFixture.CaptureBoth(host: host, rowA: rowA, rowB: rowB);
-        var (finalRestoredA, finalRestoredB) = HostRoundtripFixture.CaptureBoth(host: restoredHost, rowA: restoredA, rowB: restoredB);
+        var (finalUninterruptedA, finalUninterruptedB) = HostRoundtripFixture.CaptureBoth(
+            host: host,
+            rowA: rowA,
+            rowB: rowB
+        );
+        var (finalRestoredA, finalRestoredB) = HostRoundtripFixture.CaptureBoth(
+            host: restoredHost,
+            rowA: restoredA,
+            rowB: restoredB
+        );
 
-        Assert.True(condition: DeepEqual.Compare(a: finalUninterruptedA, b: finalRestoredA), userMessage: DeepEqual.LastMismatchPath);
+        Assert.True(
+            condition: DeepEqual.Compare(
+                a: finalUninterruptedA,
+                b: finalRestoredA
+            ),
+            userMessage: DeepEqual.LastMismatchPath
+        );
 
         Assert.Equal(
             actual: finalRestoredB.Population.Revision,
@@ -239,6 +369,12 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
             Grants = (normalizedRestoredB.Grants with { Revision = normalizedUninterruptedB.Grants.Revision }),
         };
 
-        Assert.True(condition: DeepEqual.Compare(a: normalizedUninterruptedB, b: normalizedRestoredB), userMessage: DeepEqual.LastMismatchPath);
+        Assert.True(
+            condition: DeepEqual.Compare(
+                a: normalizedUninterruptedB,
+                b: normalizedRestoredB
+            ),
+            userMessage: DeepEqual.LastMismatchPath
+        );
     }
 }

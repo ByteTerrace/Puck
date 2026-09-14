@@ -165,16 +165,25 @@ public sealed class BindingProfileJsonTests {
         using var parsed = JsonDocument.Parse(json: json);
 
         // The kind is a declared member NAME, not the ordinal 2 the default shape wrote.
-        Assert.Equal(actual: parsed.RootElement.GetProperty(propertyName: "kind").GetString(), expected: "Axis2D");
+        Assert.Equal(
+            actual: parsed.RootElement.GetProperty(propertyName: "kind").GetString(),
+            expected: "Axis2D"
+        );
         // And raw is the four components, not the empty object a Vector4's public FIELDS collapse to.
-        Assert.Equal(actual: parsed.RootElement.GetProperty(propertyName: "raw").ValueKind, expected: JsonValueKind.Array);
+        Assert.Equal(
+            actual: parsed.RootElement.GetProperty(propertyName: "raw").ValueKind,
+            expected: JsonValueKind.Array
+        );
         Assert.Equal(
             actual: parsed.RootElement.GetProperty(propertyName: "raw").EnumerateArray().Select(selector: static component => component.GetSingle()),
             expected: [0.5f, -0.25f, 0f, 0f]
         );
         // No computed accessor rides along: the converter owns the whole object.
         Assert.Equal(
-            actual: string.Join(separator: ", ", values: parsed.RootElement.EnumerateObject().Select(selector: static member => member.Name)),
+            actual: string.Join(
+                separator: ", ",
+                values: parsed.RootElement.EnumerateObject().Select(selector: static member => member.Name)
+            ),
             expected: "kind, raw"
         );
         Assert.Equal(
@@ -202,6 +211,24 @@ public sealed class BindingProfileJsonTests {
         ));
     }
     [Fact]
+    public void TheContextRefusesAnUnmappedMember() {
+        // The strict posture the World's context carries is the context's own here too: an authoring typo fails
+        // by name rather than vanishing.
+        var written = JsonSerializer.Serialize(
+            jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument,
+            value: Document()
+        ).Replace(
+            comparisonType: StringComparison.Ordinal,
+            newValue: "\"modifierz\":",
+            oldValue: "\"modifiers\":"
+        );
+
+        _ = Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(
+            json: written,
+            jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument
+        ));
+    }
+    [Fact]
     public void TheContextRoundTripsAWholeDocumentWithoutLoss() {
         var document = Document();
         var written = JsonSerializer.Serialize(
@@ -224,32 +251,29 @@ public sealed class BindingProfileJsonTests {
         var compiled = BindingProfile.Compile(document: document);
         var recompiled = BindingProfile.Compile(document: reread!);
 
-        Assert.Equal(actual: recompiled.RowCount, expected: compiled.RowCount);
-        Assert.Equal(actual: recompiled.ActivatorCount, expected: compiled.ActivatorCount);
-        Assert.Equal(actual: recompiled.Groups, expected: compiled.Groups);
+        Assert.Equal(
+            actual: recompiled.RowCount,
+            expected: compiled.RowCount
+        );
+        Assert.Equal(
+            actual: recompiled.ActivatorCount,
+            expected: compiled.ActivatorCount
+        );
+        Assert.Equal(
+            actual: recompiled.Groups,
+            expected: compiled.Groups
+        );
         // A record's IReadOnlyList member compares by REFERENCE, so the modifier rows are compared by the values
         // that crossed the wire rather than with Assert.Equal over the records themselves.
         Assert.Equal(
-            actual: recompiled.Modifiers.Select(selector: static modifier => (modifier.Id, string.Join(separator: ',', values: modifier.Sources), modifier.PressThreshold, modifier.ReleaseThreshold)),
-            expected: compiled.Modifiers.Select(selector: static modifier => (modifier.Id, string.Join(separator: ',', values: modifier.Sources), modifier.PressThreshold, modifier.ReleaseThreshold))
+            actual: recompiled.Modifiers.Select(selector: static modifier => (modifier.Id, string.Join(
+                separator: ',',
+                values: modifier.Sources
+            ), modifier.PressThreshold, modifier.ReleaseThreshold)),
+            expected: compiled.Modifiers.Select(selector: static modifier => (modifier.Id, string.Join(
+                separator: ',',
+                values: modifier.Sources
+            ), modifier.PressThreshold, modifier.ReleaseThreshold))
         );
-    }
-    [Fact]
-    public void TheContextRefusesAnUnmappedMember() {
-        // The strict posture the World's context carries is the context's own here too: an authoring typo fails
-        // by name rather than vanishing.
-        var written = JsonSerializer.Serialize(
-            jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument,
-            value: Document()
-        ).Replace(
-            comparisonType: StringComparison.Ordinal,
-            newValue: "\"modifierz\":",
-            oldValue: "\"modifiers\":"
-        );
-
-        _ = Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(
-            json: written,
-            jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument
-        ));
     }
 }

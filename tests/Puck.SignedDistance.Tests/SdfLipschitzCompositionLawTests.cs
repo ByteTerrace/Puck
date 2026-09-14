@@ -17,22 +17,38 @@ public sealed class SdfLipschitzCompositionLawTests {
     // Three parallel slabs, chamfer-unioned and then carved by a plane, leaving a thin top plate. Distinct (not
     // coincident) centres, so the geometry is ordinary stacked-panel authoring rather than a degenerate duplicate.
     private static readonly Vector3[] SlabCenters = [
-        new(x: 0f, y: 0f, z: 0f),
-        new(x: 0f, y: -0.03f, z: 0f),
-        new(x: 0f, y: -0.06f, z: 0f),
+        new(
+            x: 0f,
+            y: 0f,
+            z: 0f
+        ),
+        new(
+            x: 0f,
+            y: -0.03f,
+            z: 0f
+        ),
+        new(
+            x: 0f,
+            y: -0.06f,
+            z: 0f
+        ),
     ];
-    private static readonly Vector3 SlabHalfExtents = new(x: 10f, y: 1f, z: 10f);
+    private static readonly Vector3 SlabHalfExtents = new(
+        x: 10f,
+        y: 1f,
+        z: 10f
+    );
     private static readonly FixedVector3 Down = new(
         X: FixedQ4816.Zero,
         Y: -FixedQ4816.One,
         Z: FixedQ4816.Zero
     );
 
-    private const float PlateBevel = 0.4f;
     // The step scale AnalyzeLipschitz produced while the chamfer factor was a per-chain latch: one √2 however many
     // chamfer compositions the chain held. Kept here ONLY as the falsifier — each march law below runs at it and
     // requires the opposite outcome, which is what proves the law can fail.
     private const float LatchedStepScale = (1.0f / 1.41421356f);
+    private const float PlateBevel = 0.4f;
 
     private static SdfProgram BuildChamferStack(int slabCount, float plateBottomY) {
         var builder = new SdfProgramBuilder();
@@ -118,6 +134,35 @@ public sealed class SdfLipschitzCompositionLawTests {
     }
 
     [Fact]
+    public void ChamferFreeCastIsUnchangedByTheStepClamp() {
+        // The other control: a warp-free program bakes stepScale 1.0f, so its cast advances by the raw field exactly as
+        // it did before the clamp existed — a downward ray from y = 6 onto a box whose top is y = 1 travels 5.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Box(
+            halfExtents: SlabHalfExtents,
+            round: 0f,
+            material: material
+        );
+
+        Assert.True(condition: new SdfFieldEvaluator(program: builder.Build()).Raycast(
+            dir: Down,
+            hit: out var hit,
+            maxDist: FixedQ4816.FromInteger(value: 12L),
+            origin: Position(y: 6.0)
+        ));
+        Assert.Equal(
+            expected: WorldQueryConfidence.Exact,
+            actual: hit.Confidence
+        );
+        Assert.Equal(
+            expected: 5.0,
+            actual: ((double)hit.Distance),
+            tolerance: 0.002
+        );
+    }
+    [Fact]
     public void ChamferFreeProgramKeepsTheUnitStepScale() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -141,37 +186,52 @@ public sealed class SdfLipschitzCompositionLawTests {
         );
     }
     [Fact]
-    public void ChamferStepScaleGrowsPerCompositionFromTheThirdChamfer() {
-        // One chamfer composes against the SDF_FAR_DISTANCE constant (L = 0), so it is the identity: max(0, 1, 1/√2) = 1.
-        Assert.Equal(
-            expected: 1.0f,
-            actual: BuildChamferStack(
-                plateBottomY: -100f,
-                slabCount: 1
-            ).StepScale
-        );
-        // Two chamfers reach exactly √2 — the value the retired per-chain latch reported — so shallow-chamfer content
-        // keeps its step scale to the bit.
-        Assert.Equal(
-            expected: LatchedStepScale,
-            actual: BuildChamferStack(
-                plateBottomY: -100f,
-                slabCount: 2
-            ).StepScale
-        );
+    public void ChamferPopFieldComposesThroughTheSameRecurrence() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        // Three reach 1 + 1/√2 = 1.70711, which the latch cannot express: this is the composition the latch drops.
-        var third = BuildChamferStack(
-            plateBottomY: -100f,
-            slabCount: 3
-        ).StepScale;
+        // Two chamfer-unioned parent shapes (L = √2 by the recurrence), then a scope chamfer-composed back in. A pop is
+        // a composition like any other: max(√2, 1, (√2 + 1)/√2) = 1.70711.
+        _ = builder
+            .Sphere(
+            blend: SdfBlendOp.ChamferUnion,
+            material: material,
+            radius: 1f,
+            smooth: 0.2f
+        )
+            .ResetPoint()
+            .Translate(offset: new Vector3(
+            x: 1f,
+            y: 0f,
+            z: 0f
+        ))
+            .Sphere(
+            blend: SdfBlendOp.ChamferUnion,
+            material: material,
+            radius: 1f,
+            smooth: 0.2f
+        )
+            .ResetPoint()
+            .PushField(
+            compose: SdfBlendOp.ChamferUnion,
+            smooth: 0.2f
+        )
+            .Translate(offset: new Vector3(
+            x: 2f,
+            y: 0f,
+            z: 0f
+        ))
+            .Sphere(
+            radius: 1f,
+            material: material
+        )
+            .PopField();
 
         Assert.Equal(
-            actual: third,
             expected: (1.0f / 1.7071067f),
+            actual: builder.Build().StepScale,
             tolerance: 1.0e-6f
         );
-        Assert.True(condition: (third < LatchedStepScale));
     }
     [Fact]
     public void ChamferStackedPlateIsMarchableAtTheAnalyzedStepScale() {
@@ -265,6 +325,39 @@ public sealed class SdfLipschitzCompositionLawTests {
             tolerance: 0.01
         );
     }
+    [Fact]
+    public void ChamferStepScaleGrowsPerCompositionFromTheThirdChamfer() {
+        // One chamfer composes against the SDF_FAR_DISTANCE constant (L = 0), so it is the identity: max(0, 1, 1/√2) = 1.
+        Assert.Equal(
+            expected: 1.0f,
+            actual: BuildChamferStack(
+                plateBottomY: -100f,
+                slabCount: 1
+            ).StepScale
+        );
+        // Two chamfers reach exactly √2 — the value the retired per-chain latch reported — so shallow-chamfer content
+        // keeps its step scale to the bit.
+        Assert.Equal(
+            expected: LatchedStepScale,
+            actual: BuildChamferStack(
+                plateBottomY: -100f,
+                slabCount: 2
+            ).StepScale
+        );
+
+        // Three reach 1 + 1/√2 = 1.70711, which the latch cannot express: this is the composition the latch drops.
+        var third = BuildChamferStack(
+            plateBottomY: -100f,
+            slabCount: 3
+        ).StepScale;
+
+        Assert.Equal(
+            actual: third,
+            expected: (1.0f / 1.7071067f),
+            tolerance: 1.0e-6f
+        );
+        Assert.True(condition: (third < LatchedStepScale));
+    }
     /// <summary>A radius must be subtracted after the field is scaled. Once that lower bound can no longer prove the
     /// sphere is separated, authoritative queries resolve toward obstruction instead of continuing to a raw-field
     /// threshold that may lie inside the true contact envelope.</summary>
@@ -314,83 +407,6 @@ public sealed class SdfLipschitzCompositionLawTests {
             actual: ((double)hit.Distance),
             high: (trueContactTravel + 0.001),
             low: (trueContactTravel - 0.001)
-        );
-    }
-    [Fact]
-    public void ChamferFreeCastIsUnchangedByTheStepClamp() {
-        // The other control: a warp-free program bakes stepScale 1.0f, so its cast advances by the raw field exactly as
-        // it did before the clamp existed — a downward ray from y = 6 onto a box whose top is y = 1 travels 5.
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = builder.Box(
-            halfExtents: SlabHalfExtents,
-            round: 0f,
-            material: material
-        );
-
-        Assert.True(condition: new SdfFieldEvaluator(program: builder.Build()).Raycast(
-            dir: Down,
-            hit: out var hit,
-            maxDist: FixedQ4816.FromInteger(value: 12L),
-            origin: Position(y: 6.0)
-        ));
-        Assert.Equal(
-            expected: WorldQueryConfidence.Exact,
-            actual: hit.Confidence
-        );
-        Assert.Equal(
-            expected: 5.0,
-            actual: ((double)hit.Distance),
-            tolerance: 0.002
-        );
-    }
-    [Fact]
-    public void ChamferPopFieldComposesThroughTheSameRecurrence() {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        // Two chamfer-unioned parent shapes (L = √2 by the recurrence), then a scope chamfer-composed back in. A pop is
-        // a composition like any other: max(√2, 1, (√2 + 1)/√2) = 1.70711.
-        _ = builder
-            .Sphere(
-            blend: SdfBlendOp.ChamferUnion,
-            material: material,
-            radius: 1f,
-            smooth: 0.2f
-        )
-            .ResetPoint()
-            .Translate(offset: new Vector3(
-            x: 1f,
-            y: 0f,
-            z: 0f
-        ))
-            .Sphere(
-            blend: SdfBlendOp.ChamferUnion,
-            material: material,
-            radius: 1f,
-            smooth: 0.2f
-        )
-            .ResetPoint()
-            .PushField(
-            compose: SdfBlendOp.ChamferUnion,
-            smooth: 0.2f
-        )
-            .Translate(offset: new Vector3(
-            x: 2f,
-            y: 0f,
-            z: 0f
-        ))
-            .Sphere(
-            radius: 1f,
-            material: material
-        )
-            .PopField();
-
-        Assert.Equal(
-            expected: (1.0f / 1.7071067f),
-            actual: builder.Build().StepScale,
-            tolerance: 1.0e-6f
         );
     }
 }

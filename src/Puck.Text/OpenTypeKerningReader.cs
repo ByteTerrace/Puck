@@ -39,7 +39,7 @@ internal static class OpenTypeKerningReader {
             pairs[pair] = accumulated;
         }
     }
-    private static IReadOnlyList<(ushort Glyph, int CoverageIndex)> ReadCoverage(ReadOnlySpan<byte> bytes, int coverageOffset) {
+    private static IReadOnlyList<(ushort Glyph, int CoverageIndex)> ReadCoverage(ReadOnlySpan<byte> bytes, int coverageOffset, FontGenerationBudget? budget) {
         var format = OpenTypeFontFace.ReadUInt16(
             bytes: bytes,
             context: "GPOS coverage format",
@@ -55,6 +55,7 @@ internal static class OpenTypeKerningReader {
                         offset: (coverageOffset + 2)
                     );
 
+                    budget?.Work(amount: glyphCount);
                     for (var index = 0; (index < glyphCount); index++) {
                         covered.Add(item: (
                             Glyph: OpenTypeFontFace.ReadUInt16(
@@ -75,6 +76,7 @@ internal static class OpenTypeKerningReader {
                         offset: (coverageOffset + 2)
                     );
 
+                    budget?.Work(amount: rangeCount);
                     for (var index = 0; (index < rangeCount); index++) {
                         var rangeOffset = checked(((coverageOffset + 4) + (index * 6)));
                         var start = OpenTypeFontFace.ReadUInt16(
@@ -103,6 +105,7 @@ internal static class OpenTypeKerningReader {
                             throw new InvalidDataException(message: "A GPOS coverage table exceeds Puck's supported size.");
                         }
 
+                        budget?.Work(amount: rangeLength);
                         for (var glyph = ((int)start); (glyph <= end); glyph++) {
                             covered.Add(item: (
                                 Glyph: ((ushort)glyph),
@@ -195,7 +198,7 @@ internal static class OpenTypeKerningReader {
                 throw new InvalidDataException(message: "The font's GPOS class definition declares an unsupported format.");
         }
     }
-    private static bool ReadGpos(ReadOnlySpan<byte> bytes, HashSet<ushort> included, Dictionary<GlyphPair, int> pairs) {
+    private static bool ReadGpos(ReadOnlySpan<byte> bytes, HashSet<ushort> included, Dictionary<GlyphPair, int> pairs, FontGenerationBudget? budget) {
         var major = OpenTypeFontFace.ReadUInt16(
             bytes: bytes,
             context: "GPOS version",
@@ -233,6 +236,7 @@ internal static class OpenTypeKerningReader {
         // ScriptList/LangSys selection belongs to the future shaping layer; until then, a font carrying distinct
         // language-specific kern features can be over-flattened here (documented on Puck.Text's support boundary).
         for (var featureIndex = 0; (featureIndex < featureCount); featureIndex++) {
+            budget?.Work();
             var recordOffset = checked(((featureListOffset + 2) + (featureIndex * 6)));
             var tag = OpenTypeFontFace.ReadUInt32(
                 bytes: bytes,
@@ -256,6 +260,7 @@ internal static class OpenTypeKerningReader {
             );
 
             for (var index = 0; (index < lookupIndexCount); index++) {
+                budget?.Work();
                 _ = lookupIndices.Add(item: OpenTypeFontFace.ReadUInt16(
                     bytes: bytes,
                     context: "GPOS feature lookup index",
@@ -287,6 +292,7 @@ internal static class OpenTypeKerningReader {
             var lookupPairs = new Dictionary<GlyphPair, int>();
 
             for (var index = 0; (index < subtableCount); index++) {
+                budget?.Work();
                 var subtableOffset = checked((lookupOffset + OpenTypeFontFace.ReadUInt16(
                     bytes: bytes,
                     context: "GPOS lookup subtable offset",
@@ -296,6 +302,7 @@ internal static class OpenTypeKerningReader {
                 switch (lookupType) {
                     case PairPositioningLookupType:
                         ReadPairPositioning(
+                            budget: budget,
                             bytes: bytes,
                             included: included,
                             matches: lookupPairs,
@@ -327,6 +334,7 @@ internal static class OpenTypeKerningReader {
                                 );
 
                                 ReadPairPositioning(
+                                    budget: budget,
                                     bytes: bytes,
                                     included: included,
                                     matches: lookupPairs,
@@ -358,7 +366,7 @@ internal static class OpenTypeKerningReader {
     }
     // The Windows-layout horizontal 'kern' table, format 0 subtables only; vertical, cross-stream, and Apple
     // extended layouts contribute nothing.
-    private static void ReadLegacyKern(ReadOnlySpan<byte> bytes, HashSet<ushort> included, Dictionary<GlyphPair, int> pairs) {
+    private static void ReadLegacyKern(ReadOnlySpan<byte> bytes, HashSet<ushort> included, Dictionary<GlyphPair, int> pairs, FontGenerationBudget? budget) {
         var version = OpenTypeFontFace.ReadUInt16(
             bytes: bytes,
             context: "kern table version",
@@ -437,6 +445,7 @@ internal static class OpenTypeKerningReader {
                 var overridesEarlierValues = ((coverage & OverrideKern) != 0);
 
                 for (var index = 0; (index < pairCount); index++) {
+                    budget?.Work();
                     var pairOffset = checked(((offset + 14) + (index * 6)));
                     var left = OpenTypeFontFace.ReadUInt16(
                         bytes: bytes,
@@ -466,6 +475,8 @@ internal static class OpenTypeKerningReader {
                         Right: right
                     );
 
+                    budget?.KerningPairs();
+
                     if (overridesEarlierValues) {
                         if (value == 0) {
                             _ = pairs.Remove(key: pair);
@@ -485,7 +496,7 @@ internal static class OpenTypeKerningReader {
             offset = checked((offset + length));
         }
     }
-    private static void ReadPairPositioning(ReadOnlySpan<byte> bytes, HashSet<ushort> included, Dictionary<GlyphPair, int> matches, int subtableOffset) {
+    private static void ReadPairPositioning(ReadOnlySpan<byte> bytes, HashSet<ushort> included, Dictionary<GlyphPair, int> matches, int subtableOffset, FontGenerationBudget? budget) {
         var format = OpenTypeFontFace.ReadUInt16(
             bytes: bytes,
             context: "GPOS pair subtable format",
@@ -512,6 +523,7 @@ internal static class OpenTypeKerningReader {
         var xAdvanceOffset = XAdvanceFieldOffset(valueFormat: valueFormat1);
         var hasXAdvance = ((valueFormat1 & XAdvanceBit) != 0);
         var coverage = ReadCoverage(
+            budget: budget,
             bytes: bytes,
             coverageOffset: coverageOffset
         );
@@ -526,6 +538,7 @@ internal static class OpenTypeKerningReader {
                     var recordSize = ((2 + record1Size) + record2Size);
 
                     foreach (var (glyph, coverageIndex) in coverage) {
+                        budget?.Work();
                         if (
                             (coverageIndex >= pairSetCount) ||
                             !included.Contains(item: glyph)
@@ -545,6 +558,7 @@ internal static class OpenTypeKerningReader {
                         );
 
                         for (var index = 0; (index < pairValueCount); index++) {
+                            budget?.Work();
                             var recordOffset = checked(((pairSetOffset + 2) + (index * recordSize)));
                             var second = OpenTypeFontFace.ReadUInt16(
                                 bytes: bytes,
@@ -565,6 +579,7 @@ internal static class OpenTypeKerningReader {
                                 : 0
                             );
 
+                            budget?.KerningPairs();
                             _ = matches.TryAdd(
                                 key: new GlyphPair(
                                     Left: glyph,
@@ -602,6 +617,7 @@ internal static class OpenTypeKerningReader {
                     var rightClasses = new List<(ushort Glyph, ushort Class)>(capacity: included.Count);
 
                     foreach (var glyph in included) {
+                        budget?.Work();
                         var glyphClass = ReadGlyphClass(
                             bytes: bytes,
                             classDefOffset: classDef2Offset,
@@ -614,6 +630,7 @@ internal static class OpenTypeKerningReader {
                     }
 
                     foreach (var (glyph, _) in coverage) {
+                        budget?.Work();
                         if (!included.Contains(item: glyph)) {
                             continue;
                         }
@@ -631,6 +648,7 @@ internal static class OpenTypeKerningReader {
                         var rowOffset = checked(((subtableOffset + 16) + ((class1 * class2Count) * recordSize)));
 
                         foreach (var (rightGlyph, class2) in rightClasses) {
+                            budget?.KerningPairs();
                             var xAdvance = (hasXAdvance
                                 ? OpenTypeFontFace.ReadInt16(
                                     bytes: bytes,
@@ -666,12 +684,14 @@ internal static class OpenTypeKerningReader {
     public static IReadOnlyList<OpenTypeKerningPair> Read(
         ReadOnlyMemory<byte> gpos,
         ReadOnlyMemory<byte> kern,
-        IReadOnlyCollection<ushort> includedGlyphs
+        IReadOnlyCollection<ushort> includedGlyphs,
+        FontGenerationBudget? budget = null
     ) {
         var included = new HashSet<ushort>(collection: includedGlyphs);
         var pairs = new Dictionary<GlyphPair, int>();
 
         var hasGposPairs = (!gpos.IsEmpty && ReadGpos(
+            budget: budget,
             bytes: gpos.Span,
             included: included,
             pairs: pairs
@@ -682,6 +702,7 @@ internal static class OpenTypeKerningReader {
             !kern.IsEmpty
         ) {
             ReadLegacyKern(
+                budget: budget,
                 bytes: kern.Span,
                 included: included,
                 pairs: pairs

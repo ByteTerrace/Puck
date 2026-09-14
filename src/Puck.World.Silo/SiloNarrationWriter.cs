@@ -13,13 +13,13 @@ namespace Puck.World.Silo;
 /// <remarks>Only the whole-line write path (<see cref="WriteLine(string?)"/>/<see cref="WriteLine()"/>) is tagged —
 /// every engine narration call in this codebase writes one complete line per call.</remarks>
 internal sealed class SiloNarrationWriter(TextWriter inner) : TextWriter {
-    /// <inheritdoc/>
-    public override Encoding Encoding => inner.Encoding;
-
     private static string Prefix => ((WorldNarrationScope.Current is { Length: > 0 } scope)
         ? $"[{scope}] "
         : "[silo] "
     );
+
+    /// <inheritdoc/>
+    public override Encoding Encoding => inner.Encoding;
 
     /// <inheritdoc/>
     public override void Flush() => inner.Flush();

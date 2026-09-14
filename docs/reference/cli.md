@@ -1,0 +1,1356 @@
+# Puck.Cli
+
+Normal builds generate the registered world JSON and shader bytecode from their
+tracked parents. See [generated assets](../../build/README.md) for build,
+source-control, and packaging rules.
+
+Puck.Cli provides the `puck` developer command line. Its commands share the
+System.CommandLine tree declared in `PuckRootCommand.cs`:
+
+| Verb | What it is |
+|---|---|
+| [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
+| [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
+| [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
+| [`puck docs`](#automation-commands) | build and stage the website documentation. |
+| [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
+| [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
+| [`puck world`](#automation-commands) | prepare hosted world documents, prepare release manifests, inspect deployment-group state, or probe a QUIC endpoint. |
+| [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
+| [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator --attach <attachment file>`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape installs the optional host extension, and standalone silo and World have no MCP dependency. MCP 2026-07-28. |
+| [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
+| [`puck citations`](#puck-citationscited-verb-token-check) | checks every verb-shaped token skills and XML docs cite against vocabularies swept from the code, including a live `Puck.World` console boot. |
+| [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
+| [`puck bench`](#puck-benchthe-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` is the `Puck.World.Server` tick-path stopwatch lane. |
+| [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
+| [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1`, checked and regenerated. |
+| [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
+| [`puck registry`](#puck-registryworld-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
+| [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--bundle` inlines world imports, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`. |
+| [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror. |
+| [`puck fmt`](#the-puck-dsl-verbs) | formats `.puck` sources (distinct from `puck format`, which rewrites this repository's C#). |
+| [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
+| [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting. |
+| [`puck format`](#puck-formatsource-rewriters) | source rewriters for the conventions `.editorconfig` cannot express; `format ci` prepares a PR's patch and `format submit` is CI's trusted applier. |
+| [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
+| [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
+| [`puck shaders`](#puck-shadersshader-compilation) | `shaders compile` compiles a source stage; `shaders pipeline` validates or compiles connected passes for both GPU backends. |
+| [`puck references`](#puck-referencessemantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
+| [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
+| [`puck lengths`](#puck-lengthsfile-length-ledger) | checks or regenerates `FileLengths.json`, the ledger the file-length build error (LEN001–LEN004) reads; the ledger only shrinks. |
+| [`puck packages`](#puck-packagespublished-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report—id/description/tags—checked and regenerated against `docs/site/index.html`. |
+| [`puck wasm-stdlib`](#puck-wasm-stdlibwasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library—currently `FixedQ4816`'s Rust port and known-answer vectors. |
+| [`puck worktree-base`](#puck-worktree-baseworktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
+| [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
+
+Unlike its retired `tools/` predecessors, this project is a **first-class member
+of `Puck.slnx`** and joins the full root build regime (warnings-as-errors,
+analyzers, code-metric ceilings, doc generation, committed `packages.lock.json`).
+
+**One parser, one grammar.** `-h`/`--help` answers on the root and on every verb
+and sub-verb; option spellings are exact. A usage error—no verb, an unknown
+verb or option, a missing required option, an option-looking token where a value
+belongs—prints the parse errors and `Run 'puck <verb> --help' for usage.` on
+stderr and exits 2, so verbs keep 1 for a failed check and 0 for success. Output
+is UTF-8 on both streams regardless of the host console's code page, so a
+non-ASCII source line survives being captured to a file.
+
+**Path resolution is uniform.** Every verb resolves a relative path against the
+**working directory**; an absolute path is used as given. (`scan` anchors its
+`artifacts/scan` default and its shader-referent tree at the repository root—
+found by walking up for `Puck.slnx`, and only looked up when one of those two
+defaults is actually live—because those name repo conventions, not the
+argument. `wasm-stdlib` anchors the same way: it takes no path argument at all,
+because every registered artifact's path (e.g. `wasm/puck-stdlib/src`) is a
+repo convention, not something a caller supplies.) Reporting anchors are the
+one asymmetry: `scan` records name files relative to the scan root, while the
+other verbs print working-directory-relative paths.
+
+## Publishing
+
+The installable package is `ByteTerrace.Puck.Cli`, a .NET tool whose command is
+`puck`. Its version comes from the same `build/Packaging.targets` as the libraries.
+`puck --version` reports the running CLI's version and source revision;
+`puck nuget version` reads the release version from the current checkout.
+See [the CLI used by CI](../development/ci.md#the-cli-used-by-ci) for candidate
+installation, package installation checks, and release adoption.
+
+To build the candidate directly for local development:
+
+```sh
+dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
+```
+
+produces `src/Puck.Cli/publish/puck.exe` on Windows or `src/Puck.Cli/publish/puck`
+elsewhere—a framework-dependent .NET executable. A trivial invocation costs
+~0.18 s wall (measured quiet), cheap enough to call per query
+though not per file.
+Do not attempt AOT: the search engine's F# runtime dependency and the
+BenchmarkDotNet host code both preclude it. `publish/` is git-ignored.
+
+The publish layout carries a `BuildHost-netcore/` directory (and its `net472`
+sibling) beside the executable. That is the out-of-process build host
+`references` launches to load the project graph; it arrives as package
+`contentFiles` copied to the output. Adding `ExcludeAssets` or
+`PrivateAssets=contentfiles` to either workspace package reference would silently
+remove it and break every `references` run.
+
+---
+
+## `puck firmware`—bundled boot images
+
+Firmware images are generated release inputs. Rebuild them explicitly after changing their maintained source;
+ordinary emulator builds consume the checked-in images without depending on Forge or a native compiler.
+From a clean checkout, use `dotnet run --project src/Puck.Cli -c Release -- firmware ...` in place of `puck firmware ...`.
+
+```sh
+puck firmware hgb --output src/Puck.HumbleGamingBrick/Firmware
+puck firmware hgb --output src/Puck.HumbleGamingBrick/Firmware --verify
+puck firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang <clang-executable> --linker <ld.lld-executable>
+puck firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang <clang-executable> --linker <ld.lld-executable> --verify
+```
+
+The HGB command runs `BootRomBuilder.Build` with the compatible cartridge policy for every `ConsoleModel`.
+Each image uses its lowercase revision name, such as `dmg0.bin` or `cgbd.bin`.
+The AGB command builds the maintained freestanding C and ARM sources with Clang's `armv4t-none-eabi` target
+and links them with the source directory's `firmware.ld`. Supply native compiler and ELF-linker executable paths;
+no shell, downloaded toolchain, or system C library is involved. Object files and the linked candidate live in a
+fresh temporary directory that the command removes after either success or failure. The candidate must be exactly 16 KiB.
+
+Both commands report SHA-256 hashes. `--verify` rebuilds and compares bytes without creating or repairing the output;
+missing files or different bytes exit 1, and invalid command syntax exits 2. A successful comparison proves reproducible
+generation with that source and toolchain, not hardware compatibility. Emulator and firmware execution tests own that claim.
+
+## Automation commands
+
+```sh
+puck artifacts capture | restore | test-windows | test-world
+puck docs build [output-directory]
+puck bundle create <directory> <commit>
+puck bundle verify <directory> <commit>
+puck world prepare <worlds-directory> <output-directory>
+puck world release prepare <package-directory> --silo <silo.json> --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
+puck world release status [group-file] [--json]
+puck world release finalize
+puck world release resume
+puck world release deploy <package-directory> [--operation <id>]
+puck world release rollback [--operation <id>]
+puck azure prepare-world-release [--output-directory <package-directory>]
+puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>]
+puck world probe <host> <port> <public-key-file>
+puck wasm build
+```
+
+`artifacts capture` archives one build's compiled Release outputs with their
+source identity so consumer jobs restore rather than recompile; `restore` extracts
+that archive into place, and the two test sub-verbs run the archived assemblies
+through the producer's manifest. `docs build` runs the pinned DocFX tool and stages `/reference/` and `/_theme/`;
+use an output directory without those prefixes. `bundle create` writes a stable
+deployment manifest containing the source commit and every file's SHA-256.
+`bundle verify` checks provenance, containment, hashes, and the complete inventory,
+including hidden files.
+
+`world prepare` uses the engine's composer and validator to package Puck and its
+referenced neighbours under canonical hosted file names. It rebases provider-declared
+asset paths from nested documents to the common worlds directory; the image retains
+the neighbouring asset directories. `world probe` checks
+QUIC reachability and the endpoint's expected public key; it requires QUIC support
+and contacts the supplied host. `wasm build` invokes Cargo and refreshes the
+committed default addon, printing the content hash needed by its document rows.
+`world release prepare` loads the validated silo inventory, requires one canonical
+composed `*.world.json` output for every owner/world row, and writes a
+content-addressed manifest after hashing those definitions and the remaining
+package artifacts. Stable owner/world identities and package paths are recorded
+separately; authored `.puck` inputs are artifacts and are never treated as ready
+definitions. New manifests require `puck.world.release.restore.v1` coordinator
+support, including receipt-aware qualification and closed-group rewind enforcement.
+Official preparation and bootstrap read composed published definitions, allowing
+unfilled boot draws. Bootstrap retries compare exact published bytes, without
+running those draws or comparing them with a newly initialized world.
+`world release status` reads the managed group for the world silo
+named in the existing Azure deployment outputs. It reports the active and previous
+releases, admission, rollback eligibility, pending phase, recovery scope, and next
+operator action. Supply a saved group file for offline inspection; add `--json`
+for the complete validated record plus the next action. A deployment without a
+managed group is reported explicitly and returns exit code 2.
+Release command failures print a concise `world release:` diagnostic and return
+exit code 1; cancellation returns 130. A failed or canceled mutation directs the
+operator to inspect `status` and use `resume` for unfinished work. Neither an exit
+code nor a lost response establishes whether the durable operation committed.
+`world release checkpoint [--request <guid>]` captures a coherent recovery point
+without stopping gameplay and prints its request ID, capture time, and world ticks.
+It requires a managed closed group; older qualification captures without durable
+boundary proof cannot be used for intentional rewind. `world release restore
+<recovery-point>` previews the saved release and ticks against current durable
+ticks. Add `--discard-progress` to explicitly rewind the entire group, and optionally
+`--operation <guid>` to identify that operation. Current request receipts survive;
+the same `status` and `resume` commands handle interruption. The implementation is
+under local acceptance and has not been accepted on Azure.
+`world release finalize` closes the current admitted rollback window with a
+guarded group write. It preserves gameplay, recovery history, and retained
+artifacts. Repeating it after finalization succeeds without another mutation;
+an uncommitted or closed deployment refuses. It uses the same configured Azure
+group as `status`, and acquires the deployment controller lease before its write.
+`world release resume` reads the configured group's pending operation and resumes
+that exact source and target. It loads verified retained packages, a pinned Key
+Vault secret version containing deployment inputs, and the retained compute
+template. It never substitutes the latest secret value or the current checkout's
+template. Missing or conflicting retained inputs refuse before a worker effect.
+A recovered source is reported as a failed deployment, not a successful upgrade.
+
+`world release deploy` verifies the package, retains its files and versioned
+deployment inputs, protects and pulls the exact source and target registry
+digests, and runs qualification before entering the coordinator. Repeating a
+pending target resumes it; another target refuses. A previous rollback window
+must be finalized before a third release. Bootstrap refuses existing unmanaged
+workers and persisted gameplay. `azure deploy-world` uses this same transaction.
+Deployment automatically exports all source worlds at one simulation boundary.
+The worker retains complete immutable checkpoints, and the CLI builds an isolated
+fixture with the captured machine identity and fresh test signing keys. Source
+admission stays open during export and qualification. A lost export response can
+reuse its stable request ID; partial uploads have no published inventory. Bootstrap
+builds its empty fixture from the retained package. Managed deploy does not accept
+a replacement fixture that could omit uncapturable live state. Each export also
+pins the receipt index and chain selected in the checkpoint's publication queue.
+Materialization retains those exact bytes and their sequence meaning under a new
+unowned root. A legacy export without receipt proof requires a fresh capture from
+a source worker that supports receipt history; absence never means empty history.
+
+`world release rollback` selects the retained predecessor, exports current source
+state, and qualifies the reverse pair before entering the same drain and cutover
+transaction. It preserves progress earned since deployment. A pending operation
+requires `resume`; an absent or finalized rollback window refuses. `--operation`
+sets a stable operation ID for diagnostics. Explicit restore selects a retained
+closed-group recovery point and requires `--discard-progress`. The Azure activation adapter has an atomic metadata
+definition publisher, guarded by the operation and exact drained root, with
+receipt-based retries. Metadata-only definition changes can proceed after
+packaged qualification exercises the same forward and reverse transformation.
+Changes to other definition sections, packaged dependencies, or metadata conflicts
+found in the exported state refuse before the serving release drains. Activation
+rechecks the actual drained checkpoint; a later conflict follows pre-commit recovery.
+Newly prepared packages carry a coordinator contract automatically. Use current
+tooling to deploy or resume them; an older archive reader can report a noncanonical
+manifest when it encounters this requirement. Update the CLI rather than editing
+or regenerating the retained manifest. Legacy manifest identities remain valid.
+
+`azure prepare-world-release` applies the official endpoint and delegated
+admission bindings to the staged composed worlds, then hashes the complete
+inventory. It reads the deployment outputs, `artifacts/release-source.json`, image digest,
+and `artifacts/azure/silo-worlds`. Every world is pinned with its own retained
+signing key at deployment. Temporary preparation keys are never packaged.
+
+Deploy, rollback, resume, and finalization use a renewable Azure Blob lease to exclude competing
+controllers. Losing ownership cancels the CLI's child processes and closes its
+next-effect checks; the durable operation remains available for a later resume.
+This controller lease complements the world's authority fences and publication
+barrier. Guest mutations also serialize with bootstrap under a VM lock and check
+the durable operation after waiting, refusing stale phases or release identities.
+The bootstrap waits for private health; only the coordinator opens admission.
+These checks do not retract an Azure operation already accepted by the service;
+full cloud interruption acceptance testing remains required.
+
+`world release qualify` runs four isolated Docker legs over a marked, coherent
+offline fixture: both packages import the source state, then both import the
+candidate's saved continuation. Complete checkpoint hashes must agree for each
+pair of imports, and every leg must advance simulation and save successfully.
+For metadata changes, both manifests must sit at their package roots with their
+declared files present. The command retains and verifies those exact package
+bytes, applies the deployment publisher to a disposable forward copy, and makes
+both images import it. It then reverses the authored delta over B's saved
+continuation before both reverse imports. Evidence retains the original seed,
+both transformed copies and their hashes; the source fixture stays intact.
+The runner resolves each image against its manifest digest, uses that immutable
+image identity, disables container networking, and mounts only a fresh fixture
+copy. It retains the copied state and evidence under a unique output directory.
+Equal contract labels or an operator-authored receipt cannot replace these runs.
+
+Each image emits `puck.world.qualification-exercise.v2`: it inventories every
+captured receipt before activation, looks up each original decision after import
+and continuation, and checks duplicate and conflicting retries after draining.
+Retries must leave the authority root unchanged. The runner independently computes
+the expected inventory hash before starting each leg and refuses missing or
+mismatched proof. Newly written receipts remain available to the reverse legs.
+
+The fixture contains `qualification.fixture` with `puck.world.qualification.v1`,
+a local `<fixture-directory>/silo.json` with the exact pinned release inventory, per-world signing
+keys inside the fixture, `store/` with coherent authority state and required
+neighbour definitions, and `state/` with the owned-world catalog. It must have
+no production release binding or authentication provider. The inner
+`world release exercise <fixture-directory> [--steps <count>]` command belongs
+to this isolated runner: it opens the fixture's own admission gate and advances
+the normal silo simulation. Do not point it at a live store. These tests cover
+the supplied states; qualifying new gameplay values still requires representative
+fixtures that reach those values. Machine and addon state that the checkpoint
+contract cannot capture rejects qualification.
+Rollback and restore remain hosted maintenance operations
+until their coordinator can perform the corresponding guarded storage and
+admission transitions.
+Azure credentials, deployment ordering, and access restoration belong to
+[`puck azure`](../development/ci.md#azure-production-deployment), which reaches these
+verbs in process.
+
+## `puck official`—the local official tree producer
+
+```sh
+puck official build --out <dir> --channel <name> --engine <AppBundle dir> [--worlds <dir>] [--allow-dirty]
+puck official verify --base <dir> --channel <name> [--expect-commit <hex>]
+puck official serve --tree <dir> [--port 61102]
+```
+
+Writes, serves, and verifies a `puck.official.manifest.v1` tree: the shipped browser-wasm
+engine (a `dotnet publish src/Puck.World.Browser -c Release`
+AppBundle), the world schema bundle (the same `WorldSchema.Export`/`Bundle` path
+`puck schema --bundle` uses), every world document under the worlds directory,
+the one fully-composed root world (`puck.world.json`, resolved through its whole
+basis-and-imports graph, parsed, migrated, validated, and re-serialized), and
+every off-disk asset a music/table/tune/patch row references—all
+content-addressed under `<out>/objects/sha256/<hex[0..2]>/<hex64>` (the same
+layout `puck publish`'s dry-run and `Puck.Launcher.Release.DirectoryReleaseSource`
+already read) and hash-checked, so `verify` and a client both catch a mismatch
+by name. `build` refuses unless `puck schema --check` and `puck registry --check`
+both pass, and unless the working tree is clean (or `--allow-dirty` is given).
+No sub-verb here uploads, signs, or drives a GitHub workflow—publishing a
+signed release to a real channel is a separate, later concern.
+
+---
+
+## `puck font-atlas`—managed SDF font artifacts
+
+`puck font-atlas` turns an OpenType font or collection into the same
+loader-compatible SDF atlas that `Puck.World` can generate in process. The CLI
+and runtime share `ManagedFontAtlasGenerator`; there is no Python or native
+rasterizer hiding behind the command.
+
+```text
+puck font-atlas fonts/Inter-Regular.ttf \
+  --range U+0020-U+007E \
+  --range U+00A0-U+024F \
+  --face-index 0 \
+  --size 48 \
+  --output artifacts/inter-regular.json
+```
+
+The output path names the JSON metadata. A PNG with the same base name is
+written beside it. Ranges are repeatable and use the same syntax as world font
+definitions; `--range "*"` requests every mapped Basic Multilingual Plane
+scalar. The command also exposes the raster size, signed-distance range,
+padding, preferred columns, and atlas dimension and pixel limits through the
+options listed by `puck font-atlas --help`.
+
+Standalone OpenType fonts and TTC/OTC collections are accepted with TrueType
+quadratic or CFF/CFF2 cubic outlines. `--face-index` explicitly selects a
+zero-based collection face and defaults to 0. CFF2 variable outlines use their
+default design coordinates. Complex-script shaping remains a separate layer;
+generated atlases preserve source glyph IDs for it.
+
+---
+
+## `puck shaders`—shader compilation
+
+```sh
+puck shaders compile <source> --out <directory> [--name <name>] [--toolchain <directory>] [--language hlsl|glsl|shadertoy] [--stage compute|vertex|fragment] [--entry <name>]
+puck shaders pipeline <source> [--inspect] [--toolchain <directory>] [--cache <directory>]
+```
+
+`compile` writes SPIR-V and DXIL for one source stage. A `.glsl` file defaults
+to the Shadertoy adapter; HLSL uses an explicit stage entry point. `pipeline`
+loads a pipeline document or synthesizes a one-pass pipeline from a shader,
+validates its resource graph, and compiles every planned pass. `--inspect`
+prints the execution order, dependencies and named outputs without compiling
+shaders or creating a GPU device. Compilation errors return exit code 1 and
+identify the source location.
+
+These commands use the same compiler and loader as live World pipelines.
+The [shader README](../Puck.Shaders/README.md#shader-pipelines-and-live-development)
+owns the source-language, resource and toolchain contracts.
+## `puck canary`—real-World behavioral proofs
+
+`puck canary` is deliberately narrow: it runs deterministic stdin-driven
+behavioral proofs that fit a strict transcript vocabulary. Every manifest owns
+a positive leg and an executable discriminating leg; both start from fresh
+state, and the positive observation must turn red under the discriminator while
+the declared opposite observation holds. The runner builds `Puck.World` once,
+runs that exact artifact sequentially, keeps stdout and stderr separate, pins
+BOM-less UTF-8 stdin, closes the pipe, drains both streams, checks the absolute
+`--world` boot-origin line, enforces per-leg and whole-suite budgets, and kills
+the process tree on timeout.
+
+A `bootShape: "stub"` manifest is the one exception to "runs that exact
+artifact sequentially": its leg runs through `Puck.Launcher.Stub` from a
+leg-private, disposable `<run>/install/` tree, never the shared build path,
+and observes two successive process launches rather than one—the
+`self-update` canary is the only user today.
+
+```text
+puck canary                         run the automatic set (headless, no environmental requirements)
+puck canary <id> ...                explicitly run named proofs
+puck canary --all                   explicitly run every proof; does not change automatic eligibility
+puck canary --list                  strictly load and list manifests without building or running
+puck canary --capability <class>    filter automatic/headless/windowed or an environmental requirement
+```
+
+The selection forms are mutually exclusive and every execution selection must
+be nonempty. Manifest tokens are case-sensitive. Every non-comment script
+command declares `accepted` or intentionally expected `refused`, bound to its
+verb and occurrence; an accepted claim may add `"stream": "stderr"` to expect
+its confirmation there instead of stdout—the shape server narration
+(`[world.grant: …]`, `[world.revoke: …]`) always uses regardless of
+accept/refuse, unlike an ordinary accepted command's stdout read-back.
+Assertions cover stream-specific exact/contained lines, verb/occurrence/
+exact-cardinality responses, ordered sequences, named response field
+extraction, equality/inequality, inclusive bounds, minimum margins,
+byte-level file equality/inequality (`filesDiffer`), and image agreement
+between two captured frames (`framesAgree`, stating `agree` explicitly—
+`CanaryFrameNoise` counts the pixels that moved by at least 2 LSB and compares
+that against a 64-pixel noise budget). Two live windowed captures of identical
+simulation state are never bit-equal: silhouette shading carries ±1-LSB
+variance, so a byte comparison of two live frames reports a difference on
+roughly one run in three. A frame proof therefore states `framesAgree`, never
+`filesDiffer`, over a `.png` pair; `filesDiffer` remains the right shape for a
+file whose bytes really are the claim. Note this is NOT the relaxed parity
+envelope `puck parity` uses: that guards a whole-frame mean, which a body
+relocation covering a fraction of a percent of the frame slips under.
+A manifest may start a companion authority
+world, pass its allocated endpoint through `connect`, and use `{run}` in scripts
+and assertions for per-leg capture paths. There are no regex programs, loops,
+callbacks, conditionals, shell, or embedded scripts.
+Exit codes are 0 for all proofs held, 1 for an observed proof failure, and 2 for
+usage, manifest, build, or infrastructure refusal.
+
+A leg may instead declare `authorities`: an array of `{id, world, script}`
+naming at least two listeners, none dialing out—the N-ary generalization of
+the singular `authorityWorld`/`connect` companion pair above, mutually
+exclusive with it. Every entry gets its own dynamically allocated loopback
+endpoint and generated federation identity, pinned into every other entry's
+admission rows the same way a two-process leg's companion is; the entries
+launch concurrently and run to completion before any assertion reads a
+transcript. Exactly one entry's `world`/`script` must equal the leg's own—
+the entry an assertion with no `authority` selector reads by default—and a
+`line`/`response`/`sequence` assertion may add `"authority": "<id>"` to read
+a different entry's transcript instead. A federated leg's `seconds`/
+`timeoutSeconds` ceilings are wider (concurrently-spawned processes on a
+shared machine see real spawn/handshake variance a single process does not).
+`tests/Puck.World.Canaries/addon-mutation-seam` is the `stream` override's
+first user; `tests/Puck.World.Canaries/four-corners-sharded` is `authorities`'
+first user—five real processes (four ground worlds plus the floating
+island), one human-driven body ringing all four ground authorities. Not yet
+expressible in that same canary, owed to future widening rather than a
+runner limitation: vertical/island crossing, retained dual-stick camera and
+movement control across a handoff, autonomous producer-driven travellers,
+derived diagonal corner peers, and a cross-authority contact-pair settling
+observation. A killed or mispointed authority turning the corresponding
+transfer/address observation red is out of scope for any two-leg manifest
+by the format's own rule (a manifest is exactly `positive`/`discriminating`);
+a Silo-hosted (rather than `dotnet run`) authority entry is a documented
+future transport arm, not a reshape of `authorities`' current members.
+
+---
+
+## `puck parity`—cross-backend parity over the authored parity world
+
+The runner builds into its own scratch directory before starting either
+backend. An open world using the normal build output does not block this
+build. Build stdout and stderr remain beside the capture transcripts.
+
+`puck parity` boots `tests/Puck.Parity/parity.world.json` once per graphics
+backend (Vulkan, Direct3D 12) with `host.presentation: offscreen`—no window
+is shown—and lets the world's own `captures` rows land every tick-scheduled
+capture and write a `puck.parity.manifest.v1`. Because both backends capture
+the same simulation ticks, each pair observes one moment by construction.
+The two manifest directories are then compared by `puck parity compare` under
+the contract versioned beside the world
+(`tests/Puck.Parity/parity.contract.json`).
+
+```text
+puck parity                                            full run: both backends, then compare
+puck parity compare <leftDir> <rightDir> --contract <file> [--out <dir>]   compare two captured runs
+```
+
+Per capture, three independent verdicts, in order:
+
+1. **Content gate**—a capture refused as camera-inside-geometry
+   (`map(cameraPos) <= 0`), missing, or below its station's census floor never
+   reaches comparison: agreement between degenerate frames is vacuous.
+2. **State verdict**—`stateHash` equality, exact, no envelope. A one-bit
+   sim-state divergence is a defect, never noise.
+3. **Pixel verdict**—per-tile mean/max deltas against the station's contract
+   thresholds. A localized defect cannot dilute itself across a whole-frame
+   mean.
+
+Failures write both frames, a per-pixel delta heatmap, and a per-verdict
+summary into the run's `evidence/` directory—a red names its tile and shows
+its pixels. There are no stored baselines: both runs come from the same build,
+so content changes cannot fail the check, only a cross-backend divergence can.
+The runner builds `Puck.World` once, runs each leg from fresh state with its
+own `--state-dir`, and requires every scripted command accepted
+(`wire.errors` closes each transcript with zero rejections). It needs both
+GPU devices but takes over no display. Exit codes: 0 every capture held all
+three verdicts, 2 a verdict failed or a leg/build refused, 3 malformed
+manifest or contract.
+
+---
+
+## `puck citations`—cited verb token check
+
+Sweeps `.claude/skills/**/*.md` for `` `backticked` `` tokens and `src/**/*.cs`
+for `<c>…</c>` tokens, keeps those shaped like a console verb (a family the
+console actually uses, dotted), and resolves each against: the console-verb
+enumeration, verb names spelled literally in registrations, every other
+verb-shaped string literal under `src/`, and every world-document field path
+the generated section schemas under `src/Puck.World/Assets/worlds/schema/`
+declare (`storage.userId`, `audio.masterGain`)—a document field is cited
+exactly like a verb and the generated schema is the vocabulary that cannot
+drift from the shape.
+
+```text
+puck citations                       enumerate the console live, then check every citation
+puck citations --enumeration <path>  check against a supplied verb list (one name per line) instead
+```
+
+With no `--enumeration`, the console-verb vocabulary is booted rather than
+read from a file: this verb builds `Puck.World` once (Release) and runs it
+twice—headless, then windowed—piping `help` over stdin to each and
+unioning the two vocabularies, because some command modules register only
+under one boot shape. If a verb spelled literally in a registration is absent
+from that union, the run refuses (exit 3) rather than report—checking
+citations against an incomplete vocabulary would accuse correct documentation
+of quoting dead verbs.
+
+Exit codes: 0 every citation resolved, 1 unresolved citations (each named),
+2 usage error, no repository root, or the enumeration boot/build refused,
+3 the enumeration is provably incomplete and nothing was reported against it.
+
+---
+
+## `puck doc-links`—relative link and path check
+
+Checks a fixed documentation set (the world-project READMEs, the repository
+root README, and the engine manual's entry and topic pages) for citations that
+stopped resolving: relative markdown links, backticked rooted repository
+paths (`src/...`, `docs/...`, `tests/...`, `build/...`), and backticked bare
+filenames (looked up in an index swept from `src/`, `docs/`, `tests/`,
+`build/`, and `.claude/skills/`—enforced under `src/`, advisory elsewhere,
+since a `docs/` document legitimately names out-of-repo files).
+
+```text
+puck doc-links                check the world-documentation set this verb ships with
+puck doc-links <doc> ...      check exactly the named repository-relative markdown files instead
+```
+
+One control runs before any document—a deliberately nonexistent path must
+fail resolution—so a green run proves the checker can turn red. Unlike
+`puck citations`, this covers file/path citations, never console-verb tokens.
+
+Exit codes: 0 every citation resolved, 1 one or more citations did not
+resolve, 2 usage or no repository root.
+
+---
+
+## `puck search`—content search
+
+A ripgrep-shaped CLI over a non-backtracking symbolic-derivatives regex engine:
+linear-time, leftmost-longest, with intersection (`&`), complement (`~(...)`),
+and lookaround; no backreferences. `_` is any character including newline.
+
+```text
+puck search <pattern> [path ...]        content search (default path: cwd)
+  -i / --ignore-case                    case-insensitive
+  -F / --fixed-strings                  literal string (escape the pattern)
+  -l / --files-with-matches             files-with-matches only (wins over -c)
+  -c / --count                          per-file matching-line counts
+  -n / --line-number                    line numbers on (the default)
+  -N / --no-line-number                 line numbers off (wins over -n)
+  -A / --after-context <n>              n context lines after
+  -B / --before-context <n>             n context lines before
+  -C / --context <n>                    both sides; an explicit -A or -B overrides that side
+  -g / --glob <glob>                    include glob (repeatable; no '/' matches basename)
+  --not <glob>                          exclude glob (repeatable; no '/' matches a file OR directory basename)
+  -s / --span                           span mode: run over whole-file text, print start-end line ranges
+  -M / --max-results <n>                max results (default 250, 0 = unlimited)
+  --files                               enumerate the files that would be searched
+  -q / --quiet                          quiet: exit code only (--files included)
+  --                                    end of options: every later argument is pattern/paths
+  -h / --help                           this text
+```
+
+Exit codes: **0** matched, **1** no match, **2** usage/pattern error (the
+engine's own parse message is printed verbatim). A path argument that names
+nothing on disk is one of those usage errors—every bad path is reported before
+the run gives up, so a typo cannot pass for "no match". The recursive walk skips
+`.git`, `artifacts`, `bin`, `obj`, `node_modules`, `publish`,
+`BenchmarkDotNet.Artifacts`, agent worktrees under `.claude/worktrees`, and
+binary files—naming one of those paths searches it anyway. The build-artifact
+names are on that list because this project writes into them: publishing drops a
+generated `Puck.Maths.xml` next to the executable, whose duplicated doc comments
+would otherwise drain the default `-M` cap ahead of `src/Puck.Maths/` itself.
+`.claude/worktrees` holds live duplicate checkouts, whose copies otherwise answer
+a query as if they were live consumers. The full flag, glob, and engine-semantics
+reference—including the leftmost-longest and complement gotchas—lives in the
+`content-search` skill (`.claude/skills/content-search/SKILL.md`), which drives
+every content search in this repo through the published `puck search`.
+
+---
+
+## `puck bench`—the Puck.Maths microscope
+
+The on-demand **microscope** for `Puck.Maths`. Where the in-suite bench-as-test
+gate answers *did the ratio regress?* (fast pass/fail against baselines), this
+verb answers *why is the number what it is?*—instruction-level disassembly,
+per-scenario allocation columns, and full statistical detail (mean / error /
+stddev / percentiles). Reach for it when a gate row moves and you need the cause,
+not the verdict.
+
+### When to reach for which
+
+| | The gate (the test-suite ratio harness, `tests/Puck.Maths.Tests/BenchTests.cs`) | This microscope |
+|---|---|---|
+| Question | Did the generic/hand ratio regress past its ceiling? | *Why* is a kernel slow / allocating / different from its neighbour? |
+| Output | One ns/op number per scenario, pass/fail | Disassembly, alloc bytes, stddev, percentiles, ratios vs baseline |
+| Speed | Fast, runs in CI | Slow, run by hand on a quiet machine |
+| Determinism | Fixed seeds, zero-alloc asserted | Same fixed seeds and regimes; framework owns the timing loop |
+
+### Benchmark inventory
+
+The original algebra benchmark classes retain a **1:1** mapping to scenarios
+from the retired standalone quadratic-algebra bench. Their method names remain
+stable so historical rows can be compared on the same machine. Of the grid
+below, **only scenario 1's generic/hand ratio is measured automatically** by the
+test-suite ratio gate; the other seven are manual microscope workloads.
+
+| Bench scenario | Class here | Methods |
+|---|---|---|
+| `1. complex mul narrow (latency)`   | `ComplexMulNarrow`   | `Hand` (baseline), `GenericStatic`, `GenericLocal` |
+| `2. complex mul wide (throughput)`  | `ComplexMulWide`     | `Hand` (baseline), `GenericStatic`, `GenericLocal` |
+| `3a. split mul narrow (latency)`    | `SplitMulNarrow`     | `Hand` (baseline), `GenericStatic`, `GenericLocal` |
+| `3b. split norm narrow (throughput)`| `SplitNormNarrow`    | `Hand` (baseline), `GenericStatic`, `GenericLocal` |
+| `4. dual<FixedQ4816> mul (latency)` | `DualFixMul`         | `Hand` (baseline), `GenericStatic`, `GenericLocal` |
+| `5. dual quaternion mul (latency)`  | `DualQuaternionMul`  | `Hand` (baseline), `GenericStatic`, `GenericLocal` |
+| `6a. extension mul (latency)`       | `ExtensionMul`       | `Hand` (baseline), `GenericStatic`, `GenericLocal` |
+| `6b. extension-only operations`     | `ExtensionOnly`      | `Frobenius`, `BatchInverse` (no generic counterpart—structural gap) |
+
+The microscope also contains workload-specific classes that never belonged to
+that retired scenario grid. Transform families include direct/naive baselines,
+pristine-input forward/inverse latency, and explicit plan-construction cost:
+
+| Workload | Classes | What is measured |
+|---|---|---|
+| Number-theoretic transform | `NttConvolveVsNaive`, `NttForwardInverse` | Cyclic convolution against the O(N²) definition; forward/inverse latency. |
+| Walsh–Hadamard transform | `WhtForwardVsNaive`, `WhtForwardInverse` | Network against the O(N²) definition; forward/inverse latency. |
+| Fixed Fourier transform | `FftForwardVsDirectSum`, `FftForwardInverse`, `FftConvolveVsNaive` | Forward/convolution against direct definitions; forward/inverse latency. |
+| Fixed cosine transform | `DctForwardVsDirectSum`, `DctForwardInverse` | Fourier route against the direct DCT; forward/inverse latency. |
+| Reusable transform plans | `TransformPlanCreation` | Construction time and allocated bytes for NTT, FFT and DCT plans. |
+| Encoded square and hex coordinates | `EncodedOperations` | Direct norm/sum, swap, scale and translation against decode–operate–encode, plus specialized hex radius against the general layer locator; 1024 deterministic mixed small and wide inputs, normalized per cell. |
+| Combination and permutation identities | `CombinationQueries`, `PermutationQueries` | Counts, ranking, unranking, and single combination elements over 512 deterministic inputs; permutations also compare with a validated quadratic inversion-count baseline. |
+
+Each forward/inverse latency class uses one invocation per iteration and
+restores its working array in `IterationSetup`, outside the timed operation, so
+every sample measures the same data regime rather than another transform of the
+previous sample. Inverse inputs are valid spectra precomputed once from the
+matching forward inputs during global setup.
+
+`GenericStatic` reads the algebra from a static-readonly field (the JIT may fold
+`P`/`Q` to constants after tier-up); `GenericLocal` receives it as a
+by-parameter argument into a `[MethodImpl(NoInlining)]` method so it cannot—the
+same two placements the gate measures.
+
+`MemoryDiagnoser` rides on every class. `DisassemblyDiagnoser` is attached only
+to the **fixed-point kernels** (scenarios 1–5); the extension scenarios are
+modular-`ulong` arithmetic, not a fixed-point kernel.
+
+### Running it
+
+```sh
+# Everything (balanced default job):
+puck bench --filter '*'
+
+# One scenario family — the norm quirk, with the disassembler:
+puck bench --filter '*Norm*'
+
+# Just the hand-vs-generic-static comparison of one class:
+puck bench --filter '*SplitNormNarrow.Hand' --filter '*SplitNormNarrow.GenericStatic'
+
+# List what is available without running anything:
+puck bench --list flat
+```
+
+Every token other than the `world` sub-verb reaches BenchmarkDotNet's switcher
+verbatim. `-h`/`--help` there is puck's own, so the switcher's help (whose `-h`
+is its `hide` option) is reached past a separator: `puck bench -- --help`.
+
+(Run against the published executable, e.g.
+`src/Puck.Cli/publish/puck.exe bench --filter '*Norm*'`, or through
+`dotnet run --project src/Puck.Cli -c Release -- bench --filter '*Norm*'`.)
+
+#### Job rigor
+
+No explicit job is baked into the config, so a command-line `--job` is the only
+job that runs (the harness would otherwise run its own job *alongside* one added
+here and double the output). Pick rigor on the command line:
+
+| Flag | Use |
+|---|---|
+| *(none)* | BenchmarkDotNet's adaptive default—the sane balanced setting for everyday runs. |
+| `--job short` | **Fast survey.** Fewer warmup/target iterations; a quick shape-of-the-numbers pass. |
+| `--job long` | **Thorough verdict.** Many iterations, tight error bars—use before a retention decision. |
+
+### Measurement hygiene
+
+**Run on a quiet machine.** Numbers taken under concurrent load—a build, the
+test suite, another benchmark, a busy GPU—are *garbage*, not slow-but-usable
+data; this is a measured house fact. Close background work first. If two runs of
+a scenario disagree by more than ~10%, the machine was not quiet—rerun. The
+kernels are measured exactly as written (the `Int128` widening multiply in the
+wide path is deliberate and is not "fixed" here). Do not commit result artifacts;
+this verb produces evidence for a decision, not baselines to pin—the
+`BenchmarkDotNet.Artifacts/` directory it writes under the cwd is git-ignored.
+
+### `puck bench world`
+
+The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
+`puck.world.json` and a checked-in Klondike fixture document
+(`Bench/klondike.fixture.world.json`, spliced the way
+`tests/Puck.World.Tests/SolitaireFixtures.cs`'s `Game` builds one, without this
+project referencing the test project) and prints one row per number—
+shipped-world server construction time, idle-tick time and quiet-tick
+allocation (median over a sampled window, after a warmup), and a scripted
+Klondike deal's per-tick time and per-mutation allocation. A server
+construction against the shipped world costs tens of seconds
+(`Puck.Physics.Navigation.NavigationRuntime.Domain.BuildEdges` sphere-casting
+through the static SDF program)—far past what an iteration-based
+BenchmarkDotNet job can amortize honestly—so this lane is a plain stopwatch
+harness (`WorldBenchmarks.cs`,
+`WorldBenchHarness.cs`) rather than a `[Benchmark]` class, and it sits beside the
+switcher as its own sub-verb rather than inside it:
+
+```sh
+puck bench world
+```
+
+Regenerate the fixture document only when
+`Fixtures.BuildDocument` in [Fixtures.cs](../../tests/Puck.World.Tests/Fixtures.cs) or
+`src/Puck.World/Assets/worlds/games/klondike.world.json` changes underneath
+it—it is a checked-in snapshot, not derived at run time.
+
+---
+
+## `puck registry`—world name registry
+
+Writes `docs/world-name-registry.md` from `Puck.World.WorldNameRegistry`
+(`src/Puck.World.Schema/WorldNameRegistry.cs`): every document field that
+carries a state, zone, rule, table, pattern, topology, generator, field, or
+dynamics name, with the role it carries the name in, the JSON paths derived by
+walking the same source-generated `WorldJsonContext` the loader reads through.
+`WorldModuleNamespace` reads the same registry to prefix an aliased import's
+names at compose time, so the table and the compose path cannot disagree.
+
+```text
+puck registry               write docs/world-name-registry.md
+puck registry --check       regenerate in memory and compare against the file on disk;
+                            write nothing, exit 1 naming the first differing line
+puck registry -h / --help   this text
+```
+
+Both modes first refuse, exit 1, on a name-shaped document member the registry
+neither registers nor excludes with a reason—a `CellName`, `ValueExpression`,
+`BindableScalar`, `BindableColor`, or `WorldLatticeScalar` member, or a string
+member whose C# name reads like a name position—so a field added to the model
+without a registration cannot pass. Exit codes: **0** wrote or matched, **1**
+drift or an uncovered member, **2** usage error or missing repository root.
+
+## `puck scan`—source sweep
+
+Parses every `.cs` file under `<root>` **once** (the artifact set—`.git`,
+`artifacts`, `bin`, `obj`, `node_modules`, `publish`,
+`BenchmarkDotNet.Artifacts`—plus agent worktrees under `.claude/worktrees`
+pruned below the root; naming a skipped directory as the root itself still scans
+it) and
+runs the selected analyzers over that one shared corpus, so a full sweep parses
+the tree a single time rather than once per analyzer.
+
+```text
+puck scan [<root=src>] [-Only comments,comment-smells,locks,clones]
+          [-OutDir <dir>] [-Grouped] [-MaxPerChunk N]
+          [-MinTokens N] [-MinStatements N] [-NoBlocks] [-h]
+```
+
+| Analyzer | Emits |
+|---|---|
+| `comments` | every non-XML inline comment (`//` and `/* */`). |
+| `comment-smells` | those comments bucketed by weakness (sync-coupling / debt-marker / banner-divider / commented-out-code / unclassified), plus each cross-artifact referent (a shader file name or an `UPPER_SNAKE` define) tagged resolved or dangling. |
+| `locks` | synchronization sites, kind-tagged: `lock` statements, lock-primitive declarations, `Monitor.*`/`Interlocked.*` calls, `[MethodImpl(Synchronized)]`. |
+| `clones` | structurally identical callable bodies and nested blocks, Type-1/Type-2 fingerprinted; gated by `-MinTokens`/`-MinStatements`, and `-NoBlocks` drops the block pass. |
+
+### Output modes
+
+One record per finding, as JSONL. Where it goes depends on the flags:
+
+- **stdout** when exactly one analyzer is selected and neither `-OutDir` nor
+  `-Grouped` is given—the pipe-friendly default for a one-off query.
+- **`<OutDir>/<name>.jsonl`** otherwise, defaulting to `<repo>/artifacts/scan`.
+  Any multi-analyzer run takes this path, so pass `-OutDir` when you do not want
+  the default directory written.
+- **`<OutDir>/<name>.grouped.json`** additionally under `-Grouped`: the same
+  findings chunked per file (or per cluster, for `clones`) at most
+  `-MaxPerChunk` to a chunk—the work-list a fan-out audit spends one agent per
+  chunk on.
+
+The analyzer's own one-line digest, plus its densest-files table, always goes to
+**stderr**, so `puck scan … -Only comments > records.jsonl` leaves a readable
+summary on the terminal. Exit codes: **0** ran, **2** usage error, unknown
+analyzer, or missing root.
+
+Output is deterministic: files are enumerated in a fixed order, and every
+ordering—records, buckets, chunks, clusters—is fully tie-broken, so two runs
+over an unchanged tree produce byte-identical bytes.
+
+The comment-smell referent check resolves against **non-comment** source text
+plus the shader sources under `<repo>/src`; resolving against comment text too
+would let a define cited in a comment resolve against that very comment, which
+makes the check a tautology rather than evidence.
+
+---
+
+## `puck creation`—code-authored sculpts
+
+The offline twin of the in-engine `creation.sculpt(s)` console verbs (see
+`Puck.World.Authoring`'s README for the sculpting library itself—
+`CreationBuilder`/`StateHoisting`/`SculptPatch`/`ICreationSculpt`):
+
+- `puck creation sculpts`—lists every registered sculpt (`CreationSculptRegistry.All`) by name and description.
+- `puck creation sculpt <name> --world <path>`—reads the world file, runs the named sculpt's `SculptPatch` against it, echoes every operation's `(kind, path, verdict)`, then parses and validates the PATCHED document through `WorldDefinitionSerialization`/`WorldDefinitionValidator` before writing it back canonically. A refusal (unknown sculpt, malformed JSON, a patch fault, a validation failure) leaves the file untouched. Exit codes: 0 wrote, 1 the patch faulted or the patched document was refused, 2 a usage error (unknown sculpt, missing file).
+- `puck creation stats --world <path> [--prototype <id>]`—reports a creation's shape count against `WorldPlacementPolicy.MaxShapesPerStamp`, counts by primitive and blend op, and which shapes use domain ops, onion, twist, bend, rounding, dilate, lift, chamfer, or a panel, plus palette slot usage and named flare/shear/bumps/erode/cells shapes. It builds unit-scale static and pooled rest geometry through the live stampers and lists the global step scale plus every non-unit field-scope clamp, its instance/instruction range, and how many shapes share it. Animated prototypes use the pooled path. Text-bearing prototypes report clamp inspection unavailable because the offline command has no resolved font atlas; inspect `world.budget` in the render host. Field bounds are not measured GPU-time or march-count multipliers. Defaults to every prototype carrying a creation document; a geometry inspection failure exits 1.
+
+`creation stats` also constructs the whole world's deterministic contact field
+through the runtime builder, including solid placements and screens. This runs
+even with `--prototype` or when text prevents render-clamp inspection. It reports
+`contact: accepted` on success; a contact compilation refusal exits 1 and names
+the unsupported operation, including residual nonuniform `Scale`. Non-solid
+placements and unplaced prototypes need no contact representation. Acceptance
+does not imply render/contact parity: presentation-only facets remain omitted.
+
+`puck creation sculpt` writing to disk goes through the SAME canonical
+serializer `world.save` does, so an UNTOUCHED section of the file (one the
+named sculpt's patch never references) can still change shape—every
+optional field the schema declares gets written out explicitly rather than
+omitted, and every derived field (a camera program operation's `opcode`, a
+rule effect's default `target`) gets filled in. This is not specific to a
+sculpt; it is what routing a document through the typed `WorldDefinition`
+model at all does.
+
+The shipped `CreationSculptRegistry` carries no sculpts—`puck creation
+sculpts` reports "none registered" until a composition root or a test
+registers one.
+
+## `puck schema`—world.def JSON Schema
+
+Generates the JSON Schema for `puck.world.definition.v1` from the live C# model—
+`Puck.World.WorldSchema` (`src/Puck.World.Schema/WorldSchema.cs`) walks
+`WorldDefinition` over its own source-generated `WorldJsonContext` via
+`System.Text.Json`'s `JsonSchemaExporter`, so `$type` unions, enum values, and
+`additionalProperties: false` all come from the SAME contract the loader
+enforces, never a hand-maintained copy. Descriptions come from
+`Puck.World.Schema.xml`, `Puck.State.xml`, `Puck.World.Authoring.xml`, and `Puck.SignedDistance.xml`, resolved property `<summary>` first, then the
+declaring record's own `<param>` (most members are documented that way—a
+positional record's XML doc lives on the record declaration, not the
+property), then a type `<summary>` for a node with no containing property
+(an array's item schema, a `$type` arm).
+
+`render.extensions[]` takes its `id` vocabulary and per-id `config` schema
+from the shipped `puck.shader.manifest.v1` manifests under `src/*/Assets/Shaders`
+(`Puck.Shaders.ShaderSetManifest.ConfigJsonSchema`)—one `if`/`then` arm per
+id—so an entry's config validates by id in an editor, and adding a shader
+set changes the schema (`--check` catches a manifest edit not regenerated).
+
+Every array and dictionary carries `items`/`additionalProperties`, including
+a converter-hidden shape the exporter cannot introspect on its own (a
+`StateRowJsonConverter<TRow>`-owned row, a fixed-arity vector array, a
+document-identifier list); a raw `JsonElement` slot decided by an id named
+elsewhere in the document (`render.extensions[].config`, `probes[].config`,
+`metadata.custom`) stays open but carries a `$comment` saying so. The root
+carries `x-puck: {schemaVersion, generator, commit}` (the silo root carries
+its own) and `properties.schema.const` pins the exact tag a well-formed
+document's own `schema` field must equal; `--check` masks `x-puck.commit`
+before comparing, since the commit a checked-in file was generated at can
+never equal the commit that first introduces the file.
+
+The output is SPLIT, not one file: a small root plus one file per top-level
+document section (`kits.schema.json`, `screens.schema.json`, …), plus
+`common.schema.json` for every subschema referenced from more than one
+place—named after the CLR type it came from where that's recoverable. Every
+cross-file reference is a plain relative `$ref`
+(`"./schema/kits.schema.json"`, `"./common.schema.json#/$defs/WorldChannel"`),
+never `$id`-based, so an editor resolves them without extra configuration.
+
+```text
+puck schema                 write the checked-in root + sections + common.schema.json
+puck schema --check         regenerate in memory and compare EVERY file (root, each
+                            section, common.schema.json) against what's on disk; also
+                            catches a stale orphan section no current model produces;
+                            exit 1 on any drift
+puck schema --stdout        emit the ROOT document to stdout instead of writing
+                            (skips --check)
+puck schema --bundle [path] emit the single-file equivalent with every cross-file $ref
+                            resolved through named $defs (not a checked-in artifact) —
+                            to [path] if given, else stdout
+puck schema -h / --help     this text
+```
+
+Written to `src/Puck.World/Assets/worlds/puck.world.definition.v1.schema.json` (root)
+and `src/Puck.World/Assets/worlds/schema/*.schema.json` (sections + common),
+which already flow to `Puck.World`'s build output (`Assets\**` copies
+`PreserveNewest`), so the schema ships beside the world documents it
+describes. Running `puck schema` also DELETES any section file the current
+model no longer produces, so the checked-in tree never carries an orphan.
+A missing documentation XML file from that set still produces a schema, with no
+descriptions, and this verb says so on stderr rather than failing. Exit
+codes: **0** wrote or matched, **1** `--check` found drift (reported per file
+—missing, orphan, or the path plus the first differing line), **2** usage
+error or missing repository root.
+
+---
+
+## The `.puck` DSL verbs
+
+Five verbs over `Puck.World.Transpiler`, the `.puck` authoring layer above the
+world documents. JSON stays the wire form and the checked-in source of every
+shipped world; `.puck` is how one is written and read by hand.
+
+```text
+puck compile <source.puck> [-o <out.json>] [--validate] [--bundle] [--strict] [--watch]
+puck decompile <source.json> [-o <out.puck>]
+puck fmt <path> [--check] [--indent-size 2] [--tabs]
+puck lint <path> [--strict]
+puck lsp
+```
+
+`--validate` composes the document's `basis` and `imports` graph **before**
+validating, rooted at the source file's own directory—the same order
+`PuckWorldLoader` uses at boot. Validating the uncomposed root would report every
+field the basis supplies as missing, so a document naming a basis only validates
+correctly this way.
+
+Cartridge sources select `puck.cartridge.v1` and use `CartridgeDocuments.Validate` through the same adapter in
+`compile --validate`, `lint`, and LSP diagnostics. The language server supplies cartridge completions, including
+for unsaved buffers. Forge paths map back to authored properties and rows.
+
+World engine-schema validation runs only on a ROOT—a document declaring
+`schema: "puck.world.definition.v1"`, a `basis`, or both
+(`WorldSemanticValidator.IsRootDocument`). A World fragment is a MODULE some
+other, unknown root supplies fields for, and validating it as a world would
+report those fields as missing; `--validate` on a module is therefore a no-op,
+and `puck lint` applies the identical test, so the two verbs never contradict
+each other on the same file. `puck lint`'s separate symbol-resolution pass
+(`Puck.World.Transpiler.Validation.PuckLinter.LintReferences`) composes any
+document naming a `basis` or `imports` to resolve names those supply, but
+reports an unresolved name only for a root—see
+[the transpiler README](../Puck.World.Transpiler/README.md#reference-resolution-lint).
+
+Every verb that validates or composes a world document—`compile --validate`,
+`lint`, and `world prepare`—registers the shipped screen-machine engines
+(`gaming-brick`, `advanced-gaming-brick`, `tune-instrument`) and installs
+`Puck.World.Schema`'s vocabulary hooks through the CLI's one installer,
+`Puck.Cli.CliWorldVocabulary.EnsureInstalled`—the same `IMachineExtension`
+entry points (`HumbleGamingBrickExtension`, `AdvancedGamingBrickExtension`) and
+`WorldMachineExtensionRegistry` the game's dynamic extension loader calls into,
+so a document naming a shipped `screens[]` engine validates identically here and
+at boot.
+
+`decompile` writes beside its source when `-o` is omitted. A basis or import path
+inside the document resolves relative to the `.puck` file, so a round trip must
+write the `.puck` next to the JSON it came from.
+
+Exit codes: **0** success, **1** diagnostics at or above the failing severity
+(`--strict` promotes warnings), **2** usage error or unreadable input.
+
+---
+
+## `puck format`—source rewriters
+
+The rewriters for conventions `.editorconfig` cannot express, applied in one
+parse-and-write per file.
+
+```text
+puck format [<root=src>] [-WhatIf] [-Verify] [-h]
+            [-Files <json-array-of-relative-paths>]
+            [-Only attr-order,member-groups,member-spacing,member-order,null-pattern,
+                   string-merge,paren-clarity,logical-lines,arg-lines,ternary-lines,
+                   init-order,trailing-comma,decl-spacing,literal-var,named-args]
+puck format ci <base-sha> <head-sha> <empty-output-directory>
+```
+
+`-Files` limits every phase, including SDK whitespace formatting, to the given
+JSON array of paths relative to the root. An empty array selects nothing.
+Missing paths, parent traversal, and symbolic links are errors. The full owning
+project still supplies semantic context. Standalone C# files use disposable,
+built SDK projects; their original directives survive and their operational
+bodies are never run. A semantic phase that cannot analyze an owning project
+fails rather than reporting unchecked source as clean.
+
+`format ci` requires a clean tracked checkout at the specified head. It selects
+added, modified, and renamed C# files from the PR comparison, excluding generated
+and quarantined code, applies the defaults, verifies convergence, and writes
+format.json plus format.patch. It never commits or pushes. The
+[CI formatting workflow](../../docs/development/ci.md#automatic-pr-formatting) compiles that
+result before its separate trusted submitter can append a bot commit.
+
+**Phase 0 always runs first**, for every mode and every `-Only` selection:
+`dotnet format whitespace` over the projects that own corpus files (so the
+corpus pruning governs which projects it can reach), establishing the
+`.editorconfig` baseline the custom passes layer onto. It needs the projects
+restored—and in **write mode it rewrites any whitespace drift in the root**,
+which on an unswept root is the whitespace sweep for that root. Run `-WhatIf`
+first; the tree-wide sweep is deliberately its own, separately-landed change.
+
+Choosing the projects is only half the scoping, because a project formats every
+compile item it carries and some of those are LINKED IN from outside it.
+`build/VerifiedCodeAttribute.cs` is linked into every project, so a run over one
+project used to rewrite a file two directories above the root it was handed.
+Phase 0 therefore also passes `--include <root>/`, which confines each
+invocation to the requested root. `dotnet format` matches that pattern against
+each document's path relative to the WORKING DIRECTORY, and it reads a pattern
+as a directory only when the pattern ends in a separator, so a root that cannot
+be spelled that way, meaning one that does not sit under the working directory,
+gets no pattern at all rather than one the matcher would quietly match nothing
+for.
+That run is unscoped, and it says so on stderr before it starts.
+
+| Pass | Rewrite | In the bare-`format` set |
+|---|---|---|
+| `attr-order` | one attribute per list/line, alphabetized. | yes |
+| `member-spacing` | blank-line grouping between type members; a field's kind is its storage class (const / static readonly / static / readonly / mutable), and initializer-coupled fields/properties share one kind, so each `member-groups` group is one blank-line-delimited unit. | yes |
+| `member-order` | a const block or uncoupled property block (same kind + scope) sorted by name; non-const fields and initializer-coupled properties are never reordered, and layout-sensitive/attributed, partial, or directive-bearing types stay as written. | yes |
+| `null-pattern` | compiler-resolved `== null` / `!= null` → `is null` / `is not null`; pointer, dynamic/error-bound, and user-defined equality comparisons stay unchanged. | yes |
+| `string-merge` | `+` of two string/interpolated literals → one literal (`"a" + $"b{x}"` → `(string)$"ab{x}"`), so message text is searchable contiguously. The explicit cast preserves the concatenation's string type and overload binding. A seam carrying a comment, a verbatim/raw interpolated operand, and any non-literal operand are left alone. | yes |
+| `paren-clarity` | explicit precedence parens (`((0 == a) \|\| (0 == b))`), casts included (`((uint)sets.Length)`—bare only under checked/unchecked and as a ternary branch). | yes |
+| `init-order` | object-initializer members alphabetized when every right-hand value is syntactically reorder-safe. Setter invocation order still changes; use only where those setters are order-independent (auto-properties and fields satisfy that boundary). | yes |
+| `trailing-comma` | trailing comma on a multi-line initializer's last element. | yes |
+| `decl-spacing` | one blank line between a local-declaration run and the next statement. | yes |
+| `literal-var` | `uint x = 0;` → `var x = 0U;` for suffix-bearing primitives. | yes |
+| `named-args` | call arguments named and alphabetized (semantic). | yes |
+| `member-groups` | fields, properties, and methods each gathered at their first occurrence. Fields use kind order (const → static readonly → static → instance readonly → instance mutable), then accessibility scope, then name; properties and methods use accessibility scope then name, with overloads stable in source order. Struct/record-struct instance-field declarations stay fixed, while constants, static fields, properties, and methods still group; on an unattributed struct this opt-in may change generated auto-property backing-field order. Complete declarations move, so comments and attributes travel with them. Initializer-coupled movable members stay together in source order. A type is left as written when moving could change behavior: attributed or partial types, members carrying `#directives`, or a coupled member that would cross a fixed field or field-like event initializer. | `-Only` |
+| `logical-lines` | multi-operand `&&`/`\|\|` one operand per line, operator trailing. | `-Only` |
+| `arg-lines` | a call with >1 argument: one argument per line, hanging close paren. | `-Only` |
+| `ternary-lines` | `c ? t : f` across three lines, operators leading; a statement-ending paren-wrapped ternary's trailing close parens hang at the root's indent. | `-Only` |
+
+The three vertical line-wrappers stay opt-in because their one-per-line layout
+is a deliberate choice, not a baseline; `member-groups` stays opt-in because
+regrouping a type's declarations changes source and metadata order and is a
+reorganization to ask for, not a convention to drift into. Run it with the
+default set (or run a bare `format` after it) so `member-spacing` renormalizes
+the blank lines the moved declarations carried along.
+Required braces are `.editorconfig`'s job (`IDE0011`, `csharp_prefer_braces`),
+applied by `dotnet format style`.
+
+### Dry modes
+
+| Mode | Writes | Fails on |
+|---|---|---|
+| *(bare)* | yes |—|
+| `-WhatIf` | **nothing** | any drift (exit 1), listing the files |
+| `-Verify` | **nothing** | drift, a rewrite that would introduce syntax errors, or a pass that is not a fixed point (running the pipeline twice differs from once) |
+
+Both dry modes run phase 0 as `--verify-no-changes`, so nothing on disk moves in
+either. Exit code is the worst of the three phases: **1** for drift in a dry
+mode or a skipped rewrite, **2** for a usage error, a missing root, or a tool
+failure in write mode.
+
+### Safety
+
+- **The write guard is unconditional.** A syntactically invalid input file is
+  declined, and output from valid input must remain syntactically valid. The
+  file is reported as corrupt and the run fails loudly—never written, not
+  even in a plain rewrite run. This is a syntax guard, not a substitute for the
+  compiler and tests after semantic normalizers.
+- **Custom rewrites preserve source newline trivia.** Ordinary whitespace policy
+  belongs to phase 0. The disk writer does not normalize the complete file text,
+  because doing so would change newline characters inside verbatim or raw string
+  literals. A break a pass SYNTHESIZES is a bare line feed, taken from the one
+  declaration `RewriteShaping.EndOfLine`, matching what `.editorconfig` and
+  `.gitattributes` already pin for the whole tree. Phase 0 runs first in every
+  invocation, so a rewriter never inserts into a file it has not already
+  normalized.
+- **Annotated code is left alone.** The four reordering passes (`attr-order`,
+  `member-order`, `init-order`, `named-args`) reassign trivia by *slot*, so a
+  reorder would leave a comment—or an `#if`—describing whichever element
+  moved under it; the three line-wrappers (`logical-lines`, `arg-lines`,
+  `ternary-lines`) reissue their layout slots outright, so a comment in one would
+  be deleted. The syntax-only write guard sees neither: both rewrites still
+  parse. All seven therefore decline a construct carrying a comment or a
+  preprocessor directive in **any slot they touch**, separators, operators and
+  delimiters included—a comment written after a comma belongs to the comma, not
+  to either neighbour, and a slot-preserving reorder would strand it.
+- **`member-groups` moves complete declarations.** A field, property, or method
+  keeps its attributes and leading/trailing comments when it moves. A type with
+  any preprocessor directive is left as written because a directive's guarded
+  region cannot safely be inferred from syntax trivia alone.
+- **Declaration and attribute order is observable metadata.** `attr-order`,
+  `member-order`, and `member-groups` deliberately establish source order. Code
+  that consumes reflection order, default JSON property order, sequential struct
+  layout, or byte-exact metadata must use explicit ordering/layout contracts or
+  leave the relevant reorderer off. `member-groups` additionally calls out its
+  auto-property backing-field boundary in the pass table above.
+- **Semantic rewrites need the project built.** `null-pattern` uses the compiler
+  to decline pointer, dynamic/error-bound, and overloaded-equality comparisons;
+  unresolved comparisons stay unchanged. `named-args` uses the same project
+  closure to resolve parameters.
+- **Evaluation-order rewriters are conservative, not omniscient.** `named-args`
+  uses the semantic model and declines calls whose moved arguments contain calls,
+  mutations, indexers, construction, awaits, or property getters. `init-order`
+  has no semantic model: it applies the syntactic value guard but cannot inspect
+  setter bodies, so initializer setters must be order-independent.
+- **`named-args` needs the project built.** It resolves symbols against the
+  project's real build closure—the built output under `bin/`, the restore's
+  package assemblies from `obj/project.assets.json`, the generated global-usings
+  file, and any emitted generator output. Without a build, only the framework
+  set resolves there, so the project's files are SKIPPED entire and named, in
+  every mode, rather than named from a framework-only closure; the run exits 1.
+  Build them and run again. A file whose directory chain holds no `.csproj` is
+  likewise reported as skipped rather than counted as clean.
+
+---
+
+## `puck references`—semantic symbol queries
+
+Loads the project graph and asks the compiler what each name means, so the
+answer survives extension methods, `using` aliases, overload resolution, generic
+instantiation and name collisions—the five places a text search is wrong.
+
+```text
+puck references <name>   references to a source symbol, solution-wide
+  --declarations      declarations only, no reference search
+  --implementers      implementations of an interface or interface member
+  --overrides         overrides of a virtual/abstract member
+  --derived           derived types
+  --containing <frag> keep declarations whose display string contains frag
+  --contains          treat <name> as a substring, not an exact simple name
+  -i                  case-insensitive name match
+  --kind <k,k>        type, member, namespace (default: type,member)
+  --solution <path>   default: the nearest .slnx walking up from the cwd
+  --project <path>    load one project instead
+  --configuration <c> build configuration (default Debug)
+  --metadata          also match declarations from referenced assemblies
+  --no-doc            drop locations inside documentation trivia
+  --strict            keep only locations whose group definition IS the queried symbol
+  --allow-partial     report anyway after a workspace load failure
+  --json / -q / -h
+```
+
+Records only on stdout, `path:line:col` first so a line parses like a `search`
+hit:
+
+```text
+src/Puck.Abstractions/Memory/AllocatorExtensions.cs:14:24 decl Method Puck…AllocatorExtensions.Alloc(Puck…IAllocator, nint)
+src/Puck.Vulkan/VulkanMarshalHelpers.cs:18:31 ref Method Puck…AllocatorExtensions.Alloc(Puck…IAllocator, nint)
+```
+
+Records are grouped by resolved definition (display string, then documentation
+comment id) and sorted by position within a group, so two runs over an unchanged
+tree are byte-identical. Exit codes: **0** a declaration matched, **1** none did,
+**2** usage error or workspace load failure.
+
+The declaration search runs at the widest symbol filter and applies `--kind`
+afterwards, and it matches an exact name with the same walk `--contains` uses,
+so an exact query answers a subset of the substring one and a narrower `--kind`
+only removes records. Each project's entry point is asked for directly, because
+the declaration index that backs the search is built from what the files spell
+and does not carry the `Program` type a top-level-statements file gets.
+
+Four behaviors decide whether a result means what it looks like, and all four
+are documented at length in the `symbol-analysis` skill:
+
+- **The symbol on a `ref` line is the resolved definition**, not the query.
+  `new T(…)` reports under `T`'s constructor and an interface-dispatched call
+  reports under the interface, so `--strict` on a type hides every construction
+  site.
+- **`<see cref="…"/>` targets are ordinary references.** Pass `--no-doc` for
+  dead-code work; a symbol whose only inbound references are doc crefs is not
+  pinned.
+- **Only what the project system compiles is visible.** Files removed from
+  compilation (`<Compile Remove="scripts/**/*.cs" />`) and files in no project
+  cannot be seen; `puck search` and `puck declarations` see them.
+- **A workspace load failure is fatal.** A partly loaded solution answers "no
+  references" indistinguishably from a true zero, so any `Failure` diagnostic
+  prints and exits 2 unless `--allow-partial` is passed. The commonest cause is
+  an unrestored tree (a fresh worktree): the design-time build resolves an
+  incomplete reference closure and the architecture gate's lane profiles trip
+  on the missing edges. The refusal counts the projects carrying no
+  `obj/project.assets.json`, and the remedy there is `dotnet restore` at the
+  tree's root—never `--allow-partial`.
+
+Loading is not a pure read: it runs a design-time build, which writes generated
+files into each project's `obj/<Configuration>/`.
+
+---
+
+## `puck declarations`—declaration inventory
+
+The syntax tier: parse each file and report what it declares. No build, no
+restore, no project system—so it covers files no project compiles.
+
+```text
+puck declarations [path ...]   declaration inventory, parse-only (default path: cwd)
+  -g <glob> / --not <glob>   include/exclude globs, the same matcher search uses
+  --kind <k,k>       class, struct, record, interface, enum, delegate,
+                     method, property, field, event, ctor
+  --name <frag>      declared simple name contains frag
+  --base <frag>      base list contains frag (types only)
+  --attribute <frag> an attribute name contains frag
+  --members          list members inside each type (implied by a member --kind)
+  --doc              also emit XML-doc cref targets, filtered by --name alone
+  --json / -q / -h
+```
+
+Output is `path:line:col decl <kind> <qualified name>[ : <base list>]`, sorted by
+path then position, with a `cref` relation under `--doc`. One record is always
+one line: base lists, parameter lists and crefs written across source lines are
+rendered from their tokens alone, so comments between them are dropped, two
+tokens the source separated are separated by one space, and the `///` opening a
+continued line of a documentation comment is a continuation rather than a
+separator—a cref split across two lines still reads as one dotted path.
+`--name` and `--base` filter that same rendered form. Both record forms report
+the kind `record`, and an extension block, which names nothing, is reported as
+its members' enclosing static class rather than as a declaration of its own.
+Same exit codes as `references`, and a path that names nothing is a usage error
+rather than a silent empty answer. `--base` is the cheap implementers query when
+a build is unwanted; it matches base-list text, so it cannot see an
+implementation inherited through a base class.
+
+`declarations` shares its walk, glob matcher and skip list with `search`—both
+refuse `artifacts` and agent worktrees under `.claude/worktrees`, so a paired
+sweep covers one tree—and its parse with `scan`.
+
+---
+
+## `puck lengths`—file-length ledger
+
+Every compilation carries `FileLengthAnalyzer` (in `Puck.Analyzers`, wired like `VerifiedCode.json`): a source
+file over the ceiling in `FileLengths.json` fails the build with **LEN001** unless the ledger records it, a
+recorded file that grows past its recorded length fails with **LEN002**, a recorded file that has dropped to the
+ceiling or below fails with **LEN003** until its entry is removed, and a missing or off-schema ledger fails with
+**LEN004**. The ledger therefore only shrinks: a new file may not start life over the ceiling, and a file already
+over it may only get shorter. Generated trees (`*.g.cs`, auto-generated headers) are outside the rule. The count
+is line breaks plus one.
+
+The analyzer sees one compilation at a time, so an entry whose file was deleted or moved never reaches it; this
+verb walks the tracked `src/`, `tests/`, and `build/` trees instead.
+
+```text
+puck lengths [--check]   report stale, grown, and unrecorded-over-ceiling files; exit 1 on any
+puck lengths --write     rewrite FileLengths.json from the tree: remove stale entries, lower shrunken ones;
+                         refuses (exit 1, naming the file) to raise a recorded length or record a new file
+```
+
+Splitting a recorded file is the expected way to change the ledger: shrink it, run `puck lengths --write`, and the
+entry lowers or disappears. Raising the ceiling itself is a deliberate edit to `FileLengths.json`.
+
+## `puck packages`—published NuGet package report
+
+Enumerates every csproj under `src/` declaring `<IsPackable>true</IsPackable>`
+(see `build/Packaging.targets`) and reads the same fields `dotnet pack` reads:
+`<PackageId>`, `<Description>`, `<PackageTags>`. Projects without an explicit
+packing opt-in are omitted.
+
+```text
+puck packages                list every packable project: id, description, tags
+puck packages --check <path> compare <path>'s GENERATED package section against the
+                              current list; write nothing, exit 1 on disagreement
+puck packages --write <path> regenerate the GENERATED package section in <path>
+puck packages -h / --help    this text
+```
+
+The GENERATED section a page carries is delimited by a comment pair:
+
+```html
+<!-- GENERATED: puck packages -->
+...
+<!-- /GENERATED -->
+```
+
+`docs/site/index.html` carries the one checked-in instance, its `<p
+class="libs">` paragraph. `--write` replaces everything between and including
+the pair; the rest of the file is untouched. Exit codes: **0**
+listed/wrote/matched, **1** `--check` found drift, **2** usage error or
+missing repository root.
+
+---
+
+## `puck wasm-stdlib`—WASM standard library sources
+
+Regenerates every GENERATED Rust source registered in
+`Puck.Scripting.WasmStdlibSources.All`—the maintained set of generated sources
+that make up the WASM standard library, not a single one-off port. Today that
+registry holds three files under `wasm/puck-stdlib/src`. Two give the WASM addon
+guest a self-contained, bit-exact copy of `FixedQ4816`'s six algorithm-pinned
+transcendentals (`atan2`, `sin`/`cos`, `exp2`, `log2`, `pow`): `fixed_generated.rs`
+(the ported functions plus their interval tables and polynomial coefficients)
+and `fixed_vectors.rs` (known-answer vectors, computed by calling the real
+`FixedQ4816` at generation time). The third, `abi_generated.rs`, mirrors the
+addon ABI's names and values from the live host types.
+
+```text
+puck wasm-stdlib   regenerate every registered generated Rust source
+  -h / --help   this text
+```
+
+This verb is a thin wrapper: it writes whatever
+`Puck.Scripting.WasmStdlibSources.All` lists, never generation logic of its own
+—every table, coefficient and vector is read from the live `FixedQ4816` type by
+`Puck.Maths.FixedQ4816RustPort`, one of the registry's contributors. **Adding a
+future artifact is a one-line addition to that registry**—this verb never
+changes. Every `Emit` delegate is **byte-idempotent**: an unchanged host must
+produce byte-identical output on every run, which is what makes running this
+verb twice a drift check in its own right. **Nothing gates that today**—the
+stage that iterated the registry in-process and compared each result against
+what is committed left the build, so a drifted commit is caught only by running
+this verb and reading the diff. Never hand-edit a generated file; regenerate it
+with this verb and commit the result.
+
+Takes no arguments and no `<root>`—unlike every other verb, each registered
+path (e.g. `wasm/puck-stdlib/src`) names a repository convention rather than
+something a caller supplies, so it is anchored at the repository root instead
+of the working directory. Exit codes: **0** wrote every file, **2** usage error,
+repository root not found, or a destination directory missing.
+
+---
+
+## `puck worktree-base`—worktree base guard
+
+A git worktree an agent is handed can sit at a stale base. `puck worktree-base
+<sha-or-ref> [--path <worktree>]` resolves HEAD and `<sha-or-ref>^{commit}` in
+the target worktree (default `--path`: the current directory) and shells out to
+`git` to reconcile them:
+
+- HEAD already at the base—prints "at base", exits 0.
+- Clean tree, wrong base—`git reset --hard <base>`, prints old → new, exits 0.
+- Dirty tree, wrong base—prints what is dirty and refuses, exits 1, resets
+  nothing.
+- Git failure, not a git tree, or an unresolvable ref—exits 2.
+
+"Dirty" is a tracked modification (`git status --porcelain
+--untracked-files=no` nonempty); untracked files never block a reset. Always
+prints the worktree's toplevel path it acted on. Shells out to `git` rather
+than adding a git library dependency.
+
+## `puck branding`—maintained assets
+
+`puck branding` reads `branding/manifest.json`, verifies every canonical SHA-256
+hash and required source reference, then synchronizes every non-deferred copy.
+The command preflights every source, destination, duplicate output, and wiring
+entry before it writes, and refuses rooted, escaping, or reparse-point paths.
+The editor extension's copy remains deferred while its separate task is active.
+
+```text
+puck branding             synchronize canonical assets into their consumers
+puck branding --check     check hashes and wiring without writing
+```
+
+Exit codes are **0** for a successful synchronization or matching check, **1**
+for a manifest, hash, copy, or wiring problem, and **2** when no repository root
+can be found. The authoritative asset map and variant rationale live in
+[`branding/README.md`](../../branding/README.md).
+
+## Documentation
+
+- [Engine manual](../README.md)
+- [Development](../development/README.md)
+- [API reference](../api/index.md)

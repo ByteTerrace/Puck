@@ -13,6 +13,9 @@ public sealed class VulkanGpuComputeCommandPoolFactory(IVulkanCommandResourcesFa
 
         var logicalDevice = ((IVulkanDeviceContext)deviceContext).LogicalDevice;
 
-        return new VulkanGpuComputeCommandPool(commandResources: commandResourcesFactory.Create(commandBufferCount: 1, logicalDevice: logicalDevice));
+        return new VulkanGpuComputeCommandPool(commandResources: commandResourcesFactory.Create(
+            commandBufferCount: 1,
+            logicalDevice: logicalDevice
+        ));
     }
 }

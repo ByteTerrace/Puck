@@ -1,13 +1,13 @@
 namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
-/// The full serial communication subsystem (SIO / RCNT / JOY-bus), modelled on the hardware register spec.
+/// The serial communication subsystem (SIO / RCNT / JOY-bus), modelled on the hardware register spec.
 /// SIOCNT, RCNT and the JOY registers are decomposed into
 /// their hardware fields; writing SIOCNT's start bit begins a transfer in the selected mode (Normal 8/32-bit,
 /// Multiplayer, UART) over the attached <see cref="IAgbLink"/>, and RCNT bit 15 hands the lines to General-purpose
-/// (GPIO) or JOY-bus mode. With the default lone-console transport (<see cref="NullAgbLink"/>) a started transfer is
-/// left PENDING — no fabricated completion and no serial IRQ — exactly as real hardware does, so cable-less games
-/// (a representative commercial cartridge's boot SIO probe) proceed via their own timeouts instead of acting on a phantom partner.
+/// (GPIO) or JOY-bus mode. Internal-clock normal transfers complete even without a partner, reading idle-high data.
+/// An external-clock normal transfer stays pending until an armed peer actually supplies a matching transfer;
+/// merely connecting a cable is not a clock source. Multiplayer children likewise wait for the parent round.
 /// </summary>
 public sealed partial class AgbSerialController : IAgbSerialController, IAgbLinkClient {
     // Every transfer (Normal 8/32-bit, Multiplayer, UART) completes this many cycles later than the mode's raw
@@ -156,7 +156,8 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             | (((uint)m_sioMode) << 12)
             | (m_irqEnable
             ? 0x4000u
-            : 0u);
+            : 0u
+        );
 
         // In multiplayer mode bits 4-5 expose the assigned player id and bit 6 the error flag.
         if (m_sioMode == 2) {
@@ -197,9 +198,8 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
     }
     // Begins a transfer in the current mode. A self-clocked transfer (normal internal-clock master, multiplayer
     // parent, UART) completes after the appropriate bit-time — even on a lone console, where hardware still shifts
-    // and reads the idle-high lines back as all ones. An externally-clocked normal transfer with no partner has no
-    // clock source, so it correctly stays pending (the start bit holds set). A connected partner supplies the real
-    // exchanged data through the link in CompleteTransfer.
+    // and reads the idle-high lines back as all ones. An externally-clocked normal transfer never schedules its
+    // own completion: the peer's internal clock delivers it through TryCompleteNormalSlave.
     private void BeginTransfer() {
         // A transfer already in flight is not restarted by further SIOCNT writes (e.g. the RFU code re-asserts the
         // start bit after selecting the internal clock); the hardware shifts it through to completion regardless.
@@ -214,7 +214,8 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
 
         var bitCycles = (m_shiftClock2MHz
             ? 8
-            : 64); // 2 MHz vs 256 KHz internal shift clock
+            : 64
+        ); // 2 MHz vs 256 KHz internal shift clock
         int cycles;
 
         switch (m_sioMode) {
@@ -222,11 +223,8 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             case 1:
                 // Normal: the master (internal clock) self-clocks the transfer and on real hardware it always
                 // completes, shifting in idle-high 0xFFFF when no partner is attached (and raising the serial IRQ).
-                // A slave (external clock) has no clock source with no partner, so it correctly stays pending.
-                if (
-                    !m_shiftClockInternal &&
-                    !m_link.HasPartner
-                ) {
+                // A slave stays armed until the master clocks an exchange, even if the cable is already attached.
+                if (!m_shiftClockInternal) {
                     return;
                 }
 
@@ -280,14 +278,15 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
         ? 1
         : 0) | (m_shiftClock2MHz
         ? 2
-        : 0);
+        : 0
+    );
     private int UartBaudCycles() => GetBaudRateIndex() switch {
         0 => 64,  //   9600 bps
         1 => 32,  //  38400 bps
         2 => 16,  //  57600 bps
         _ => 8,   // 115200 bps
     };
-    // Fired by the scheduler when a partner-driven transfer finishes: exchange the data through the link, clear the
+    // Fired by the scheduler when a locally-clocked transfer finishes: exchange the data through the link, clear the
     // start/busy bit, and raise the serial IRQ if enabled.
     private void CompleteTransfer() {
         m_startBit = false;
@@ -388,6 +387,9 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             return false;
         }
 
+        // A peer completion supersedes any older locally scheduled event (for example after clock selection
+        // changed while busy); that event must not deliver a second word or IRQ on the abandoned schedule.
+        m_scheduler.Deschedule(e: m_transferEvent);
         m_startBit = false;
 
         if (word) {

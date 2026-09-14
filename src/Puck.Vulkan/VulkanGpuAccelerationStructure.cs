@@ -38,6 +38,21 @@ public sealed class VulkanGpuAccelerationStructure : IGpuAccelerationStructure {
     public nint TlasReference => m_resources.TlasHandle;
 
     /// <inheritdoc/>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        m_disposed = true;
+
+        if (m_created) {
+            m_api.DestroyResources(
+                deviceHandle: m_deviceHandle,
+                resources: m_resources
+            );
+        }
+    }
+    /// <inheritdoc/>
     public void EnsureCreated(uint maxInstanceCount) {
         if (m_created) {
             return;
@@ -51,6 +66,15 @@ public sealed class VulkanGpuAccelerationStructure : IGpuAccelerationStructure {
         ));
         m_created = true;
     }
+    /// <inheritdoc/>
+    public void RecordBuild(nint commandBufferHandle, uint instanceCount, bool includeBlasBuild) =>
+        m_api.RecordWorldAccelerationBuild(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: m_deviceHandle,
+            includeBlasBuild: includeBlasBuild,
+            instanceCount: instanceCount,
+            resources: in m_resources
+        );
     /// <inheritdoc/>
     public void WriteInstance(int index, float halfExtentX, float halfExtentY, float halfExtentZ, float centerX, float centerY, float centerZ, uint instanceIndex, uint visibilityMask) =>
         m_api.WriteInstance(
@@ -66,25 +90,4 @@ public sealed class VulkanGpuAccelerationStructure : IGpuAccelerationStructure {
             worldCenterY: centerY,
             worldCenterZ: centerZ
         );
-    /// <inheritdoc/>
-    public void RecordBuild(nint commandBufferHandle, uint instanceCount, bool includeBlasBuild) =>
-        m_api.RecordWorldAccelerationBuild(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: m_deviceHandle,
-            includeBlasBuild: includeBlasBuild,
-            instanceCount: instanceCount,
-            resources: in m_resources
-        );
-    /// <inheritdoc/>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-
-        if (m_created) {
-            m_api.DestroyResources(deviceHandle: m_deviceHandle, resources: m_resources);
-        }
-    }
 }

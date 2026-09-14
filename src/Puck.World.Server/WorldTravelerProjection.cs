@@ -8,40 +8,99 @@ internal static class WorldTravelerProjection {
         if (request.RemainingHops is 0 or > 64) { return "traveler projection exceeded its forwarding hop limit"; }
         WorldFederationProjectionSink? sink = null;
         IDisposable? lease = null;
-        var refusal = server.ExecuteAuthorityOperation(() => {
-            if (!server.TryTransferredPrincipal(request.SourceAuthority, request.Mobility, out var principal)) {
+        var refusal = server.ExecuteAuthorityOperation(operation: () => {
+            if (!server.TryTransferredPrincipal(
+                request.SourceAuthority,
+                request.Mobility,
+                out var principal
+            )) {
                 return "the projection credential names no committed traveler";
             }
-            if (WorldAdmissionDoor.TryAdmitArrival(server.Definition.Admission, request.SourceAuthority, out var admission) is not null) {
+            if (WorldAdmissionDoor.TryAdmitArrival(
+                entries: server.Definition.Admission,
+                sourceAuthority: request.SourceAuthority,
+                verdict: out var admission
+            ) is not null) {
                 return "the source authority is no longer admitted for traveler projection";
             }
-            request = request with { Ceiling = (WorldDisclosureTier)Math.Min((byte)request.Ceiling, (byte)admission!.Tier) };
+            request = request with { Ceiling = ((WorldDisclosureTier)Math.Min(
+                val1: ((byte)request.Ceiling),
+                val2: ((byte)admission!.Tier)
+            )) };
             if (request.Ceiling == WorldDisclosureTier.Frames) { return "the projection disclosure tier permits no world document"; }
-            if (!WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(server, principal)) { return null; }
+            if (!WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
+                principal: principal,
+                server: server
+            )) { return null; }
             var definition = server.Definition;
-            var subject = GrantSubject.Body(principal.Index);
-            if (!server.Grants.Allows(principal, WorldCapability.Observe, subject).IsAllowed) {
+            var subject = GrantSubject.Body(index: principal.Index);
+
+            if (!server.Grants.Allows(
+                capability: WorldCapability.Observe,
+                principal: principal,
+                subject: subject
+            ).IsAllowed) {
                 return "the traveler holds no Observe grant for its body";
             }
-            bool Current() => ReferenceEquals(server.Definition, definition) &&
-                server.TryTransferredPrincipal(request.SourceAuthority, request.Mobility, out var current) && current == principal &&
-                WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(server, principal) &&
-                server.Grants.Allows(principal, WorldCapability.Observe, subject).IsAllowed;
-            var disclosure = new WorldSinkDisclosure(definition.Population.ObserverDisclosure, principal.Index);
-            sink = new(request.Ceiling, server.AuthorityIdentity, () => server.Population.Revision,
-                () => disclosure, Current, principal);
-            sink.PrimeRoute(WorldLocalForwardedAuthority.DescribeRoute(server, endpoint, principal));
+            bool Current() => (ReferenceEquals(
+                objA: server.Definition,
+                objB: definition
+            ) &&
+                server.TryTransferredPrincipal(
+                request.SourceAuthority,
+                request.Mobility,
+                out var current
+            ) && (current == principal) &&
+                WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
+                principal: principal,
+                server: server
+            ) &&
+                server.Grants.Allows(
+                capability: WorldCapability.Observe,
+                principal: principal,
+                subject: subject
+            ).IsAllowed);
+            var disclosure = new WorldSinkDisclosure(
+                definition.Population.ObserverDisclosure,
+                principal.Index
+            );
+
+            sink = new(
+                request.Ceiling,
+                server.AuthorityIdentity,
+                () => server.Population.Revision,
+                () => disclosure,
+                Current,
+                principal
+            );
+            sink.PrimeRoute(route: WorldLocalForwardedAuthority.DescribeRoute(
+                endpoint: endpoint,
+                principal: principal,
+                server: server
+            ));
             lease = server.AttachSink(sink: sink);
-            return (string?)null;
+            return ((string?)null);
         });
+
         if (refusal is not null) { return refusal; }
-        if (sink is null || lease is null) {
-            return server.TransferForwarder is { } forwarder
-                ? await forwarder.StreamForwardedProjectionAsync(server, request, output, ct).ConfigureAwait(false)
-                : "the traveler has no committed onward projection route";
+        if (
+            (sink is null) ||
+            (lease is null)
+        ) {
+            return ((server.TransferForwarder is { } forwarder)
+                ? await forwarder.StreamForwardedProjectionAsync(
+                    ct: ct,
+                    output: output,
+                    request: request,
+                    source: server
+                ).ConfigureAwait(continueOnCapturedContext: false)
+                : "the traveler has no committed onward projection route"
+            );
         }
-        try { await sink.StreamAsync(output, ct).ConfigureAwait(false); }
-        finally { server.ExecuteAuthorityOperation(lease.Dispose); }
+        try { await sink.StreamAsync(
+            ct: ct,
+            output: output
+        ).ConfigureAwait(continueOnCapturedContext: false); } finally { server.ExecuteAuthorityOperation(operation: lease.Dispose); }
         return null;
     }
 }

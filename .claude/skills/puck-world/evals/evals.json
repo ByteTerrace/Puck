@@ -18,6 +18,12 @@
       "prompt": "Write a hermetic stdin script that mutates HUD state, reads it back, and captures the composed overlay for a pixel assertion.",
       "expected_output": "Uses an isolated state directory, captures both streams, preserves BOM-less UTF-8, relies on the simulation drain barrier or world.wait, waits a frame after the screenshot reports pending, finds the capture announcement on stderr, distinguishes the pixel proof from authoritative replay proof, and does not create permanent verification infrastructure without approval.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Add a world rule that decrements a countdown row and removes a stale cell once it reaches zero. Author it and say which mutation kind it lowers to and how you would boot it.",
+      "expected_output": "Authors the rule as `.puck` source (rule/gate/effect sugar — `countdown row[key]`, `remove row[key]`) instead of hand-writing JSON, routes grammar/CLI questions to puck-dsl, and states from the mutations reference that `countdownState` and `removeStateCell` fold through `UpsertStateCell`/`RemoveStateCell` via the rule frame, not a bespoke path. Boots the source directly with `--world <file>.puck` (PuckWorldLoader compiles it in memory) rather than hand-authoring the compiled JSON, and knows the flagship puck.world.json has no .puck source of its own so a scratch/basis-merged world is needed to try this live. Does not claim world.row.set is the authoring path for a new rule.",
+      "files": []
     }
   ]
 }

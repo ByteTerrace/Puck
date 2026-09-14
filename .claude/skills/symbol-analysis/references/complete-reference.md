@@ -29,8 +29,9 @@ Every command below writes just `puck <verb>` for short. Never depend
 exclusively on the ignored Windows launcher
 `src/Puck.Cli/publish/puck.exe`. Refresh published output after tool changes with
 `dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish` from the repo
-root. `puck <verb> -h` prints that verb's usage and exits 0; `puck` with no verb
-lists every verb of the CLI on stderr and exits 2, as an unknown verb does.
+root. `puck <verb> -h` prints that verb's usage and exits 0; `puck` with no verb,
+like an unknown verb or option, prints the parse error and
+`Run 'puck --help' for usage.` on stderr and exits 2.
 
 | Verb | Tier | Answers |
 |---|---|---|

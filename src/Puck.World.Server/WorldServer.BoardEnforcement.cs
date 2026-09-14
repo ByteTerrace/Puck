@@ -9,7 +9,6 @@ public sealed record WorldBoardEnforcementCheckpoint(IReadOnlyList<(string Place
     /// <summary>Gets an empty image, for a checkpoint captured before this section existed.</summary>
     public static WorldBoardEnforcementCheckpoint Empty { get; } = new(Entries: []);
 }
-
 public sealed partial class WorldServer {
     // The last verdict seen at each Return-bound board placement, keyed by placement id — kept outside the
     // document because a candidate replaces state.<verdict> wholesale every tick and the edge needs last tick's
@@ -42,7 +41,11 @@ public sealed partial class WorldServer {
         }
 
         for (var index = 0; (index < cells.Count); index++) {
-            if (string.Equals(a: cells[index].Key.Value, b: key, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(
+                a: cells[index].Key.Value,
+                b: key,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 value = cells[index].Value;
 
                 return true;
@@ -57,15 +60,26 @@ public sealed partial class WorldServer {
     // board piece already carries.
     private void ReturnBoardMove(WorldPlacementBoard board, WorldStateRow moveRow) {
         if (
-            !TryReadKeyedCell(row: moveRow, key: "from", out var fromCell) ||
-            !TryReadKeyedCell(row: moveRow, key: "to", out var toCell) ||
+            !TryReadKeyedCell(
+            row: moveRow,
+            key: "from",
+            out var fromCell
+        ) ||
+            !TryReadKeyedCell(
+            row: moveRow,
+            key: "to",
+            out var toCell
+        ) ||
             (fromCell < 0L) ||
             (toCell < 0L)
         ) {
             return;
         }
 
-        if (WorldTopologyCompilation.Find(m_definition, board.Topology) is not { } topology) {
+        if (WorldTopologyCompilation.Find(
+            definition: m_definition,
+            name: board.Topology
+        ) is not { } topology) {
             return;
         }
 
@@ -79,11 +93,20 @@ public sealed partial class WorldServer {
         var to = ((int)toCell);
 
         for (var index = 0; (index < m_population.Capacity); index++) {
-            if (!m_population.IsActive(index: index) || (Body(index: index) is not { } body)) {
+            if (
+                !m_population.IsActive(index: index) ||
+                (Body(index: index) is not { } body)
+            ) {
                 continue;
             }
 
-            if (!topology.TryCellOf(position: body.FixedPosition, cell: out var cell) || (cell != to)) {
+            if (
+                !topology.TryCellOf(
+                position: body.FixedPosition,
+                cell: out var cell
+            ) ||
+                (cell != to)
+            ) {
                 continue;
             }
 
@@ -91,7 +114,11 @@ public sealed partial class WorldServer {
             var current = body.FixedPosition;
 
             body.Pose(
-                position: new FixedVector3(X: centre.X, Y: current.Y, Z: centre.Z),
+                position: new FixedVector3(
+                    X: centre.X,
+                    Y: current.Y,
+                    Z: centre.Z
+                ),
                 yawRadians: body.FixedYaw,
                 pitchRadians: FixedQ4816.Zero,
                 rollRadians: FixedQ4816.Zero
@@ -123,22 +150,48 @@ public sealed partial class WorldServer {
             }
 
             if (
-                !TryResolveDocumentRow(name: verdictName, handle: out _, row: out var verdictRow) ||
-                !TryReadSlotValue(row: verdictRow, value: out var verdict)
+                !TryResolveDocumentRow(
+                handle: out _,
+                name: verdictName,
+                row: out var verdictRow
+            ) ||
+                !TryReadSlotValue(
+                row: verdictRow,
+                value: out var verdict
+            )
             ) {
                 continue;
             }
 
-            var previous = (m_boardVerdictLatch.TryGetValue(key: placement.Id, value: out var seen) ? seen : board.Accept);
+            var previous = (m_boardVerdictLatch.TryGetValue(
+                key: placement.Id,
+                value: out var seen
+            )
+                ? seen
+                : board.Accept
+            );
 
             m_boardVerdictLatch[placement.Id] = verdict;
 
-            if ((verdict == board.Accept) || (previous != board.Accept)) {
+            if (
+                (verdict == board.Accept) ||
+                (previous != board.Accept)
+            ) {
                 continue;
             }
 
-            if (TryResolveDocumentRow(name: moveName, handle: out _, row: out var moveRow) && (moveRow is not null)) {
-                ReturnBoardMove(board: board, moveRow: moveRow);
+            if (
+                TryResolveDocumentRow(
+                handle: out _,
+                name: moveName,
+                row: out var moveRow
+            ) &&
+                (moveRow is not null)
+            ) {
+                ReturnBoardMove(
+                    board: board,
+                    moveRow: moveRow
+                );
             }
         }
     }
@@ -186,7 +239,10 @@ public sealed partial class WorldServer {
             entries.Add(item: entry);
         }
 
-        entries.Sort(comparison: static (left, right) => string.CompareOrdinal(strA: left.Key, strB: right.Key));
+        entries.Sort(comparison: static (left, right) => string.CompareOrdinal(
+            strA: left.Key,
+            strB: right.Key
+        ));
 
         foreach (var (placementId, verdict) in entries) {
             hash.Add(value: Fnv1aHash.Compute(values: placementId.AsSpan()));
@@ -201,7 +257,10 @@ public sealed partial class WorldServer {
             entries.Add(item: (placementId, verdict));
         }
 
-        entries.Sort(comparison: static (left, right) => string.CompareOrdinal(strA: left.PlacementId, strB: right.PlacementId));
+        entries.Sort(comparison: static (left, right) => string.CompareOrdinal(
+            strA: left.PlacementId,
+            strB: right.PlacementId
+        ));
 
         return new WorldBoardEnforcementCheckpoint(Entries: entries);
     }

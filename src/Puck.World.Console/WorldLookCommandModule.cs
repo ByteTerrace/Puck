@@ -164,7 +164,10 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
             name: "world.looks",
             description: "Reports the LOOK census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one line per look row — name, resolved source, active entity count. A world with no looks section prints the single implicit 'catalog (index-derived)' row over the whole population.",
             handler: (context, args) => {
-                if (CommandResult.RequireNoArguments(args: args, verb: "world.looks") is { } refusal) {
+                if (CommandResult.RequireNoArguments(
+                    args: args,
+                    verb: "world.looks"
+                ) is { } refusal) {
                     return refusal;
                 }
 

@@ -14,54 +14,18 @@ namespace Puck.Cli.Format.Rewriters;
 // #directive (slot reassignment would scramble the annotation). Per-slot trivia is reassigned
 // positionally, so the tight one-per-line layout is preserved and a second run is a no-op.
 internal sealed class MemberOrderRewriter : CSharpSyntaxRewriter {
-    public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitClassDeclaration(node: node)!));
-    public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitStructDeclaration(node: node)!));
-    public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitInterfaceDeclaration(node: node)!));
-    public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitRecordDeclaration(node: node)!));
-
     private static TypeDeclarationSyntax Fix(TypeDeclarationSyntax node) {
-        if ((node is StructDeclarationSyntax)
-            || ((node is RecordDeclarationSyntax record) && record.ClassOrStructKeyword.IsKind(kind: SyntaxKind.StructKeyword))
-            || node.Modifiers.Any(predicate: static modifier => modifier.IsKind(kind: SyntaxKind.PartialKeyword))
-            || (node.AttributeLists.Count > 0)
-            || node.Members.Any(predicate: static member => member.ContainsDirectives)) {
+        if (
+            (node is StructDeclarationSyntax) ||
+            ((node is RecordDeclarationSyntax record) && record.ClassOrStructKeyword.IsKind(kind: SyntaxKind.StructKeyword)) ||
+            node.Modifiers.Any(predicate: static modifier => modifier.IsKind(kind: SyntaxKind.PartialKeyword)) ||
+            (node.AttributeLists.Count > 0) ||
+            node.Members.Any(predicate: static member => member.ContainsDirectives)
+        ) {
             return node;
         }
 
         return node.WithMembers(members: Reorder(members: node.Members));
-    }
-    private static SyntaxList<MemberDeclarationSyntax> Reorder(SyntaxList<MemberDeclarationSyntax> members) {
-        if (members.Count < 2) {
-            return members;
-        }
-
-        var result = new List<MemberDeclarationSyntax>(capacity: members.Count);
-        var run = new List<MemberDeclarationSyntax>();
-        var coupled = InitializerCoupling.CoupledMemberNames(members: members);
-        string? runKey = null;
-
-        foreach (var member in members) {
-            var key = (RewriteShaping.IsAnnotated(node: member) ? null : GroupKey(coupled: coupled, member: member));
-
-            if ((key is not null) && (key == runKey)) {
-                run.Add(item: member);
-
-                continue;
-            }
-
-            FlushRun(result: result, run: run);
-            runKey = key;
-
-            if (key is null) {
-                result.Add(item: member);
-            } else {
-                run.Add(item: member);
-            }
-        }
-
-        FlushRun(result: result, run: run);
-
-        return SyntaxFactory.List(nodes: result);
     }
     private static void FlushRun(List<MemberDeclarationSyntax> result, List<MemberDeclarationSyntax> run) {
         if (run.Count == 1) {
@@ -76,7 +40,10 @@ internal sealed class MemberOrderRewriter : CSharpSyntaxRewriter {
                 // The inter-member whitespace is positional (slot i always carries the same surrounding
                 // trivia); reassigning it by slot preserves the layout while the declarations move.
                 var slots = run.Select(selector: static member => (member.GetLeadingTrivia(), member.GetTrailingTrivia())).ToArray();
-                var sorted = run.OrderBy(keySelector: SortKey, comparer: StringComparer.Ordinal).ToArray();
+                var sorted = run.OrderBy(
+                    keySelector: SortKey,
+                    comparer: StringComparer.Ordinal
+                ).ToArray();
 
                 for (var slot = 0; (slot < sorted.Length); slot++) {
                     result.Add(item: sorted[slot].WithLeadingTrivia(trivia: slots[slot].Item1).WithTrailingTrivia(trivia: slots[slot].Item2));
@@ -95,11 +62,67 @@ internal sealed class MemberOrderRewriter : CSharpSyntaxRewriter {
             _ => null
         };
 
-        return ((kind is null) ? null : $"{kind} {RewriteShaping.AccessibilityScope(member: member)}");
+        return ((kind is null)
+            ? null
+            : $"{kind} {RewriteShaping.AccessibilityScope(member: member)}"
+        );
+    }
+    private static SyntaxList<MemberDeclarationSyntax> Reorder(SyntaxList<MemberDeclarationSyntax> members) {
+        if (members.Count < 2) {
+            return members;
+        }
+
+        var result = new List<MemberDeclarationSyntax>(capacity: members.Count);
+        var run = new List<MemberDeclarationSyntax>();
+        var coupled = InitializerCoupling.CoupledMemberNames(members: members);
+        string? runKey = null;
+
+        foreach (var member in members) {
+            var key = (RewriteShaping.IsAnnotated(node: member)
+                ? null
+                : GroupKey(
+                    coupled: coupled,
+                    member: member
+                )
+            );
+
+            if (
+                (key is not null) &&
+                (key == runKey)
+            ) {
+                run.Add(item: member);
+
+                continue;
+            }
+
+            FlushRun(
+                result: result,
+                run: run
+            );
+            runKey = key;
+
+            if (key is null) {
+                result.Add(item: member);
+            } else {
+                run.Add(item: member);
+            }
+        }
+
+        FlushRun(
+            result: result,
+            run: run
+        );
+
+        return SyntaxFactory.List(nodes: result);
     }
     private static string SortKey(MemberDeclarationSyntax member) => member switch {
         FieldDeclarationSyntax field => field.Declaration.Variables[0].Identifier.ValueText,
         PropertyDeclarationSyntax property => property.Identifier.ValueText,
         _ => ""
     };
+
+    public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitClassDeclaration(node: node)!));
+    public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitInterfaceDeclaration(node: node)!));
+    public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitRecordDeclaration(node: node)!));
+    public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitStructDeclaration(node: node)!));
 }

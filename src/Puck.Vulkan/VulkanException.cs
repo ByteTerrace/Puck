@@ -29,9 +29,9 @@ public sealed class VulkanException : Exception {
     /// <exception cref="ArgumentException"><paramref name="operation"/> is <see langword="null"/>, empty, or white space.</exception>
     public VulkanException(string operation, VkResult result)
         : base(CreateMessage(
-            operation: operation,
-            result: result
-        )) {
+        operation: operation,
+        result: result
+    )) {
         Operation = operation;
         Result = result;
     }

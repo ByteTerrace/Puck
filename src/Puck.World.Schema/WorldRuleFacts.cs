@@ -22,32 +22,6 @@ public static class WorldRuleFacts {
     /// <summary>The prefix; <c>$argmin:&lt;row&gt;</c> is <see cref="ArgMaxPrefix"/>'s dual — the body naming the
     /// smallest cell; it accepts the same optional <c>:where:&lt;filterRow&gt;</c> suffix.</summary>
     public const string ArgMinPrefix = "$argmin:";
-    /// <summary>The prefix; <c>$nearest:&lt;bodyRef&gt;:&lt;row&gt;</c> yields the index of the active body nearest to
-    /// <c>bodyRef</c> (itself excluded) whose cell in the keyed <c>row</c> reads nonzero — "the closest enemy" when
-    /// <c>row</c> tags enemies — or <c>-1</c> when no such body exists. Ties resolve to the lowest index. The body
-    /// reference takes the same tokens <see cref="DistancePrefix"/> takes.</summary>
-    public const string NearestPrefix = "$nearest:";
-    /// <summary>The prefix; <c>$clock:&lt;music&gt;:phaseError</c> reads the signed tick distance from the world's
-    /// musical clock's current position to the nearest beat — positive after the beat, negative ahead of the next
-    /// one, magnitude at most half a beat. A hit window is an ordinary <c>compareState</c> range over it (no
-    /// dedicated effect or asset family): the same read at every firing tick a kit action's own edge trigger stamps
-    /// a state cell for. <c>music</c> must name the document's declared music row (the only clock a world may
-    /// author); a world with none has no clock to read and the operand refuses at compile time.</summary>
-    public const string ClockPrefix = "$clock:";
-    /// <summary>The prefix a cell KEY may carry to address a row by a genuine (observer, subject) pair rather than
-    /// one body: <c>$pair:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> resolves, at every read and every firing, to the
-    /// composite key <c>"&lt;a&gt;_&lt;b&gt;"</c> (underscore, since <see cref="CellName"/> reserves <c>:</c>)
-    /// the two live body references (the same grammar <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/>
-    /// spend both halves on — a literal <c>body:&lt;n&gt;</c>, an <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c>
-    /// reduction, a <c>cell:&lt;row&gt;:&lt;key&gt;</c> indirection, or a bound <c>each</c>/<c>left</c>/<c>right</c>)
-    /// resolve to — so a keyed row can hold one cell PER PAIR (an observer's own impression of one particular
-    /// subject) instead of one cell per body. <c>(a, b)</c> and <c>(b, a)</c> name different cells: the pair is
-    /// directed, exactly as "how much A trusts B" and "how much B trusts A" are two different numbers. Admitted
-    /// everywhere <see cref="RuleFacts.CellKeyPrefix"/> is — a <c>compareState</c> <c>key</c>/<c>comparandKey</c>, a
-    /// world-scope effect's <c>key</c>/<c>fromKey</c>, a flock affinity's own key — because both resolve through the
-    /// same <c>CompiledCellRef</c> indirection carrier.</summary>
-    public const string PairKeyPrefix = "$pair:";
-
     /// <summary>The prefix; <c>$channel:&lt;seat&gt;:&lt;channelName&gt;</c> reads the 1-based local seat's current value of
     /// a declared <c>channels[]</c> row as its body integrates it that tick — the drained
     /// <c>CommandSnapshot</c> read folded with co-driving contributions and the admitted held
@@ -60,6 +34,13 @@ public static class WorldRuleFacts {
     /// <c>channelName</c> against the declared <c>channels[]</c> rows. An unseated/absent seat reads <c>0</c> — the
     /// convention <see cref="ParkedPrefix"/>/<see cref="MachinePrefix"/>/<see cref="RegionPrefix"/> already set.</summary>
     public const string ChannelPrefix = "$channel:";
+    /// <summary>The prefix; <c>$clock:&lt;music&gt;:phaseError</c> reads the signed tick distance from the world's
+    /// musical clock's current position to the nearest beat — positive after the beat, negative ahead of the next
+    /// one, magnitude at most half a beat. A hit window is an ordinary <c>compareState</c> range over it (no
+    /// dedicated effect or asset family): the same read at every firing tick a kit action's own edge trigger stamps
+    /// a state cell for. <c>music</c> must name the document's declared music row (the only clock a world may
+    /// author); a world with none has no clock to read and the operand refuses at compile time.</summary>
+    public const string ClockPrefix = "$clock:";
     /// <summary>The prefix; <c>$distance:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> reads the live straight-line distance
     /// between two named bodies — each a <c>body:&lt;n&gt;</c> literal 0-based index (the floor) or an
     /// <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c> body reference (the entity-addressable widening — see
@@ -73,6 +54,17 @@ public static class WorldRuleFacts {
     /// <see cref="MachinePrefix"/>/<see cref="RegionPrefix"/>, deliberately: those measure "how much", where zero is
     /// a correct neutral count, while a spatial gate's neutral-for-absence value must never read as "close").</summary>
     public const string DistancePrefix = "$distance:";
+    /// <summary>The prefix; <c>$fact:&lt;bodyRef&gt;:&lt;fact&gt;</c> reads <c>1</c> while the named body's live
+    /// <c>BodyFacts</c> bit holds (<c>Grounded</c>, <c>Airborne</c>, <c>Rising</c>, <c>Falling</c>, …) and <c>0</c>
+    /// otherwise; a reference resolving to no live body reads <c>0</c>.</summary>
+    public const string FactPrefix = "$fact:";
+    /// <summary>The reserved channel reading one fact on the identity a body drives under:
+    /// <c>$identity:&lt;bodyRef&gt;:&lt;fact&gt;</c>, answered from the world's <see cref="WorldIdentityFactLane"/>.</summary>
+    public const string IdentityPrefix = "$identity:";
+    /// <summary><c>$influence:&lt;channel&gt;:&lt;placementId&gt;</c> counts distinct other placements covering
+    /// the target with the named influence. An optional read key addresses a dealt child of the named template.
+    /// Channels are opaque shared labels, so importing a module does not rename them. A missing child reads absent.</summary>
+    public const string InfluencePrefix = "$influence:";
     /// <summary>The prefix; <c>$los:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> reads <c>1</c> when solid world geometry
     /// leaves the sight-offset segment between two named bodies (the same body-reference grammar
     /// <see cref="DistancePrefix"/> uses) unobstructed, <c>0</c> otherwise — the same
@@ -82,22 +74,6 @@ public static class WorldRuleFacts {
     /// <see cref="DistancePrefix"/>'s deliberately-inverted sentinel (a boolean has no "too far" failure mode to
     /// guard against).</summary>
     public const string LineOfSightPrefix = "$los:";
-    /// <summary>The prefix; <c>$upright:&lt;bodyRef&gt;</c> reads one named body's own up axis (its local +Y rotated
-    /// by its live orientation) dotted against the world up its gravity opposes — <c>1</c> standing exactly upright,
-    /// <c>0</c> lying exactly on its side, negative past horizontal — the same single-body-reference grammar
-    /// <see cref="ParkedPrefix"/> spends. A gate compares it directly against an authored cosine threshold
-    /// (<c>compareState($upright:body:12, greaterOrEqual, 0.866)</c> admits up to 30 degrees of tilt) rather than a
-    /// second reserved channel duplicating the angle — the tabletop primitive's own worked use is gating a piece's
-    /// board occupancy derive on this so a knocked-over piece reads as displaced rather than occupying its last
-    /// resolved cell. A body reference resolving to no live body reads <c>1</c> (perfectly upright) — the neutral
-    /// value for an absent body, since nothing about "no body" should ever read as knocked over.</summary>
-    public const string UprightPrefix = "$upright:";
-    /// <summary>The reserved channel reading one fact on the identity a body drives under:
-    /// <c>$identity:&lt;bodyRef&gt;:&lt;fact&gt;</c>, answered from the world's <see cref="WorldIdentityFactLane"/>.</summary>
-    public const string IdentityPrefix = "$identity:";
-    /// <summary>The prefix; <c>$nav:&lt;bodyRef&gt;:&lt;facet&gt;</c> reads one body's live route state. Facets are
-    /// <c>hasPath</c>, <c>active</c>, <c>arrived</c>, <c>unreachable</c>, <c>pending</c>, <c>capacity</c>, and <c>remaining</c> waypoints.</summary>
-    public const string NavigationPrefix = "$nav:";
     /// <summary>The prefix; <c>$link:&lt;adjacencyName&gt;</c> reads how many simulation ticks have passed since the
     /// named <c>adjacencies</c> row last received a delivered neighbour refresh — <c>0</c> the tick a refresh landed,
     /// rising by one per tick while nothing arrives. The neutral-falsy convention
@@ -121,6 +97,27 @@ public static class WorldRuleFacts {
     /// a later tick. Deliberately fixed-width: the addon family's own shipped watch (the retired `arcade` world's
     /// win flag) was 1 byte, and a multi-byte little-endian read is not a primitive anything here has needed yet.</summary>
     public const string MachinePrefix = "$machine:";
+    /// <summary>The prefix; <c>$nav:&lt;bodyRef&gt;:&lt;facet&gt;</c> reads one body's live route state. Facets are
+    /// <c>hasPath</c>, <c>active</c>, <c>arrived</c>, <c>unreachable</c>, <c>pending</c>, <c>capacity</c>, and <c>remaining</c> waypoints.</summary>
+    public const string NavigationPrefix = "$nav:";
+    /// <summary>The prefix; <c>$nearest:&lt;bodyRef&gt;:&lt;row&gt;</c> yields the index of the active body nearest to
+    /// <c>bodyRef</c> (itself excluded) whose cell in the keyed <c>row</c> reads nonzero — "the closest enemy" when
+    /// <c>row</c> tags enemies — or <c>-1</c> when no such body exists. Ties resolve to the lowest index. The body
+    /// reference takes the same tokens <see cref="DistancePrefix"/> takes.</summary>
+    public const string NearestPrefix = "$nearest:";
+    /// <summary>The prefix a cell KEY may carry to address a row by a genuine (observer, subject) pair rather than
+    /// one body: <c>$pair:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> resolves, at every read and every firing, to the
+    /// composite key <c>"&lt;a&gt;_&lt;b&gt;"</c> (underscore, since <see cref="CellName"/> reserves <c>:</c>)
+    /// the two live body references (the same grammar <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/>
+    /// spend both halves on — a literal <c>body:&lt;n&gt;</c>, an <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c>
+    /// reduction, a <c>cell:&lt;row&gt;:&lt;key&gt;</c> indirection, or a bound <c>each</c>/<c>left</c>/<c>right</c>)
+    /// resolve to — so a keyed row can hold one cell PER PAIR (an observer's own impression of one particular
+    /// subject) instead of one cell per body. <c>(a, b)</c> and <c>(b, a)</c> name different cells: the pair is
+    /// directed, exactly as "how much A trusts B" and "how much B trusts A" are two different numbers. Admitted
+    /// everywhere <see cref="RuleFacts.CellKeyPrefix"/> is — a <c>compareState</c> <c>key</c>/<c>comparandKey</c>, a
+    /// world-scope effect's <c>key</c>/<c>fromKey</c>, a flock affinity's own key — because both resolve through the
+    /// same <c>CompiledCellRef</c> indirection carrier.</summary>
+    public const string PairKeyPrefix = "$pair:";
     /// <summary>The prefix; <c>$parked:&lt;bodyRef&gt;</c> reads the remaining reconnect-grace ticks for one named
     /// body — the same body-reference grammar <see cref="DistancePrefix"/>/<see cref="LineOfSightPrefix"/> use
     /// (<c>body:&lt;n&gt;</c> or <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c>), so it composes with them
@@ -133,13 +130,13 @@ public static class WorldRuleFacts {
     /// not spuriously open. See <c>Server.WorldPopulation</c>'s park-with-grace remarks for what marks a body parked
     /// and how the deadline is authored (<c>population.reconnectGraceSeconds</c>).</summary>
     public const string ParkedPrefix = "$parked:";
-    /// <summary>Compares the world's own live active-population count.</summary>
-    public const string Population = "$population";
     /// <summary>Reads <c>1</c> when every active rigid body (a kit authoring <c>rigid</c>) currently latches
     /// <see cref="Puck.Physics.Motion.ActionFact.Resting"/>, <c>0</c> otherwise — vacuously <c>1</c> when the world
     /// authors no rigid body, so a turn-waiting rule composes without a special case for a world that never wired one
     /// in.</summary>
     public const string PhysicsQuiescent = "$physics:quiescent";
+    /// <summary>Compares the world's own live active-population count.</summary>
+    public const string Population = "$population";
     /// <summary>The prefix; <c>$region:&lt;placementId&gt;</c> compares that placement's live region occupant count —
     /// the same count the world-events feed already tracks per tick, read rather than duplicated.</summary>
     /// <remarks><b>Does not collapse into <see cref="DistancePrefix"/>.</b> A <c>WorldPlacementRegion</c> is
@@ -153,9 +150,14 @@ public static class WorldRuleFacts {
     /// per tick to recover a number the engine already tracks for free — a real regression for the one consumer that
     /// exists today. Kept as its own case, deliberately.</remarks>
     public const string RegionPrefix = "$region:";
-
-    /// <summary><c>$influence:&lt;channel&gt;:&lt;placementId&gt;</c> counts distinct other placements covering
-    /// the target with the named influence. An optional read key addresses a dealt child of the named template.
-    /// Channels are opaque shared labels, so importing a module does not rename them. A missing child reads absent.</summary>
-    public const string InfluencePrefix = "$influence:";
+    /// <summary>The prefix; <c>$upright:&lt;bodyRef&gt;</c> reads one named body's own up axis (its local +Y rotated
+    /// by its live orientation) dotted against the world up its gravity opposes — <c>1</c> standing exactly upright,
+    /// <c>0</c> lying exactly on its side, negative past horizontal — the same single-body-reference grammar
+    /// <see cref="ParkedPrefix"/> spends. A gate compares it directly against an authored cosine threshold
+    /// (<c>compareState($upright:body:12, greaterOrEqual, 0.866)</c> admits up to 30 degrees of tilt) rather than a
+    /// second reserved channel duplicating the angle — the tabletop primitive's own worked use is gating a piece's
+    /// board occupancy derive on this so a knocked-over piece reads as displaced rather than occupying its last
+    /// resolved cell. A body reference resolving to no live body reads <c>1</c> (perfectly upright) — the neutral
+    /// value for an absent body, since nothing about "no body" should ever read as knocked over.</summary>
+    public const string UprightPrefix = "$upright:";
 }

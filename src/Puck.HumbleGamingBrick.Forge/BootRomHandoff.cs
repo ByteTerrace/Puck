@@ -23,62 +23,53 @@ public static class BootRomHandoff {
 
     private static MachineInstance Create(ConsoleModel model, byte[] rom, byte[]? bootRom) =>
         MachineFactory.Create(
-        configuration: new MachineConfiguration(
-            bootRom: bootRom,
-            cartridgeRom: rom,
-            model: model
-        ),
-        compose: static services => services.AddHumbleGamingBrickComponents()
-    );
-
-    /// <summary>Boots one cartridge through an authored image and against the seeded post-boot handoff, and names the
-    /// first observable field the two disagree on.</summary>
-    /// <param name="model">The revision to emulate.</param>
-    /// <param name="bootRom">The authored boot image.</param>
-    /// <param name="rom">The cartridge ROM to boot.</param>
-    /// <param name="instructionCeiling">The instruction budget before the boot is declared wedged.</param>
-    /// <returns>A description of the first difference, or <see langword="null"/> when the two agree.</returns>
-    public static string? Compare(ConsoleModel model, byte[] bootRom, byte[] rom, int instructionCeiling = DefaultInstructionCeiling) {
-        using var seeded = Create(
-            bootRom: null,
-            model: model,
-            rom: rom
+            configuration: new MachineConfiguration(
+                bootRom: bootRom,
+                cartridgeRom: rom,
+                model: model
+            ),
+            compose: static services => services.AddHumbleGamingBrickComponents()
         );
-        using var booted = Create(
-            bootRom: bootRom,
-            model: model,
-            rom: rom
-        );
+    private static string RegisterName(ushort address) =>
+        address switch {
+            MemoryMap.Joypad => "joypad.p1",
+            MemoryMap.SerialData => "serial.sb",
+            MemoryMap.SerialControl => "serial.sc",
+            MemoryMap.Divider => "timer.div",
+            MemoryMap.TimerCounter => "timer.tima",
+            MemoryMap.TimerModulo => "timer.tma",
+            MemoryMap.TimerControl => "timer.tac",
+            MemoryMap.InterruptFlag => "interrupts.if",
+            MemoryMap.LcdControl => "ppu.lcdc",
+            MemoryMap.LcdStatus => "ppu.stat",
+            MemoryMap.ScrollY => "ppu.scy",
+            MemoryMap.ScrollX => "ppu.scx",
+            MemoryMap.LcdY => "ppu.ly",
+            MemoryMap.LcdYCompare => "ppu.lyc",
+            MemoryMap.OamDmaSource => "oamDma.dma",
+            MemoryMap.BackgroundPalette => "ppu.bgp",
+            MemoryMap.ObjectPalette0 => "ppu.obp0",
+            MemoryMap.ObjectPalette1 => "ppu.obp1",
+            MemoryMap.WindowY => "ppu.wy",
+            MemoryMap.WindowX => "ppu.wx",
+            MemoryMap.SystemModeSelect => "key0",
+            MemoryMap.SpeedSwitch => "key1",
+            MemoryMap.VramBankSelect => "vbk",
+            MemoryMap.BootRomDisable => "bank",
+            MemoryMap.HdmaSourceHigh => "hdma1",
+            MemoryMap.HdmaSourceLow => "hdma2",
+            MemoryMap.HdmaDestinationHigh => "hdma3",
+            MemoryMap.HdmaDestinationLow => "hdma4",
+            MemoryMap.HdmaControl => "hdma5",
+            MemoryMap.InfraredPort => "rp",
+            MemoryMap.BackgroundColorPaletteIndex => "ppu.bcps",
+            MemoryMap.ObjectColorPaletteIndex => "ppu.ocps",
+            MemoryMap.WorkRamBankSelect => "svbk",
+            _ => (((address >= MemoryMap.AudioStart) && (address <= MemoryMap.WaveRamEnd))
+            ? $"apu.{address:X4}"
+            : $"io.{address:X4}"),
+        };
 
-        if (!TryRunToHandoff(
-            instance: booted,
-            instructionCeiling: instructionCeiling
-        )) {
-            return $"the boot program never unmapped itself within {instructionCeiling} instructions";
-        }
-
-        return FirstDifference(
-            actual: Capture(instance: booted),
-            expected: Capture(instance: seeded)
-        );
-    }
-    /// <summary>Steps a machine until its boot program unmaps itself, leaving it at the cartridge's entry point.</summary>
-    /// <param name="instance">The machine, configured with a boot ROM.</param>
-    /// <param name="instructionCeiling">The instruction budget before the boot is declared wedged.</param>
-    /// <returns><see langword="true"/> when the machine reached its handoff.</returns>
-    public static bool TryRunToHandoff(MachineInstance instance, int instructionCeiling) {
-        var bus = instance.GetRequiredService<ISystemBus>();
-
-        for (var step = 0; (step < instructionCeiling); ++step) {
-            if ((bus.ReadByte(address: MemoryMap.BootRomDisable) & 0x01) != 0) {
-                return true;
-            }
-
-            instance.Machine.StepInstruction();
-        }
-
-        return false;
-    }
     /// <summary>Captures the observable handoff surface of a machine, leaving its state exactly as it found it.</summary>
     /// <param name="instance">The machine to read.</param>
     /// <returns>The captured fields, in a stable order.</returns>
@@ -148,6 +139,37 @@ public static class BootRomHandoff {
 
         return fields;
     }
+    /// <summary>Boots one cartridge through an authored image and against the seeded post-boot handoff, and names the
+    /// first observable field the two disagree on.</summary>
+    /// <param name="model">The revision to emulate.</param>
+    /// <param name="bootRom">The authored boot image.</param>
+    /// <param name="rom">The cartridge ROM to boot.</param>
+    /// <param name="instructionCeiling">The instruction budget before the boot is declared wedged.</param>
+    /// <returns>A description of the first difference, or <see langword="null"/> when the two agree.</returns>
+    public static string? Compare(ConsoleModel model, byte[] bootRom, byte[] rom, int instructionCeiling = DefaultInstructionCeiling) {
+        using var seeded = Create(
+            bootRom: null,
+            model: model,
+            rom: rom
+        );
+        using var booted = Create(
+            bootRom: bootRom,
+            model: model,
+            rom: rom
+        );
+
+        if (!TryRunToHandoff(
+            instance: booted,
+            instructionCeiling: instructionCeiling
+        )) {
+            return $"the boot program never unmapped itself within {instructionCeiling} instructions";
+        }
+
+        return FirstDifference(
+            actual: Capture(instance: booted),
+            expected: Capture(instance: seeded)
+        );
+    }
     /// <summary>Returns the first field whose value differs between two captures, or <see langword="null"/> when they
     /// agree.</summary>
     /// <param name="expected">The seeded machine's capture.</param>
@@ -166,44 +188,21 @@ public static class BootRomHandoff {
 
         return null;
     }
+    /// <summary>Steps a machine until its boot program unmaps itself, leaving it at the cartridge's entry point.</summary>
+    /// <param name="instance">The machine, configured with a boot ROM.</param>
+    /// <param name="instructionCeiling">The instruction budget before the boot is declared wedged.</param>
+    /// <returns><see langword="true"/> when the machine reached its handoff.</returns>
+    public static bool TryRunToHandoff(MachineInstance instance, int instructionCeiling) {
+        var bus = instance.GetRequiredService<ISystemBus>();
 
-    private static string RegisterName(ushort address) =>
-        address switch {
-            MemoryMap.Joypad => "joypad.p1",
-            MemoryMap.SerialData => "serial.sb",
-            MemoryMap.SerialControl => "serial.sc",
-            MemoryMap.Divider => "timer.div",
-            MemoryMap.TimerCounter => "timer.tima",
-            MemoryMap.TimerModulo => "timer.tma",
-            MemoryMap.TimerControl => "timer.tac",
-            MemoryMap.InterruptFlag => "interrupts.if",
-            MemoryMap.LcdControl => "ppu.lcdc",
-            MemoryMap.LcdStatus => "ppu.stat",
-            MemoryMap.ScrollY => "ppu.scy",
-            MemoryMap.ScrollX => "ppu.scx",
-            MemoryMap.LcdY => "ppu.ly",
-            MemoryMap.LcdYCompare => "ppu.lyc",
-            MemoryMap.OamDmaSource => "oamDma.dma",
-            MemoryMap.BackgroundPalette => "ppu.bgp",
-            MemoryMap.ObjectPalette0 => "ppu.obp0",
-            MemoryMap.ObjectPalette1 => "ppu.obp1",
-            MemoryMap.WindowY => "ppu.wy",
-            MemoryMap.WindowX => "ppu.wx",
-            MemoryMap.SystemModeSelect => "key0",
-            MemoryMap.SpeedSwitch => "key1",
-            MemoryMap.VramBankSelect => "vbk",
-            MemoryMap.BootRomDisable => "bank",
-            MemoryMap.HdmaSourceHigh => "hdma1",
-            MemoryMap.HdmaSourceLow => "hdma2",
-            MemoryMap.HdmaDestinationHigh => "hdma3",
-            MemoryMap.HdmaDestinationLow => "hdma4",
-            MemoryMap.HdmaControl => "hdma5",
-            MemoryMap.InfraredPort => "rp",
-            MemoryMap.BackgroundColorPaletteIndex => "ppu.bcps",
-            MemoryMap.ObjectColorPaletteIndex => "ppu.ocps",
-            MemoryMap.WorkRamBankSelect => "svbk",
-            _ => ((address >= MemoryMap.AudioStart) && (address <= MemoryMap.WaveRamEnd))
-                ? $"apu.{address:X4}"
-                : $"io.{address:X4}",
-        };
+        for (var step = 0; (step < instructionCeiling); ++step) {
+            if ((bus.ReadByte(address: MemoryMap.BootRomDisable) & 0x01) != 0) {
+                return true;
+            }
+
+            instance.Machine.StepInstruction();
+        }
+
+        return false;
+    }
 }

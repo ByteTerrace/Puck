@@ -10,22 +10,36 @@ namespace Puck.World.Tests;
 /// than boot silently truncated.
 /// </summary>
 public sealed class MusicRowCapLawTests {
-    [Fact]
-    public void TwoMusicRowsRefuseByName() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-music-cap-law-").FullName;
+    private static WorldMusicRow BuildMusicRow(string assetDirectory, string name) {
+        var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(
+            Schema: MusicDocument.CurrentSchema,
+            Name: name,
+            Tempo: new MusicTempoDocument(
+                BeatsPerBar: 4,
+                TicksPerBeat: 2100
+            ),
+            Segments: [new MusicSegmentDocument(
+                    Id: "calm",
+                    Transitions: null
+                )]
+        ));
+        var path = Path.Combine(
+            path1: assetDirectory,
+            path2: $"{name}.puck.music.v1.json"
+        );
 
-        try {
-            var document = Fixtures.BuildDocument() with {
-                Music = [BuildMusicRow(assetDirectory: directory, name: "score-a"), BuildMusicRow(assetDirectory: directory, name: "score-b")],
-            };
+        File.WriteAllBytes(
+            path: path,
+            bytes: music.Bytes
+        );
 
-            Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason), userMessage: "a second authored music row was expected to refuse");
-            Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "music declares 2 rows");
-            Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "at most one");
-        } finally {
-            Directory.Delete(path: directory, recursive: true);
-        }
+        return new WorldMusicRow(
+            Name: name,
+            Source: path,
+            Hash: music.Hash
+        );
     }
+
     [Fact]
     public void OneMusicRowControl() {
         // The identical row-building helper, called once instead of twice — isolates the refusal above to the cap
@@ -35,26 +49,65 @@ public sealed class MusicRowCapLawTests {
 
         try {
             var document = Fixtures.BuildDocument() with {
-                Music = [BuildMusicRow(assetDirectory: directory, name: "score-a")],
+                Music = [BuildMusicRow(
+                    assetDirectory: directory,
+                    name: "score-a"
+                )],
             };
 
-            Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason), userMessage: reason);
+            Assert.True(
+                condition: WorldDefinitionValidator.TryValidate(
+                    definition: document,
+                    neighbours: null,
+                    reason: out var reason
+                ),
+                userMessage: reason
+            );
         } finally {
-            Directory.Delete(path: directory, recursive: true);
+            Directory.Delete(
+                path: directory,
+                recursive: true
+            );
         }
     }
+    [Fact]
+    public void TwoMusicRowsRefuseByName() {
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-music-cap-law-").FullName;
 
-    private static WorldMusicRow BuildMusicRow(string assetDirectory, string name) {
-        var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(
-            Schema: MusicDocument.CurrentSchema,
-            Name: name,
-            Tempo: new MusicTempoDocument(BeatsPerBar: 4, TicksPerBeat: 2100),
-            Segments: [new MusicSegmentDocument(Id: "calm", Transitions: null)]
-        ));
-        var path = Path.Combine(path1: assetDirectory, path2: $"{name}.puck.music.v1.json");
+        try {
+            var document = Fixtures.BuildDocument() with {
+                Music = [BuildMusicRow(
+                    assetDirectory: directory,
+                    name: "score-a"
+                ), BuildMusicRow(
+                    assetDirectory: directory,
+                    name: "score-b"
+                )],
+            };
 
-        File.WriteAllBytes(path: path, bytes: music.Bytes);
-
-        return new WorldMusicRow(Name: name, Source: path, Hash: music.Hash);
+            Assert.False(
+                condition: WorldDefinitionValidator.TryValidate(
+                    definition: document,
+                    neighbours: null,
+                    reason: out var reason
+                ),
+                userMessage: "a second authored music row was expected to refuse"
+            );
+            Assert.Contains(
+                actualString: reason,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "music declares 2 rows"
+            );
+            Assert.Contains(
+                actualString: reason,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "at most one"
+            );
+        } finally {
+            Directory.Delete(
+                path: directory,
+                recursive: true
+            );
+        }
     }
 }

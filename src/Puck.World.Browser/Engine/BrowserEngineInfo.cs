@@ -19,7 +19,10 @@ public static class BrowserEngineInfo {
 
         var plusIndex = informational.IndexOf(value: '+');
 
-        return ((plusIndex >= 0) ? informational[(plusIndex + 1)..] : null);
+        return ((plusIndex >= 0)
+            ? informational[(plusIndex + 1)..]
+            : null
+        );
     }
 
     /// <summary>Builds the version payload every <c>Version</c> export returns.</summary>
@@ -29,7 +32,6 @@ public static class BrowserEngineInfo {
         Commit: Commit
     );
 }
-
 /// <summary>The engine identity payload — the JSON-string wire shape every <c>Version</c> export marshals.</summary>
 /// <param name="SchemaVersion">The world document schema tag this build parses and validates against.</param>
 /// <param name="Engine">The engine's own name, so a caller juggling more than one embedded engine can tell them apart.</param>

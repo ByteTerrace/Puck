@@ -12,6 +12,38 @@ public sealed class InputRouterReleaseOrderTests {
     private const string BetaChannelCommand = "test.channel.beta";
     private const string BetaCommand = "test.beta";
 
+    private static CommandEntry[] CanceledOf(InputRouter router, ulong tick, CommandPhase phase) {
+        return Assert.Single(collection: router.SnapshotForTick(
+            tick: tick,
+            windowEndTick: ulong.MaxValue
+        ).Lanes)
+            .Entries
+            .ToArray()
+            .Where(predicate: entry => (entry.Phase == phase))
+            .ToArray();
+    }
+    // Deliberately reversed: the two holds enter the slot's held table in DESCENDING command-id order, so an
+    // emission that simply walked that table would answer descending too.
+    private static SwitchableBindings DescendingBindings(bool channel) {
+        return new SwitchableBindings {
+            Current = (channel
+            ? [
+                    new CommandBinding(
+                    Command: BetaChannelCommand,
+                    ChannelScale: 1f
+                ),
+                    new CommandBinding(
+                    Command: AlphaChannelCommand,
+                    ChannelScale: 1f
+                ),
+                ]
+            : [
+                    new CommandBinding(Command: BetaCommand),
+                    new CommandBinding(Command: AlphaCommand),
+                ]),
+        };
+    }
+
     [Fact]
     public void AClosingMapCancelsItsHoldsInCommandIdOrder() {
         var bindings = DescendingBindings(channel: false);
@@ -22,16 +54,31 @@ public sealed class InputRouterReleaseOrderTests {
             principalResolver: new ConsolePrincipal()
         );
 
-        Assert.True(condition: registry.TryGetId(id: out var alphaId, name: AlphaCommand));
-        Assert.True(condition: registry.TryGetId(id: out var betaId, name: BetaCommand));
+        Assert.True(condition: registry.TryGetId(
+            id: out var alphaId,
+            name: AlphaCommand
+        ));
+        Assert.True(condition: registry.TryGetId(
+            id: out var betaId,
+            name: BetaCommand
+        ));
         Assert.True(condition: (alphaId < betaId));
 
-        router.SetActiveMaps(maps: ["play"], slot: 0);
+        router.SetActiveMaps(
+            maps: ["play"],
+            slot: 0
+        );
         router.Capture(signal: InputSignal.Press(source: "key.x"));
-        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        _ = router.SnapshotForTick(
+            tick: 1UL,
+            windowEndTick: ulong.MaxValue
+        );
 
         // Both commands live in the map that closes, so both are cancelled in one transition.
-        router.SetActiveMaps(maps: [], slot: 0);
+        router.SetActiveMaps(
+            maps: [],
+            slot: 0
+        );
 
         var canceled = CanceledOf(
             phase: CommandPhase.Canceled,
@@ -39,9 +86,18 @@ public sealed class InputRouterReleaseOrderTests {
             tick: 2UL
         );
 
-        Assert.Equal(actual: canceled.Length, expected: 2);
-        Assert.Equal(actual: canceled[0].CommandId, expected: alphaId);
-        Assert.Equal(actual: canceled[1].CommandId, expected: betaId);
+        Assert.Equal(
+            actual: canceled.Length,
+            expected: 2
+        );
+        Assert.Equal(
+            actual: canceled[0].CommandId,
+            expected: alphaId
+        );
+        Assert.Equal(
+            actual: canceled[1].CommandId,
+            expected: betaId
+        );
     }
     [Fact]
     public void ADisconnectCancelsItsDevicesHoldsInCommandIdOrder() {
@@ -54,15 +110,27 @@ public sealed class InputRouterReleaseOrderTests {
         );
         var device = InputDeviceId.FromConnectionKey(key: "pad-1");
 
-        Assert.True(condition: registry.TryGetId(id: out var alphaId, name: AlphaCommand));
-        Assert.True(condition: registry.TryGetId(id: out var betaId, name: BetaCommand));
+        Assert.True(condition: registry.TryGetId(
+            id: out var alphaId,
+            name: AlphaCommand
+        ));
+        Assert.True(condition: registry.TryGetId(
+            id: out var betaId,
+            name: BetaCommand
+        ));
 
-        router.SetActiveMaps(maps: ["play"], slot: 0);
+        router.SetActiveMaps(
+            maps: ["play"],
+            slot: 0
+        );
         router.Capture(signal: InputSignal.Press(
             deviceId: device,
             source: "key.x"
         ));
-        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        _ = router.SnapshotForTick(
+            tick: 1UL,
+            windowEndTick: ulong.MaxValue
+        );
         router.ReleaseHeld(device: device);
 
         var canceled = CanceledOf(
@@ -71,9 +139,18 @@ public sealed class InputRouterReleaseOrderTests {
             tick: 2UL
         );
 
-        Assert.Equal(actual: canceled.Length, expected: 2);
-        Assert.Equal(actual: canceled[0].CommandId, expected: alphaId);
-        Assert.Equal(actual: canceled[1].CommandId, expected: betaId);
+        Assert.Equal(
+            actual: canceled.Length,
+            expected: 2
+        );
+        Assert.Equal(
+            actual: canceled[0].CommandId,
+            expected: alphaId
+        );
+        Assert.Equal(
+            actual: canceled[1].CommandId,
+            expected: betaId
+        );
     }
     [Fact]
     public void StrandedChannelContributionsEmitInCommandIdOrder() {
@@ -85,12 +162,21 @@ public sealed class InputRouterReleaseOrderTests {
             principalResolver: new ConsolePrincipal()
         );
 
-        Assert.True(condition: registry.TryGetId(id: out var alphaId, name: AlphaChannelCommand));
-        Assert.True(condition: registry.TryGetId(id: out var betaId, name: BetaChannelCommand));
+        Assert.True(condition: registry.TryGetId(
+            id: out var alphaId,
+            name: AlphaChannelCommand
+        ));
+        Assert.True(condition: registry.TryGetId(
+            id: out var betaId,
+            name: BetaChannelCommand
+        ));
         Assert.True(condition: (alphaId < betaId));
 
         router.Capture(signal: InputSignal.Press(source: "key.x"));
-        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        _ = router.SnapshotForTick(
+            tick: 1UL,
+            windowEndTick: ulong.MaxValue
+        );
 
         // One control feeding TWO channel contributions: the page stops binding it while it is down, so both
         // contributions are stranded and both must run their release.
@@ -103,32 +189,18 @@ public sealed class InputRouterReleaseOrderTests {
             tick: 2UL
         );
 
-        Assert.Equal(actual: stranded.Length, expected: 2);
-        Assert.Equal(actual: stranded[0].CommandId, expected: alphaId);
-        Assert.Equal(actual: stranded[1].CommandId, expected: betaId);
-    }
-
-    private static CommandEntry[] CanceledOf(InputRouter router, ulong tick, CommandPhase phase) {
-        return Assert.Single(collection: router.SnapshotForTick(tick: tick, windowEndTick: ulong.MaxValue).Lanes)
-            .Entries
-            .ToArray()
-            .Where(predicate: entry => (entry.Phase == phase))
-            .ToArray();
-    }
-    // Deliberately reversed: the two holds enter the slot's held table in DESCENDING command-id order, so an
-    // emission that simply walked that table would answer descending too.
-    private static SwitchableBindings DescendingBindings(bool channel) {
-        return new SwitchableBindings {
-            Current = (channel
-                ? [
-                    new CommandBinding(Command: BetaChannelCommand, ChannelScale: 1f),
-                    new CommandBinding(Command: AlphaChannelCommand, ChannelScale: 1f),
-                ]
-                : [
-                    new CommandBinding(Command: BetaCommand),
-                    new CommandBinding(Command: AlphaCommand),
-                ]),
-        };
+        Assert.Equal(
+            actual: stranded.Length,
+            expected: 2
+        );
+        Assert.Equal(
+            actual: stranded[0].CommandId,
+            expected: alphaId
+        );
+        Assert.Equal(
+            actual: stranded[1].CommandId,
+            expected: betaId
+        );
     }
 
     private sealed class ConsolePrincipal : ICommandPrincipalResolver {

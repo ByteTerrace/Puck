@@ -42,46 +42,141 @@ namespace Puck.Maths.Tests;
 /// </para>
 /// </remarks>
 internal static class WorldCoordClaims {
+    private static int GreatestCommonDivisorOf(int value, int other) =>
+        value.GreatestCommonDivisor(other: other);
+    private static int LeastCommonMultipleOf(int value, int other) =>
+        value.LeastCommonMultiple(other: other);
+
     public static string? BinaryIntegerSignedExtremesAndRefusalsSurface() {
         // GCD returns a magnitude at the zero fast paths and on the ordinary mixed-sign general path, verified against
         // elementary Euclidean division worked out by hand -- a different algorithm and a different derivation route
         // from the subject's Stein binary descent.
-        Assert.Equal(expected: 3, actual: GreatestCommonDivisorOf(other: 0, value: -3));
-        Assert.Equal(expected: 7, actual: GreatestCommonDivisorOf(other: -7, value: 0));
-        Assert.Equal(expected: 4, actual: GreatestCommonDivisorOf(other: 8, value: -12));
-        Assert.Equal(expected: 6, actual: GreatestCommonDivisorOf(other: -24, value: 54));
+        Assert.Equal(
+            expected: 3,
+            actual: GreatestCommonDivisorOf(
+                other: 0,
+                value: -3
+            )
+        );
+        Assert.Equal(
+            expected: 7,
+            actual: GreatestCommonDivisorOf(
+                other: -7,
+                value: 0
+            )
+        );
+        Assert.Equal(
+            expected: 4,
+            actual: GreatestCommonDivisorOf(
+                other: 8,
+                value: -12
+            )
+        );
+        Assert.Equal(
+            expected: 6,
+            actual: GreatestCommonDivisorOf(
+                other: -24,
+                value: 54
+            )
+        );
 
         // The two near-signed-minimum branches the member's own documentation describes: exactly one operand at
         // int.MinValue returns the OTHER operand's own highest power-of-two factor, and BOTH at int.MinValue throws
         // OverflowException naming the unrepresentable magnitude.
-        Assert.Equal(expected: 1, actual: GreatestCommonDivisorOf(other: 1, value: int.MinValue));
-        Assert.Equal(expected: 4, actual: GreatestCommonDivisorOf(other: 12, value: int.MinValue));
-        Assert.Throws<OverflowException>(testCode: static () => _ = GreatestCommonDivisorOf(other: int.MinValue, value: int.MinValue));
+        Assert.Equal(
+            expected: 1,
+            actual: GreatestCommonDivisorOf(
+                other: 1,
+                value: int.MinValue
+            )
+        );
+        Assert.Equal(
+            expected: 4,
+            actual: GreatestCommonDivisorOf(
+                other: 12,
+                value: int.MinValue
+            )
+        );
+        Assert.Throws<OverflowException>(testCode: static () => _ = GreatestCommonDivisorOf(
+            other: int.MinValue,
+            value: int.MinValue
+        ));
 
         // LCM over representable operands, against |a*b| / gcd(a,b) worked out by hand, with lcm(n, 0) conventionally
         // zero -- independent of the subject's divide-before-multiply order and its sign correction.
-        Assert.Equal(expected: 12, actual: LeastCommonMultipleOf(other: 6, value: 4));
-        Assert.Equal(expected: 0, actual: LeastCommonMultipleOf(other: 5, value: 0));
-        Assert.Equal(expected: 12, actual: LeastCommonMultipleOf(other: 6, value: -4));
-        Assert.Equal(expected: 12, actual: LeastCommonMultipleOf(other: -6, value: 4));
+        Assert.Equal(
+            expected: 12,
+            actual: LeastCommonMultipleOf(
+                other: 6,
+                value: 4
+            )
+        );
+        Assert.Equal(
+            expected: 0,
+            actual: LeastCommonMultipleOf(
+                other: 5,
+                value: 0
+            )
+        );
+        Assert.Equal(
+            expected: 12,
+            actual: LeastCommonMultipleOf(
+                other: 6,
+                value: -4
+            )
+        );
+        Assert.Equal(
+            expected: 12,
+            actual: LeastCommonMultipleOf(
+                other: -6,
+                value: 4
+            )
+        );
 
         // The documented overflow contract: the true product 2*(2^31 - 1) exceeds int, the member's own doc says the
         // result WRAPS rather than throws, and the sign correction reads the PRE-multiplication operand signs rather
         // than the wrapped product's sign. No finite oracle decides a value the carrier cannot hold, so this states
         // the carrier's own declared contract directly.
-        Assert.Equal(expected: -2, actual: LeastCommonMultipleOf(other: 2, value: int.MaxValue));
-        Assert.Equal(expected: -2, actual: LeastCommonMultipleOf(other: 2, value: -int.MaxValue));
+        Assert.Equal(
+            expected: -2,
+            actual: LeastCommonMultipleOf(
+                other: 2,
+                value: int.MaxValue
+            )
+        );
+        Assert.Equal(
+            expected: -2,
+            actual: LeastCommonMultipleOf(
+                other: 2,
+                value: -int.MaxValue
+            )
+        );
 
         // The base-10 digit helpers at int.MinValue, whose magnitude 2^31 = 2,147,483,648 is not representable in int
         // and is the one operand each member's own doc calls out as the reason it abs-es a remainder or a quotient
         // rather than the whole value. Against the decimal expansion of 2^31 worked out on paper, independent of and
         // prior to any of the subject's DivRem or modulo-nine-residue implementations.
-        Assert.Equal(expected: [8, 4, 6, 3, 8, 4, 7, 4, 1, 2], actual: int.MinValue.EnumerateDigits().ToArray());
-        Assert.Equal(expected: 10, actual: int.MinValue.LogarithmBase10());
-        Assert.Equal(expected: 8, actual: int.MinValue.LeastSignificantDigit());
-        Assert.Equal(expected: 2, actual: int.MinValue.MostSignificantDigit());
+        Assert.Equal(
+            expected: [8, 4, 6, 3, 8, 4, 7, 4, 1, 2],
+            actual: int.MinValue.EnumerateDigits().ToArray()
+        );
+        Assert.Equal(
+            expected: 10,
+            actual: int.MinValue.LogarithmBase10()
+        );
+        Assert.Equal(
+            expected: 8,
+            actual: int.MinValue.LeastSignificantDigit()
+        );
+        Assert.Equal(
+            expected: 2,
+            actual: int.MinValue.MostSignificantDigit()
+        );
         // 2+1+4+7+4+8+3+6+4+8 = 47, which reduces to 4+7 = 11, which reduces to 1+1 = 2.
-        Assert.Equal(expected: 2, actual: int.MinValue.DigitalRoot());
+        Assert.Equal(
+            expected: 2,
+            actual: int.MinValue.DigitalRoot()
+        );
 
         // Exponentiate<int> rejects a negative exponent with ArgumentOutOfRangeException, exactly as its own doc
         // requires. The guard folds away to nothing for the unsigned UInt128 instantiation
@@ -91,9 +186,4 @@ internal static class WorldCoordClaims {
 
         return null;
     }
-
-    private static int GreatestCommonDivisorOf(int value, int other) =>
-        value.GreatestCommonDivisor(other: other);
-    private static int LeastCommonMultipleOf(int value, int other) =>
-        value.LeastCommonMultiple(other: other);
 }

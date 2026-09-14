@@ -100,11 +100,10 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
             link.SubmitSessionLever(
                 lever: new WorldSessionLever(
                     A: ((visibilityOverride is not { } forced)
-                    ? WorldSessionLevers.BindingBarAuto
-                    : (forced
-                        ? 1.0
-                        : 0.0
-                    )),
+                ? WorldSessionLevers.BindingBarAuto
+                : (forced
+                    ? 1.0
+                    : 0.0)),
                     Name: WorldSessionLevers.BindingBar,
                     Seat: slot,
                     Section: WorldSection.Bindings

@@ -26,37 +26,18 @@ namespace Puck.World.Tests;
 /// construction, so self-targeting discriminates nothing here either.
 /// </summary>
 public sealed class EngageAuthorityLawTests {
-    [Fact]
-    public void SeatLackingScreenControlIsRefused_SeatHoldingScreenControlSucceeds() {
-        using var fixture = Fixtures.FreshServer();
+    // Compose(...) itself IS the observation: it checks CheckEngage first and returns false without mutating
+    // anything on a denial (Puck.World.Server.WorldEngagement.Compose's own contract), so its bool return is exactly
+    // the door's verdict — no need to separately probe the grant table or the application set afterward.
+    private static bool ComposeAndObserve(WorldFixture fixture, WorldPrincipal actor, GrantSubject target) =>
+        fixture.Server.Engagement.Compose(
+            entityIndex: actor.Index,
+            target: target,
+            exclusive: true,
+            actingPrincipal: actor,
+            targetPrincipal: actor
+        );
 
-        var actor = WorldPrincipal.Seat(slot: 1);
-        var target = GrantSubject.Screen(index: Fixtures.TestPatternScreenIndex);
-        var controlAll = new WorldGrant(Principal: actor, Capability: WorldCapability.Control, Subject: GrantSubject.All, Exclusive: false);
-        var controlOverTarget = new WorldGrant(Principal: actor, Capability: WorldCapability.Control, Subject: target, Exclusive: false);
-
-        // Compose(...) requires a LIVE body at the applied entity index — a local seat's body is not minted at
-        // WorldPopulation construction (Fixtures.FreshServer boots with every seat unjoined), only on Join
-        // (Server.WorldPopulation.ActivateSeat, reached here through the ordinary session door). This mirrors
-        // WorldReplaySnapshot.Drive's own seat rehydration and is furniture the entity-index resolution needs, not
-        // part of the authority fact under test.
-        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey));
-
-        // Strip the boot-seeded wildcard FIRST — without this, CheckEngage would allow the denied case through via
-        // WildcardHold and the law would prove nothing (README.md red-line #2: every test must fail for a real
-        // reason).
-        fixture.Server.Revoke(grant: controlAll, actor: WorldPrincipal.Console);
-
-        Laws.RefusalWithControl(
-            lawId: "engagement.control-authority-required",
-            deniedOutcome: () => ComposeAndObserve(actor: actor, fixture: fixture, target: target),
-            controlOutcome: () => {
-                // The missing grant restored — narrowly, over the target screen only, never the wildcard.
-                fixture.Server.Grant(grant: controlOverTarget, actor: WorldPrincipal.Console);
-
-                return ComposeAndObserve(actor: actor, fixture: fixture, target: target);
-            });
-    }
     /// <summary>Dissolving is gated by the SAME Control-over-each-applied-target pair composing required — an actor
     /// whose hold is revoked after the composition landed cannot tear it down, and regaining the hold lets the
     /// identical call through. The composition is established while the wildcard still stands, so the discriminating
@@ -67,15 +48,33 @@ public sealed class EngageAuthorityLawTests {
 
         var actor = WorldPrincipal.Seat(slot: 1);
         var target = GrantSubject.Screen(index: Fixtures.TestPatternScreenIndex);
-        var controlAll = new WorldGrant(Principal: actor, Capability: WorldCapability.Control, Subject: GrantSubject.All, Exclusive: false);
-        var controlOverTarget = new WorldGrant(Principal: actor, Capability: WorldCapability.Control, Subject: target, Exclusive: false);
+        var controlAll = new WorldGrant(
+            Principal: actor,
+            Capability: WorldCapability.Control,
+            Subject: GrantSubject.All,
+            Exclusive: false
+        );
+        var controlOverTarget = new WorldGrant(
+            Principal: actor,
+            Capability: WorldCapability.Control,
+            Subject: target,
+            Exclusive: false
+        );
 
-        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey));
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
 
         // The actor's own wildcard goes FIRST, so its later hold over the target is the one fact that moves. The
         // composition is then established under CONSOLE's authority (seeded Control/all), which leaves the actor
         // standing on an application it does not itself hold Control over — exactly the state dissolve must refuse.
-        fixture.Server.Revoke(grant: controlAll, actor: WorldPrincipal.Console);
+        fixture.Server.Revoke(
+            grant: controlAll,
+            actor: WorldPrincipal.Console
+        );
         Assert.True(condition: fixture.Server.Engagement.Compose(
             entityIndex: actor.Index,
             target: target,
@@ -92,19 +91,78 @@ public sealed class EngageAuthorityLawTests {
                 targetPrincipal: actor
             ) != ControlOutcome.Denied),
             controlOutcome: () => {
-                fixture.Server.Grant(grant: controlOverTarget, actor: WorldPrincipal.Console);
+                fixture.Server.Grant(
+                    grant: controlOverTarget,
+                    actor: WorldPrincipal.Console
+                );
 
                 return (fixture.Server.Engagement.Dissolve(
                     actingPrincipal: actor,
                     entityIndex: actor.Index,
                     targetPrincipal: actor
                 ) == ControlOutcome.Dissolved);
-            });
+            }
+        );
     }
+    [Fact]
+    public void SeatLackingScreenControlIsRefused_SeatHoldingScreenControlSucceeds() {
+        using var fixture = Fixtures.FreshServer();
 
-    // Compose(...) itself IS the observation: it checks CheckEngage first and returns false without mutating
-    // anything on a denial (Puck.World.Server.WorldEngagement.Compose's own contract), so its bool return is exactly
-    // the door's verdict — no need to separately probe the grant table or the application set afterward.
-    private static bool ComposeAndObserve(WorldFixture fixture, WorldPrincipal actor, GrantSubject target) =>
-        fixture.Server.Engagement.Compose(entityIndex: actor.Index, target: target, exclusive: true, actingPrincipal: actor, targetPrincipal: actor);
+        var actor = WorldPrincipal.Seat(slot: 1);
+        var target = GrantSubject.Screen(index: Fixtures.TestPatternScreenIndex);
+        var controlAll = new WorldGrant(
+            Principal: actor,
+            Capability: WorldCapability.Control,
+            Subject: GrantSubject.All,
+            Exclusive: false
+        );
+        var controlOverTarget = new WorldGrant(
+            Principal: actor,
+            Capability: WorldCapability.Control,
+            Subject: target,
+            Exclusive: false
+        );
+
+        // Compose(...) requires a LIVE body at the applied entity index — a local seat's body is not minted at
+        // WorldPopulation construction (Fixtures.FreshServer boots with every seat unjoined), only on Join
+        // (Server.WorldPopulation.ActivateSeat, reached here through the ordinary session door). This mirrors
+        // WorldReplaySnapshot.Drive's own seat rehydration and is furniture the entity-index resolution needs, not
+        // part of the authority fact under test.
+        _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
+
+        // Strip the boot-seeded wildcard FIRST — without this, CheckEngage would allow the denied case through via
+        // WildcardHold and the law would prove nothing (README.md red-line #2: every test must fail for a real
+        // reason).
+        fixture.Server.Revoke(
+            grant: controlAll,
+            actor: WorldPrincipal.Console
+        );
+
+        Laws.RefusalWithControl(
+            lawId: "engagement.control-authority-required",
+            deniedOutcome: () => ComposeAndObserve(
+                actor: actor,
+                fixture: fixture,
+                target: target
+            ),
+            controlOutcome: () => {
+                // The missing grant restored — narrowly, over the target screen only, never the wildcard.
+                fixture.Server.Grant(
+                    grant: controlOverTarget,
+                    actor: WorldPrincipal.Console
+                );
+
+                return ComposeAndObserve(
+                    actor: actor,
+                    fixture: fixture,
+                    target: target
+                );
+            }
+        );
+    }
 }

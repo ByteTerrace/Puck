@@ -12,7 +12,13 @@ internal sealed class HarnessAdditionalText : AdditionalText {
     private readonly SourceText? m_text;
 
     public HarnessAdditionalText(string path, string? text, Encoding? encoding = null) {
-        m_text = ((text is null) ? null : SourceText.From(text: text, encoding: (encoding ?? new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))));
+        m_text = ((text is null)
+            ? null
+            : SourceText.From(
+                text: text,
+                encoding: (encoding ?? new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
+            )
+        );
         Path = path;
     }
 
@@ -29,22 +35,32 @@ internal readonly record struct SourceFile(string Name, string Text);
 /// <param name="Analyzer">Diagnostics the analyzer reported, including any AD0001 analyzer crash.</param>
 /// <param name="Compiler">Diagnostics the compiler itself reported for the same compilation.</param>
 internal sealed record AnalysisResult(ImmutableArray<Diagnostic> Analyzer, ImmutableArray<Diagnostic> Compiler) {
-    /// <summary>The analyzer diagnostic ids, sorted, so an assertion reads as a set rather than an ordering.</summary>
-    public string[] Ids =>
-        Analyzer.Select(selector: diagnostic => diagnostic.Id).OrderBy(keySelector: id => id, comparer: StringComparer.Ordinal).ToArray();
     /// <summary>The compiler errors, formatted for an assertion message.</summary>
     public string CompilerErrorText =>
-        string.Join(separator: "; ", values: Compiler.Where(predicate: diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error)).Select(selector: diagnostic => diagnostic.ToString()));
+        string.Join(
+            separator: "; ",
+            values: Compiler.Where(predicate: diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error)).Select(selector: diagnostic => diagnostic.ToString())
+        );
     /// <summary>Whether the compiler accepted the source outright — the precondition for calling a silent analyzer a bypass.</summary>
     public bool CompilesCleanly =>
         !Compiler.Any(predicate: diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
+    /// <summary>The analyzer diagnostic ids, sorted, so an assertion reads as a set rather than an ordering.</summary>
+    public string[] Ids =>
+        Analyzer.Select(selector: diagnostic => diagnostic.Id).OrderBy(
+            keySelector: id => id,
+            comparer: StringComparer.Ordinal
+        ).ToArray();
 
-    /// <summary>The analyzer diagnostics carrying <paramref name="id"/>.</summary>
-    public ImmutableArray<Diagnostic> WithId(string id) =>
-        Analyzer.Where(predicate: diagnostic => string.Equals(a: diagnostic.Id, b: id, comparisonType: StringComparison.Ordinal)).ToImmutableArray();
     /// <summary>The one analyzer diagnostic carrying <paramref name="id"/>; throws when there is not exactly one.</summary>
     public Diagnostic Single(string id) =>
         WithId(id: id).Single();
+    /// <summary>The analyzer diagnostics carrying <paramref name="id"/>.</summary>
+    public ImmutableArray<Diagnostic> WithId(string id) =>
+        Analyzer.Where(predicate: diagnostic => string.Equals(
+            a: diagnostic.Id,
+            b: id,
+            comparisonType: StringComparison.Ordinal
+        )).ToImmutableArray();
 }
 /// <summary>
 /// Compiles C# source strings in memory, runs <see cref="VerifiedCodeAnalyzer"/> over them against a chosen set of
@@ -60,10 +76,10 @@ internal sealed record AnalysisResult(ImmutableArray<Diagnostic> Analyzer, Immut
 internal static class Harness {
     /// <summary>The assembly name harness compilations use unless a case needs a specific one for the manifest sweep.</summary>
     public const string DefaultAssemblyName = "Subject.Assembly";
-    /// <summary>The file name the analyzer looks for among <c>AdditionalFiles</c>.</summary>
-    public const string ManifestFileName = "VerifiedCode.json";
     /// <summary>The namespace harness sources declare by default, matching <see cref="DefaultAssemblyName"/> so the manifest sweep's convention holds.</summary>
     public const string DefaultNamespace = "Subject.Assembly";
+    /// <summary>The file name the analyzer looks for among <c>AdditionalFiles</c>.</summary>
+    public const string ManifestFileName = "VerifiedCode.json";
 
     private static readonly ImmutableArray<MetadataReference> References = CreateReferences();
     private static readonly string BrandAttributeSource = ReadBrandAttributeSource();
@@ -74,37 +90,65 @@ internal static class Harness {
     /// </summary>
     public static string BrandAttribute =>
         BrandAttributeSource;
+    /// <summary>The full path harness manifests are given, so <c>Path.GetFileName</c> in the analyzer sees the real name.</summary>
+    public static string ManifestPath =>
+        System.IO.Path.Combine(
+            path1: System.IO.Path.GetTempPath(),
+            path2: ManifestFileName
+        );
+    /// <summary>The metadata references every harness compilation gets: the running runtime's own reference set.</summary>
+    public static ImmutableArray<MetadataReference> RuntimeReferences =>
+        References;
 
-    /// <summary>Builds a compilation from <paramref name="sources"/> plus the brand attribute and the global usings the SDK would supply.</summary>
-    public static CSharpCompilation Compile(string assemblyName, params SourceFile[] sources) {
-        var trees = new List<SyntaxTree> {
-            // `global using Puck;` stands in for the namespace ancestry that resolves the brand in the product
-            // tree, where every branded type already sits under a Puck.* namespace. Usings live in their own tree,
-            // so this never enters a fingerprint.
-            Parse(file: new SourceFile(Name: "GlobalUsings.cs", Text: "global using System;\r\nglobal using System.Collections.Generic;\r\nglobal using System.Linq;\r\nglobal using System.Threading;\r\nglobal using System.Threading.Tasks;\r\nglobal using Puck;\r\n")),
-            Parse(file: new SourceFile(Name: "VerifiedCodeAttribute.cs", Text: BrandAttributeSource)),
-        };
+    private static ImmutableArray<MetadataReference> CreateReferences() {
+        var trusted = ((AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES") as string) ?? string.Empty);
 
-        trees.AddRange(collection: sources.Select(selector: Parse));
-
-        return CSharpCompilation.Create(
-            assemblyName: assemblyName,
-            syntaxTrees: trees,
-            references: References,
-            options: new CSharpCompilationOptions(
-                outputKind: OutputKind.DynamicallyLinkedLibrary,
-                nullableContextOptions: NullableContextOptions.Enable));
+        return trusted
+            .Split(
+            options: StringSplitOptions.RemoveEmptyEntries,
+            separator: System.IO.Path.PathSeparator
+        )
+            .Where(predicate: path => path.EndsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: ".dll"
+        ))
+            .Select(selector: path => ((MetadataReference)MetadataReference.CreateFromFile(path: path)))
+            .ToImmutableArray();
     }
-    /// <summary>Builds a compilation that does not declare the brand attribute at all, the one shape the analyzer opts out of.</summary>
-    public static CSharpCompilation CompileWithoutBrandAttribute(string assemblyName, params SourceFile[] sources) =>
-        CSharpCompilation.Create(
-            assemblyName: assemblyName,
-            syntaxTrees: sources.Select(selector: Parse),
-            references: References,
-            options: new CSharpCompilationOptions(outputKind: OutputKind.DynamicallyLinkedLibrary));
+    private static SyntaxTree Parse(SourceFile file) =>
+        CSharpSyntaxTree.ParseText(
+            text: SourceText.From(
+                text: file.Text,
+                encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+            ),
+            options: new CSharpParseOptions(languageVersion: LanguageVersion.Latest),
+            path: file.Name
+        );
+    private static string? Property(Diagnostic diagnostic, string key) =>
+        (diagnostic.Properties.TryGetValue(
+            key: key,
+            value: out var value
+        )
+            ? value
+            : null
+        );
+    private static string ReadBrandAttributeSource() {
+        using var stream = (typeof(Harness).Assembly.GetManifestResourceStream(name: "VerifiedCodeAttribute.cs")
+            ?? throw new InvalidOperationException(message: "The embedded VerifiedCodeAttribute.cs resource is missing."));
+        using var reader = new StreamReader(stream: stream);
+
+        return reader.ReadToEnd();
+    }
+
     /// <summary>Runs <paramref name="analyzer"/> (<see cref="VerifiedCodeAnalyzer"/> by default) over <paramref name="compilation"/> with the given additional files.</summary>
     public static AnalysisResult Analyze(CSharpCompilation compilation, Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer? analyzer = null, params AdditionalText[] additionalFiles) =>
-        AnalyzeCore(compilation: compilation, additionalFiles: additionalFiles, concurrent: true, cancellationToken: CancellationToken.None, analyzer: analyzer);
+        AnalyzeCore(
+            compilation: compilation,
+            additionalFiles: additionalFiles,
+            concurrent: true,
+            cancellationToken: CancellationToken.None,
+            analyzer: analyzer
+        );
     /// <summary>Runs the analyzer with explicit control over concurrent execution and cancellation.</summary>
     /// <param name="compilation">The compilation to analyze.</param>
     /// <param name="additionalFiles">The <c>AdditionalFiles</c> the analyzer sees.</param>
@@ -116,27 +160,60 @@ internal static class Harness {
             options: new AnalyzerOptions(additionalFiles: additionalFiles.ToImmutableArray()),
             onAnalyzerException: null,
             concurrentAnalysis: concurrent,
-            logAnalyzerExecutionTime: false);
+            logAnalyzerExecutionTime: false
+        );
 
         var withAnalyzers = compilation.WithAnalyzers(
             analyzers: ImmutableArray.Create(item: (analyzer ?? new VerifiedCodeAnalyzer())),
-            analysisOptions: options);
+            analysisOptions: options
+        );
 
         var analyzerDiagnostics = withAnalyzers
             .GetAnalyzerDiagnosticsAsync(cancellationToken: cancellationToken)
             .GetAwaiter()
             .GetResult();
 
-        return new AnalysisResult(Analyzer: analyzerDiagnostics, Compiler: compilation.GetDiagnostics(cancellationToken: cancellationToken));
+        return new AnalysisResult(
+            Analyzer: analyzerDiagnostics,
+            Compiler: compilation.GetDiagnostics(cancellationToken: cancellationToken)
+        );
     }
-    /// <summary>The common shape: one source file, one <c>VerifiedCode.json</c>, the default assembly name.</summary>
-    public static AnalysisResult Run(string source, string manifestJson, string assemblyName = DefaultAssemblyName, string sourceName = "Subject.cs") =>
-        Analyze(
-            compilation: Compile(assemblyName: assemblyName, sources: new SourceFile(Name: sourceName, Text: source)),
-            additionalFiles: new HarnessAdditionalText(path: ManifestPath, text: manifestJson));
-    /// <summary>Runs a case with no <c>VerifiedCode.json</c> among the additional files at all.</summary>
-    public static AnalysisResult RunWithoutManifest(string source, string assemblyName = DefaultAssemblyName) =>
-        Analyze(compilation: Compile(assemblyName: assemblyName, sources: new SourceFile(Name: "Subject.cs", Text: source)));
+    /// <summary>Builds a compilation from <paramref name="sources"/> plus the brand attribute and the global usings the SDK would supply.</summary>
+    public static CSharpCompilation Compile(string assemblyName, params SourceFile[] sources) {
+        var trees = new List<SyntaxTree> {
+            // `global using Puck;` stands in for the namespace ancestry that resolves the brand in the product
+            // tree, where every branded type already sits under a Puck.* namespace. Usings live in their own tree,
+            // so this never enters a fingerprint.
+            Parse(file: new SourceFile(
+            Name: "GlobalUsings.cs",
+            Text: "global using System;\r\nglobal using System.Collections.Generic;\r\nglobal using System.Linq;\r\nglobal using System.Threading;\r\nglobal using System.Threading.Tasks;\r\nglobal using Puck;\r\n"
+        )),
+            Parse(file: new SourceFile(
+            Name: "VerifiedCodeAttribute.cs",
+            Text: BrandAttributeSource
+        )),
+        };
+
+        trees.AddRange(collection: sources.Select(selector: Parse));
+
+        return CSharpCompilation.Create(
+            assemblyName: assemblyName,
+            syntaxTrees: trees,
+            references: References,
+            options: new CSharpCompilationOptions(
+                outputKind: OutputKind.DynamicallyLinkedLibrary,
+                nullableContextOptions: NullableContextOptions.Enable
+            )
+        );
+    }
+    /// <summary>Builds a compilation that does not declare the brand attribute at all, the one shape the analyzer opts out of.</summary>
+    public static CSharpCompilation CompileWithoutBrandAttribute(string assemblyName, params SourceFile[] sources) =>
+        CSharpCompilation.Create(
+            assemblyName: assemblyName,
+            syntaxTrees: sources.Select(selector: Parse),
+            references: References,
+            options: new CSharpCompilationOptions(outputKind: OutputKind.DynamicallyLinkedLibrary)
+        );
     /// <summary>The fingerprint the analyzer computes for the brand <paramref name="id"/> in <paramref name="source"/>.</summary>
     /// <param name="source">The compilation's one source file.</param>
     /// <param name="id">The brand id whose recomputed hash is wanted.</param>
@@ -163,11 +240,23 @@ internal static class Harness {
                 Assembly = assemblyName,
                 Dependencies = dependencies,
                 Id = id,
-                Sha256 = new string(c: '0', count: 64),
-                Symbol = (symbol ?? throw new ArgumentNullException(paramName: nameof(symbol), message: "A probe entry has to record a symbol before its dependencies can be folded.")),
-            }));
+                Sha256 = new string(
+                c: '0',
+                count: 64
+            ),
+                Symbol = (symbol ?? throw new ArgumentNullException(
+                paramName: nameof(symbol),
+                message: "A probe entry has to record a symbol before its dependencies can be folded."
+            )),
+            })
+        );
 
-        var result = Run(assemblyName: assemblyName, manifestJson: manifestJson, source: source, sourceName: sourceName);
+        var result = Run(
+            assemblyName: assemblyName,
+            manifestJson: manifestJson,
+            source: source,
+            sourceName: sourceName
+        );
 
         if (!result.CompilesCleanly) {
             throw new InvalidOperationException(message: $"Fingerprint source did not compile: {result.CompilerErrorText}");
@@ -175,42 +264,47 @@ internal static class Harness {
 
         var mismatch = (result
             .WithId(id: "VER001")
-            .FirstOrDefault(predicate: diagnostic => string.Equals(a: Property(diagnostic: diagnostic, key: "VerifiedCodeId"), b: id, comparisonType: StringComparison.Ordinal))
-            ?? throw new InvalidOperationException(message: $"No VER001 for brand '{id}'; analyzer reported [{string.Join(separator: ", ", values: result.Ids)}]."));
+            .FirstOrDefault(predicate: diagnostic => string.Equals(
+            a: Property(
+                diagnostic: diagnostic,
+                key: "VerifiedCodeId"
+            ),
+            b: id,
+            comparisonType: StringComparison.Ordinal
+        ))
+            ?? throw new InvalidOperationException(message: $"No VER001 for brand '{id}'; analyzer reported [{string.Join(
+            separator: ", ",
+            values: result.Ids
+        )}]."));
 
-        return (Property(diagnostic: mismatch, key: "VerifiedCodeHash")
+        return (Property(
+            diagnostic: mismatch,
+            key: "VerifiedCodeHash"
+        )
             ?? throw new InvalidOperationException(message: $"VER001 for brand '{id}' carried no recomputed hash property."));
     }
-
-    private static string? Property(Diagnostic diagnostic, string key) =>
-        (diagnostic.Properties.TryGetValue(key: key, value: out var value) ? value : null);
-
-    /// <summary>The full path harness manifests are given, so <c>Path.GetFileName</c> in the analyzer sees the real name.</summary>
-    public static string ManifestPath =>
-        System.IO.Path.Combine(path1: System.IO.Path.GetTempPath(), path2: ManifestFileName);
-    /// <summary>The metadata references every harness compilation gets: the running runtime's own reference set.</summary>
-    public static ImmutableArray<MetadataReference> RuntimeReferences =>
-        References;
-
-    private static SyntaxTree Parse(SourceFile file) =>
-        CSharpSyntaxTree.ParseText(
-            text: SourceText.From(text: file.Text, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)),
-            options: new CSharpParseOptions(languageVersion: LanguageVersion.Latest),
-            path: file.Name);
-    private static ImmutableArray<MetadataReference> CreateReferences() {
-        var trusted = ((AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES") as string) ?? string.Empty);
-
-        return trusted
-            .Split(options: StringSplitOptions.RemoveEmptyEntries, separator: System.IO.Path.PathSeparator)
-            .Where(predicate: path => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".dll"))
-            .Select(selector: path => ((MetadataReference)MetadataReference.CreateFromFile(path: path)))
-            .ToImmutableArray();
-    }
-    private static string ReadBrandAttributeSource() {
-        using var stream = (typeof(Harness).Assembly.GetManifestResourceStream(name: "VerifiedCodeAttribute.cs")
-            ?? throw new InvalidOperationException(message: "The embedded VerifiedCodeAttribute.cs resource is missing."));
-        using var reader = new StreamReader(stream: stream);
-
-        return reader.ReadToEnd();
-    }
+    /// <summary>The common shape: one source file, one <c>VerifiedCode.json</c>, the default assembly name.</summary>
+    public static AnalysisResult Run(string source, string manifestJson, string assemblyName = DefaultAssemblyName, string sourceName = "Subject.cs") =>
+        Analyze(
+            compilation: Compile(
+                assemblyName: assemblyName,
+                sources: new SourceFile(
+                    Name: sourceName,
+                    Text: source
+                )
+            ),
+            additionalFiles: new HarnessAdditionalText(
+                path: ManifestPath,
+                text: manifestJson
+            )
+        );
+    /// <summary>Runs a case with no <c>VerifiedCode.json</c> among the additional files at all.</summary>
+    public static AnalysisResult RunWithoutManifest(string source, string assemblyName = DefaultAssemblyName) =>
+        Analyze(compilation: Compile(
+            assemblyName: assemblyName,
+            sources: new SourceFile(
+                Name: "Subject.cs",
+                Text: source
+            )
+        ));
 }

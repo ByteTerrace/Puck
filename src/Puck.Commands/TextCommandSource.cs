@@ -22,43 +22,9 @@ public sealed class TextCommandSource : ITextCommandSink {
     // session therefore cannot move that session's oldest line behind a concurrently appended later line.
     private readonly ConcurrentQueue<TextCommandSession> m_pending = new();
     private readonly CommandRegistry m_registry;
-    /// <summary>Describes registered commands selected by a trusted host policy, without exposing handlers.</summary>
-    /// <param name="include">The disclosure filter, evaluated on the command pump.</param>
-    /// <returns>Registered names and descriptions in ordinal order.</returns>
-    public string DescribeCommands(Func<CommandMetadata, bool> include) => m_registry.BuildHelpText(include);
 
     // See HoldGate's remarks: volatile because a host may arm the gate from a thread other than the one that drains.
     private volatile Func<bool>? m_holdGate;
-
-    /// <summary>Gets or sets a source-wide hold gate. While it returns true, no session drains; a handler that
-    /// arms it stops the current drain too. Use <see cref="TextCommandSession.HoldWhile"/> for a wait that belongs
-    /// to only one session. Null leaves all ready sessions eligible to drain.</summary>
-    /// <remarks>THREADING: unlike <see cref="Enqueue"/>, which any producer may call, this is read on the frame thread
-    /// inside <see cref="Collect"/> and is expected to be set from there too — in practice by a handler the drain
-    /// itself just ran. The backing field is <see langword="volatile"/> so a host that arms the gate from another
-    /// thread is seen by the next drain rather than by whichever one the JIT decides to reload on; the gate's own
-    /// delegate is invoked on the frame thread, so whatever it reads must be safe to read there.</remarks>
-    public Func<bool>? HoldGate {
-        get => m_holdGate;
-        set => m_holdGate = value;
-    }
-
-    /// <summary>Initializes a new instance of the <see cref="TextCommandSource"/> class.</summary>
-    /// <param name="registry">The registry whose text path each enqueued line is submitted to.</param>
-    /// <param name="onResult">An optional callback invoked with each submitted line and its result.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="registry"/> is <see langword="null"/>.</exception>
-    public TextCommandSource(CommandRegistry registry, Action<string, CommandResult>? onResult = null) {
-        ArgumentNullException.ThrowIfNull(registry);
-
-        m_registry = registry;
-        m_administrativeSession = new TextCommandSession(
-            source: this,
-            principal: CommandPrincipal.Console,
-            slot: 0,
-            simulationSink: null,
-            onResult: onResult
-        );
-    }
 
     internal void EnqueueSession(TextCommandSession session, TextSessionWork work) {
         session.EnqueuePending(work: work);
@@ -105,7 +71,7 @@ public sealed class TextCommandSource : ITextCommandSink {
 
             var line = work.Line;
             var content = line.AsSpan().TrimStart();
-            var isComment = line is not null && (content.IsEmpty || (content[0] == '#'));
+            var isComment = ((line is not null) && (content.IsEmpty || (content[0] == '#')));
 
             if (blockedSessions?.Contains(item: session) ?? false) {
                 m_pending.Enqueue(item: session);
@@ -128,7 +94,7 @@ public sealed class TextCommandSource : ITextCommandSink {
 
             if (
                 session.HasPendingSimulationSubmission &&
-                (line is null || !m_registry.RoutesToSimulation(line: line))
+                ((line is null) || !m_registry.RoutesToSimulation(line: line))
             ) {
                 (blockedSessions ??= []).Add(item: session);
                 m_pending.Enqueue(item: session);
@@ -205,16 +171,20 @@ public sealed class TextCommandSource : ITextCommandSink {
     /// the command. Null adds no session-specific authorization predicate.</param>
     public TextCommandSession CreateSession(CommandPrincipal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null, Func<CommandMetadata, bool>? authorize = null) {
         return new TextCommandSession(
+            authorize: authorize,
             hold: hold,
             onResult: onResult,
             principal: principal,
             scope: scope,
             simulationSink: simulationSink,
             slot: slot,
-            source: this,
-            authorize: authorize
+            source: this
         );
     }
+    /// <summary>Describes registered commands selected by a trusted host policy, without exposing handlers.</summary>
+    /// <param name="include">The disclosure filter, evaluated on the command pump.</param>
+    /// <returns>Registered names and descriptions in ordinal order.</returns>
+    public string DescribeCommands(Func<CommandMetadata, bool> include) => m_registry.BuildHelpText(include: include);
     /// <summary>Queues a command line to be submitted on the next <see cref="Collect"/>.</summary>
     /// <param name="line">The command line to queue. Blank lines are skipped when collected.</param>
     /// <exception cref="ArgumentNullException"><paramref name="line"/> is <see langword="null"/>.</exception>
@@ -222,5 +192,35 @@ public sealed class TextCommandSource : ITextCommandSink {
         ArgumentNullException.ThrowIfNull(line);
 
         m_administrativeSession.Enqueue(line: line);
+    }
+
+    /// <summary>Gets or sets a source-wide hold gate. While it returns true, no session drains; a handler that
+    /// arms it stops the current drain too. Use <see cref="TextCommandSession.HoldWhile"/> for a wait that belongs
+    /// to only one session. Null leaves all ready sessions eligible to drain.</summary>
+    /// <remarks>THREADING: unlike <see cref="Enqueue"/>, which any producer may call, this is read on the frame thread
+    /// inside <see cref="Collect"/> and is expected to be set from there too — in practice by a handler the drain
+    /// itself just ran. The backing field is <see langword="volatile"/> so a host that arms the gate from another
+    /// thread is seen by the next drain rather than by whichever one the JIT decides to reload on; the gate's own
+    /// delegate is invoked on the frame thread, so whatever it reads must be safe to read there.</remarks>
+    public Func<bool>? HoldGate {
+        get => m_holdGate;
+        set => m_holdGate = value;
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="TextCommandSource"/> class.</summary>
+    /// <param name="registry">The registry whose text path each enqueued line is submitted to.</param>
+    /// <param name="onResult">An optional callback invoked with each submitted line and its result.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="registry"/> is <see langword="null"/>.</exception>
+    public TextCommandSource(CommandRegistry registry, Action<string, CommandResult>? onResult = null) {
+        ArgumentNullException.ThrowIfNull(registry);
+
+        m_registry = registry;
+        m_administrativeSession = new TextCommandSession(
+            source: this,
+            principal: CommandPrincipal.Console,
+            slot: 0,
+            simulationSink: null,
+            onResult: onResult
+        );
     }
 }

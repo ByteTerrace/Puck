@@ -80,14 +80,19 @@ internal sealed partial class WorldProbes {
                     continue;
                 }
 
-                if (!sample.Changed && !axis.Suppressed) {
+                if (
+                    !sample.Changed &&
+                    !axis.Suppressed
+                ) {
                     continue;
                 }
 
                 m_router.Capture(signal: new InputSignal(
                     CaptureTick: m_clock.NowTicks,
                     DeviceId: axis.Device,
-                    Phase: (sample.Expired ? CommandPhase.Completed : CommandPhase.Active),
+                    Phase: (sample.Expired
+                    ? CommandPhase.Completed
+                    : CommandPhase.Active),
                     Slot: axis.Slot,
                     Source: axis.Source,
                     Value: CommandValue.Axis(value: ((float)((double)sample.Value)))

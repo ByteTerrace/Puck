@@ -25,5 +25,8 @@ public sealed class WorldPostRenderExtensionPasses {
     /// <param name="id">The <c>render.extensions[].id</c>.</param>
     /// <param name="pass">The pass, when composed this boot.</param>
     /// <returns><see langword="true"/> when a pass with that id was composed.</returns>
-    public bool TryGet(string id, out FullscreenPassNode pass) => m_passes.TryGetValue(key: id, value: out pass!);
+    public bool TryGet(string id, out FullscreenPassNode pass) => m_passes.TryGetValue(
+        key: id,
+        value: out pass!
+    );
 }

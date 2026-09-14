@@ -1,3 +1,5 @@
+using Puck.Abstractions.Machines;
+
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
@@ -83,7 +85,10 @@ public static partial class WorldDefinitionValidator {
 
         foreach (var rule in (rules ?? [])) {
             foreach (var effect in (rule?.Effects ?? [])) {
-                if ((effect is WorldEffect.EmitCue cue) && WorldGameplayCue.IsValidName(candidate: cue.Name)) {
+                if (
+                    (effect is WorldEffect.EmitCue cue) &&
+                    WorldGameplayCue.IsValidName(candidate: cue.Name)
+                ) {
                     tokens.Add(item: cue.Name);
                 }
             }
@@ -110,12 +115,19 @@ public static partial class WorldDefinitionValidator {
             }
 
             var isPublished = WorldAudioCue.IsEventToken(token: cue.Event);
-            if (!isPublished && !ruleCueTokens.Contains(item: cue.Event)) {
+
+            if (
+                !isPublished &&
+                !ruleCueTokens.Contains(item: cue.Event)
+            ) {
                 errors.Add(item: $"{path}.event '{cue.Event}' is neither emitted by a world rule nor a published cue event token ({string.Join(
                     separator: " | ",
                     values: WorldAudioCue.EventTokens
                 )}).");
-            } else if (isPublished && WorldAudioCue.IsProducerBypassedToken(token: cue.Event)) {
+            } else if (
+                isPublished &&
+                WorldAudioCue.IsProducerBypassedToken(token: cue.Event)
+            ) {
                 errors.Add(item: $"{path}.event '{cue.Event}' is fired directly by its producer and can never be targeted by an authored audio.cues row.");
             }
 
@@ -189,7 +201,7 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-    private static void ValidateFeed(WorldSpeakerFeed? feed, HashSet<int> screenIndices, HashSet<string> tuneIds, HashSet<string> patchIds, string path, List<string> errors) {
+    private static void ValidateFeed(WorldDefinition definition, WorldSpeakerFeed? feed, IReadOnlySet<string> machineNames, IMachineValidationCatalog? machines, HashSet<string> tuneIds, HashSet<string> patchIds, string path, List<string> errors) {
         if (feed is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -213,8 +225,34 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.source is required.");
 
                 break;
-            case WorldSpeakerSource.Machine machine when !screenIndices.Contains(item: machine.ScreenIndex):
-                errors.Add(item: $"{path}.source.screenIndex {machine.ScreenIndex} names no declared screen.");
+            case WorldSpeakerSource.Machine machine when string.IsNullOrWhiteSpace(value: machine.Instance):
+                errors.Add(item: $"{path}.source.instance is required.");
+
+                break;
+            case WorldSpeakerSource.Machine machine when !machineNames.Contains(item: machine.Instance):
+                errors.Add(item: $"{path}.source.instance '{machine.Instance}' names no declared machine.");
+
+                break;
+            case WorldSpeakerSource.Machine machine when string.IsNullOrWhiteSpace(value: machine.Output):
+                errors.Add(item: $"{path}.source.output is required.");
+
+                break;
+            case WorldSpeakerSource.Machine machine when ((machines is { } catalog) &&
+                (definition.Machines.FirstOrDefault(predicate: candidate => ((candidate is not null) && string.Equals(
+            a: candidate.Name,
+            b: machine.Instance,
+            comparisonType: StringComparison.Ordinal
+        ))) is { } declaration) &&
+                catalog.TryDescriptor(
+            declaration.Engine,
+            out var descriptor
+        ) &&
+                !descriptor.AudioOutputs.Any(predicate: port => string.Equals(
+            a: port.Name,
+            b: machine.Output,
+            comparisonType: StringComparison.Ordinal
+        ))):
+                errors.Add(item: $"{path}.source.output '{machine.Output}' is not declared by machine '{machine.Instance}'.");
 
                 break;
             case WorldSpeakerSource.Tune tune when (string.IsNullOrWhiteSpace(value: tune.TuneId) || !tuneIds.Contains(item: tune.TuneId)):
@@ -226,13 +264,14 @@ public static partial class WorldDefinitionValidator {
 
                 break;
         }
+
     }
     // The speaker rows (PRESENTATION-ONLY — audio never enters sim state): name presence/uniqueness, the per-kind
     // pose/extent invariants, the feed (source resolution, channel token, the gain ceiling), and the attenuation
     // policy. A Machine source checks only that the screen row EXISTS — never its declared source kind (runtime
     // inserts overlay declared sources; no live machine at drain time is silence, not a reject). Returns the name
     // set (the cue table's emitter placements resolve against it).
-    private static HashSet<string> ValidateSpeakers(WorldDefinition definition, HashSet<int> screenIndices, HashSet<string> placementIds, HashSet<string> tuneIds, HashSet<string> patchIds, List<string> errors) {
+    private static HashSet<string> ValidateSpeakers(WorldDefinition definition, HashSet<int> screenIndices, HashSet<string> placementIds, HashSet<string> tuneIds, HashSet<string> patchIds, IMachineValidationCatalog? machines, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         if (definition.Speakers is not { } speakers) {
@@ -321,8 +360,10 @@ public static partial class WorldDefinitionValidator {
             }
 
             ValidateFeed(
+                definition: definition,
                 feed: speaker.Feed,
-                screenIndices: screenIndices,
+                machineNames: definition.Machines.Where(predicate: machine => (machine is not null)).Select(selector: machine => machine!.Name).ToHashSet(comparer: StringComparer.Ordinal),
+                machines: machines,
                 tuneIds: tuneIds,
                 patchIds: patchIds,
                 path: $"{path}.feed",

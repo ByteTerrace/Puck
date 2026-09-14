@@ -8,6 +8,7 @@ public sealed partial class WorldServer {
     // in place — so a reference compare is an exact "did anything change" test); a quiet tick with nothing to
     // reclaim just sweeps the table instead of walking every ownership row again.
     private readonly WorldDeadlineTable<OwnershipSubject> m_ownershipDeadlines = new();
+
     private WorldDefinition? m_ownershipDeadlineSource;
 
     // ESCROW RECOVERY — the "recovery is a LIFETIME RULE" shape: fires an ordinary SettleOwnership(Reclaim: true)
@@ -18,7 +19,10 @@ public sealed partial class WorldServer {
     // it. The table is built once per document revision, before any mutation in this pass swaps `m_definition`, so
     // a subject an earlier dequeue already reclaimed this tick simply is not read again.
     private void ReclaimExpiredEscrows(ulong tick) {
-        if (!ReferenceEquals(objA: m_definition, objB: m_ownershipDeadlineSource)) {
+        if (!ReferenceEquals(
+            objA: m_definition,
+            objB: m_ownershipDeadlineSource
+        )) {
             m_ownershipDeadlineSource = m_definition;
             m_ownershipDeadlines.Clear();
 
@@ -27,14 +31,20 @@ public sealed partial class WorldServer {
                     (row.Owner.Kind == OwnershipOwnerKind.Escrow) &&
                     (row.Owner.Escrow is { } escrow)
                 ) {
-                    m_ownershipDeadlines.Add(dueTick: escrow.DeadlineTick, token: row.Subject);
+                    m_ownershipDeadlines.Add(
+                        dueTick: escrow.DeadlineTick,
+                        token: row.Subject
+                    );
                 }
             }
         }
 
         var signedTick = unchecked((long)tick);
 
-        while (m_ownershipDeadlines.TryDequeueDue(tick: signedTick, out var subject)) {
+        while (m_ownershipDeadlines.TryDequeueDue(
+            tick: signedTick,
+            out var subject
+        )) {
             _ = TryApplyMutation(
                 mutation: new WorldMutation.SettleOwnership(
                     Principal: WorldPrincipal.World,
@@ -42,6 +52,7 @@ public sealed partial class WorldServer {
                     Reclaim: true
                 ),
                 tick: tick,
+                engineTick: CompletedEngineTicks,
                 connectionId: SubmissionEnvelope.LocalConnectionId,
                 correlationId: 0,
                 preMetered: false

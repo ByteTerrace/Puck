@@ -32,17 +32,23 @@ public sealed class GameStateMachine {
         ArgumentNullException.ThrowIfNull(emitEnter);
         ArgumentNullException.ThrowIfNull(emitTick);
 
-        if ((id == NoPendingState) || m_states.Exists(match: state => (state.Id == id))) {
-            throw new ArgumentException(message: $"State id {id} is reserved or already defined.", paramName: nameof(id));
+        if (
+            (id == NoPendingState) ||
+            m_states.Exists(match: state => (state.Id == id))
+        ) {
+            throw new ArgumentException(
+                message: $"State id {id} is reserved or already defined.",
+                paramName: nameof(id)
+            );
         }
 
-        m_states.Add(item: new StateDefinition(Id: id, EnterLabel: m_emitter.NewLabel(), TickLabel: m_emitter.NewLabel(), EmitEnter: emitEnter, EmitTick: emitTick));
-    }
-    /// <summary>Emits a state-switch request at the current point (consumed at the next frame's dispatch).</summary>
-    /// <param name="id">The requested state id.</param>
-    public void EmitRequestState(byte id) {
-        m_emitter.LoadAImmediate(value: id);
-        m_emitter.StoreAToAddress(address: FrameworkMemoryMap.PendingState);
+        m_states.Add(item: new StateDefinition(
+            Id: id,
+            EnterLabel: m_emitter.NewLabel(),
+            TickLabel: m_emitter.NewLabel(),
+            EmitEnter: emitEnter,
+            EmitTick: emitTick
+        ));
     }
     /// <summary>Emits the per-frame dispatch (main loop only): consume a pending switch (assign the state and call its
     /// enter thunk), then call the current state's tick thunk.</summary>
@@ -50,24 +56,42 @@ public sealed class GameStateMachine {
         var noSwitch = m_emitter.NewLabel();
 
         m_emitter.LoadAFromAddress(address: FrameworkMemoryMap.PendingState);
-        m_emitter.ArithmeticImmediate(op: AluOp.Compare, value: NoPendingState);
-        m_emitter.JumpRelative(condition: Condition.Zero, label: noSwitch);
+        m_emitter.ArithmeticImmediate(
+            op: AluOp.Compare,
+            value: NoPendingState
+        );
+        m_emitter.JumpRelative(
+            condition: Condition.Zero,
+            label: noSwitch
+        );
         m_emitter.StoreAToAddress(address: FrameworkMemoryMap.GameState);
         m_emitter.LoadAImmediate(value: NoPendingState);
         m_emitter.StoreAToAddress(address: FrameworkMemoryMap.PendingState);
 
         foreach (var state in m_states) {
             m_emitter.LoadAFromAddress(address: FrameworkMemoryMap.GameState);
-            m_emitter.ArithmeticImmediate(op: AluOp.Compare, value: state.Id);
-            m_emitter.Call(condition: Condition.Zero, label: state.EnterLabel);
+            m_emitter.ArithmeticImmediate(
+                op: AluOp.Compare,
+                value: state.Id
+            );
+            m_emitter.Call(
+                condition: Condition.Zero,
+                label: state.EnterLabel
+            );
         }
 
         m_emitter.MarkLabel(label: noSwitch);
 
         foreach (var state in m_states) {
             m_emitter.LoadAFromAddress(address: FrameworkMemoryMap.GameState);
-            m_emitter.ArithmeticImmediate(op: AluOp.Compare, value: state.Id);
-            m_emitter.Call(condition: Condition.Zero, label: state.TickLabel);
+            m_emitter.ArithmeticImmediate(
+                op: AluOp.Compare,
+                value: state.Id
+            );
+            m_emitter.Call(
+                condition: Condition.Zero,
+                label: state.TickLabel
+            );
         }
     }
     /// <summary>Emits every state's enter/tick bodies as subroutines. Called once by the framework facade.</summary>
@@ -80,5 +104,11 @@ public sealed class GameStateMachine {
             state.EmitTick(m_emitter);
             m_emitter.Return();
         }
+    }
+    /// <summary>Emits a state-switch request at the current point (consumed at the next frame's dispatch).</summary>
+    /// <param name="id">The requested state id.</param>
+    public void EmitRequestState(byte id) {
+        m_emitter.LoadAImmediate(value: id);
+        m_emitter.StoreAToAddress(address: FrameworkMemoryMap.PendingState);
     }
 }

@@ -15,6 +15,7 @@ public sealed partial class WorldPopulation {
     // constructor and Rebuild so a live retune quantizes through exactly the same path.
     private void CompileFixedTables(WorldDefinition definition, WorldSolidField? solids) {
         var previousNavigation = (m_navigation ?? null);
+
         LocalSeatCount = definition.Population.LocalSeats;
         var authoredMotion = definition.Motion;
 
@@ -24,7 +25,10 @@ public sealed partial class WorldPopulation {
         m_seatVariation = definition.Population.SeatVariation;
         m_peerColors = definition.Population.PeerColors;
         m_reconnectGraceTicks = definition.PopulationReconnectGraceTicks;
-        m_sleepAfterTicks = ((ulong)Math.Max(val1: 0, val2: definition.Population.SleepAfterTicks));
+        m_sleepAfterTicks = ((ulong)Math.Max(
+            val1: 0,
+            val2: definition.Population.SleepAfterTicks
+        ));
         m_kitRows = definition.Kits;
         var programs = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
         var programRows = new Dictionary<string, BodyMotionProgram>(comparer: StringComparer.Ordinal);
@@ -123,11 +127,13 @@ public sealed partial class WorldPopulation {
         m_navigation = new NavigationRuntime(
             domains: CompileNavigationDomains(definition: definition),
             query: derivedSolids?.Query,
-            fields: (m_fields is null ? null : new NavigationMediumFieldAdapter(lattice: m_fields)),
+            fields: ((m_fields is null)
+            ? null
+            : new NavigationMediumFieldAdapter(lattice: m_fields)),
             capacity: new NavigationCapacity(
-                MaxSurfaceClearanceSweeps: WorldNavigationCapacity.MaxSurfaceClearanceSweeps,
+                MaxConcurrentRequesters: WorldBodiesLimits.CapacityCeiling,
                 MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions,
-                MaxConcurrentRequesters: WorldBodiesLimits.CapacityCeiling
+                MaxSurfaceClearanceSweeps: WorldNavigationCapacity.MaxSurfaceClearanceSweeps
             ),
             previous: previousNavigation
         );
@@ -183,7 +189,10 @@ public sealed partial class WorldPopulation {
         }
 
         return m_fields.CanInstallInput(
-            input: CompileFieldLatticeInput(document: document!, program: program!),
+            input: CompileFieldLatticeInput(
+                document: document!,
+                program: program!
+            ),
             reason: out reason
         );
     }
@@ -248,21 +257,52 @@ public sealed partial class WorldPopulation {
             fieldsByName[fields[index].Name] = index;
         }
 
-        static FieldScalarInput Scalar(WorldFieldScalarInput input) => new(Literal: input.Literal, State: input.State);
+        static FieldScalarInput Scalar(WorldFieldScalarInput input) => new(
+            Literal: input.Literal,
+            State: input.State
+        );
 
         var reactions = new FieldReactionInput[program.Nodes.Count];
 
         for (var index = 0; (index < reactions.Length); index++) {
             reactions[index] = program.Nodes[index] switch {
-                WorldFieldNode.Diffuse diffuse => new FieldReactionInput.Diffuse(diffuse.Field.Ordinal, Scalar(diffuse.Rate)),
-                WorldFieldNode.Decay decay => new FieldReactionInput.Decay(decay.Field.Ordinal, Scalar(decay.Rate)),
+                WorldFieldNode.Diffuse diffuse => new FieldReactionInput.Diffuse(
+                Field: diffuse.Field.Ordinal,
+                Rate: Scalar(input: diffuse.Rate)
+            ),
+                WorldFieldNode.Decay decay => new FieldReactionInput.Decay(
+                Field: decay.Field.Ordinal,
+                Rate: Scalar(input: decay.Rate)
+            ),
                 WorldFieldNode.Transform transform => new FieldReactionInput.Transform(
-                    When: [.. transform.When.Select(selector: condition => new FieldConditionInput(condition.Field.Ordinal, condition.Comparison, Scalar(condition.Value)))],
-                    Then: [.. transform.Then.Select(selector: write => new FieldWriteInput(write.Field.Ordinal, MapWriteOp(op: write.Op), Scalar(write.Value)))]
-                ),
-                WorldFieldNode.Emit emit => new FieldReactionInput.Emit(emit.Tag, emit.Field.Ordinal, Scalar(emit.Amount)),
-                WorldFieldNode.Expose expose => new FieldReactionInput.Expose(expose.Field.Ordinal, expose.Comparison, Scalar(expose.Value), expose.Row),
-                WorldFieldNode.Flow flow => new FieldReactionInput.Flow(flow.Field.Ordinal, Scalar(flow.Rate), [.. flow.Over.Select(selector: static over => over.Ordinal)], flow.SpillRow),
+                When: [.. transform.When.Select(selector: condition => new FieldConditionInput(
+                        condition.Field.Ordinal,
+                        condition.Comparison,
+                        Scalar(input: condition.Value)
+                    ))],
+                Then: [.. transform.Then.Select(selector: write => new FieldWriteInput(
+                        Field: write.Field.Ordinal,
+                        Op: MapWriteOp(op: write.Op),
+                        Value: Scalar(input: write.Value)
+                    ))]
+            ),
+                WorldFieldNode.Emit emit => new FieldReactionInput.Emit(
+                emit.Tag,
+                emit.Field.Ordinal,
+                Scalar(input: emit.Amount)
+            ),
+                WorldFieldNode.Expose expose => new FieldReactionInput.Expose(
+                expose.Field.Ordinal,
+                expose.Comparison,
+                Scalar(input: expose.Value),
+                expose.Row
+            ),
+                WorldFieldNode.Flow flow => new FieldReactionInput.Flow(
+                flow.Field.Ordinal,
+                Scalar(input: flow.Rate),
+                [.. flow.Over.Select(selector: static over => over.Ordinal)],
+                flow.SpillRow
+            ),
                 _ => throw new InvalidOperationException(message: "fields.reactions carries an unknown reaction kind."),
             };
         }
@@ -270,15 +310,38 @@ public sealed partial class WorldPopulation {
         var paint = new List<FieldFillInput>();
 
         foreach (var fill in (document.Paint ?? [])) {
-            if (!fieldsByName.TryGetValue(key: fill.Field, value: out var field)) {
+            if (!fieldsByName.TryGetValue(
+                key: fill.Field,
+                value: out var field
+            )) {
                 throw new InvalidOperationException(message: $"fields: '{fill.Field}' is not a declared field.");
             }
 
             paint.Add(item: fill switch {
-                WorldLatticeFill.Rect rect => new FieldFillInput.Rect(field, FixedQ4816.FromDouble(value: rect.Value), FixedQ4816.FromDouble(value: rect.MinX), FixedQ4816.FromDouble(value: rect.MinZ), FixedQ4816.FromDouble(value: rect.MaxX), FixedQ4816.FromDouble(value: rect.MaxZ)),
-                WorldLatticeFill.Noise noise => new FieldFillInput.Noise(field, FixedQ4816.FromDouble(value: noise.Value), noise.Frequency, FixedQ4816.FromDouble(value: noise.Threshold), noise.Octaves, noise.Seed),
-                WorldLatticeFill.Scatter scatter => new FieldFillInput.Scatter(field, FixedQ4816.FromDouble(value: scatter.Value), scatter.Spacing, scatter.Radius, scatter.Seed),
-                WorldLatticeFill.Draw => new FieldFillInput.DrawMarker(field),
+                WorldLatticeFill.Rect rect => new FieldFillInput.Rect(
+                field,
+                FixedQ4816.FromDouble(value: rect.Value),
+                FixedQ4816.FromDouble(value: rect.MinX),
+                FixedQ4816.FromDouble(value: rect.MinZ),
+                FixedQ4816.FromDouble(value: rect.MaxX),
+                FixedQ4816.FromDouble(value: rect.MaxZ)
+            ),
+                WorldLatticeFill.Noise noise => new FieldFillInput.Noise(
+                field,
+                FixedQ4816.FromDouble(value: noise.Value),
+                noise.Frequency,
+                FixedQ4816.FromDouble(value: noise.Threshold),
+                noise.Octaves,
+                noise.Seed
+            ),
+                WorldLatticeFill.Scatter scatter => new FieldFillInput.Scatter(
+                field,
+                FixedQ4816.FromDouble(value: scatter.Value),
+                scatter.Spacing,
+                scatter.Radius,
+                scatter.Seed
+            ),
+                WorldLatticeFill.Draw => new FieldFillInput.DrawMarker(Field: field),
                 _ => throw new InvalidOperationException(message: "fields.paint carries an unknown fill kind."),
             });
         }
@@ -301,12 +364,16 @@ public sealed partial class WorldPopulation {
             Paint: paint
         );
     }
+
     private static FieldWriteOp MapWriteOp(WorldFieldWriteOp op) => op switch {
         WorldFieldWriteOp.Set => FieldWriteOp.Set,
         WorldFieldWriteOp.Add => FieldWriteOp.Add,
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(op), actualValue: op, message: null),
+        _ => throw new ArgumentOutOfRangeException(
+        paramName: nameof(op),
+        actualValue: op,
+        message: null
+    ),
     };
-
     private static FixedSpawnPoint[] CompileSeatSpawns(IReadOnlyList<WorldSpawnPoint> spawnPoints, IReadOnlyList<string> seatSpawns) {
         var compiled = new FixedSpawnPoint[seatSpawns.Count];
 
@@ -546,7 +613,7 @@ public sealed partial class WorldPopulation {
                 body.SetContactConfiguration(
                     field: m_contactField,
                     upPolicy: m_bodyUpPolicy,
-                walkableThreshold: m_walkableThreshold
+                    walkableThreshold: m_walkableThreshold
                 );
                 body.SetGravityField(field: m_gravityField);
             }
@@ -591,9 +658,14 @@ public sealed partial class WorldPopulation {
         for (var bodyIndex = 0; (bodyIndex < m_entries.Length); bodyIndex++) {
             var navigation = m_entries[bodyIndex].NavigationState;
             var routeRetained = false;
-            if ((uint)navigation.DomainIndex < (uint)previousNavigation.Count) {
+
+            if (((uint)navigation.DomainIndex) < ((uint)previousNavigation.Count)) {
                 var oldName = previousNavigation[navigation.DomainIndex].Name;
-                if (TryFindRetainedDomain(oldName, out var currentIndex)) {
+
+                if (TryFindRetainedDomain(
+                    index: out var currentIndex,
+                    name: oldName
+                )) {
                     navigation.DomainIndex = currentIndex;
                     routeRetained = true;
                 }
@@ -605,8 +677,14 @@ public sealed partial class WorldPopulation {
                 navigation.Clear();
             }
             var activeDomain = m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex;
-            if ((uint)activeDomain < (uint)previousNavigation.Count &&
-                TryFindRetainedDomain(previousNavigation[activeDomain].Name, out var reboundDomain)) {
+
+            if (
+                (((uint)activeDomain) < ((uint)previousNavigation.Count)) &&
+                TryFindRetainedDomain(
+                previousNavigation[activeDomain].Name,
+                out var reboundDomain
+            )
+            ) {
                 m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex = reboundDomain;
             } else if (activeDomain >= 0) {
                 m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex = -1;
@@ -630,8 +708,15 @@ public sealed partial class WorldPopulation {
         }
 
         bool TryFindRetainedDomain(string name, out int index) {
-            for (var candidate = 0; candidate < m_navigation.Count; candidate++) {
-                if (m_navigation.WasRetained(candidate) && string.Equals(m_navigation[candidate].Name, name, StringComparison.Ordinal)) {
+            for (var candidate = 0; (candidate < m_navigation.Count); candidate++) {
+                if (
+                    m_navigation.WasRetained(index: candidate) &&
+                    string.Equals(
+                    a: m_navigation[candidate].Name,
+                    b: name,
+                    comparisonType: StringComparison.Ordinal
+                )
+                ) {
                     index = candidate;
                     return true;
                 }
@@ -715,12 +800,17 @@ public sealed partial class WorldPopulation {
 
         m_revision++;
     }
+
     /// <summary>One reusable sweep row for dynamic-body contact.</summary>
     private readonly record struct DynamicContactBody(int Index, FixedQ4816 MinimumX, FixedQ4816 MaximumX,
         FixedQ4816 Radius) : IComparable<DynamicContactBody> {
         public int CompareTo(DynamicContactBody other) {
-            var minimum = MinimumX.CompareTo(other.MinimumX);
-            return minimum != 0 ? minimum : Index.CompareTo(other.Index);
+            var minimum = MinimumX.CompareTo(other: other.MinimumX);
+
+            return ((minimum != 0)
+                ? minimum
+                : Index.CompareTo(value: other.Index)
+            );
         }
     }
 
@@ -763,8 +853,8 @@ public sealed partial class WorldPopulation {
 
             contacts[count++] = new DynamicContactBody(
                 Index: index,
-                MinimumX: body.FixedPosition.X - radius,
-                MaximumX: body.FixedPosition.X + radius,
+                MinimumX: (body.FixedPosition.X - radius),
+                MaximumX: (body.FixedPosition.X + radius),
                 Radius: radius
             );
         }
@@ -802,7 +892,11 @@ public sealed partial class WorldPopulation {
 
             // Introspective sort keeps a badly reshuffled few-thousand-body frame O(n log n), while the body index
             // is a complete tie-breaker that makes its result deterministic.
-            Array.Sort(array: contacts, index: 0, length: count);
+            Array.Sort(
+                array: contacts,
+                index: 0,
+                length: count
+            );
             Array.Clear(array: m_dynamicContactDegrees);
 
             for (var leftOrdinal = 0; (leftOrdinal < count); leftOrdinal++) {
@@ -810,11 +904,13 @@ public sealed partial class WorldPopulation {
                 var leftIndex = leftContact.Index;
                 var left = m_entries[leftIndex].Body!;
                 var leftCollider = left.Collider!.Value;
+
                 if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
                     continue;
                 }
 
                 var inspected = 0;
+
                 for (var rightOrdinal = (leftOrdinal + 1); ((rightOrdinal < count) && (contacts[rightOrdinal].MinimumX <= leftContact.MaximumX)); rightOrdinal++) {
                     if (inspected >= m_bodyContactPolicy.CandidateBudget) {
                         DynamicContactLimitedBodies++;
@@ -824,6 +920,7 @@ public sealed partial class WorldPopulation {
                     DynamicContactCandidates++;
                     var rightContact = contacts[rightOrdinal];
                     var rightIndex = rightContact.Index;
+
                     if (m_dynamicContactDegrees[rightIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
                         continue;
                     }
@@ -861,9 +958,9 @@ public sealed partial class WorldPopulation {
 
                         if (pairIsRigid) {
                             ResolveRigidPairContact(
+                                correction: correction,
                                 left: left,
-                                right: right,
-                                correction: correction
+                                right: right
                             );
                             rigidResolvedThisPass++;
                         } else {
@@ -885,7 +982,10 @@ public sealed partial class WorldPopulation {
             return rigidResolvedThisPass;
         }
 
-        var firstPassRigidResolved = RunSweep(leftScratch, rightScratch);
+        var firstPassRigidResolved = RunSweep(
+            leftScratch: leftScratch,
+            rightScratch: rightScratch
+        );
 
         RigidPairPassesThisTick = 1;
 
@@ -894,15 +994,24 @@ public sealed partial class WorldPopulation {
         // crosses more than one pair-hop within THIS tick instead of propagating one body per tick; a heavily loaded
         // one is bounded by RigidPairIterationBudget so a crowded tick's total extra-sweep work stays capped.
         var extraIterations = (Math.Clamp(
-            value: (m_bodyContactPolicy.RigidPairIterationBudget / Math.Max(val1: 1, val2: firstPassRigidResolved)),
+            value: (m_bodyContactPolicy.RigidPairIterationBudget / Math.Max(
+                val1: 1,
+                val2: firstPassRigidResolved
+            )),
             min: 1,
-            max: Math.Max(val1: 1, val2: m_bodyContactPolicy.RigidPairIterationCeiling)
+            max: Math.Max(
+                val1: 1,
+                val2: m_bodyContactPolicy.RigidPairIterationCeiling
+            )
         ) - 1);
 
         for (var extra = 0; ((extra < extraIterations) && (firstPassRigidResolved > 0)); extra++) {
             RigidPairPassesThisTick++;
 
-            var thisPassRigidResolved = RunSweep(leftScratch, rightScratch);
+            var thisPassRigidResolved = RunSweep(
+                leftScratch: leftScratch,
+                rightScratch: rightScratch
+            );
 
             if (thisPassRigidResolved <= 0) {
                 break;

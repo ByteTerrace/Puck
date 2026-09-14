@@ -29,7 +29,10 @@ public readonly record struct Rational : IComparable<Rational> {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="Denominator"/> is zero.</exception>
     public Rational(BigInteger Numerator, BigInteger Denominator) {
         if (Denominator.IsZero) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(Denominator), message: "A Rational's denominator must be nonzero.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(Denominator),
+                message: "A Rational's denominator must be nonzero."
+            );
         }
 
         if (Denominator.Sign < 0) {
@@ -49,49 +52,82 @@ public readonly record struct Rational : IComparable<Rational> {
             right: Denominator
         );
 
-        this.Numerator = (divisor.IsOne ? Numerator : (Numerator / divisor));
-        m_denominatorOrDefaultZero = (divisor.IsOne ? Denominator : (Denominator / divisor));
+        this.Numerator = (divisor.IsOne
+            ? Numerator
+            : (Numerator / divisor)
+        );
+        m_denominatorOrDefaultZero = (divisor.IsOne
+            ? Denominator
+            : (Denominator / divisor)
+        );
     }
 
-    /// <summary>Gets the reduced numerator; its sign is the value's sign.</summary>
-    public BigInteger Numerator { get; }
     /// <summary>Gets the reduced, positive denominator. <see langword="default"/> reads back <c>1</c> here rather than
     /// the zero its zero-initialized storage holds, so the all-zero default is the canonical <c>0/1</c>.</summary>
-    public BigInteger Denominator => (m_denominatorOrDefaultZero.IsZero ? BigInteger.One : m_denominatorOrDefaultZero);
+    public BigInteger Denominator => (m_denominatorOrDefaultZero.IsZero
+        ? BigInteger.One
+        : m_denominatorOrDefaultZero
+    );
     /// <summary>Gets whether the value is a whole number.</summary>
     public bool IsInteger => Denominator.IsOne;
     /// <summary>Gets whether the value is zero.</summary>
     public bool IsZero => Numerator.IsZero;
+    /// <summary>Gets the reduced numerator; its sign is the value's sign.</summary>
+    public BigInteger Numerator { get; }
     /// <summary>Gets the exact sign: <c>-1</c>, <c>0</c> or <c>1</c>.</summary>
     public int Sign => Numerator.Sign;
-
-    /// <summary>Gets the rational <c>1</c>.</summary>
-    public static Rational One { get; } = new(Numerator: BigInteger.One, Denominator: BigInteger.One);
-    /// <summary>Gets the rational <c>2</c>.</summary>
-    public static Rational Two { get; } = new(Numerator: (2 * BigInteger.One), Denominator: BigInteger.One);
-
     /// <summary>Gets the rational <c>0</c>.</summary>
     public static Rational Zero => default;
 
-    /// <summary>Tests exact equality of two reduced rationals.</summary>
-    public bool Equals(Rational other) => ((Numerator == other.Numerator) && (Denominator == other.Denominator));
-    /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(value1: Numerator, value2: Denominator);
+    /// <summary>Gets the rational <c>1</c>.</summary>
+    public static Rational One { get; } = new(
+        Numerator: BigInteger.One,
+        Denominator: BigInteger.One
+    );
+    /// <summary>Gets the rational <c>2</c>.</summary>
+    public static Rational Two { get; } = new(
+        Numerator: (2 * BigInteger.One),
+        Denominator: BigInteger.One
+    );
+
+    // The left shift that lands a value of the given (possibly negative) magnitude bit length at about 2^72, so the
+    // truncated integer carries more than the fifty-four bits the rounding needs below it; a value already wider than
+    // that is truncated at scale zero.
+    internal static int DoubleScale(long magnitudeBitLength) =>
+        ((int)Math.Clamp(
+            max: 4096L,
+            min: 0L,
+            value: (72L - magnitudeBitLength)
+        ));
+
     /// <summary>Returns the absolute value.</summary>
-    public Rational Abs() => ((Numerator.Sign < 0) ? -this : this);
+    public Rational Abs() => ((Numerator.Sign < 0)
+        ? -this
+        : this
+    );
     /// <summary>Returns the least integer no smaller than this value.</summary>
     public BigInteger Ceiling() => -(-this).Floor();
     /// <inheritdoc />
     public int CompareTo(Rational other) =>
         (Numerator * other.Denominator).CompareTo(other: (other.Numerator * Denominator));
+    /// <summary>Tests exact equality of two reduced rationals.</summary>
+    public bool Equals(Rational other) => ((Numerator == other.Numerator) && (Denominator == other.Denominator));
     /// <summary>Returns the greatest integer no larger than this value.</summary>
     public BigInteger Floor() => Numerator.FloorDivide(divisor: Denominator);
+    /// <inheritdoc />
+    public override int GetHashCode() => HashCode.Combine(
+        value1: Numerator,
+        value2: Denominator
+    );
     /// <summary>Returns the multiplicative inverse.</summary>
     /// <exception cref="DivideByZeroException">The value is zero.</exception>
     public Rational Reciprocal() {
         if (Numerator.IsZero) { throw new DivideByZeroException(message: "The rational zero has no reciprocal."); }
 
-        return new(Numerator: Denominator, Denominator: Numerator);
+        return new(
+            Numerator: Denominator,
+            Denominator: Numerator
+        );
     }
     /// <summary>Returns the nearest <see cref="double"/>, ties to even: the magnitude is truncated at a binary scale
     /// wide enough to leave more than sixty bits, and that one integer plus the truncation's remainder round once
@@ -103,7 +139,12 @@ public readonly record struct Rational : IComparable<Rational> {
         var magnitudeBits = (((long)magnitude.GetBitLength()) - ((long)Denominator.GetBitLength()));
 
         // Below 2^-1100 the value is under every subnormal's half, so the nearest double is zero at either sign.
-        if (magnitudeBits < -1100L) { return ((Numerator.Sign < 0) ? -0.0 : 0.0); }
+        if (magnitudeBits < -1100L) {
+            return ((Numerator.Sign < 0)
+            ? -0.0
+            : 0.0
+        );
+        }
 
         var scale = DoubleScale(magnitudeBitLength: magnitudeBits);
         var quotient = BigInteger.DivRem(
@@ -117,23 +158,27 @@ public readonly record struct Rational : IComparable<Rational> {
             truncatedMagnitude: quotient
         );
 
-        return ((Numerator.Sign < 0) ? -result : result);
+        return ((Numerator.Sign < 0)
+            ? -result
+            : result
+        );
     }
     /// <inheritdoc />
     /// <remarks>Both components are formatted against <see cref="CultureInfo.InvariantCulture"/>, so the text is the
     /// same on every host; a whole number prints without its denominator.</remarks>
     public override string ToString() => (IsInteger
         ? Numerator.ToString(provider: CultureInfo.InvariantCulture)
-        : string.Create(provider: CultureInfo.InvariantCulture, $"{Numerator}/{Denominator}"));
-
-    // The left shift that lands a value of the given (possibly negative) magnitude bit length at about 2^72, so the
-    // truncated integer carries more than the fifty-four bits the rounding needs below it; a value already wider than
-    // that is truncated at scale zero.
-    internal static int DoubleScale(long magnitudeBitLength) =>
-        ((int)Math.Clamp(max: 4096L, min: 0L, value: (72L - magnitudeBitLength)));
+        : string.Create(
+            provider: CultureInfo.InvariantCulture,
+            $"{Numerator}/{Denominator}"
+        )
+    );
 
     /// <summary>Widens an integer to the rational with denominator one.</summary>
-    public static implicit operator Rational(BigInteger value) => new(Numerator: value, Denominator: BigInteger.One);
+    public static implicit operator Rational(BigInteger value) => new(
+        Numerator: value,
+        Denominator: BigInteger.One
+    );
     /// <summary>Adds two rationals.</summary>
     public static Rational operator +(Rational left, Rational right) => new(
         Numerator: ((left.Numerator * right.Denominator) + (right.Numerator * left.Denominator)),

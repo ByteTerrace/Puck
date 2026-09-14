@@ -37,7 +37,8 @@ public sealed class PostReport {
             ? 2
             : (hasFail
                 ? 1
-                : 0));
+                : 0
+        ));
     }
 
     /// <summary>The table's first line — the caller's own battery/machine identification.</summary>
@@ -49,15 +50,33 @@ public sealed class PostReport {
     /// <summary>The per-stage results, in run order.</summary>
     public IReadOnlyList<PostStageResult> Results { get; }
 
+    private string Summarize() {
+        var pass = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Pass));
+        var skip = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Skip));
+        var fail = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Fail));
+        var infra = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Infra));
+
+        return $"{Results.Count} stage(s): {pass} pass, {fail} fail, {infra} infra, {skip} skip";
+    }
+    private static string VerdictToken(PostVerdict verdict) {
+        return verdict switch {
+            PostVerdict.Pass => "PASS ",
+            PostVerdict.Skip => "SKIP ",
+            PostVerdict.Fail => "FAIL ",
+            PostVerdict.Infra => "INFRA",
+            _ => "?????",
+        };
+    }
+
     /// <summary>Renders a duration for the console and the table: seconds to one decimal, right-aligned.</summary>
     /// <param name="duration">The duration to render.</param>
     /// <returns>The rendered text.</returns>
     public static string FormatDuration(TimeSpan duration) =>
         string.Create(
-        provider: CultureInfo.InvariantCulture,
-        initialBuffer: stackalloc char[16],
-        $"{duration.TotalSeconds,7:0.0}s"
-    );
+            provider: CultureInfo.InvariantCulture,
+            initialBuffer: stackalloc char[16],
+            $"{duration.TotalSeconds,7:0.0}s"
+        );
     /// <summary>Renders the report as a fixed-width table.</summary>
     /// <returns>The table text.</returns>
     public string Render() {
@@ -114,23 +133,5 @@ public sealed class PostReport {
             report: this
         );
         Console.Out.Write(value: table);
-    }
-
-    private static string VerdictToken(PostVerdict verdict) {
-        return verdict switch {
-            PostVerdict.Pass => "PASS ",
-            PostVerdict.Skip => "SKIP ",
-            PostVerdict.Fail => "FAIL ",
-            PostVerdict.Infra => "INFRA",
-            _ => "?????",
-        };
-    }
-    private string Summarize() {
-        var pass = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Pass));
-        var skip = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Skip));
-        var fail = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Fail));
-        var infra = Results.Count(predicate: static result => (result.Outcome.Verdict == PostVerdict.Infra));
-
-        return $"{Results.Count} stage(s): {pass} pass, {fail} fail, {infra} infra, {skip} skip";
     }
 }

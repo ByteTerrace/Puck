@@ -4,20 +4,46 @@ namespace Puck.Commands.Tests;
 
 /// <summary>Proves a channel scale is always a finite member of its authored [-1, 1] domain.</summary>
 public sealed class BindingChannelScaleLawTests {
-    [Fact]
-    public void NonFiniteChannelScalesAreStructurallyRefusedOnPagesAndChords() {
-        foreach (var scale in new[] { float.NaN, float.NegativeInfinity, float.PositiveInfinity }) {
-            _ = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: Document(chordScale: null, pageScale: scale)));
-            _ = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: Document(chordScale: scale, pageScale: null)));
-        }
-    }
+    private static BindingProfileDocument Document(float? pageScale, float? chordScale) => new(
+        Version: BindingProfileDocument.CurrentVersion,
+        Modifiers: [new BindingModifierDefinition(
+                Id: "shift",
+                Sources: ["key.shift"]
+            )],
+        Chords: [
+            new BindingChordDefinition(
+                Group: "play",
+                Chord: [],
+                Page: new BindingPageDefinition(
+                    Id: "base",
+                    Entries: [new BindingPageEntryDefinition(
+                            Sources: ["key.fire"],
+                            Channel: new ChannelRef.Name(Value: "fire"),
+                            Scale: pageScale
+                        )]
+                )
+            ),
+            new BindingChordDefinition(
+                Group: "play",
+                Chord: ["shift"],
+                Command: new BindingCommandDefinition(
+                    Channel: new ChannelRef.Name(Value: "fire"),
+                    Scale: chordScale
+                )
+            ),
+        ]
+    );
+
     [Fact]
     public void DefaultChannelBindingDispatchesItsOwnCompletedRelease() {
-        const string command = "test.channel";
-        var registry = new CommandRegistry(modules: [new ChannelModule(command: command)]);
+        const string Command = "test.channel";
+        var registry = new CommandRegistry(modules: [new ChannelModule(command: Command)]);
         var router = new InputRouter(
             registry: registry,
-            bindings: new FixedBindings(binding: new CommandBinding(Command: command, ChannelScale: 1f)),
+            bindings: new FixedBindings(binding: new CommandBinding(
+                Command: Command,
+                ChannelScale: 1f
+            )),
             principalResolver: new ConsolePrincipal()
         );
         var device = InputDeviceId.FromConnectionKey(key: "pad-1");
@@ -28,9 +54,15 @@ public sealed class BindingChannelScaleLawTests {
             Value: CommandValue.Axis(value: 1f),
             Phase: CommandPhase.Active
         ));
-        var held = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        var held = router.SnapshotForTick(
+            tick: 1UL,
+            windowEndTick: ulong.MaxValue
+        );
 
-        Assert.Equal(expected: CommandPhase.Active, actual: Assert.Single(collection: Assert.Single(collection: held.Lanes).Entries).Phase);
+        Assert.Equal(
+            expected: CommandPhase.Active,
+            actual: Assert.Single(collection: Assert.Single(collection: held.Lanes).Entries).Phase
+        );
 
         router.Capture(signal: new InputSignal(
             Source: "gamepad.rightTrigger",
@@ -38,36 +70,44 @@ public sealed class BindingChannelScaleLawTests {
             Value: CommandValue.Axis(value: 0f),
             Phase: CommandPhase.Completed
         ));
-        var released = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+        var released = router.SnapshotForTick(
+            tick: 2UL,
+            windowEndTick: ulong.MaxValue
+        );
         var releaseLane = Assert.Single(collection: released.Lanes);
 
-        Assert.Equal(expected: 2, actual: releaseLane.Entries.Length);
+        Assert.Equal(
+            expected: 2,
+            actual: releaseLane.Entries.Length
+        );
         var release = releaseLane.Entries[^1];
 
-        Assert.Equal(expected: CommandPhase.Completed, actual: release.Phase);
-        Assert.Equal(expected: 0f, actual: release.Value.AsAxis1D);
-        Assert.Empty(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes);
+        Assert.Equal(
+            expected: CommandPhase.Completed,
+            actual: release.Phase
+        );
+        Assert.Equal(
+            expected: 0f,
+            actual: release.Value.AsAxis1D
+        );
+        Assert.Empty(collection: router.SnapshotForTick(
+            tick: 3UL,
+            windowEndTick: ulong.MaxValue
+        ).Lanes);
     }
-
-    private static BindingProfileDocument Document(float? pageScale, float? chordScale) => new(
-        Version: BindingProfileDocument.CurrentVersion,
-        Modifiers: [new BindingModifierDefinition(Id: "shift", Sources: ["key.shift"])],
-        Chords: [
-            new BindingChordDefinition(
-                Group: "play",
-                Chord: [],
-                Page: new BindingPageDefinition(
-                    Id: "base",
-                    Entries: [new BindingPageEntryDefinition(Sources: ["key.fire"], Channel: new ChannelRef.Name(Value: "fire"), Scale: pageScale)]
-                )
-            ),
-            new BindingChordDefinition(
-                Group: "play",
-                Chord: ["shift"],
-                Command: new BindingCommandDefinition(Channel: new ChannelRef.Name(Value: "fire"), Scale: chordScale)
-            ),
-        ]
-    );
+    [Fact]
+    public void NonFiniteChannelScalesAreStructurallyRefusedOnPagesAndChords() {
+        foreach (var scale in new[] { float.NaN, float.NegativeInfinity, float.PositiveInfinity }) {
+            _ = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: Document(
+                chordScale: null,
+                pageScale: scale
+            )));
+            _ = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: Document(
+                chordScale: scale,
+                pageScale: null
+            )));
+        }
+    }
 
     private sealed class FixedBindings(CommandBinding binding) : IInputBindings {
         private readonly CommandBinding[] m_bindings = [binding];

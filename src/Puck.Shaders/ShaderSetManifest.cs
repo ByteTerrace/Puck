@@ -6,7 +6,7 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Shaders;
 
 /// <summary>
-/// A <c>puck.shader.v1</c> shader-set manifest: one <c>&lt;id&gt;.puck.shader.json</c> beside its HLSL and compiled
+/// A <c>puck.shader.manifest.v1</c> shader-set manifest: one <c>&lt;id&gt;.puck.shader.json</c> beside its HLSL and compiled
 /// bytecode, and the whole declaration of a shader set — its stage stems, its descriptor bindings, its config
 /// schema (what a document may author for it), and its push-constant block (which fields, in what order, filled from
 /// which source). The binding layout is authored by hand and cross-checked against the pipeline description built
@@ -37,7 +37,7 @@ public sealed partial record ShaderSetManifest(
     /// <summary>The file suffix every manifest carries; the text before it is the set's id.</summary>
     public const string FileSuffix = ".puck.shader.json";
     /// <summary>The required <c>$schema</c> value of every <see cref="ShaderSetManifest"/> document.</summary>
-    public const string SchemaTag = "puck.shader.v1";
+    public const string SchemaTag = "puck.shader.manifest.v1";
 
     /// <summary>Gets the directory the manifest was loaded from — where its stage stems resolve.</summary>
     [JsonIgnore]
@@ -54,7 +54,10 @@ public sealed partial record ShaderSetManifest(
     /// <param name="bytecodeExtension"><c>".spv"</c> or <c>".dxil"</c>.</param>
     /// <returns>The path.</returns>
     public string BytecodePath(string stem, string bytecodeExtension) =>
-        Path.Combine(path1: Directory, path2: $"{stem}{bytecodeExtension}");
+        Path.Combine(
+            path1: Directory,
+            path2: $"{stem}{bytecodeExtension}"
+        );
     /// <summary>Reads, parses, and validates a manifest file: the <c>$schema</c> tag, the name against the file stem,
     /// the stage shape, the config schema (defaults well-typed and in range), the push-constant block (sources
     /// resolved, offsets computed), and — for every stage present — that the sibling <c>.spv</c> exists and it and
@@ -66,26 +69,52 @@ public sealed partial record ShaderSetManifest(
     /// format validation.</exception>
     public static ShaderSetManifest Load(string manifestPath) {
         if (!File.Exists(path: manifestPath)) {
-            throw new FileNotFoundException(fileName: manifestPath, message: $"Shader set manifest not found: {manifestPath}");
+            throw new FileNotFoundException(
+                fileName: manifestPath,
+                message: $"Shader set manifest not found: {manifestPath}"
+            );
         }
 
         ShaderSetManifest manifest;
 
         try {
-            manifest = (JsonSerializer.Deserialize(json: File.ReadAllText(path: manifestPath), jsonTypeInfo: ShaderManifestJsonContext.Default.ShaderSetManifest)
+            manifest = (JsonSerializer.Deserialize(
+                json: File.ReadAllText(path: manifestPath),
+                jsonTypeInfo: ShaderManifestJsonContext.Default.ShaderSetManifest
+            )
                 ?? throw new InvalidDataException(message: $"Shader set manifest is empty or 'null': {manifestPath}"));
         } catch (JsonException exception) {
-            throw new InvalidDataException(message: $"Shader set manifest '{manifestPath}' is malformed: {exception.Message}", innerException: exception);
+            throw new InvalidDataException(
+                message: $"Shader set manifest '{manifestPath}' is malformed: {exception.Message}",
+                innerException: exception
+            );
         }
 
-        if (!string.Equals(a: manifest.Schema, b: SchemaTag, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: manifest.Schema,
+            b: SchemaTag,
+            comparisonType: StringComparison.Ordinal
+        )) {
             throw new InvalidDataException(message: $"Shader set manifest '{manifestPath}' declares '$schema' = '{manifest.Schema}'; expected '{SchemaTag}'.");
         }
 
         var fileName = Path.GetFileName(path: manifestPath);
-        var stem = (fileName.EndsWith(comparisonType: StringComparison.Ordinal, value: FileSuffix) ? fileName[..^FileSuffix.Length] : null);
+        var stem = (fileName.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: FileSuffix
+        )
+            ? fileName[..^FileSuffix.Length]
+            : null
+        );
 
-        if ((stem is null) || !string.Equals(a: stem, b: manifest.Name, comparisonType: StringComparison.Ordinal)) {
+        if (
+            (stem is null) ||
+            !string.Equals(
+            a: stem,
+            b: manifest.Name,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
             throw new InvalidDataException(message: $"Shader set manifest '{manifestPath}' is named '{manifest.Name}'; the file must be '{manifest.Name}{FileSuffix}'.");
         }
 
@@ -93,7 +122,10 @@ public sealed partial record ShaderSetManifest(
         var isGraphics = ((manifest.Stages.Vertex is not null) && (manifest.Stages.Fragment is not null) && (manifest.Stages.Compute is null));
         var isCompute = ((manifest.Stages.Vertex is null) && (manifest.Stages.Fragment is null) && (manifest.Stages.Compute is not null));
 
-        if (!isGraphics && !isCompute) {
+        if (
+            !isGraphics &&
+            !isCompute
+        ) {
             throw new InvalidDataException(message: $"'{manifest.Name}' manifest must declare either vertex+fragment stages or a compute stage.");
         }
 
@@ -107,11 +139,33 @@ public sealed partial record ShaderSetManifest(
 
         manifest.ValidateConfigSchema();
 
-        var layout = ((manifest.PushConstants is { } block) ? ShaderPushConstantLayout.Resolve(block: block, config: manifest.Config, manifestName: manifest.Name) : null);
+        var layout = ((manifest.PushConstants is { } block)
+            ? ShaderPushConstantLayout.Resolve(
+                block: block,
+                config: manifest.Config,
+                manifestName: manifest.Name
+            )
+            : null
+        );
 
-        ValidateStage(directory: directory, manifestName: manifest.Name, stem: manifest.Stages.Vertex, stageName: "vertex");
-        ValidateStage(directory: directory, manifestName: manifest.Name, stem: manifest.Stages.Fragment, stageName: "fragment");
-        ValidateStage(directory: directory, manifestName: manifest.Name, stem: manifest.Stages.Compute, stageName: "compute");
+        ValidateStage(
+            directory: directory,
+            manifestName: manifest.Name,
+            stem: manifest.Stages.Vertex,
+            stageName: "vertex"
+        );
+        ValidateStage(
+            directory: directory,
+            manifestName: manifest.Name,
+            stem: manifest.Stages.Fragment,
+            stageName: "fragment"
+        );
+        ValidateStage(
+            directory: directory,
+            manifestName: manifest.Name,
+            stem: manifest.Stages.Compute,
+            stageName: "compute"
+        );
 
         return (manifest with { Directory = directory, PushConstantLayout = layout });
     }
@@ -141,7 +195,11 @@ public sealed partial record ShaderSetManifest(
             throw new InvalidDataException(message: $"'{Name}' manifest declares {sampledImageCount} sampledImage binding(s); the pipeline description requests {description.TextureSamplerCount}.");
         }
         if (hasStorageBuffer != description.EnableStorageBuffer) {
-            throw new InvalidDataException(message: $"'{Name}' manifest {(hasStorageBuffer ? "declares a" : "declares no")} storageBuffer binding; the pipeline description {(description.EnableStorageBuffer ? "requests one" : "requests none")}.");
+            throw new InvalidDataException(message: $"'{Name}' manifest {(hasStorageBuffer
+                ? "declares a"
+                : "declares no")} storageBuffer binding; the pipeline description {(description.EnableStorageBuffer
+                ? "requests one"
+                : "requests none")}.");
         }
 
         var declaredPushBytes = (PushConstantLayout?.SizeBytes ?? 0);
@@ -165,10 +223,16 @@ public sealed partial record ShaderSetManifest(
         }
 
         foreach (var requested in description.Bindings) {
-            if (!byBinding.TryGetValue(key: requested.Binding, value: out var declared)) {
+            if (!byBinding.TryGetValue(
+                key: requested.Binding,
+                value: out var declared
+            )) {
                 throw new InvalidDataException(message: $"'{Name}' manifest declares no binding at Vulkan binding {requested.Binding}; the pipeline description requests one.");
             }
-            if (!KindsAgree(manifestKind: declared.Kind, descriptionKind: requested.Kind)) {
+            if (!KindsAgree(
+                manifestKind: declared.Kind,
+                descriptionKind: requested.Kind
+            )) {
                 throw new InvalidDataException(message: $"'{Name}' manifest declares binding {requested.Binding} as '{declared.Kind}'; the pipeline description requests '{requested.Kind}' there.");
             }
             if (declared.Count != requested.Count) {
@@ -191,25 +255,45 @@ public sealed partial record ShaderSetManifest(
             return;
         }
 
-        var spirvPath = Path.Combine(path1: directory, path2: $"{stem}.spv");
+        var spirvPath = Path.Combine(
+            path1: directory,
+            path2: $"{stem}.spv"
+        );
 
         if (!File.Exists(path: spirvPath)) {
-            throw new FileNotFoundException(fileName: spirvPath, message: $"'{manifestName}' manifest's {stageName} stage '{stem}' has no compiled '{stem}.spv' beside it.");
+            throw new FileNotFoundException(
+                fileName: spirvPath,
+                message: $"'{manifestName}' manifest's {stageName} stage '{stem}' has no compiled '{stem}.spv' beside it."
+            );
         }
 
-        ValidateBytecodeFile(manifestName: manifestName, path: spirvPath, stageName: stageName);
+        ValidateBytecodeFile(
+            manifestName: manifestName,
+            path: spirvPath,
+            stageName: stageName
+        );
 
-        var dxilPath = Path.Combine(path1: directory, path2: $"{stem}.dxil");
+        var dxilPath = Path.Combine(
+            path1: directory,
+            path2: $"{stem}.dxil"
+        );
 
         if (File.Exists(path: dxilPath)) {
-            ValidateBytecodeFile(manifestName: manifestName, path: dxilPath, stageName: stageName);
+            ValidateBytecodeFile(
+                manifestName: manifestName,
+                path: dxilPath,
+                stageName: stageName
+            );
         }
     }
     private static void ValidateBytecodeFile(string manifestName, string path, string stageName) {
         try {
             ShaderBytecode.ValidateFormat(bytecode: File.ReadAllBytes(path: path));
         } catch (ArgumentException exception) {
-            throw new InvalidDataException(message: $"'{manifestName}' manifest's {stageName} bytecode failed format validation: {path} ({exception.Message})", innerException: exception);
+            throw new InvalidDataException(
+                message: $"'{manifestName}' manifest's {stageName} bytecode failed format validation: {path} ({exception.Message})",
+                innerException: exception
+            );
         }
     }
 }

@@ -34,7 +34,7 @@ namespace Puck;
 /// a project reference — <c>Puck.Maths</c> deliberately carries zero <c>ProjectReference</c>s.
 /// </para>
 /// </remarks>
-[AttributeUsage(validOn: (AttributeTargets.Method | AttributeTargets.Constructor | AttributeTargets.Class | AttributeTargets.Struct), Inherited = false, AllowMultiple = false)]
+[AttributeUsage(validOn: AttributeTargets.Method | AttributeTargets.Constructor | AttributeTargets.Class | AttributeTargets.Struct, Inherited = false, AllowMultiple = false)]
 internal sealed class VerifiedCodeAttribute : Attribute {
     /// <summary>Names the manifest entry this declaration's fingerprint is recorded under.</summary>
     /// <param name="id">The manifest entry id, keyed in the repository-root <c>VerifiedCode.json</c>.</param>
@@ -44,7 +44,6 @@ internal sealed class VerifiedCodeAttribute : Attribute {
 
     /// <summary>The manifest entry id this declaration's fingerprint is recorded under in <c>VerifiedCode.json</c>.</summary>
     public string Id { get; }
-
     /// <summary>
     /// Why this declaration can be branded at all: <c>exhaustive</c> when every input has been decided by execution,
     /// <c>exact-by-construction</c> when the body is a primitive operation on the representation and carries no
@@ -58,7 +57,6 @@ internal sealed class VerifiedCodeAttribute : Attribute {
     /// leans on: what would have to be false for the brand to be wrong.
     /// </remarks>
     public string? Basis { get; init; }
-
     /// <summary>Optional free-text note on which law ids justify this brand (informational; the manifest's <c>laws</c> array is authoritative).</summary>
     public string? Laws { get; init; }
 }

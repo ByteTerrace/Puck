@@ -91,13 +91,6 @@ public static class NumberTheoreticTransform {
             if (length == n) { break; }
         }
     }
-    private static void Encode(Span<ulong> values) {
-        var ring = Ring;
-
-        for (var i = 0; (i < values.Length); ++i) {
-            values[i] = ring.Encode(value: values[i]);
-        }
-    }
     // One REDC per element strips the radix and applies scale at once: scale is an ordinary residue, so the product
     // of a Montgomery-form element with it decodes to (element * scale).
     private static void DecodeScaled(Span<ulong> values, ulong scale) {
@@ -108,6 +101,13 @@ public static class NumberTheoreticTransform {
                 left: values[i],
                 right: scale
             );
+        }
+    }
+    private static void Encode(Span<ulong> values) {
+        var ring = Ring;
+
+        for (var i = 0; (i < values.Length); ++i) {
+            values[i] = ring.Encode(value: values[i]);
         }
     }
 
@@ -162,7 +162,9 @@ public static class NumberTheoreticTransform {
         for (var i = 0; (i < destination.Length); ++i) {
             destination[i] = ring.Multiply(
                 left: left[i],
-                right: (sameOperands ? left[i] : right[i])
+                right: (sameOperands
+                ? left[i]
+                : right[i])
             );
         }
 

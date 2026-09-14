@@ -1,0 +1,141 @@
+using Puck.GamingBricks.Forge;
+
+
+namespace Puck.AdvancedGamingBrick.Forge.Tests;
+
+/// <summary>Covers recorded one-shots reaching the advanced machine's digital sound path.</summary>
+public sealed class CartridgeDirectSoundTests {
+    private const uint BufferAddress = 0x02000160u;
+    private const uint DmaControlAddress = 0x040000C6u;
+    private const int SamplesPerFrame = 288;
+
+    private static bool Silent(AgbVerifyMachineDriver machine) {
+        for (var index = 0; (index < (SamplesPerFrame * 2)); ++index) {
+            if (machine.ReadByte(address: (BufferAddress + ((uint)index))) != 0) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    [Fact]
+    public void APlayedSampleIsMixedIntoTheBufferAndTheTransferRuns() {
+        var sample = new int[600];
+
+        for (var index = 0; (index < sample.Length); ++index) {
+            sample[index] = (((index % 2) == 0)
+                ? 100
+                : -100
+            );
+        }
+
+        var document = CartridgeDocuments.Create(
+            target: "agb",
+            title: "PCM"
+        ) with {
+            Variables = [new CartridgeVariable(
+                Name: "phase",
+                Initial: 0
+            )],
+            Sounds = [new CartridgeSound(
+                Name: "boom",
+                Sample: sample
+            )],
+            Rules = [
+                new CartridgeRule(
+                Name: "fire",
+                When: CartridgeExpressions.Gate(
+                    left: CartridgeExpressions.Of(state: "phase"),
+                    comparison: ActionStateComparison.Equal,
+                    right: CartridgeExpressions.Of(constant: 3)
+                ),
+                Body: [new CartridgeStatement(
+                        Kind: "play",
+                        Sound: "boom"
+                    )]
+            ),
+                new CartridgeRule(
+                Name: "tick",
+                When: CartridgeExpressions.Gate(
+                    left: CartridgeExpressions.Of(state: "phase"),
+                    comparison: ActionStateComparison.Less,
+                    right: CartridgeExpressions.Of(constant: 200)
+                ),
+                Body: [new CartridgeStatement(
+                        Kind: "set",
+                        Target: new CartridgeTarget(State: "phase"),
+                        Operation: ExpressionOp.Add,
+                        Value: CartridgeExpressions.Of(constant: 1)
+                    )]
+            ),
+            ],
+        };
+        var result = new AgbCartridgeCompiler().Compile(document: document);
+        using var machine = new AgbVerifyMachineDriver(
+            rom: result.Rom,
+            label: "pcm"
+        );
+
+        machine.RunFrames(
+            frames: 2,
+            keys: AgbKeys.None
+        );
+
+        // Before anything plays the buffer is silent and the transfer is already armed.
+        Assert.True(condition: ((machine.ReadHalf(address: DmaControlAddress) & 0x8000) != 0));
+        Assert.True(condition: Silent(machine: machine));
+
+        machine.RunFrames(
+            frames: 6,
+            keys: AgbKeys.None
+        );
+        Assert.False(condition: Silent(machine: machine));
+
+        // The sample is 600 long against 288 per frame, so it retires and the buffer falls silent again.
+        machine.RunFrames(
+            frames: 12,
+            keys: AgbKeys.None
+        );
+        Assert.True(condition: Silent(machine: machine));
+    }
+    [Fact]
+    public void ValidationRefusesRecordedSoundOnTheHumbleTarget() {
+        var document = CartridgeDocuments.Create(
+            target: "cgb",
+            title: "PCMBAD"
+        ) with {
+            Sounds = [new CartridgeSound(
+                Name: "boom",
+                Sample: [1, 2, 3]
+            )],
+        };
+        var errors = CartridgeDocuments.Validate(document: document);
+
+        Assert.Contains(
+            collection: errors,
+            filter: error => error.Message.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "digital sound path"
+            )
+        );
+
+        var tooLoud = CartridgeDocuments.Create(
+            target: "agb",
+            title: "PCMLOUD"
+        ) with {
+            Sounds = [new CartridgeSound(
+                Name: "boom",
+                Sample: [200]
+            )],
+        };
+
+        Assert.Contains(
+            collection: CartridgeDocuments.Validate(document: tooLoud),
+            filter: error => error.Message.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "signed eight-bit samples"
+            )
+        );
+    }
+}

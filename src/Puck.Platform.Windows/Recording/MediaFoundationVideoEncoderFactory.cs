@@ -25,7 +25,12 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
             return null;
         }
 
-        if ((width <= 0) || (height <= 0) || ((width & 1) != 0) || ((height & 1) != 0)) {
+        if (
+            (width <= 0) ||
+            (height <= 0) ||
+            ((width & 1) != 0) ||
+            ((height & 1) != 0)
+        ) {
             reason = $"the frame extent {width}x{height} must be positive and even for NV12 encoding";
 
             return null;
@@ -33,19 +38,44 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
 
         var attempts = new List<string>();
 
-        MfInterop.Check(hr: MfInterop.MFStartup(Version: MfInterop.MfVersion, dwFlags: 0));
+        MfInterop.Check(hr: MfInterop.MFStartup(
+            Version: MfInterop.MfVersion,
+            dwFlags: 0
+        ));
 
         try {
             foreach (var token in codecLadder) {
-                if (!TryMapCodec(codec: out var codec, subtype: out var subtype, token: token)) {
+                if (!TryMapCodec(
+                    codec: out var codec,
+                    subtype: out var subtype,
+                    token: token
+                )) {
                     attempts.Add(item: $"'{token}': unknown ladder token");
 
                     continue;
                 }
 
                 // Hardware first (the brief's ladder), then software only if no hardware MFT initializes.
-                var encoder = (TryCreateForCategory(attempts: attempts, bitrateKilobitsPerSecond: bitrateKilobitsPerSecond, codec: codec, frameRate: frameRate, hardware: true, height: height, subtype: subtype, width: width)
-                    ?? TryCreateForCategory(attempts: attempts, bitrateKilobitsPerSecond: bitrateKilobitsPerSecond, codec: codec, frameRate: frameRate, hardware: false, height: height, subtype: subtype, width: width));
+                var encoder = (TryCreateForCategory(
+                    attempts: attempts,
+                    bitrateKilobitsPerSecond: bitrateKilobitsPerSecond,
+                    codec: codec,
+                    frameRate: frameRate,
+                    hardware: true,
+                    height: height,
+                    subtype: subtype,
+                    width: width
+                )
+                    ?? TryCreateForCategory(
+                    attempts: attempts,
+                    bitrateKilobitsPerSecond: bitrateKilobitsPerSecond,
+                    codec: codec,
+                    frameRate: frameRate,
+                    hardware: false,
+                    height: height,
+                    subtype: subtype,
+                    width: width
+                ));
 
                 if (encoder is not null) {
                     reason = "";
@@ -59,13 +89,20 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
 
         reason = ((attempts.Count == 0)
             ? "the codec ladder was empty"
-            : $"no ladder codec was encodable ({string.Join(separator: "; ", values: attempts)})");
+            : $"no ladder codec was encodable ({string.Join(
+                separator: "; ",
+                values: attempts
+            )})"
+        );
 
         return null;
     }
 
     private static MediaFoundationVideoEncoder? TryCreateForCategory(EncoderCodec codec, Guid subtype, bool hardware, int width, int height, int frameRate, int bitrateKilobitsPerSecond, List<string> attempts) {
-        var flags = MftEnumFlagSortAndFilter | (hardware ? MftEnumFlagHardware | MftEnumFlagAsyncMft : MftEnumFlagSyncMft);
+        var flags = MftEnumFlagSortAndFilter | (hardware
+            ? MftEnumFlagHardware | MftEnumFlagAsyncMft
+            : MftEnumFlagSyncMft
+        );
         var outputInfo = new MftRegisterTypeInfo {
             guidMajorType = MFMediaType_Video,
             guidSubtype = subtype,
@@ -73,18 +110,36 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
         var outputInfoPointer = Marshal.AllocHGlobal(cb: Marshal.SizeOf<MftRegisterTypeInfo>());
 
         try {
-            Marshal.StructureToPtr(fDeleteOld: false, ptr: outputInfoPointer, structure: outputInfo);
+            Marshal.StructureToPtr(
+                fDeleteOld: false,
+                ptr: outputInfoPointer,
+                structure: outputInfo
+            );
 
             var category = MFT_CATEGORY_VIDEO_ENCODER;
-            var hr = MFTEnumEx(Flags: flags, guidCategory: category, pInputType: 0, pOutputType: outputInfoPointer, pnumMFTActivate: out var count, pppMFTActivate: out var activateArray);
+            var hr = MFTEnumEx(
+                Flags: flags,
+                guidCategory: category,
+                pInputType: 0,
+                pOutputType: outputInfoPointer,
+                pnumMFTActivate: out var count,
+                pppMFTActivate: out var activateArray
+            );
 
-            if ((hr < 0) || (count == 0) || (activateArray == 0)) {
+            if (
+                (hr < 0) ||
+                (count == 0) ||
+                (activateArray == 0)
+            ) {
                 return null;
             }
 
             try {
                 for (var index = 0; (index < count); index++) {
-                    var activatePointer = Marshal.ReadIntPtr(ptr: activateArray, ofs: (index * IntPtr.Size));
+                    var activatePointer = Marshal.ReadIntPtr(
+                        ptr: activateArray,
+                        ofs: (index * IntPtr.Size)
+                    );
 
                     if (activatePointer == 0) {
                         continue;
@@ -93,13 +148,26 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
                     var activate = ((IMFActivate)Marshal.GetObjectForIUnknown(pUnk: activatePointer));
                     var mftName = ReadFriendlyName(activate: activate);
 
-                    if (TryActivateEncoder(activate: activate, attempts: attempts, bitrateKilobitsPerSecond: bitrateKilobitsPerSecond, codec: codec, encoder: out var encoder, frameRate: frameRate, height: height, mftName: mftName, width: width)) {
+                    if (TryActivateEncoder(
+                        activate: activate,
+                        attempts: attempts,
+                        bitrateKilobitsPerSecond: bitrateKilobitsPerSecond,
+                        codec: codec,
+                        encoder: out var encoder,
+                        frameRate: frameRate,
+                        height: height,
+                        mftName: mftName,
+                        width: width
+                    )) {
                         return encoder;
                     }
                 }
             } finally {
                 for (var index = 0; (index < count); index++) {
-                    var activatePointer = Marshal.ReadIntPtr(ptr: activateArray, ofs: (index * IntPtr.Size));
+                    var activatePointer = Marshal.ReadIntPtr(
+                        ptr: activateArray,
+                        ofs: (index * IntPtr.Size)
+                    );
 
                     if (activatePointer != 0) {
                         _ = Marshal.Release(pUnk: activatePointer);
@@ -122,11 +190,22 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
         try {
             var transformIid = IID_IMFTransform;
 
-            MfInterop.Check(hr: activate.ActivateObject(ppv: out transformObject, riid: ref transformIid));
+            MfInterop.Check(hr: activate.ActivateObject(
+                ppv: out transformObject,
+                riid: ref transformIid
+            ));
 
             var transform = ((IMFTransform)transformObject);
 
-            encoder = new MediaFoundationVideoEncoder(bitrateKilobitsPerSecond: bitrateKilobitsPerSecond, codec: codec, frameRate: frameRate, height: height, mftName: mftName, transform: transform, width: width);
+            encoder = new MediaFoundationVideoEncoder(
+                bitrateKilobitsPerSecond: bitrateKilobitsPerSecond,
+                codec: codec,
+                frameRate: frameRate,
+                height: height,
+                mftName: mftName,
+                transform: transform,
+                width: width
+            );
 
             return true;
         } catch (Exception exception) {
@@ -142,9 +221,14 @@ public sealed class MediaFoundationVideoEncoderFactory : IVideoEncoderFactory {
     private static string ReadFriendlyName(IMFActivate activate) {
         var nameKey = MFT_FRIENDLY_NAME_Attribute;
 
-        return ((activate.GetAllocatedString(guidKey: ref nameKey, pcchLength: out _, ppwszValue: out var name) >= 0)
+        return ((activate.GetAllocatedString(
+            guidKey: ref nameKey,
+            pcchLength: out _,
+            ppwszValue: out var name
+        ) >= 0)
             ? name
-            : "unnamed encoder MFT");
+            : "unnamed encoder MFT"
+        );
     }
     private static bool TryMapCodec(string token, out EncoderCodec codec, out Guid subtype) {
         switch (token?.Trim().ToLowerInvariant()) {

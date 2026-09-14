@@ -62,7 +62,8 @@ public static class SnapshotDumpDiagnostic {
             s: framesArg
         ))
             ? parsedFrames
-            : defaultFrames);
+            : defaultFrames
+        );
         var imagePath = (CommandLineArguments.Value(
             args: args,
             name: "--out"

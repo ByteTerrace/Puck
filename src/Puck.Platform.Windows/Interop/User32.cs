@@ -46,6 +46,19 @@ internal static partial class User32 {
     [LibraryImport("user32.dll", EntryPoint = "LoadCursorW", SetLastError = true)]
     public static partial nint LoadCursor(nint instanceHandle, nint cursorName);
     [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool DestroyIcon(nint iconHandle);
+    [LibraryImport("user32.dll", EntryPoint = "LoadIconW", SetLastError = true)]
+    public static partial nint LoadIcon(nint instanceHandle, nint iconName);
+    // Two projections of LoadImageW over its one polymorphic name parameter: a MAKEINTRESOURCE ordinal against a
+    // module, and a path with LR_LOADFROMFILE. One signature cannot marshal both.
+    [LibraryImport("user32.dll", EntryPoint = "LoadImageW", SetLastError = true)]
+    public static partial nint LoadImage(nint instanceHandle, nint name, uint type, int desiredWidth, int desiredHeight, uint loadFlags);
+    [LibraryImport("user32.dll", EntryPoint = "LoadImageW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    public static partial nint LoadImageFromFile(nint instanceHandle, string name, uint type, int desiredWidth, int desiredHeight, uint loadFlags);
+    [LibraryImport("user32.dll", EntryPoint = "SendMessageW", SetLastError = true)]
+    public static partial nint SendMessage(nint windowHandle, uint message, nint wParam, nint lParam);
+    [LibraryImport("user32.dll", SetLastError = true)]
     public static partial nint SetCursor(nint cursorHandle);
     [LibraryImport("user32.dll")]
     public static partial short GetKeyState(int virtualKey);

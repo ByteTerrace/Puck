@@ -8,10 +8,19 @@ public static class CommandLineArguments {
     /// <param name="error">A diagnostic for a missing value, or an empty string on success.</param>
     /// <returns>Whether every supplied flag has a value.</returns>
     public static bool TryValidateValues(string[] args, ReadOnlySpan<string> names, out string error) {
-        for (var index = 0; index < args.Length; ++index) {
+        for (var index = 0; (index < args.Length); ++index) {
             foreach (var name in names) {
-                if (string.Equals(a: args[index], b: name, comparisonType: StringComparison.OrdinalIgnoreCase) &&
-                    (index + 1 == args.Length || string.IsNullOrWhiteSpace(value: args[index + 1]) || args[index + 1].StartsWith(value: "--", comparisonType: StringComparison.Ordinal))) {
+                if (
+                    string.Equals(
+                    a: args[index],
+                    b: name,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                ) &&
+                    (((index + 1) == args.Length) || string.IsNullOrWhiteSpace(value: args[(index + 1)]) || args[(index + 1)].StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: "--"
+                ))
+                ) {
                     error = $"{name} requires a value.";
                     return false;
                 }
@@ -20,7 +29,6 @@ public static class CommandLineArguments {
         error = "";
         return true;
     }
-
     /// <summary>Returns the value following the first occurrence of <paramref name="name"/> in <paramref name="args"/>,
     /// or <see langword="null"/> when the flag or its following value is absent.</summary>
     /// <param name="args">The process command-line arguments.</param>

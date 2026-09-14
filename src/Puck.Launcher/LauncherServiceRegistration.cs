@@ -209,69 +209,6 @@ public static class LauncherServiceRegistration {
 
         return services;
     }
-    /// <summary>Registers self-update: an app that does not call this has no update path at all. Wires
-    /// <see cref="UpdateService"/> (backing <c>update.status</c>/<c>update.check</c>) over
-    /// <paramref name="releaseSource"/>, an <see cref="AttestationReleaseVerifier"/> pinned to
-    /// <paramref name="options"/>'s <see cref="UpdateOptions.TrustAnchor"/>, a durable
-    /// <see cref="FileReleaseSequenceStore"/>, and a <see cref="ContentAddressedUpdateStager"/> rooted at
-    /// <paramref name="options"/>'s <see cref="UpdateOptions.CacheRoot"/>. The composition root supplies
-    /// <paramref name="releaseSource"/> directly — <see cref="HttpReleaseSource"/> normally,
-    /// <see cref="DirectoryReleaseSource"/> for laws and canaries — so this method never selects a transport
-    /// itself.</summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="options">The resolved operational configuration plus the build-pinned trust anchor.</param>
-    /// <param name="releaseSource">The transport to fetch the channel manifest and payload files through.</param>
-    /// <returns>The same service collection, for chaining.</returns>
-    /// <exception cref="ArgumentNullException">Any parameter is <see langword="null"/>.</exception>
-    public static IServiceCollection AddSelfUpdate(this IServiceCollection services, UpdateOptions options, IReleaseSource releaseSource) {
-        ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(releaseSource);
-
-        services.TryAddSingleton(implementationFactory: _ => options);
-        services.TryAddSingleton(implementationFactory: _ => releaseSource);
-        services.TryAddSingleton<IReleaseSequenceStore>(implementationFactory: _ => new FileReleaseSequenceStore(
-            filePath: Path.Combine(path1: options.CacheRoot, path2: "state", path3: "sequence-mark")
-        ));
-        services.TryAddSingleton<IReleaseVerifier>(implementationFactory: sp => {
-            if (options.TrustAnchor.IsPlaceholder) {
-                return new PlaceholderReleaseVerifier();
-            }
-
-            var trustList = new TrustList(
-                entries: [options.TrustAnchor.ToTrustListEntry(
-                    maximumAge: null,
-                    reach: new HashSet<string>(comparer: StringComparer.Ordinal) { AttestationReleaseVerifier.Slot }
-                )],
-                defaultMaximumAge: null,
-                replayAcceptanceHorizon: (options.ReplayAcceptanceHorizon ?? AddSelfUpdateDefaults.ReplayAcceptanceHorizon)
-            );
-
-            return new AttestationReleaseVerifier(
-                codec: new CborAttestationCodec(),
-                sequenceStore: sp.GetRequiredService<IReleaseSequenceStore>(),
-                trustList: trustList
-            );
-        });
-        services.TryAddSingleton(implementationFactory: _ => new ContentAddressedStore(root: Path.Combine(path1: options.CacheRoot, path2: "objects")));
-        services.TryAddSingleton<IUpdateStager>(implementationFactory: sp => new ContentAddressedUpdateStager(
-            cache: sp.GetRequiredService<ContentAddressedStore>(),
-            cacheRoot: options.CacheRoot,
-            source: sp.GetRequiredService<IReleaseSource>()
-        ));
-        services.TryAddSingleton<IUpdateApplier, FileUpdateApplier>();
-        services.TryAddSingleton(implementationFactory: sp => new UpdateService(
-            applier: sp.GetRequiredService<IUpdateApplier>(),
-            options: options,
-            source: sp.GetRequiredService<IReleaseSource>(),
-            stager: sp.GetRequiredService<IUpdateStager>(),
-            verifier: sp.GetRequiredService<IReleaseVerifier>()
-        ));
-        services.AddSingleton<ICommandModule, UpdateCommandModule>();
-        services.AddHostedService<SelfUpdateHealthGateHostedService>();
-
-        return services;
-    }
     /// <summary>Registers the launcher's deterministic fixed-step easy path: one consumer, one slot-aware input router,
     /// and one command snapshot per host-owned fixed tick. The ordinary terminal registration still supplies the window,
     /// clock, command registry, and run loop.</summary>
@@ -373,6 +310,74 @@ public static class LauncherServiceRegistration {
         services.TryAddSingleton<FrameCaptureController>();
         services.AddHostedService<LauncherWindowHostedService>();
         AddStandardInputReader(services: services);
+
+        return services;
+    }
+    /// <summary>Registers self-update: an app that does not call this has no update path at all. Wires
+    /// <see cref="UpdateService"/> (backing <c>update.status</c>/<c>update.check</c>) over
+    /// <paramref name="releaseSource"/>, an <see cref="AttestationReleaseVerifier"/> pinned to
+    /// <paramref name="options"/>'s <see cref="UpdateOptions.TrustAnchor"/>, a durable
+    /// <see cref="FileReleaseSequenceStore"/>, and a <see cref="ContentAddressedUpdateStager"/> rooted at
+    /// <paramref name="options"/>'s <see cref="UpdateOptions.CacheRoot"/>. The composition root supplies
+    /// <paramref name="releaseSource"/> directly — <see cref="HttpReleaseSource"/> normally,
+    /// <see cref="DirectoryReleaseSource"/> for laws and canaries — so this method never selects a transport
+    /// itself.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">The resolved operational configuration plus the build-pinned trust anchor.</param>
+    /// <param name="releaseSource">The transport to fetch the channel manifest and payload files through.</param>
+    /// <returns>The same service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Any parameter is <see langword="null"/>.</exception>
+    public static IServiceCollection AddSelfUpdate(this IServiceCollection services, UpdateOptions options, IReleaseSource releaseSource) {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(releaseSource);
+
+        services.TryAddSingleton(implementationFactory: _ => options);
+        services.TryAddSingleton(implementationFactory: _ => releaseSource);
+        services.TryAddSingleton<IReleaseSequenceStore>(implementationFactory: _ => new FileReleaseSequenceStore(filePath: Path.Combine(
+            path1: options.CacheRoot,
+            path2: "state",
+            path3: "sequence-mark"
+        )));
+        services.TryAddSingleton<IReleaseVerifier>(implementationFactory: sp => {
+            if (options.TrustAnchor.IsPlaceholder) {
+                return new PlaceholderReleaseVerifier();
+            }
+
+            var trustList = new TrustList(
+                entries: [options.TrustAnchor.ToTrustListEntry(
+                        maximumAge: null,
+                        reach: new HashSet<string>(comparer: StringComparer.Ordinal) { AttestationReleaseVerifier.Slot }
+                    )],
+                defaultMaximumAge: null,
+                replayAcceptanceHorizon: (options.ReplayAcceptanceHorizon ?? AddSelfUpdateDefaults.ReplayAcceptanceHorizon)
+            );
+
+            return new AttestationReleaseVerifier(
+                codec: new CborAttestationCodec(),
+                sequenceStore: sp.GetRequiredService<IReleaseSequenceStore>(),
+                trustList: trustList
+            );
+        });
+        services.TryAddSingleton(implementationFactory: _ => new ContentAddressedStore(root: Path.Combine(
+            path1: options.CacheRoot,
+            path2: "objects"
+        )));
+        services.TryAddSingleton<IUpdateStager>(implementationFactory: sp => new ContentAddressedUpdateStager(
+            cache: sp.GetRequiredService<ContentAddressedStore>(),
+            cacheRoot: options.CacheRoot,
+            source: sp.GetRequiredService<IReleaseSource>()
+        ));
+        services.TryAddSingleton<IUpdateApplier, FileUpdateApplier>();
+        services.TryAddSingleton(implementationFactory: sp => new UpdateService(
+            applier: sp.GetRequiredService<IUpdateApplier>(),
+            options: options,
+            source: sp.GetRequiredService<IReleaseSource>(),
+            stager: sp.GetRequiredService<IUpdateStager>(),
+            verifier: sp.GetRequiredService<IReleaseVerifier>()
+        ));
+        services.AddSingleton<ICommandModule, UpdateCommandModule>();
+        services.AddHostedService<SelfUpdateHealthGateHostedService>();
 
         return services;
     }

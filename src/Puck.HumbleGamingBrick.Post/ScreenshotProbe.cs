@@ -14,6 +14,16 @@ namespace Puck.HumbleGamingBrick.Post;
 /// divergence or a resolution mismatch, both reported as a failure.
 /// </summary>
 internal static class ScreenshotProbe {
+    private static uint[] Transformed(ReadOnlySpan<uint> pixels) {
+        var transformed = new uint[pixels.Length];
+
+        for (var index = 0; (index < pixels.Length); ++index) {
+            transformed[index] = GambatteCgbPalette.Transform(pixel: pixels[index]);
+        }
+
+        return transformed;
+    }
+
     /// <summary>Resolves a screenshot case's expected image: the first of <see cref="LedgerCase.ExpectedImageCandidates"/>
     /// that exists on disk.</summary>
     /// <param name="ledgerCase">The case to resolve.</param>
@@ -41,7 +51,10 @@ internal static class ScreenshotProbe {
 
         if (imagePath is null) {
             return new ProbeOutcome(
-                Detail: $"none of the expected images exist: {string.Join(separator: ", ", values: candidates.Select(selector: Path.GetFileName))}",
+                Detail: $"none of the expected images exist: {string.Join(
+                    separator: ", ",
+                    values: candidates.Select(selector: Path.GetFileName)
+                )}",
                 Verdict: ProbeVerdict.Inconclusive
             );
         }
@@ -128,16 +141,7 @@ internal static class ScreenshotProbe {
                     Width: expected.Width
                 ),
                 Verdict: ProbeVerdict.Fail
-            ));
-    }
-
-    private static uint[] Transformed(ReadOnlySpan<uint> pixels) {
-        var transformed = new uint[pixels.Length];
-
-        for (var index = 0; (index < pixels.Length); ++index) {
-            transformed[index] = GambatteCgbPalette.Transform(pixel: pixels[index]);
-        }
-
-        return transformed;
+            )
+        );
     }
 }

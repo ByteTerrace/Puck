@@ -54,26 +54,51 @@ public static partial class WorldDefinitionValidator {
             var styleRingPresent = ((marker.Style.RingColor is not null) || (marker.Style.RingAlpha is not null));
 
             if (ringPresent != styleRingPresent) {
-                errors.Add(item: $"{path} authors {(ringPresent ? "a ring policy without a style.ringColor/ringAlpha pair" : "a style.ringColor/ringAlpha without a ring policy")} — a ring and its style ride together, or neither.");
+                errors.Add(item: $"{path} authors {(ringPresent
+                    ? "a ring policy without a style.ringColor/ringAlpha pair"
+                    : "a style.ringColor/ringAlpha without a ring policy")} — a ring and its style ride together, or neither.");
             }
 
             if (marker.Ring is { } ring) {
-                if (!string.Equals(a: ring.Field, b: WorldMarkerRing.SpeakerRadiusField, comparisonType: StringComparison.Ordinal)) {
+                if (!string.Equals(
+                    a: ring.Field,
+                    b: WorldMarkerRing.SpeakerRadiusField,
+                    comparisonType: StringComparison.Ordinal
+                )) {
                     errors.Add(item: $"{path}.ring.field '{ring.Field}' names no recognized field — the only one is '{WorldMarkerRing.SpeakerRadiusField}'.");
                 } else if (marker.Source is not WorldMarkerSource.Speakers) {
                     errors.Add(item: $"{path}.ring.field '{ring.Field}' names a speakers-only field, but {path}.source is not speakers.");
                 }
             }
 
-            RequireBindableUnitScalar(definition: definition, errors: errors, path: $"{path}.style.chipAlpha", scalar: marker.Style.ChipAlpha);
-            RequirePositive(errors: errors, name: $"{path}.style.size", value: marker.Style.Size);
+            RequireBindableUnitScalar(
+                definition: definition,
+                errors: errors,
+                path: $"{path}.style.chipAlpha",
+                scalar: marker.Style.ChipAlpha
+            );
+            RequirePositive(
+                errors: errors,
+                name: $"{path}.style.size",
+                value: marker.Style.Size
+            );
 
             if (marker.Style.RingColor is { } ringColor) {
-                RequireBindableColor(color: ringColor, definition: definition, errors: errors, path: $"{path}.style.ringColor");
+                RequireBindableColor(
+                    color: ringColor,
+                    definition: definition,
+                    errors: errors,
+                    path: $"{path}.style.ringColor"
+                );
             }
 
             if (marker.Style.RingAlpha is { } ringAlpha) {
-                RequireBindableUnitScalar(definition: definition, errors: errors, path: $"{path}.style.ringAlpha", scalar: ringAlpha);
+                RequireBindableUnitScalar(
+                    definition: definition,
+                    errors: errors,
+                    path: $"{path}.style.ringAlpha",
+                    scalar: ringAlpha
+                );
             }
         }
     }

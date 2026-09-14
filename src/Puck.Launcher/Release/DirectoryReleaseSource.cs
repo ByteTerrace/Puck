@@ -12,25 +12,14 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
     private readonly string m_root = Path.GetFullPath(path: root);
 
     /// <inheritdoc/>
-    public Task<ReleaseSourceResult> TryGetLatestManifestAsync(string channel, CancellationToken cancellationToken) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: channel);
-
-        var manifestPath = Path.Combine(path1: m_root, path2: channel, path3: "manifest.json");
-
-        if (!File.Exists(path: manifestPath)) {
-            return Task.FromResult(result: new ReleaseSourceResult(Found: false, ManifestBytes: [], RefusalReason: $"no manifest at '{manifestPath}'"));
-        }
-
-        var bytes = File.ReadAllBytes(path: manifestPath);
-
-        return Task.FromResult(result: new ReleaseSourceResult(Found: true, ManifestBytes: bytes, RefusalReason: null));
-    }
-    /// <inheritdoc/>
     public async Task<bool> TryGetFileAsync(string hash, Stream destination, CancellationToken cancellationToken) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: hash);
         ArgumentNullException.ThrowIfNull(argument: destination);
 
-        var objectPath = ContentAddressedLayout.ObjectPath(hash: hash, root: m_root);
+        var objectPath = ContentAddressedLayout.ObjectPath(
+            hash: hash,
+            root: m_root
+        );
 
         if (!File.Exists(path: objectPath)) {
             return false;
@@ -38,9 +27,38 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
 
         await using var source = File.OpenRead(path: objectPath);
 
-        await source.CopyToAsync(cancellationToken: cancellationToken, destination: destination).ConfigureAwait(continueOnCapturedContext: false);
+        await source.CopyToAsync(
+            cancellationToken: cancellationToken,
+            destination: destination
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
         return true;
+    }
+    /// <inheritdoc/>
+    public Task<ReleaseSourceResult> TryGetLatestManifestAsync(string channel, CancellationToken cancellationToken) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: channel);
+
+        var manifestPath = Path.Combine(
+            path1: m_root,
+            path2: channel,
+            path3: "manifest.json"
+        );
+
+        if (!File.Exists(path: manifestPath)) {
+            return Task.FromResult(result: new ReleaseSourceResult(
+                Found: false,
+                ManifestBytes: [],
+                RefusalReason: $"no manifest at '{manifestPath}'"
+            ));
+        }
+
+        var bytes = File.ReadAllBytes(path: manifestPath);
+
+        return Task.FromResult(result: new ReleaseSourceResult(
+            Found: true,
+            ManifestBytes: bytes,
+            RefusalReason: null
+        ));
     }
 }
 /// <summary>The <see cref="Puck.Assets.ContentAddressedStore"/> object layout, shared by
@@ -53,7 +71,10 @@ public static class ContentAddressedLayout {
     /// <param name="root">The content-addressed store's root directory.</param>
     /// <param name="hash">The object's hash, as <c>sha256/&lt;hex64&gt;</c> or bare <c>&lt;hex64&gt;</c>.</param>
     public static string ObjectPath(string root, string hash) {
-        var hex = (hash.StartsWith(comparisonType: StringComparison.Ordinal, value: Sha256Prefix)
+        var hex = (hash.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: Sha256Prefix
+        )
             ? hash[Sha256Prefix.Length..]
             : hash
         );

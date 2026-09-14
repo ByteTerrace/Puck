@@ -22,16 +22,11 @@ public sealed class InterruptController : IInterruptController, ISnapshotable {
 
         // The boot ROM runs through at least one vertical blank with IE clear, so the machine hands off with the VBlank
         // request flag already set (IF reads 0xE1) — state some titles and the timing oracles observe.
-        if (configuration.BootRom is null) {
+        if (!configuration.ExecutesBootRom) {
             m_requested = InterruptKind.VBlank;
         }
     }
 
-    /// <inheritdoc/>
-    public InterruptKind Requested {
-        get => m_requested;
-        set => m_requested = ((InterruptKind)(((byte)value) & SourceMask));
-    }
     /// <inheritdoc/>
     public InterruptKind Enabled {
         get => m_enabled;
@@ -40,21 +35,26 @@ public sealed class InterruptController : IInterruptController, ISnapshotable {
     /// <inheritdoc/>
     public InterruptKind Pending =>
         ((InterruptKind)(((byte)m_requested) & ((byte)m_enabled) & SourceMask));
-
     /// <inheritdoc/>
-    public void Request(InterruptKind kind) =>
-        m_requested = ((InterruptKind)(((byte)m_requested) | (((byte)kind) & SourceMask)));
+    public InterruptKind Requested {
+        get => m_requested;
+        set => m_requested = ((InterruptKind)(((byte)value) & SourceMask));
+    }
+
     /// <inheritdoc/>
     public void Acknowledge(InterruptKind kind) =>
         m_requested = ((InterruptKind)(((byte)m_requested) & ((byte)~kind)));
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteByte(value: ((byte)m_requested));
-        writer.WriteByte(value: ((byte)m_enabled));
-    }
-    /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         m_requested = ((InterruptKind)reader.ReadByte());
         m_enabled = ((InterruptKind)reader.ReadByte());
+    }
+    /// <inheritdoc/>
+    public void Request(InterruptKind kind) =>
+        m_requested = ((InterruptKind)(((byte)m_requested) | (((byte)kind) & SourceMask)));
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        writer.WriteByte(value: ((byte)m_requested));
+        writer.WriteByte(value: ((byte)m_enabled));
     }
 }

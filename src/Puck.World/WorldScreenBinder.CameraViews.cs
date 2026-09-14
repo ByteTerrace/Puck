@@ -38,7 +38,10 @@ internal sealed partial class WorldScreenBinder {
     // resolves every frame through RankedAnchorSource for the registration's seat; the bare kinds keep their
     // configure-time sources.
     private void ConfigureCameraView(SdfCameraView view, WorldCamera camera, int seat) {
-        if ((camera.Anchors is not null) || WorldSeatAnchors.IsSeatRelative(anchor: camera.Anchor)) {
+        if (
+            (camera.Anchors is not null) ||
+            WorldSeatAnchors.IsSeatRelative(anchor: camera.Anchor)
+        ) {
             view.AnchorSource = new RankedAnchorSource(
                 owner: this,
                 camera: camera,
@@ -191,7 +194,10 @@ internal sealed partial class WorldScreenBinder {
             }
         }
 
-        if (m_cameraViews.TryGetValue(key: name, value: out var registration)) {
+        if (m_cameraViews.TryGetValue(
+            key: name,
+            value: out var registration
+        )) {
             RetireViewExportForRecreation(cameraName: registration.Row.Name);
         }
 
@@ -212,12 +218,19 @@ internal sealed partial class WorldScreenBinder {
         var wired = WiredScreensFor(name: name);
         // A probe export holds the seat-1 registration of its camera (the only one it ever opens).
         var exported = (
-            m_cameraViews.TryGetValue(key: name, value: out var registration) &&
+            m_cameraViews.TryGetValue(
+            key: name,
+            value: out var registration
+        ) &&
             (registration.Seat == DefaultViewSeat) &&
             HasViewExportReferences(cameraName: registration.Row.Name)
         );
 
-        if ((wired.Count == 0) && !exported && !HasRetainedView(registrationName: name)) {
+        if (
+            (wired.Count == 0) &&
+            !exported &&
+            !HasRetainedView(registrationName: name)
+        ) {
             stack.Release(name: name);
             _ = m_cameraViews.Remove(key: name);
             Console.Error.WriteLine(value: $"[world.screen: camera view '{name}' released — no remaining screen references it]");
@@ -302,8 +315,8 @@ internal sealed partial class WorldScreenBinder {
                         position: out var live,
                         shapeId: placement.ShapeId
                     ))
-                        ? live
-                        : StaticAnchorPosition(placement: placement)),
+                    ? live
+                    : StaticAnchorPosition(placement: placement)),
                     Orientation: Quaternion.Identity
                 );
 

@@ -18,15 +18,15 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
 
     private readonly WorldClient m_client;
     private readonly IConsoleSessions? m_consoles;
-    private readonly WorldSeatBindings m_seatBindings;
+    private readonly WorldPerceptionAnchor m_perception;
     private readonly WorldPointer? m_pointer;
     private readonly PlayerRoster m_roster;
     private readonly Func<InputRouter> m_router;
+    private readonly WorldSeatBindings m_seatBindings;
     private readonly WorldServer m_server;
-    private readonly Func<WorldWheelFeed?> m_wheel;
-    private readonly WorldPerceptionAnchor m_perception;
-    private readonly WorldStampPool m_stamps;
     private readonly WorldSpeechClock m_speech;
+    private readonly WorldStampPool m_stamps;
+    private readonly Func<WorldWheelFeed?> m_wheel;
 
     private readonly ulong[] m_lastHeldTick = new ulong[(PlayerRoster.MaxSlots * FactCount)];
     private readonly ulong[] m_seenInputTick = new ulong[PlayerRoster.MaxSlots];
@@ -74,20 +74,6 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
     public int RecentSpeakerBody => m_speech.RecentSpeakerBody;
     /// <summary>Gets the speech clock the speaking facts read.</summary>
     public WorldSpeechClock Speech => m_speech;
-
-    /// <summary>Stamps that <paramref name="bodyIndex"/> spoke on the current completed tick.</summary>
-    /// <param name="bodyIndex">The 0-based body index.</param>
-    public void NoteSpoke(int bodyIndex) => NoteSpoke(
-        bodyIndex: bodyIndex,
-        tick: CompletedTick
-    );
-    /// <summary>Stamps that <paramref name="bodyIndex"/> spoke on <paramref name="tick"/>.</summary>
-    /// <param name="bodyIndex">The 0-based body index.</param>
-    /// <param name="tick">The completed simulation tick.</param>
-    public void NoteSpoke(int bodyIndex, ulong tick) => m_speech.NoteSpoke(
-        bodyIndex: bodyIndex,
-        tick: tick
-    );
 
     // Distance between two subjects off the presentation poses; an unresolvable subject is infinitely far. An AnySeat
     // on either side quantifies over the joined seats (the nearest pair decides).
@@ -182,13 +168,6 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
 
         return true;
     }
-    private bool Recently(int slot, OverlayFact fact, float windowSeconds, float fadeSeconds) =>
-        (RecentPresence(
-            fact: fact,
-            fadeSeconds: fadeSeconds,
-            slot: slot,
-            windowSeconds: windowSeconds
-        ) > 0f);
     // A recency fact's PRESENCE: 1 while it holds and for the window after; then, across the fade, 1 down to 0 on
     // the completed-tick clock (presentation reads it, the simulation never does); 0 once the fade has elapsed.
     private float RecentPresence(int slot, OverlayFact fact, float windowSeconds, float fadeSeconds) {
@@ -215,6 +194,56 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
         rateHz: m_client.Definition.SimulationRateHz,
         windowSeconds: windowSeconds
     );
+    private bool Recently(int slot, OverlayFact fact, float windowSeconds, float fadeSeconds) =>
+        (RecentPresence(
+            fact: fact,
+            fadeSeconds: fadeSeconds,
+            slot: slot,
+            windowSeconds: windowSeconds
+        ) > 0f);
+    // Samples a fact from its owner for one seat. SeatInput/PointerMotion are edge facts: they hold for the whole
+    // evaluation tick on which their owner is first observed advanced (an overlay evaluates once per frame, several
+    // sim ticks apart, so "arrived this tick" would miss most inputs, and every element evaluating in that frame must
+    // read the same answer); the rest are states read live. Every fact is credited to the CURRENT sim tick — the
+    // router's own input tick counts the pump's steps, a different base from the server's tick once a world reloads,
+    // so it is only ever compared against itself.
+    private bool Sample(int slot, OverlayFact fact, ulong tick) {
+        switch (fact) {
+            case OverlayFact.SeatInput:
+                if (
+                    m_router().TryGetLastInputTick(
+                    slot: slot,
+                    tick: out var inputTick
+                ) &&
+                    (inputTick != m_seenInputTick[slot])
+                ) {
+                    m_seenInputTick[slot] = inputTick;
+                    m_inputEdgeTick[slot] = tick;
+                }
+
+                return (m_inputEdgeTick[slot] == tick);
+            case OverlayFact.PointerMotion:
+                if (PointerMoved(slot: slot)) {
+                    m_motionEdgeTick[slot] = tick;
+                }
+
+                return (m_motionEdgeTick[slot] == tick);
+            default:
+                return SampleState(
+                    fact: fact,
+                    slot: slot
+                );
+        }
+    }
+    private bool SampleState(int slot, OverlayFact fact) => fact switch {
+        OverlayFact.WheelOpen => ((m_wheel() is { } wheel) && wheel.StatusFor(slot: slot).Open),
+        OverlayFact.ConsoleOpen => ((m_consoles is { } consoles) && consoles.TryGetVisible(
+        slot: slot,
+        visible: out var visible
+    ) && visible),
+        OverlayFact.SeatCameraApplication => m_seatBindings.IsCameraModeActive(slot: slot),
+        _ => false,
+    };
     // A subject's speaking presence: the speech clock's last stamp for its body, through the same window/fade curve
     // a recency fact reads. AnySeat takes the maximum over the joined seats.
     private float SpeakingPresence(int slot, OverlayPredicate.Speaking speaking) {
@@ -255,15 +284,17 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
     // resolves no single body here.
     private bool TryResolveBody(int slot, OverlaySubject subject, out int body) {
         body = subject switch {
-            OverlaySubject.Seat seat => m_perception.PerceivedBody(slot: ((seat.Number is { } number) ? (number - 1) : slot)),
+            OverlaySubject.Seat seat => m_perception.PerceivedBody(slot: ((seat.Number is { } number)
+            ? (number - 1)
+            : slot)),
             OverlaySubject.Entity entity => entity.Index,
             OverlaySubject.RecentSpeaker => m_speech.RecentSpeakerBody,
             OverlaySubject.Placement placement => (m_client.TryInhabitantBody(
-                index: out var inhabitant,
-                placementId: placement.PlacementId
-            )
-                ? inhabitant
-                : -1),
+            index: out var inhabitant,
+            placementId: placement.PlacementId
+        )
+            ? inhabitant
+            : -1),
             _ => -1,
         };
 
@@ -308,135 +339,6 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
 
         return true;
     }
-
-    /// <summary>Evaluates a predicate's PRESENCE for one seat: 1 while it fully holds, 0 when it does not, and the
-    /// eased value in between while a <see cref="OverlayPredicate.Recently"/> fades — <c>all</c> takes the minimum,
-    /// <c>any</c> the maximum, <c>not</c> the complement. <see cref="Evaluate"/> is this above zero.</summary>
-    /// <param name="slot">The 0-based local seat.</param>
-    /// <param name="predicate">The predicate, or <see langword="null"/> (always fully present).</param>
-    public float Presence(int slot, OverlayPredicate? predicate) {
-        switch (predicate) {
-            case null:
-                return 1f;
-            case OverlayPredicate.Now now:
-                return (Holds(
-                    fact: now.Fact,
-                    lastHeldTick: out _,
-                    slot: slot
-                )
-                    ? 1f
-                    : 0f);
-            case OverlayPredicate.Recently recently:
-                return RecentPresence(
-                    fact: recently.Fact,
-                    fadeSeconds: recently.FadeSeconds,
-                    slot: slot,
-                    windowSeconds: recently.WindowSeconds
-                );
-            case OverlayPredicate.All all: {
-                    var presence = 1f;
-
-                    foreach (var inner in (all.Predicates ?? [])) {
-                        presence = MathF.Min(
-                            x: presence,
-                            y: Presence(
-                                predicate: inner,
-                                slot: slot
-                            )
-                        );
-                    }
-
-                    return presence;
-                }
-            case OverlayPredicate.Any any: {
-                    var presence = 0f;
-
-                    foreach (var inner in (any.Predicates ?? [])) {
-                        presence = MathF.Max(
-                            x: presence,
-                            y: Presence(
-                                predicate: inner,
-                                slot: slot
-                            )
-                        );
-                    }
-
-                    return presence;
-                }
-            case OverlayPredicate.Not not:
-                return (1f - Presence(
-                    predicate: not.Predicate,
-                    slot: slot
-                ));
-            case OverlayPredicate.Speaking speaking:
-                return SpeakingPresence(
-                    slot: slot,
-                    speaking: speaking
-                );
-            case OverlayPredicate.Near near:
-                return ((Distance(
-                    of: near.Of,
-                    slot: slot,
-                    subject: near.Subject
-                ) <= near.Distance)
-                    ? 1f
-                    : 0f);
-            case OverlayPredicate.State state:
-                return (OverlayStateComparison.Holds(
-                    definition: m_client.Definition,
-                    state: state,
-                    tick: m_client.Tick
-                )
-                    ? 1f
-                    : 0f);
-            default:
-                return 1f;
-        }
-    }
-
-    // Samples a fact from its owner for one seat. SeatInput/PointerMotion are edge facts: they hold for the whole
-    // evaluation tick on which their owner is first observed advanced (an overlay evaluates once per frame, several
-    // sim ticks apart, so "arrived this tick" would miss most inputs, and every element evaluating in that frame must
-    // read the same answer); the rest are states read live. Every fact is credited to the CURRENT sim tick — the
-    // router's own input tick counts the pump's steps, a different base from the server's tick once a world reloads,
-    // so it is only ever compared against itself.
-    private bool Sample(int slot, OverlayFact fact, ulong tick) {
-        switch (fact) {
-            case OverlayFact.SeatInput:
-                if (
-                    m_router().TryGetLastInputTick(
-                    slot: slot,
-                    tick: out var inputTick
-                ) &&
-                    (inputTick != m_seenInputTick[slot])
-                ) {
-                    m_seenInputTick[slot] = inputTick;
-                    m_inputEdgeTick[slot] = tick;
-                }
-
-                return (m_inputEdgeTick[slot] == tick);
-            case OverlayFact.PointerMotion:
-                if (PointerMoved(slot: slot)) {
-                    m_motionEdgeTick[slot] = tick;
-                }
-
-                return (m_motionEdgeTick[slot] == tick);
-            default:
-                return SampleState(
-                    fact: fact,
-                    slot: slot
-                );
-        }
-    }
-    private bool SampleState(int slot, OverlayFact fact) => fact switch {
-        OverlayFact.WheelOpen => ((m_wheel() is { } wheel) && wheel.StatusFor(slot: slot).Open),
-        OverlayFact.ConsoleOpen => ((m_consoles is { } consoles) && consoles.TryGetVisible(
-        slot: slot,
-        visible: out var visible
-    ) && visible),
-        OverlayFact.SeatCameraApplication => m_seatBindings.IsCameraModeActive(slot: slot),
-        _ => false,
-    };
 
     /// <summary>Evaluates a predicate for one local seat; a <see langword="null"/> predicate is true.</summary>
     /// <param name="slot">The 0-based local seat.</param>
@@ -500,7 +402,8 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                 return OverlayStateComparison.Holds(
                     definition: m_client.Definition,
                     state: state,
-                    tick: m_client.Tick
+                    tick: m_client.Tick,
+                    engineTick: m_client.EngineTick
                 );
             default:
                 return true;
@@ -527,5 +430,106 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
         }
 
         return false;
+    }
+    /// <summary>Stamps that <paramref name="bodyIndex"/> spoke on the current completed tick.</summary>
+    /// <param name="bodyIndex">The 0-based body index.</param>
+    public void NoteSpoke(int bodyIndex) => NoteSpoke(
+        bodyIndex: bodyIndex,
+        tick: CompletedTick
+    );
+    /// <summary>Stamps that <paramref name="bodyIndex"/> spoke on <paramref name="tick"/>.</summary>
+    /// <param name="bodyIndex">The 0-based body index.</param>
+    /// <param name="tick">The completed simulation tick.</param>
+    public void NoteSpoke(int bodyIndex, ulong tick) => m_speech.NoteSpoke(
+        bodyIndex: bodyIndex,
+        tick: tick
+    );
+    /// <summary>Evaluates a predicate's PRESENCE for one seat: 1 while it fully holds, 0 when it does not, and the
+    /// eased value in between while a <see cref="OverlayPredicate.Recently"/> fades — <c>all</c> takes the minimum,
+    /// <c>any</c> the maximum, <c>not</c> the complement. <see cref="Evaluate"/> is this above zero.</summary>
+    /// <param name="slot">The 0-based local seat.</param>
+    /// <param name="predicate">The predicate, or <see langword="null"/> (always fully present).</param>
+    public float Presence(int slot, OverlayPredicate? predicate) {
+        switch (predicate) {
+            case null:
+                return 1f;
+            case OverlayPredicate.Now now:
+                return (Holds(
+                    fact: now.Fact,
+                    lastHeldTick: out _,
+                    slot: slot
+                )
+                    ? 1f
+                    : 0f
+                );
+            case OverlayPredicate.Recently recently:
+                return RecentPresence(
+                    fact: recently.Fact,
+                    fadeSeconds: recently.FadeSeconds,
+                    slot: slot,
+                    windowSeconds: recently.WindowSeconds
+                );
+            case OverlayPredicate.All all: {
+                    var presence = 1f;
+
+                    foreach (var inner in (all.Predicates ?? [])) {
+                        presence = MathF.Min(
+                            x: presence,
+                            y: Presence(
+                                predicate: inner,
+                                slot: slot
+                            )
+                        );
+                    }
+
+                    return presence;
+                }
+            case OverlayPredicate.Any any: {
+                    var presence = 0f;
+
+                    foreach (var inner in (any.Predicates ?? [])) {
+                        presence = MathF.Max(
+                            x: presence,
+                            y: Presence(
+                                predicate: inner,
+                                slot: slot
+                            )
+                        );
+                    }
+
+                    return presence;
+                }
+            case OverlayPredicate.Not not:
+                return (1f - Presence(
+                    predicate: not.Predicate,
+                    slot: slot
+                ));
+            case OverlayPredicate.Speaking speaking:
+                return SpeakingPresence(
+                    slot: slot,
+                    speaking: speaking
+                );
+            case OverlayPredicate.Near near:
+                return ((Distance(
+                    of: near.Of,
+                    slot: slot,
+                    subject: near.Subject
+                ) <= near.Distance)
+                    ? 1f
+                    : 0f
+                );
+            case OverlayPredicate.State state:
+                return (OverlayStateComparison.Holds(
+                    definition: m_client.Definition,
+                    state: state,
+                    tick: m_client.Tick,
+                    engineTick: m_client.EngineTick
+                )
+                    ? 1f
+                    : 0f
+                );
+            default:
+                return 1f;
+        }
     }
 }

@@ -36,10 +36,10 @@ public sealed class Mbc7Cartridge : CartridgeBase {
     private bool m_ramEnableSecondary;
     private int m_readShift;
     private int m_romBank;
+    private ITiltSensor m_sensor = new TiltSensorComponent();
     private bool m_writeEnabled;
     private int m_xLatch;
     private int m_yLatch;
-    private ITiltSensor m_sensor = new TiltSensorComponent();
 
     /// <summary>Creates an MBC7 cartridge with its registers at reset: ROM bank 1, both gates closed, the
     /// accelerometer latches erased, and the EEPROM idle with DO signalling ready.</summary>
@@ -71,195 +71,23 @@ public sealed class Mbc7Cartridge : CartridgeBase {
         set => m_sensor = (value ?? throw new ArgumentNullException(paramName: nameof(value)));
     }
 
-    /// <inheritdoc/>
-    public override void WriteControl(ushort address, byte value) {
-        switch (address >> 13) {
-            case 0: // 0x0000-0x1FFF: primary enable; dropping it also drops the secondary gate
-                m_ramEnablePrimary = ((value & 0x0F) == 0x0A);
-
-                if (!m_ramEnablePrimary) {
-                    m_ramEnableSecondary = false;
-                }
-
-                break;
-            case 1: // 0x2000-0x3FFF: eight-bit ROM bank, zero reads as one
-                m_romBank = value;
-
-                if (m_romBank == 0) {
-                    m_romBank = 1;
-                }
-
-                break;
-            case 2: // 0x4000-0x5FFF: secondary enable (exactly 0x40), only armable while the primary gate is open
-                if (m_ramEnablePrimary) {
-                    m_ramEnableSecondary = (value == 0x40);
-                }
-
-                break;
-            default: // 0x6000-0x7FFF: no register
-                break;
-        }
-    }
-    /// <summary>Reads a register from the <c>0xA000</c>–<c>0xAFFF</c> window (address bits 7–4 select it): the latched
-    /// accelerometer bytes, the EEPROM pins, or open bus while either gate is closed or above the window.</summary>
-    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
-    /// <returns>The selected register byte, or <c>0xFF</c>.</returns>
-    public override byte ReadRam(ushort address) {
-        if (
-            !RamAccessible ||
-            (address >= 0xB000)
-        ) {
-            return 0xFF;
-        }
-
-        return ((address >> 4) & 0x0F) switch {
-            0x02 => ((byte)m_xLatch),
-            0x03 => ((byte)(m_xLatch >> 8)),
-            0x04 => ((byte)m_yLatch),
-            0x05 => ((byte)(m_yLatch >> 8)),
-            0x06 => 0x00, // the unpopulated Z axis reads low
-            0x08 => ReadEepromPins(),
-            _ => 0xFF,
-        };
-    }
-    /// <summary>Writes a register in the <c>0xA000</c>–<c>0xAFFF</c> window: the accelerometer erase (<c>0x55</c>) and
-    /// latch (<c>0xAA</c>) steps or the EEPROM pins; dropped while either gate is closed or above the window.</summary>
-    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
-    /// <param name="value">The value written.</param>
-    public override void WriteRam(ushort address, byte value) {
-        if (
-            !RamAccessible ||
-            (address >= 0xB000)
-        ) {
-            return;
-        }
-
-        switch ((address >> 4) & 0x0F) {
-            case 0x00: // erase: reset the latches and arm the capture step
-                if (value == 0x55) {
-                    m_latchErased = true;
-                    m_xLatch = AccelerometerErased;
-                    m_yLatch = AccelerometerErased;
-                }
-
-                break;
-            case 0x01: // latch: capture a reading from the tilt sensor, only after an erase
-                if (
-                    (value == 0xAA) &&
-                    m_latchErased
-                ) {
-                    m_latchErased = false;
-                    m_sensor.Read(
-                        x: out m_xLatch,
-                        y: out m_yLatch
-                    );
-                }
-
-                break;
-            case 0x08:
-                WriteEepromPins(value: value);
-
-                break;
-            default:
-                break;
-        }
-    }
-    /// <inheritdoc/>
-    /// <remarks>Overridden: the whole window is the accelerometer latch and EEPROM bit-serial protocol, not RAM — it
-    /// stays on the interface path.</remarks>
-    public override bool TryComputeRamWindow(out int offset, out int length) {
-        offset = 0;
-        length = 0;
-
-        return false;
-    }
-
-    /// <inheritdoc/>
-    protected override int MapRomOffset(ushort address) =>
-        MapStandardRomOffset(
-            address: address,
-            bankSize: RomBankSize,
-            romBank: m_romBank
-        );
-    /// <inheritdoc/>
-    protected override int MapRamOffset(ushort address) =>
-        (address - MemoryMap.ExternalRamStart);
-    /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBytes(value: m_eeprom);
-        writer.WriteInt32(value: m_argumentBitsLeft);
-        writer.WriteBoolean(value: m_chipSelect);
-        writer.WriteBoolean(value: m_clockLine);
-        writer.WriteInt32(value: m_commandShift);
-        writer.WriteBoolean(value: m_dataIn);
-        writer.WriteBoolean(value: m_dataOut);
-        writer.WriteBoolean(value: m_latchErased);
-        writer.WriteBoolean(value: m_ramEnablePrimary);
-        writer.WriteBoolean(value: m_ramEnableSecondary);
-        writer.WriteInt32(value: m_readShift);
-        writer.WriteInt32(value: m_romBank);
-        writer.WriteBoolean(value: m_writeEnabled);
-        writer.WriteInt32(value: m_xLatch);
-        writer.WriteInt32(value: m_yLatch);
-    }
-    /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        reader.ReadBytes(destination: m_eeprom);
-        m_argumentBitsLeft = reader.ReadInt32();
-        m_chipSelect = reader.ReadBoolean();
-        m_clockLine = reader.ReadBoolean();
-        m_commandShift = reader.ReadInt32();
-        m_dataIn = reader.ReadBoolean();
-        m_dataOut = reader.ReadBoolean();
-        m_latchErased = reader.ReadBoolean();
-        m_ramEnablePrimary = reader.ReadBoolean();
-        m_ramEnableSecondary = reader.ReadBoolean();
-        m_readShift = reader.ReadInt32();
-        m_romBank = reader.ReadInt32();
-        m_writeEnabled = reader.ReadBoolean();
-        m_xLatch = reader.ReadInt32();
-        m_yLatch = reader.ReadInt32();
-    }
-
     private byte ReadEepromPins() =>
         ((byte)((m_dataOut
-        ? 0x01
-        : 0x00) | (m_dataIn
-        ? 0x02
-        : 0x00) | (m_clockLine
-        ? 0x40
-        : 0x00) | (m_chipSelect
-        ? 0x80
-        : 0x00)));
-    private void WriteEepromPins(byte value) {
-        m_chipSelect = ((value & 0x80) != 0);
-        m_dataIn = ((value & 0x02) != 0);
-
-        var clockHigh = ((value & 0x40) != 0);
-
-        if (
-            m_chipSelect &&
-            clockHigh &&
-            !m_clockLine
-        ) {
-            // A rising clock edge while selected: DO presents the next read/ready bit, then the incoming bit shifts
-            // into whichever phase is active — the 11-bit command or a programming command's 16 data bits.
-            m_dataOut = ((m_readShift & 0x8000) != 0);
-            m_readShift = ((m_readShift << 1) | 0x01) & 0xFFFF;
-
-            if (m_argumentBitsLeft == 0) {
-                ShiftCommandBit();
-            } else {
-                ShiftDataBit();
-            }
-        }
-
-        m_clockLine = clockHigh;
-    }
+            ? 0x01
+            : 0x00) | (m_dataIn
+            ? 0x02
+            : 0x00) | (m_clockLine
+            ? 0x40
+            : 0x00) | (m_chipSelect
+            ? 0x80
+            : 0x00)));
+    private int ReadEepromWord(int word) =>
+        m_eeprom[(word * 2)] | (m_eeprom[((word * 2) + 1)] << 8);
     private void ShiftCommandBit() {
         m_commandShift = (m_commandShift << 1) | (m_dataIn
             ? 1
-            : 0);
+            : 0
+        );
 
         if ((m_commandShift & 0x400) == 0) {
             // The start bit has not reached the top yet: still collecting the start + opcode + address bits.
@@ -361,14 +189,188 @@ public sealed class Mbc7Cartridge : CartridgeBase {
             // Programming has finished: DO reads busy (low) for a spell and then ready (high), which games poll.
             m_readShift = (((m_commandShift & 0x100) != 0)
                 ? 0x00FF
-                : 0x3FFF);
+                : 0x3FFF
+            );
             m_commandShift = 0;
         }
     }
-    private int ReadEepromWord(int word) =>
-        m_eeprom[(word * 2)] | (m_eeprom[((word * 2) + 1)] << 8);
+    private void WriteEepromPins(byte value) {
+        m_chipSelect = ((value & 0x80) != 0);
+        m_dataIn = ((value & 0x02) != 0);
+
+        var clockHigh = ((value & 0x40) != 0);
+
+        if (
+            m_chipSelect &&
+            clockHigh &&
+            !m_clockLine
+        ) {
+            // A rising clock edge while selected: DO presents the next read/ready bit, then the incoming bit shifts
+            // into whichever phase is active — the 11-bit command or a programming command's 16 data bits.
+            m_dataOut = ((m_readShift & 0x8000) != 0);
+            m_readShift = ((m_readShift << 1) | 0x01) & 0xFFFF;
+
+            if (m_argumentBitsLeft == 0) {
+                ShiftCommandBit();
+            } else {
+                ShiftDataBit();
+            }
+        }
+
+        m_clockLine = clockHigh;
+    }
     private void WriteEepromWord(int word, int value) {
         m_eeprom[(word * 2)] = ((byte)value);
         m_eeprom[((word * 2) + 1)] = ((byte)(value >> 8));
+    }
+
+    /// <inheritdoc/>
+    protected override void LoadRegisters(StateReader reader) {
+        reader.ReadBytes(destination: m_eeprom);
+        m_argumentBitsLeft = reader.ReadInt32();
+        m_chipSelect = reader.ReadBoolean();
+        m_clockLine = reader.ReadBoolean();
+        m_commandShift = reader.ReadInt32();
+        m_dataIn = reader.ReadBoolean();
+        m_dataOut = reader.ReadBoolean();
+        m_latchErased = reader.ReadBoolean();
+        m_ramEnablePrimary = reader.ReadBoolean();
+        m_ramEnableSecondary = reader.ReadBoolean();
+        m_readShift = reader.ReadInt32();
+        m_romBank = reader.ReadInt32();
+        m_writeEnabled = reader.ReadBoolean();
+        m_xLatch = reader.ReadInt32();
+        m_yLatch = reader.ReadInt32();
+    }
+    /// <inheritdoc/>
+    protected override int MapRamOffset(ushort address) =>
+        (address - MemoryMap.ExternalRamStart);
+    /// <inheritdoc/>
+    protected override int MapRomOffset(ushort address) =>
+        MapStandardRomOffset(
+            address: address,
+            bankSize: RomBankSize,
+            romBank: m_romBank
+        );
+    /// <inheritdoc/>
+    protected override void SaveRegisters(StateWriter writer) {
+        writer.WriteBytes(value: m_eeprom);
+        writer.WriteInt32(value: m_argumentBitsLeft);
+        writer.WriteBoolean(value: m_chipSelect);
+        writer.WriteBoolean(value: m_clockLine);
+        writer.WriteInt32(value: m_commandShift);
+        writer.WriteBoolean(value: m_dataIn);
+        writer.WriteBoolean(value: m_dataOut);
+        writer.WriteBoolean(value: m_latchErased);
+        writer.WriteBoolean(value: m_ramEnablePrimary);
+        writer.WriteBoolean(value: m_ramEnableSecondary);
+        writer.WriteInt32(value: m_readShift);
+        writer.WriteInt32(value: m_romBank);
+        writer.WriteBoolean(value: m_writeEnabled);
+        writer.WriteInt32(value: m_xLatch);
+        writer.WriteInt32(value: m_yLatch);
+    }
+
+    /// <summary>Reads a register from the <c>0xA000</c>–<c>0xAFFF</c> window (address bits 7–4 select it): the latched
+    /// accelerometer bytes, the EEPROM pins, or open bus while either gate is closed or above the window.</summary>
+    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
+    /// <returns>The selected register byte, or <c>0xFF</c>.</returns>
+    public override byte ReadRam(ushort address) {
+        if (
+            !RamAccessible ||
+            (address >= 0xB000)
+        ) {
+            return 0xFF;
+        }
+
+        return ((address >> 4) & 0x0F) switch {
+            0x02 => ((byte)m_xLatch),
+            0x03 => ((byte)(m_xLatch >> 8)),
+            0x04 => ((byte)m_yLatch),
+            0x05 => ((byte)(m_yLatch >> 8)),
+            0x06 => 0x00, // the unpopulated Z axis reads low
+            0x08 => ReadEepromPins(),
+            _ => 0xFF,
+        };
+    }
+    /// <inheritdoc/>
+    /// <remarks>Overridden: the whole window is the accelerometer latch and EEPROM bit-serial protocol, not RAM — it
+    /// stays on the interface path.</remarks>
+    public override bool TryComputeRamWindow(out int offset, out int length) {
+        offset = 0;
+        length = 0;
+
+        return false;
+    }
+    /// <inheritdoc/>
+    public override void WriteControl(ushort address, byte value) {
+        switch (address >> 13) {
+            case 0: // 0x0000-0x1FFF: primary enable; dropping it also drops the secondary gate
+                m_ramEnablePrimary = ((value & 0x0F) == 0x0A);
+
+                if (!m_ramEnablePrimary) {
+                    m_ramEnableSecondary = false;
+                }
+
+                break;
+            case 1: // 0x2000-0x3FFF: eight-bit ROM bank, zero reads as one
+                m_romBank = value;
+
+                if (m_romBank == 0) {
+                    m_romBank = 1;
+                }
+
+                break;
+            case 2: // 0x4000-0x5FFF: secondary enable (exactly 0x40), only armable while the primary gate is open
+                if (m_ramEnablePrimary) {
+                    m_ramEnableSecondary = (value == 0x40);
+                }
+
+                break;
+            default: // 0x6000-0x7FFF: no register
+                break;
+        }
+    }
+    /// <summary>Writes a register in the <c>0xA000</c>–<c>0xAFFF</c> window: the accelerometer erase (<c>0x55</c>) and
+    /// latch (<c>0xAA</c>) steps or the EEPROM pins; dropped while either gate is closed or above the window.</summary>
+    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
+    /// <param name="value">The value written.</param>
+    public override void WriteRam(ushort address, byte value) {
+        if (
+            !RamAccessible ||
+            (address >= 0xB000)
+        ) {
+            return;
+        }
+
+        switch ((address >> 4) & 0x0F) {
+            case 0x00: // erase: reset the latches and arm the capture step
+                if (value == 0x55) {
+                    m_latchErased = true;
+                    m_xLatch = AccelerometerErased;
+                    m_yLatch = AccelerometerErased;
+                }
+
+                break;
+            case 0x01: // latch: capture a reading from the tilt sensor, only after an erase
+                if (
+                    (value == 0xAA) &&
+                    m_latchErased
+                ) {
+                    m_latchErased = false;
+                    m_sensor.Read(
+                        x: out m_xLatch,
+                        y: out m_yLatch
+                    );
+                }
+
+                break;
+            case 0x08:
+                WriteEepromPins(value: value);
+
+                break;
+            default:
+                break;
+        }
     }
 }

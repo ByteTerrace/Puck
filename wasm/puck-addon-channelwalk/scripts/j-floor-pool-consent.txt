@@ -1,4 +1,4 @@
-# SUPERSEDED by owner ruling 2026-08-02 (headless P6b, trusted-by-authorship re-cut) -- see
+# SUPERSEDED by the trusted-by-authorship policy (headless P6b) -- see
 # .claude/skills/puck-world/references/authority.md.
 # `addon:channelwalk` is a DOCUMENT-MOUNTED (Simulation-lane) addon, so its channel contributions are now WORLD
 # LOGIC: TRUSTED in the fold, added OUTSIDE the pool, gated by its own declared Reach ONLY -- consent does not

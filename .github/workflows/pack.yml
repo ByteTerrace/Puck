@@ -2,42 +2,48 @@ name: Verify package installation
 run-name: Package installation — ${{ github.ref_name }}
 
 on:
-  workflow_dispatch:
   workflow_call:
     inputs:
       prebuilt:
-        type: boolean
         default: false
+        type: boolean
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  CI: true
+  DOTNET_NOLOGO: true
+
 jobs:
   artifacts:
-    name: Build .NET artifacts
     if: ${{ !inputs.prebuilt }}
+    name: Build .NET artifacts
     uses: ./.github/workflows/artifacts.yml
   install:
+    if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Install and exercise CLI (${{ matrix.os }})
     needs: artifacts
-    if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
+        uses: ./.github/actions/setup-dotnet
       - name: Download NuGet packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: nuget-packages
           path: artifacts/packages
-      - name: Install and exercise the packaged CLI
-        run: dotnet run -c Release --file build/Toolchain.cs -- smoke artifacts/packages
+      - name: Install Puck CLI
+        uses: ./.github/actions/setup-puck
+        with:
+          directory: artifacts/packages
+      - name: Install and exercise the packaged CLI in isolation
+        run: puck nuget smoke artifacts/packages
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    timeout-minutes: 15

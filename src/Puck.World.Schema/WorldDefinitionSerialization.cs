@@ -6,6 +6,7 @@ using System.Text.Json.Schema;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Machines;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Maths;
@@ -14,7 +15,7 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// The System.Text.Json source-generation context for the world document (<c>puck.world.def.v1</c>) — the only
+/// The System.Text.Json source-generation context for the world document (<c>puck.world.definition.v1</c>) — the only
 /// sanctioned entry point for (de)serializing a <see cref="WorldDefinition"/>. Source-gen (not runtime reflection) keeps
 /// the load/save boundary trimming/AOT-clean; every row type in the document graph rejects an unmapped member by
 /// default (<c>UnmappedMemberHandling = Disallow</c> below) — an authoring typo or a stale field fails loud, by name
@@ -54,6 +55,7 @@ namespace Puck.World;
 // only expose the typed WorldJsonContext.Default.<Type> accessors the verbs deserialize through.
 [JsonSerializable(typeof(WorldKit))]
 [JsonSerializable(typeof(WorldScreen))]
+[JsonSerializable(typeof(WorldMachine))]
 [JsonSerializable(typeof(WorldCamera))]
 // An authored camera rig is an ordered op-list program (the bodyMotionPrograms pattern promoted to cameras).
 [JsonSerializable(typeof(WorldCameraProgram))]
@@ -84,6 +86,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldSeatViewControl))]
 [JsonSerializable(typeof(WorldViewDefaults))]
 [JsonSerializable(typeof(WorldViewLayout))]
+[JsonSerializable(typeof(WorldViewPipeline))]
 [JsonSerializable(typeof(WorldSpawnPoint[]))]
 [JsonSerializable(typeof(WorldMotionDefaults))]
 [JsonSerializable(typeof(WorldRenderDefaults))]
@@ -135,6 +138,19 @@ namespace Puck.World;
 [JsonSerializable(typeof(OverlaySubject.RecentSpeaker), TypeInfoPropertyName = "OverlaySubjectRecentSpeaker")]
 [JsonSerializable(typeof(WorldAnchor.Seat), TypeInfoPropertyName = "WorldAnchorSeat")]
 [JsonSerializable(typeof(WorldAnchor.RecentSpeaker), TypeInfoPropertyName = "WorldAnchorRecentSpeaker")]
+[JsonSerializable(typeof(WorldRenderLight))]
+[JsonSerializable(typeof(WorldRenderLight.Directional), TypeInfoPropertyName = "WorldRenderLightDirectional")]
+[JsonSerializable(typeof(WorldRenderLight.Hemisphere), TypeInfoPropertyName = "WorldRenderLightHemisphere")]
+[JsonSerializable(typeof(WorldRenderLight.Rim), TypeInfoPropertyName = "WorldRenderLightRim")]
+// WorldRenderLight.Point and WorldMarkerSource.Point share a simple name (see the WorldCameraSubject.Placement
+// note above) — named explicitly.
+[JsonSerializable(typeof(WorldRenderLight.Point), TypeInfoPropertyName = "WorldRenderLightPoint")]
+[JsonSerializable(typeof(WorldRenderSkyLayer))]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Gradient), TypeInfoPropertyName = "WorldRenderSkyLayerGradient")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Fog), TypeInfoPropertyName = "WorldRenderSkyLayerFog")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.SunDisc), TypeInfoPropertyName = "WorldRenderSkyLayerSunDisc")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Stars), TypeInfoPropertyName = "WorldRenderSkyLayerStars")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Clouds), TypeInfoPropertyName = "WorldRenderSkyLayerClouds")]
 [JsonSerializable(typeof(WorldCameraAnchorCandidate))]
 [JsonSerializable(typeof(WorldLookCue))]
 [JsonSerializable(typeof(WorldHudFrameCandidate))]
@@ -198,6 +214,7 @@ namespace Puck.World;
 // property, so its own IJsonSchemaNodeConverter.BuildSchema needs an explicit root to export either through.
 [JsonSerializable(typeof(CellName))]
 [JsonSerializable(typeof(CellKind))]
+[JsonSerializable(typeof(StateOverflow))]
 [JsonSerializable(typeof(WorldStateRow))]
 [JsonSerializable(typeof(WorldStateSection))]
 // The stochastic SOURCE family — reachable both as a document `generators` row and inline inside a site's draw
@@ -288,7 +305,7 @@ namespace Puck.World;
 // The signed border claim's payload shape — a separate document family, sharing this context's strictness and
 // Vector3/enum spellings so a boundary reads identically here and in the world document.
 [JsonSerializable(typeof(WorldCounterpartAttestation))]
-// The silo document (puck.silo.def.v1) — a separate document family (Puck.World.Silo's own composition input,
+// The silo document (puck.silo.configuration.v1) — a separate document family (Puck.World.Silo's own composition input,
 // never embedded in or referenced from a world document), sharing this context's strictness and naming policy so
 // its own JSON Schema generation rides the same exporter machinery as every world-document family.
 [JsonSerializable(typeof(WorldSiloDefinition))]
@@ -323,8 +340,120 @@ internal sealed partial class WorldJsonSourceContext : JsonSerializerContext {
 /// the engine's polymorphic bases (<see cref="WorldJsonVocabulary"/>). The typed accessors mirror the generated
 /// context's, resolved through <see cref="Options"/> so every nested shape sees the same extended resolver.</summary>
 public sealed class WorldJsonContext : IJsonTypeInfoResolver {
+    /// <summary>Gets the type info for <see cref="BindingProfileDocument"/>.</summary>
+    public JsonTypeInfo<BindingProfileDocument> BindingProfileDocument => Get<BindingProfileDocument>();
+    /// <summary>Gets the type info for <see cref="BodyMotionProgram"/>.</summary>
+    public JsonTypeInfo<BodyMotionProgram> BodyMotionProgram => Get<BodyMotionProgram>();
     /// <summary>Gets the one shared instance.</summary>
     public static WorldJsonContext Default { get; } = new();
+    /// <summary>Gets the type info for <see cref="Draw"/>.</summary>
+    public JsonTypeInfo<Draw> Draw => Get<Draw>();
+    /// <summary>Gets the type info for <see cref="DynamicsRow"/>.</summary>
+    public JsonTypeInfo<DynamicsRow> DynamicsRow => Get<DynamicsRow>();
+    /// <summary>Gets the type info for <see cref="LatticeTopology"/>.</summary>
+    public JsonTypeInfo<LatticeTopology> LatticeTopology => Get<LatticeTopology>();
+    /// <summary>Gets the read-only options carrying the extended resolver.</summary>
+    public JsonSerializerOptions Options { get; }
+    /// <summary>Gets the type info for <see cref="StateAdvance"/>.</summary>
+    public JsonTypeInfo<StateAdvance> StateAdvance => Get<StateAdvance>();
+    /// <summary>Gets the type info for <see cref="StateCycle"/>.</summary>
+    public JsonTypeInfo<StateCycle> StateCycle => Get<StateCycle>();
+    /// <summary>Gets the type info for <see cref="StateDomain"/>.</summary>
+    public JsonTypeInfo<StateDomain> StateDomain => Get<StateDomain>();
+    /// <summary>Gets the type info for <see cref="StateKnowledge"/>.</summary>
+    public JsonTypeInfo<StateKnowledge> StateKnowledge => Get<StateKnowledge>();
+    /// <summary>Gets the type info for <see cref="StateObservation"/>.</summary>
+    public JsonTypeInfo<StateObservation> StateObservation => Get<StateObservation>();
+    /// <summary>Gets the type info for <see cref="StatePhase"/>.</summary>
+    public JsonTypeInfo<StatePhase> StatePhase => Get<StatePhase>();
+    /// <summary>Gets the type info for <see cref="StateTransform"/>.</summary>
+    public JsonTypeInfo<StateTransform> StateTransform => Get<StateTransform>();
+    /// <summary>Gets the type info for <see cref="StateVisibility"/>.</summary>
+    public JsonTypeInfo<StateVisibility> StateVisibility => Get<StateVisibility>();
+    /// <summary>Gets the type info for <see cref="ValueExpression"/>.</summary>
+    public JsonTypeInfo<ValueExpression> ValueExpression => Get<ValueExpression>();
+    /// <summary>Gets the type info for <see cref="ValueExpressionTokens"/>.</summary>
+    public JsonTypeInfo<ValueExpressionTokens> ValueExpressionTokens => Get<ValueExpressionTokens>();
+    /// <summary>Gets the type info for <see cref="WorldAddonRow"/>.</summary>
+    public JsonTypeInfo<WorldAddonRow> WorldAddonRow => Get<WorldAddonRow>();
+    /// <summary>Gets the type info for <see cref="WorldAudioDefaults"/>.</summary>
+    public JsonTypeInfo<WorldAudioDefaults> WorldAudioDefaults => Get<WorldAudioDefaults>();
+    /// <summary>Gets the type info for <see cref="WorldBindingOverlay"/>.</summary>
+    public JsonTypeInfo<WorldBindingOverlay> WorldBindingOverlay => Get<WorldBindingOverlay>();
+    /// <summary>Gets the type info for <see cref="WorldCamera"/>.</summary>
+    public JsonTypeInfo<WorldCamera> WorldCamera => Get<WorldCamera>();
+    /// <summary>Gets the type info for <see cref="WorldCameraProgram"/>.</summary>
+    public JsonTypeInfo<WorldCameraProgram> WorldCameraProgram => Get<WorldCameraProgram>();
+    /// <summary>Gets the type info for <see cref="WorldCollision"/>.</summary>
+    public JsonTypeInfo<WorldCollision> WorldCollision => Get<WorldCollision>();
+    /// <summary>Gets the type info for <see cref="WorldCounterpartAttestation"/>.</summary>
+    public JsonTypeInfo<WorldCounterpartAttestation> WorldCounterpartAttestation => Get<WorldCounterpartAttestation>();
+    /// <summary>Gets the type info for <see cref="WorldCurveRow"/>.</summary>
+    public JsonTypeInfo<WorldCurveRow> WorldCurveRow => Get<WorldCurveRow>();
+    /// <summary>Gets the type info for <see cref="WorldDefinition"/>.</summary>
+    public JsonTypeInfo<WorldDefinition> WorldDefinition => Get<WorldDefinition>();
+    /// <summary>Gets the type info for <see cref="WorldFrameSource"/>.</summary>
+    public JsonTypeInfo<WorldFrameSource> WorldFrameSource => Get<WorldFrameSource>();
+    /// <summary>Gets the type info for <see cref="WorldGroupKind"/>.</summary>
+    public JsonTypeInfo<WorldGroupKind> WorldGroupKind => Get<WorldGroupKind>();
+    /// <summary>Gets the type info for <see cref="WorldHostDefaults"/>.</summary>
+    public JsonTypeInfo<WorldHostDefaults> WorldHostDefaults => Get<WorldHostDefaults>();
+    /// <summary>Gets the type info for <see cref="WorldHudDefaults"/>.</summary>
+    public JsonTypeInfo<WorldHudDefaults> WorldHudDefaults => Get<WorldHudDefaults>();
+    /// <summary>Gets the type info for <see cref="WorldHudElement"/>.</summary>
+    public JsonTypeInfo<WorldHudElement> WorldHudElement => Get<WorldHudElement>();
+    /// <summary>Gets the type info for <see cref="WorldHudPanel"/>.</summary>
+    public JsonTypeInfo<WorldHudPanel> WorldHudPanel => Get<WorldHudPanel>();
+    /// <summary>Gets the type info for <see cref="WorldInputHoldAuthoring"/>.</summary>
+    public JsonTypeInfo<WorldInputHoldAuthoring> WorldInputHoldAuthoring => Get<WorldInputHoldAuthoring>();
+    /// <summary>Gets the type info for <see cref="WorldInteraction"/>.</summary>
+    public JsonTypeInfo<WorldInteraction> WorldInteraction => Get<WorldInteraction>();
+    /// <summary>Gets the type info for <see cref="WorldKit"/>.</summary>
+    public JsonTypeInfo<WorldKit> WorldKit => Get<WorldKit>();
+    /// <summary>Gets the type info for <see cref="WorldLook"/>.</summary>
+    public JsonTypeInfo<WorldLook> WorldLook => Get<WorldLook>();
+    /// <summary>Gets the metadata for an independently hosted machine declaration.</summary>
+    public JsonTypeInfo<WorldMachine> WorldMachine => Get<WorldMachine>();
+    /// <summary>Gets the type info for <see cref="WorldMotionDefaults"/>.</summary>
+    public JsonTypeInfo<WorldMotionDefaults> WorldMotionDefaults => Get<WorldMotionDefaults>();
+    /// <summary>Gets the type info for <see cref="WorldObservedRow"/> arrays.</summary>
+    public JsonTypeInfo<WorldObservedRow[]> WorldObservedRowArray => Get<WorldObservedRow[]>();
+    /// <summary>Gets the type info for <see cref="WorldPatch"/>.</summary>
+    public JsonTypeInfo<WorldPatch> WorldPatch => Get<WorldPatch>();
+    /// <summary>Gets the type info for <see cref="WorldPlacement"/>.</summary>
+    public JsonTypeInfo<WorldPlacement> WorldPlacement => Get<WorldPlacement>();
+    /// <summary>Gets the type info for <see cref="WorldPlacementPolicyDefaults"/>.</summary>
+    public JsonTypeInfo<WorldPlacementPolicyDefaults> WorldPlacementPolicyDefaults => Get<WorldPlacementPolicyDefaults>();
+    /// <summary>Gets the type info for <see cref="WorldProjectionDocument"/>.</summary>
+    public JsonTypeInfo<WorldProjectionDocument> WorldProjectionDocument => Get<WorldProjectionDocument>();
+    /// <summary>Gets the type info for <see cref="WorldPrototype"/>.</summary>
+    public JsonTypeInfo<WorldPrototype> WorldPrototype => Get<WorldPrototype>();
+    /// <summary>Gets the type info for <see cref="WorldRenderDefaults"/>.</summary>
+    public JsonTypeInfo<WorldRenderDefaults> WorldRenderDefaults => Get<WorldRenderDefaults>();
+    /// <summary>Gets the type info for <see cref="WorldRule"/>.</summary>
+    public JsonTypeInfo<WorldRule> WorldRule => Get<WorldRule>();
+    /// <summary>Gets the type info for <see cref="WorldScreen"/>.</summary>
+    public JsonTypeInfo<WorldScreen> WorldScreen => Get<WorldScreen>();
+    /// <summary>Gets the type info for <see cref="WorldSeatCameraFeel"/>.</summary>
+    public JsonTypeInfo<WorldSeatCameraFeel> WorldSeatCameraFeel => Get<WorldSeatCameraFeel>();
+    /// <summary>Gets the type info for <see cref="WorldSeatViewControl"/>.</summary>
+    public JsonTypeInfo<WorldSeatViewControl> WorldSeatViewControl => Get<WorldSeatViewControl>();
+    /// <summary>Gets the type info for <see cref="WorldSiloDefinition"/>.</summary>
+    public JsonTypeInfo<WorldSiloDefinition> WorldSiloDefinition => Get<WorldSiloDefinition>();
+    /// <summary>Gets the type info for <see cref="WorldSpawnPoint"/> arrays.</summary>
+    public JsonTypeInfo<WorldSpawnPoint[]> WorldSpawnPointArray => Get<WorldSpawnPoint[]>();
+    /// <summary>Gets the type info for <see cref="WorldSpeaker"/>.</summary>
+    public JsonTypeInfo<WorldSpeaker> WorldSpeaker => Get<WorldSpeaker>();
+    /// <summary>Gets the type info for <see cref="WorldStateFieldTrait"/>.</summary>
+    public JsonTypeInfo<WorldStateFieldTrait> WorldStateFieldTrait => Get<WorldStateFieldTrait>();
+    /// <summary>Gets the type info for <see cref="WorldStateRow"/>.</summary>
+    public JsonTypeInfo<WorldStateRow> WorldStateRow => Get<WorldStateRow>();
+    /// <summary>Gets the type info for <see cref="WorldTune"/>.</summary>
+    public JsonTypeInfo<WorldTune> WorldTune => Get<WorldTune>();
+    /// <summary>Gets the type info for <see cref="WorldViewLayout"/>.</summary>
+    public JsonTypeInfo<WorldViewLayout> WorldViewLayout => Get<WorldViewLayout>();
+    /// <summary>Gets the type info for <see cref="WorldViewPipeline"/>.</summary>
+    public JsonTypeInfo<WorldViewPipeline> WorldViewPipeline => Get<WorldViewPipeline>();
 
     private WorldJsonContext() {
         var options = new JsonSerializerOptions(options: WorldJsonSourceContext.Default.Options) {
@@ -335,122 +464,14 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
         Options = options;
     }
 
-    /// <summary>Gets the read-only options carrying the extended resolver.</summary>
-    public JsonSerializerOptions Options { get; }
-
-    /// <inheritdoc/>
-    public JsonTypeInfo? GetTypeInfo(Type type, JsonSerializerOptions options) => Options.TypeInfoResolver!.GetTypeInfo(type: type, options: options);
-
     private JsonTypeInfo<T> Get<T>() => ((JsonTypeInfo<T>)Options.GetTypeInfo(type: typeof(T)));
 
-    /// <summary>Gets the type info for <see cref="BindingProfileDocument"/>.</summary>
-    public JsonTypeInfo<BindingProfileDocument> BindingProfileDocument => Get<BindingProfileDocument>();
-    /// <summary>Gets the type info for <see cref="WorldFrameSource"/>.</summary>
-    public JsonTypeInfo<WorldFrameSource> WorldFrameSource => Get<WorldFrameSource>();
-    /// <summary>Gets the type info for <see cref="WorldDefinition"/>.</summary>
-    public JsonTypeInfo<WorldDefinition> WorldDefinition => Get<WorldDefinition>();
-    /// <summary>Gets the type info for <see cref="BodyMotionProgram"/>.</summary>
-    public JsonTypeInfo<BodyMotionProgram> BodyMotionProgram => Get<BodyMotionProgram>();
-    /// <summary>Gets the type info for <see cref="StateVisibility"/>.</summary>
-    public JsonTypeInfo<StateVisibility> StateVisibility => Get<StateVisibility>();
-    /// <summary>Gets the type info for <see cref="StateCycle"/>.</summary>
-    public JsonTypeInfo<StateCycle> StateCycle => Get<StateCycle>();
-    /// <summary>Gets the type info for <see cref="StateAdvance"/>.</summary>
-    public JsonTypeInfo<StateAdvance> StateAdvance => Get<StateAdvance>();
-    /// <summary>Gets the type info for <see cref="WorldRule"/>.</summary>
-    public JsonTypeInfo<WorldRule> WorldRule => Get<WorldRule>();
-    /// <summary>Gets the type info for <see cref="WorldStateRow"/>.</summary>
-    public JsonTypeInfo<WorldStateRow> WorldStateRow => Get<WorldStateRow>();
-    /// <summary>Gets the type info for <see cref="WorldScreen"/>.</summary>
-    public JsonTypeInfo<WorldScreen> WorldScreen => Get<WorldScreen>();
-    /// <summary>Gets the type info for <see cref="WorldPrototype"/>.</summary>
-    public JsonTypeInfo<WorldPrototype> WorldPrototype => Get<WorldPrototype>();
-    /// <summary>Gets the type info for <see cref="WorldPlacement"/>.</summary>
-    public JsonTypeInfo<WorldPlacement> WorldPlacement => Get<WorldPlacement>();
-    /// <summary>Gets the type info for <see cref="WorldInteraction"/>.</summary>
-    public JsonTypeInfo<WorldInteraction> WorldInteraction => Get<WorldInteraction>();
-    /// <summary>Gets the type info for <see cref="WorldHudPanel"/>.</summary>
-    public JsonTypeInfo<WorldHudPanel> WorldHudPanel => Get<WorldHudPanel>();
-    /// <summary>Gets the type info for <see cref="WorldGroupKind"/>.</summary>
-    public JsonTypeInfo<WorldGroupKind> WorldGroupKind => Get<WorldGroupKind>();
-    /// <summary>Gets the type info for <see cref="DynamicsRow"/>.</summary>
-    public JsonTypeInfo<DynamicsRow> DynamicsRow => Get<DynamicsRow>();
-    /// <summary>Gets the type info for <see cref="WorldCurveRow"/>.</summary>
-    public JsonTypeInfo<WorldCurveRow> WorldCurveRow => Get<WorldCurveRow>();
-    /// <summary>Gets the type info for <see cref="WorldCounterpartAttestation"/>.</summary>
-    public JsonTypeInfo<WorldCounterpartAttestation> WorldCounterpartAttestation => Get<WorldCounterpartAttestation>();
-    /// <summary>Gets the type info for <see cref="ValueExpression"/>.</summary>
-    public JsonTypeInfo<ValueExpression> ValueExpression => Get<ValueExpression>();
-    /// <summary>Gets the type info for <see cref="WorldViewLayout"/>.</summary>
-    public JsonTypeInfo<WorldViewLayout> WorldViewLayout => Get<WorldViewLayout>();
-    /// <summary>Gets the type info for <see cref="WorldTune"/>.</summary>
-    public JsonTypeInfo<WorldTune> WorldTune => Get<WorldTune>();
-    /// <summary>Gets the type info for <see cref="StatePhase"/>.</summary>
-    public JsonTypeInfo<StatePhase> StatePhase => Get<StatePhase>();
-    /// <summary>Gets the type info for <see cref="StateObservation"/>.</summary>
-    public JsonTypeInfo<StateObservation> StateObservation => Get<StateObservation>();
-    /// <summary>Gets the type info for <see cref="StateKnowledge"/>.</summary>
-    public JsonTypeInfo<StateKnowledge> StateKnowledge => Get<StateKnowledge>();
-    /// <summary>Gets the type info for <see cref="WorldStateFieldTrait"/>.</summary>
-    public JsonTypeInfo<WorldStateFieldTrait> WorldStateFieldTrait => Get<WorldStateFieldTrait>();
-    /// <summary>Gets the type info for <see cref="StateDomain"/>.</summary>
-    public JsonTypeInfo<StateDomain> StateDomain => Get<StateDomain>();
-    /// <summary>Gets the type info for <see cref="WorldSpeaker"/>.</summary>
-    public JsonTypeInfo<WorldSpeaker> WorldSpeaker => Get<WorldSpeaker>();
-    /// <summary>Gets the type info for <see cref="WorldSpawnPoint"/> arrays.</summary>
-    public JsonTypeInfo<WorldSpawnPoint[]> WorldSpawnPointArray => Get<WorldSpawnPoint[]>();
-    /// <summary>Gets the type info for <see cref="WorldSiloDefinition"/>.</summary>
-    public JsonTypeInfo<WorldSiloDefinition> WorldSiloDefinition => Get<WorldSiloDefinition>();
-    /// <summary>Gets the type info for <see cref="WorldSeatViewControl"/>.</summary>
-    public JsonTypeInfo<WorldSeatViewControl> WorldSeatViewControl => Get<WorldSeatViewControl>();
-    /// <summary>Gets the type info for <see cref="WorldSeatCameraFeel"/>.</summary>
-    public JsonTypeInfo<WorldSeatCameraFeel> WorldSeatCameraFeel => Get<WorldSeatCameraFeel>();
-    /// <summary>Gets the type info for <see cref="WorldRenderDefaults"/>.</summary>
-    public JsonTypeInfo<WorldRenderDefaults> WorldRenderDefaults => Get<WorldRenderDefaults>();
-    /// <summary>Gets the type info for <see cref="WorldProjectionDocument"/>.</summary>
-    public JsonTypeInfo<WorldProjectionDocument> WorldProjectionDocument => Get<WorldProjectionDocument>();
-    /// <summary>Gets the type info for <see cref="WorldPlacementPolicyDefaults"/>.</summary>
-    public JsonTypeInfo<WorldPlacementPolicyDefaults> WorldPlacementPolicyDefaults => Get<WorldPlacementPolicyDefaults>();
-    /// <summary>Gets the type info for <see cref="WorldPatch"/>.</summary>
-    public JsonTypeInfo<WorldPatch> WorldPatch => Get<WorldPatch>();
-    /// <summary>Gets the type info for <see cref="WorldObservedRow"/> arrays.</summary>
-    public JsonTypeInfo<WorldObservedRow[]> WorldObservedRowArray => Get<WorldObservedRow[]>();
-    /// <summary>Gets the type info for <see cref="WorldMotionDefaults"/>.</summary>
-    public JsonTypeInfo<WorldMotionDefaults> WorldMotionDefaults => Get<WorldMotionDefaults>();
-    /// <summary>Gets the type info for <see cref="WorldLook"/>.</summary>
-    public JsonTypeInfo<WorldLook> WorldLook => Get<WorldLook>();
-    /// <summary>Gets the type info for <see cref="WorldKit"/>.</summary>
-    public JsonTypeInfo<WorldKit> WorldKit => Get<WorldKit>();
-    /// <summary>Gets the type info for <see cref="WorldInputHoldAuthoring"/>.</summary>
-    public JsonTypeInfo<WorldInputHoldAuthoring> WorldInputHoldAuthoring => Get<WorldInputHoldAuthoring>();
-    /// <summary>Gets the type info for <see cref="WorldHudElement"/>.</summary>
-    public JsonTypeInfo<WorldHudElement> WorldHudElement => Get<WorldHudElement>();
-    /// <summary>Gets the type info for <see cref="WorldHudDefaults"/>.</summary>
-    public JsonTypeInfo<WorldHudDefaults> WorldHudDefaults => Get<WorldHudDefaults>();
-    /// <summary>Gets the type info for <see cref="WorldHostDefaults"/>.</summary>
-    public JsonTypeInfo<WorldHostDefaults> WorldHostDefaults => Get<WorldHostDefaults>();
-    /// <summary>Gets the type info for <see cref="Draw"/>.</summary>
-    public JsonTypeInfo<Draw> Draw => Get<Draw>();
-    /// <summary>Gets the type info for <see cref="WorldCollision"/>.</summary>
-    public JsonTypeInfo<WorldCollision> WorldCollision => Get<WorldCollision>();
-    /// <summary>Gets the type info for <see cref="WorldCameraProgram"/>.</summary>
-    public JsonTypeInfo<WorldCameraProgram> WorldCameraProgram => Get<WorldCameraProgram>();
-    /// <summary>Gets the type info for <see cref="WorldCamera"/>.</summary>
-    public JsonTypeInfo<WorldCamera> WorldCamera => Get<WorldCamera>();
-    /// <summary>Gets the type info for <see cref="WorldBindingOverlay"/>.</summary>
-    public JsonTypeInfo<WorldBindingOverlay> WorldBindingOverlay => Get<WorldBindingOverlay>();
-    /// <summary>Gets the type info for <see cref="WorldAudioDefaults"/>.</summary>
-    public JsonTypeInfo<WorldAudioDefaults> WorldAudioDefaults => Get<WorldAudioDefaults>();
-    /// <summary>Gets the type info for <see cref="WorldAddonRow"/>.</summary>
-    public JsonTypeInfo<WorldAddonRow> WorldAddonRow => Get<WorldAddonRow>();
-    /// <summary>Gets the type info for <see cref="ValueExpressionTokens"/>.</summary>
-    public JsonTypeInfo<ValueExpressionTokens> ValueExpressionTokens => Get<ValueExpressionTokens>();
-    /// <summary>Gets the type info for <see cref="StateTransform"/>.</summary>
-    public JsonTypeInfo<StateTransform> StateTransform => Get<StateTransform>();
-    /// <summary>Gets the type info for <see cref="LatticeTopology"/>.</summary>
-    public JsonTypeInfo<LatticeTopology> LatticeTopology => Get<LatticeTopology>();
+    /// <inheritdoc/>
+    public JsonTypeInfo? GetTypeInfo(Type type, JsonSerializerOptions options) => Options.TypeInfoResolver!.GetTypeInfo(
+        options: options,
+        type: type
+    );
 }
-
 /// <summary>The arms the world document adds to the engine's polymorphic bases: each engine union declares only the
 /// cases the state library owns, and this modifier appends the document's own cases under their discriminators
 /// wherever <see cref="WorldJsonContext"/> resolves the base.</summary>
@@ -460,8 +481,14 @@ public static class WorldJsonVocabulary {
     public static void Extend(JsonTypeInfo typeInfo) {
         ArgumentNullException.ThrowIfNull(argument: typeInfo);
 
-        if ((typeInfo.Type == typeof(LatticeTopology)) && (typeInfo.PolymorphismOptions is { } lattices)) {
-            lattices.DerivedTypes.Add(item: new JsonDerivedType(derivedType: typeof(WorldFieldTopology), typeDiscriminator: "field"));
+        if (
+            (typeInfo.Type == typeof(LatticeTopology)) &&
+            (typeInfo.PolymorphismOptions is { } lattices)
+        ) {
+            lattices.DerivedTypes.Add(item: new JsonDerivedType(
+                derivedType: typeof(WorldFieldTopology),
+                typeDiscriminator: "field"
+            ));
         }
         WorldRuleVocabulary.Instance.ExtendJson(typeInfo: typeInfo);
     }
@@ -512,19 +539,19 @@ internal sealed class ChannelConsentMaskJsonConverter : BitMaskJsonConverter<Cha
 internal abstract class NameListMaskJsonConverter<T> : JsonConverter<T>, IJsonSchemaNodeConverter where T : struct {
     /// <summary>Gets the mask's own noun, read into the refusal template as "a &lt;kind&gt; mask is …".</summary>
     protected abstract string MaskKind { get; }
-    /// <summary>Gets the declared vocabulary description read into the refusal template.</summary>
-    protected abstract string Vocabulary { get; }
     /// <summary>Gets the row noun an unrecognized name refuses against ("… names no declared &lt;noun&gt;.").</summary>
     protected abstract string Noun { get; }
     /// <summary>Gets a regex constraining the comma-separated wire form to the declared vocabulary, or
     /// <see langword="null"/> when the vocabulary is not reachable at schema-generation time (installed later by a
     /// module initializer this generator never runs).</summary>
     protected virtual string? SchemaPattern => null;
+    /// <summary>Gets the declared vocabulary description read into the refusal template.</summary>
+    protected abstract string Vocabulary { get; }
 
-    /// <summary>Parses the comma-separated name list, reporting the first unrecognized name.</summary>
-    protected abstract bool TryParse(string? text, out T mask, out string? unknown);
     /// <summary>Prints <paramref name="value"/>'s comma-separated name list.</summary>
     protected abstract string Describe(T value);
+    /// <summary>Parses the comma-separated name list, reporting the first unrecognized name.</summary>
+    protected abstract bool TryParse(string? text, out T mask, out string? unknown);
 
     /// <inheritdoc/>
     public JsonObject BuildSchema(Func<Type, JsonNode> exportType) {
@@ -536,7 +563,6 @@ internal abstract class NameListMaskJsonConverter<T> : JsonConverter<T>, IJsonSc
 
         return obj;
     }
-
     /// <inheritdoc/>
     public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         var token = ((reader.TokenType == JsonTokenType.String)
@@ -563,18 +589,18 @@ internal sealed class MutationKindMaskJsonConverter : NameListMaskJsonConverter<
     /// <inheritdoc/>
     protected override string MaskKind => "verb";
     /// <inheritdoc/>
-    protected override string Vocabulary => "WorldMutation kind names (e.g. \"UpsertStateCell,RemoveStateCell\")";
-    /// <inheritdoc/>
     protected override string Noun => "mutation kind";
+    /// <inheritdoc/>
+    protected override string Vocabulary => "WorldMutation kind names (e.g. \"UpsertStateCell,RemoveStateCell\")";
 
+    /// <inheritdoc/>
+    protected override string Describe(MutationKindMask value) => value.Describe();
     /// <inheritdoc/>
     protected override bool TryParse(string? text, out MutationKindMask mask, out string? unknown) => MutationKindMask.TryParse(
         mask: out mask,
         text: text,
         unknown: out unknown
     );
-    /// <inheritdoc/>
-    protected override string Describe(MutationKindMask value) => value.Describe();
 }
 /// <summary>
 /// Reads and writes a <see cref="DocumentWriteMask"/> as the same comma-separated operation-name token
@@ -586,32 +612,35 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
     /// <inheritdoc/>
     protected override string MaskKind => "write";
     /// <inheritdoc/>
-    protected override string Vocabulary => DocumentWriteMask.All.Describe();
-    /// <inheritdoc/>
     protected override string Noun => "operation";
     /// <inheritdoc/>
     protected override string SchemaPattern {
         get {
             var names = DocumentWriteMask.All.Describe().Split(separator: ',');
-            var alternation = string.Join(separator: '|', values: names);
+            var alternation = string.Join(
+                separator: '|',
+                values: names
+            );
 
             return $"^({alternation})(,({alternation}))*$";
         }
     }
+    /// <inheritdoc/>
+    protected override string Vocabulary => DocumentWriteMask.All.Describe();
 
+    /// <inheritdoc/>
+    protected override string Describe(DocumentWriteMask value) => value.Describe();
     /// <inheritdoc/>
     protected override bool TryParse(string? text, out DocumentWriteMask mask, out string? unknown) => DocumentWriteMask.TryParse(
         mask: out mask,
         text: text,
         unknown: out unknown
     );
-    /// <inheritdoc/>
-    protected override string Describe(DocumentWriteMask value) => value.Describe();
 }
 /// <summary>
 /// Reads and writes <see cref="WorldStateRow"/> — the cell substrate's one C# type — as one authored JSON shape (see
 /// <see cref="WorldStateRow"/>'s remarks): a <c>name</c>, a <c>kind</c> (<see cref="CellKind"/>'s own declared member
-/// name), the optional envelope fields (<c>min</c>/<c>max</c>/<c>capacity</c>/<c>nonNegative</c>), and
+/// name), the optional envelope fields (<c>min</c>/<c>max</c>/<c>capacity</c>/<c>overflow</c>), and
 /// either a bare <c>value</c> — sugar for the one cell keyed <see cref="StateRow.SlotKey"/> — or a <c>cells</c>
 /// array of <c>{"key","value"}</c> objects. Two optional fields, never two discriminators: a row carrying both is
 /// refused by name, as is a <c>value</c> beside a <c>capacity</c> (declaring a capacity is declaring a keyed row).
@@ -622,7 +651,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// <see cref="FixedQ4816.TryParse(string?,IFormatProvider?,out FixedQ4816)"/>/<see cref="FixedQ4816.ToString()"/> —
 /// never the raw Q48.16 bit pattern; only the per-cell mutation wire and the addon ABI channel convention stay raw
 /// (see <c>Puck.World.Protocol.WorldMutation.UpsertStateCell</c>'s remarks). An int-kind value is a plain JSON
-/// number (a timer's non-negative floor is <see cref="StateRow.NonNegative"/>, enforced at validation, never a
+/// number (a timer's zero floor is <see cref="StateRow.Min"/>, enforced at validation, never a
 /// parse-time concern here). Unmapped members and a wrong-shaped value are hard parse failures, by name, matching
 /// every other row in the document graph's strict posture — a custom converter opts out of the context-wide
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
@@ -631,38 +660,58 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// only a world reads, <c>gatesDrive</c> beside the flags and <c>field</c> beside the traits.</summary>
 internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldStateRow> {
     /// <inheritdoc/>
-    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"Markov\"|\"UniformRange\"|\"WeightedNumeric\"|\"StreamDraw\"|\"SymmetryOrbit\",…},\"timing\":\"Boot\"|\"TickPeriod\"|\"Event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
+    protected override IReadOnlyList<string> SchemaCycleExclusiveMembers => ["field"];
+    /// <inheritdoc/>
+    protected override IReadOnlyList<string> SchemaDrawSiteMembers => ["field"];
+
+    /// <inheritdoc/>
+    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"behavior\":\"None\",\"clock\":{\"epochTick\":…,\"epochEngineTick\":…,\"y0\":…,\"v0\":…,\"substepTicks\":…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"Markov\"|\"UniformRange\"|\"WeightedNumeric\"|\"StreamDraw\"|\"SymmetryOrbit\",…},\"timing\":\"Boot\"|\"TickPeriod\"|\"Event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
 
     /// <inheritdoc/>
     protected override bool ClaimsMember(string name) => (name is "gatesDrive" or "field");
     /// <inheritdoc/>
-    protected override bool DeclaresDrawSite(RowMembers members) => members.Claimed.ContainsKey(key: "field");
-    /// <inheritdoc/>
-    protected override void Validate(RowMembers members) {
-        if ((members.Cycle is not null) && members.Claimed.ContainsKey(key: "field")) {
-            throw new JsonException(message: $"state row '{members.Name}' declares both 'cycle' and 'field' — a physical-field row's cells are the field's.");
-        }
-    }
-    /// <inheritdoc/>
-    protected override IReadOnlyList<SchemaClaimedMember> SchemaClaimedMembers(Func<Type, JsonNode> exportType) => [
-        new(Name: "gatesDrive", Schema: new JsonObject { ["type"] = "boolean" }),
-        new(Name: "field", Schema: exportType(typeof(WorldStateFieldTrait))),
-    ];
-    /// <inheritdoc/>
-    protected override IReadOnlyList<string> SchemaDrawSiteMembers => ["field"];
-    /// <inheritdoc/>
-    protected override IReadOnlyList<string> SchemaCycleExclusiveMembers => ["field"];
-    /// <inheritdoc/>
     protected override WorldStateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => new(
         row: row,
-        gatesDrive: (members.Claimed.TryGetValue(key: "gatesDrive", value: out var gatesDrive) && RequireBool(
+        gatesDrive: (members.Claimed.TryGetValue(
+            key: "gatesDrive",
+            value: out var gatesDrive
+        ) && RequireBool(
             context: $"state row '{members.Name}'.gatesDrive",
             element: gatesDrive
         )),
-        field: (members.Claimed.TryGetValue(key: "field", value: out var field)
-            ? ReadNested<WorldStateFieldTrait>(element: field, options: options, context: $"state row '{members.Name}'.field")
-            : null)
+        field: (members.Claimed.TryGetValue(
+            key: "field",
+            value: out var field
+        )
+        ? ReadNested<WorldStateFieldTrait>(
+                element: field,
+                options: options,
+                context: $"state row '{members.Name}'.field"
+            )
+        : null)
     );
+    /// <inheritdoc/>
+    protected override bool DeclaresDrawSite(RowMembers members) => members.Claimed.ContainsKey(key: "field");
+    /// <inheritdoc/>
+    protected override IReadOnlyList<SchemaClaimedMember> SchemaClaimedMembers(Func<Type, JsonNode> exportType) => [
+        new(
+            Name: "gatesDrive",
+            Schema: new JsonObject { ["type"] = "boolean" }
+        ),
+        new(
+            Name: "field",
+            Schema: exportType(typeof(WorldStateFieldTrait))
+        ),
+    ];
+    /// <inheritdoc/>
+    protected override void Validate(RowMembers members) {
+        if (
+            (members.Cycle is not null) &&
+            members.Claimed.ContainsKey(key: "field")
+        ) {
+            throw new JsonException(message: $"state row '{members.Name}' declares both 'cycle' and 'field' — a physical-field row's cells are the field's.");
+        }
+    }
     /// <inheritdoc/>
     protected override void WriteFlags(Utf8JsonWriter writer, WorldStateRow row) {
         if (row.GatesDrive) {
@@ -675,7 +724,12 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
     /// <inheritdoc/>
     protected override void WriteTraits(Utf8JsonWriter writer, WorldStateRow row, JsonSerializerOptions options) {
         if (row.Field is { } fieldTrait) {
-            WriteNested(writer: writer, propertyName: "field", value: fieldTrait, options: options);
+            WriteNested(
+                options: options,
+                propertyName: "field",
+                value: fieldTrait,
+                writer: writer
+            );
         }
     }
 }
@@ -764,6 +818,19 @@ internal abstract class TokenEnumJsonConverter<T>(string fieldName, IReadOnlyLis
     /// <inheritdoc/>
     public IReadOnlyList<string>? SchemaTokens { get; } = tokens;
 
+    private string DescribeTokens() {
+        var quoted = SchemaTokens!.Select(selector: static token => $"'{token}'").ToArray();
+
+        return (quoted.Length switch {
+            1 => quoted[0],
+            2 => $"{quoted[0]} or {quoted[1]}",
+            _ => $"{string.Join(
+            separator: ", ",
+            values: quoted[..^1]
+        )}, or {quoted[^1]}",
+        });
+    }
+
     /// <summary>Parses <paramref name="token"/> against the closed vocabulary, or <see langword="null"/> when it names none.</summary>
     protected abstract T? Parse(string? token);
     /// <summary>Prints <paramref name="value"/>'s declared token.</summary>
@@ -777,16 +844,6 @@ internal abstract class TokenEnumJsonConverter<T>(string fieldName, IReadOnlyLis
     }
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) => writer.WriteStringValue(value: ToToken(value: value));
-
-    private string DescribeTokens() {
-        var quoted = SchemaTokens!.Select(selector: static token => $"'{token}'").ToArray();
-
-        return (quoted.Length switch {
-            1 => quoted[0],
-            2 => $"{quoted[0]} or {quoted[1]}",
-            _ => $"{string.Join(separator: ", ", values: quoted[..^1])}, or {quoted[^1]}",
-        });
-    }
 }
 /// <summary>
 /// Reads and writes a <see cref="WorldBackendPreference"/> as an explicit lowercase token (<c>auto</c> / <c>directx</c>
@@ -794,7 +851,10 @@ internal abstract class TokenEnumJsonConverter<T>(string fieldName, IReadOnlyLis
 /// from World's token style. The <c>--backend</c> boot flag, the <c>host.backendDraw</c> resolver and the
 /// <c>world.host</c> read-back all speak the same map.
 /// </summary>
-internal sealed class WorldBackendPreferenceJsonConverter() : TokenEnumJsonConverter<WorldBackendPreference>("backend", [WorldHostTokens.BackendAuto, WorldHostTokens.BackendDirectX, WorldHostTokens.BackendVulkan]) {
+internal sealed class WorldBackendPreferenceJsonConverter() : TokenEnumJsonConverter<WorldBackendPreference>(
+    "backend",
+    [WorldHostTokens.BackendAuto, WorldHostTokens.BackendDirectX, WorldHostTokens.BackendVulkan]
+) {
     /// <inheritdoc/>
     protected override WorldBackendPreference? Parse(string? token) => WorldHostTokens.ParseBackend(token: token);
     /// <inheritdoc/>
@@ -807,7 +867,10 @@ internal sealed class WorldBackendPreferenceJsonConverter() : TokenEnumJsonConve
 /// <see cref="SurfaceFormat.Unknown"/> — the hole the Demo's string list could not express). The
 /// <c>world.host</c> read-back prints through the same map.
 /// </summary>
-internal sealed class SurfaceFormatJsonConverter() : TokenEnumJsonConverter<SurfaceFormat>("surfaceFormat", [WorldHostTokens.SurfaceFormatRgba, WorldHostTokens.SurfaceFormatBgra]) {
+internal sealed class SurfaceFormatJsonConverter() : TokenEnumJsonConverter<SurfaceFormat>(
+    "surfaceFormat",
+    [WorldHostTokens.SurfaceFormatRgba, WorldHostTokens.SurfaceFormatBgra]
+) {
     /// <inheritdoc/>
     protected override SurfaceFormat? Parse(string? token) => WorldHostTokens.ParseSurfaceFormat(token: token);
     /// <inheritdoc/>
@@ -819,7 +882,10 @@ internal sealed class SurfaceFormatJsonConverter() : TokenEnumJsonConverter<Surf
 /// <c>persisted</c>), so an authored destination row and the console grammar its diegetic trigger drives never
 /// disagree on spelling. See <see cref="WorldDestinationTokens"/>.
 /// </summary>
-internal sealed class WorldDestinationDurabilityJsonConverter() : TokenEnumJsonConverter<WorldDestinationDurability>("destination durability", [WorldDestinationTokens.DurabilityEphemeral, WorldDestinationTokens.DurabilityPersisted]) {
+internal sealed class WorldDestinationDurabilityJsonConverter() : TokenEnumJsonConverter<WorldDestinationDurability>(
+    "destination durability",
+    [WorldDestinationTokens.DurabilityEphemeral, WorldDestinationTokens.DurabilityPersisted]
+) {
     /// <inheritdoc/>
     protected override WorldDestinationDurability? Parse(string? token) => WorldDestinationTokens.ParseDurability(token: token);
     /// <inheritdoc/>
@@ -829,7 +895,10 @@ internal sealed class WorldDestinationDurabilityJsonConverter() : TokenEnumJsonC
 /// Reads and writes a <see cref="WorldPortalTravel"/> as the lowercase token <c>world.transfer</c>'s <c>party</c>
 /// slot argument already speaks (<c>party</c> / <c>body</c>). See <see cref="WorldDestinationTokens"/>.
 /// </summary>
-internal sealed class WorldPortalTravelJsonConverter() : TokenEnumJsonConverter<WorldPortalTravel>("portal travel", [WorldDestinationTokens.TravelParty, WorldDestinationTokens.TravelBody]) {
+internal sealed class WorldPortalTravelJsonConverter() : TokenEnumJsonConverter<WorldPortalTravel>(
+    "portal travel",
+    [WorldDestinationTokens.TravelParty, WorldDestinationTokens.TravelBody]
+) {
     /// <inheritdoc/>
     protected override WorldPortalTravel? Parse(string? token) => WorldDestinationTokens.ParseTravel(token: token);
     /// <inheritdoc/>
@@ -839,18 +908,24 @@ internal sealed class WorldPortalTravelJsonConverter() : TokenEnumJsonConverter<
 /// Reads and writes a <see cref="WorldPortalArrival"/> as the lowercase token <c>spawn</c>/<c>mapped</c>, mirroring
 /// <see cref="WorldPortalTravelJsonConverter"/>. See <see cref="WorldDestinationTokens"/>.
 /// </summary>
-internal sealed class WorldPortalArrivalJsonConverter() : TokenEnumJsonConverter<WorldPortalArrival>("portal arrival", [WorldDestinationTokens.ArrivalSpawn, WorldDestinationTokens.ArrivalMapped]) {
+internal sealed class WorldPortalArrivalJsonConverter() : TokenEnumJsonConverter<WorldPortalArrival>(
+    "portal arrival",
+    [WorldDestinationTokens.ArrivalSpawn, WorldDestinationTokens.ArrivalMapped]
+) {
     /// <inheritdoc/>
     protected override WorldPortalArrival? Parse(string? token) => WorldDestinationTokens.ParseArrival(token: token);
     /// <inheritdoc/>
     protected override string ToToken(WorldPortalArrival value) => WorldDestinationTokens.ArrivalToken(arrival: value);
 }
 /// <summary>
-/// Reads and writes a <see cref="WorldDestinationScope"/> as the lowercase token docs/vision.md's "Durability,
+/// Reads and writes a <see cref="WorldDestinationScope"/> as the lowercase token docs/architecture/worlds.md's "Durability,
 /// scope and generation" names (<c>user</c> / <c>group</c> / <c>global</c>), mirroring
 /// <see cref="WorldDestinationDurabilityJsonConverter"/>. See <see cref="WorldDestinationTokens"/>.
 /// </summary>
-internal sealed class WorldDestinationScopeJsonConverter() : TokenEnumJsonConverter<WorldDestinationScope>("destination scope", [WorldDestinationTokens.ScopeUser, WorldDestinationTokens.ScopeGroup, WorldDestinationTokens.ScopeGlobal]) {
+internal sealed class WorldDestinationScopeJsonConverter() : TokenEnumJsonConverter<WorldDestinationScope>(
+    "destination scope",
+    [WorldDestinationTokens.ScopeUser, WorldDestinationTokens.ScopeGroup, WorldDestinationTokens.ScopeGlobal]
+) {
     /// <inheritdoc/>
     protected override WorldDestinationScope? Parse(string? token) => WorldDestinationTokens.ParseScope(token: token);
     /// <inheritdoc/>
@@ -873,6 +948,8 @@ internal sealed class WorldDestinationScopeJsonConverter() : TokenEnumJsonConver
 /// </summary>
 internal sealed class GrantSubjectJsonConverter : TryParseStringJsonConverter<GrantSubject> {
     /// <inheritdoc/>
+    protected override string ToValue(GrantSubject value) => value.Describe();
+    /// <inheritdoc/>
     protected override bool TryParse(string? candidate, out GrantSubject value, out string reason) {
         if (
             (candidate is not null) &&
@@ -891,8 +968,6 @@ internal sealed class GrantSubjectJsonConverter : TryParseStringJsonConverter<Gr
 
         return false;
     }
-    /// <inheritdoc/>
-    protected override string ToValue(GrantSubject value) => value.Describe();
 }
 /// <summary>
 /// Reads and writes a <see cref="WorldPrincipal"/> as the same compact token <c>world.grant</c> takes —
@@ -904,6 +979,8 @@ internal sealed class GrantSubjectJsonConverter : TryParseStringJsonConverter<Gr
 /// <see cref="WorldPrincipal.Describe"/>, the same label the console's own accept/reject lines print.
 /// </summary>
 internal sealed class WorldPrincipalJsonConverter : TryParseStringJsonConverter<WorldPrincipal> {
+    /// <inheritdoc/>
+    protected override string ToValue(WorldPrincipal value) => value.Describe();
     /// <inheritdoc/>
     protected override bool TryParse(string? candidate, out WorldPrincipal value, out string reason) {
         if (
@@ -923,8 +1000,6 @@ internal sealed class WorldPrincipalJsonConverter : TryParseStringJsonConverter<
 
         return false;
     }
-    /// <inheritdoc/>
-    protected override string ToValue(WorldPrincipal value) => value.Describe();
 }
 /// <summary>
 /// Bridges an embedded <see cref="Puck.World.Authoring.CreationDocument"/> (a <see cref="WorldPrototype.Document"/>) through
@@ -935,42 +1010,6 @@ internal sealed class WorldPrincipalJsonConverter : TryParseStringJsonConverter<
 /// writer, which is deterministic — the ouroboros round-trip covers the composition.
 /// </summary>
 internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.Authoring.CreationDocument>, IJsonSchemaNodeConverter {
-    /// <inheritdoc/>
-    // A fully self-contained fragment: $id makes any "#/$defs/…" the exporter emits for a repeated CreationDocument
-    // shape resolve against THIS fragment's own root, never the enclosing WorldDefinition schema's, wherever this
-    // node ends up embedded in the larger document tree. The exporter requires an explicit TypeInfoResolver on the
-    // options it walks; DocumentJsonOptions.Shared relies on STJ's implicit reflection default instead (attached
-    // lazily on first (de)serialize, never by the exporter), so this reads a resolver-bearing COPY rather than
-    // risking a mutation of the shared, possibly-already-frozen singleton.
-    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) {
-        var options = new JsonSerializerOptions(Puck.Assets.Documents.DocumentJsonOptions.Shared) {
-            TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
-        };
-        // This walk never reaches WorldSchema's own TransformSchemaNode (a different JsonSerializerOptions, outside
-        // WorldJsonContext's metadata), so the same converter-hidden-shape defect ApplyConverterVocabulary fixes
-        // there needs its own narrow fixup here — the only converters this document family's own graph carries
-        // beyond what the exporter already understands natively (a plain JsonStringEnumConverter) are the shared
-        // Vector2/Vector3/Quaternion array converters.
-        var exporterOptions = new JsonSchemaExporterOptions {
-            TransformSchemaNode = (context, node) => DropNullableMembersFromRequired(
-                context: context,
-                node: ((node is JsonValue value) && value.TryGetValue<bool>(value: out var permissive) && permissive)
-                    ? (context.TypeInfo.Type == typeof(Vector2)
-                        ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 2)
-                        : (context.TypeInfo.Type == typeof(Vector3)
-                            ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 3)
-                            : ((context.TypeInfo.Type == typeof(Quaternion))
-                                ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 4)
-                                : node)))
-                    : node
-            ),
-        };
-        var schema = options.GetJsonSchemaAsNode(type: typeof(Puck.World.Authoring.CreationDocument), exporterOptions: exporterOptions).AsObject();
-
-        schema["$id"] = Puck.World.Authoring.CreationDocument.CurrentSchema;
-
-        return schema;
-    }
     // Document doctrine for this whole family (see CreationDocument's own remarks) declares every optional member
     // nullable and every nullable member optional; the exporter's own "required" computation only reads a
     // constructor parameter's DEFAULT VALUE, blind to that convention, so a nullable positional-record parameter
@@ -988,7 +1027,13 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.A
             var nullableNames = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
             foreach (var parameter in constructor.GetParameters()) {
-                if ((parameter.Name is { } name) && IsNullableParameter(parameter: parameter, context: nullabilityContext)) {
+                if (
+                    (parameter.Name is { } name) &&
+                    IsNullableParameter(
+                    context: nullabilityContext,
+                    parameter: parameter
+                )
+                ) {
                     nullableNames.Add(item: name);
                 }
             }
@@ -1011,8 +1056,51 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.A
         return node;
     }
     private static bool IsNullableParameter(ParameterInfo parameter, NullabilityInfoContext context) =>
-        (Nullable.GetUnderlyingType(nullableType: parameter.ParameterType) is not null) ||
-        (!parameter.ParameterType.IsValueType && (context.Create(parameterInfo: parameter).WriteState == NullabilityState.Nullable));
+        ((Nullable.GetUnderlyingType(nullableType: parameter.ParameterType) is not null) ||
+        (!parameter.ParameterType.IsValueType && (context.Create(parameterInfo: parameter).WriteState == NullabilityState.Nullable)));
+
+    /// <inheritdoc/>
+    // A fully self-contained fragment: $id makes any "#/$defs/…" the exporter emits for a repeated CreationDocument
+    // shape resolve against THIS fragment's own root, never the enclosing WorldDefinition schema's, wherever this
+    // node ends up embedded in the larger document tree. The exporter requires an explicit TypeInfoResolver on the
+    // options it walks; DocumentJsonOptions.Shared relies on STJ's implicit reflection default instead (attached
+    // lazily on first (de)serialize, never by the exporter), so this reads a resolver-bearing COPY rather than
+    // risking a mutation of the shared, possibly-already-frozen singleton.
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) {
+        var options = new JsonSerializerOptions(options: Puck.Assets.Documents.DocumentJsonOptions.Shared) {
+            TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
+        };
+        // This walk never reaches WorldSchema's own TransformSchemaNode (a different JsonSerializerOptions, outside
+        // WorldJsonContext's metadata), so the same converter-hidden-shape defect ApplyConverterVocabulary fixes
+        // there needs its own narrow fixup here — the only converters this document family's own graph carries
+        // beyond what the exporter already understands natively (a plain JsonStringEnumConverter) are the shared
+        // Vector2/Vector3/Quaternion array converters.
+        var exporterOptions = new JsonSchemaExporterOptions {
+            TransformSchemaNode = (context, node) => WorldSchema.AnnotateCreationDocumentation(
+            context: context,
+            node: DropNullableMembersFromRequired(
+                context: context,
+                node: (((node is JsonValue value) && value.TryGetValue<bool>(value: out var permissive) && permissive)
+            ? ((context.TypeInfo.Type == typeof(Vector2))
+                ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 2)
+                : ((context.TypeInfo.Type == typeof(Vector3))
+                    ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 3)
+                    : ((context.TypeInfo.Type == typeof(Quaternion))
+                        ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 4)
+                        : node)))
+            : node)
+            )
+        ),
+        };
+        var schema = options.GetJsonSchemaAsNode(
+            exporterOptions: exporterOptions,
+            type: typeof(Puck.World.Authoring.CreationDocument)
+        ).AsObject();
+
+        schema["$id"] = Puck.World.Authoring.CreationDocument.CurrentSchema;
+
+        return schema;
+    }
     /// <inheritdoc/>
     public override Puck.World.Authoring.CreationDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         JsonSerializer.Deserialize<Puck.World.Authoring.CreationDocument>(
@@ -1047,7 +1135,7 @@ public static class WorldDefinitionSerialization {
     /// <param name="utf8Json">The canonical UTF-8 JSON bytes.</param>
     /// <returns>The deserialized, validated definition.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">The bytes are not a valid <c>puck.world.def.v1</c> document.</exception>
+    /// <exception cref="InvalidDataException">The bytes are not a valid <c>puck.world.definition.v1</c> document.</exception>
     public static WorldDefinition Deserialize(byte[] utf8Json) {
         ArgumentNullException.ThrowIfNull(argument: utf8Json);
 
@@ -1120,10 +1208,12 @@ public static class WorldDefinitionSerialization {
     /// <param name="imports">The absolute import paths the write preserved, in authored order, or empty when the
     /// target declares none or the save degraded to flat.</param>
     /// <param name="note">The one-line reason a derived target degraded to a flat save, or empty.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint used when recomposing the preserved derivation.</param>
+    /// <param name="catalog">The selected host machine catalog used for provider rewriting and validation, or null for structural composition.</param>
     /// <returns>The number of bytes written.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
-    public static long SavePreservingBasis(WorldDefinition definition, string path, out string? basisPath, out IReadOnlyList<string> imports, out string note) {
+    public static long SavePreservingBasis(WorldDefinition definition, string path, out string? basisPath, out IReadOnlyList<string> imports, out string note, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: path);
 
@@ -1175,6 +1265,8 @@ public static class WorldDefinitionSerialization {
         }
 
         if (!WorldDefinitionFileSource.TryComposeStackTree(
+            catalog: catalog,
+            catalogFingerprint: catalogFingerprint,
             path: path,
             reason: out var composeReason,
             stack: out var stackTree
@@ -1237,12 +1329,12 @@ public static class WorldDefinitionSerialization {
             foreach (var (importPath, alias) in peekedImports) {
                 var entry = new JsonObject {
                     [propertyName: WorldImport.DocumentMemberName] = Path.GetRelativePath(
-                        path: importPath,
-                        relativeTo: targetDirectory
-                    ).Replace(
-                        newChar: '/',
-                        oldChar: '\\'
-                    ),
+                    path: importPath,
+                    relativeTo: targetDirectory
+                ).Replace(
+                    newChar: '/',
+                    oldChar: '\\'
+                ),
                 };
 
                 if (alias is not null) {

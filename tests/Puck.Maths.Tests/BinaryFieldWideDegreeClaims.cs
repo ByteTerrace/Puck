@@ -76,75 +76,6 @@ internal static class BinaryFieldWideDegreeClaims {
     /// modulus genuinely has none.</summary>
     private const int GeneratorCandidateCeiling = 96;
 
-    /// <summary>Proves the irreducibility criterion at degrees 32, 64 and 128 against evidence that never runs a
-    /// decision: the exact order certificate on the catalog modulus and on the first further modulus the subject
-    /// accepts, reducible-by-construction moduli the subject must reject, and the same verdicts read back on the
-    /// 128-bit carrier at every degree.</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? WideDegreeIrreducibilityCertificatesSurface() =>
-        WideDegreeIrreducibilityFailure(acceptedFloor: 1, certifyCeiling: 1, reducibleRows: 5, scannedTails: 512);
-    /// <summary>The scale sibling of <see cref="WideDegreeIrreducibilityCertificatesSurface"/>: sixteen thousand moduli
-    /// scanned at each wide degree with EVERY accepted one certified, and sixty reducible constructions per degree
-    /// rejected. Written inline rather than through a <c>Domain</c>, because an Exhaustive case that consumed one would
-    /// advance the frontier counter its Default sibling reads.</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? WideDegreeIrreducibilitySweepSurface() =>
-        WideDegreeIrreducibilityFailure(acceptedFloor: 8, certifyCeiling: int.MaxValue, reducibleRows: 60, scannedTails: 16_384);
-
-    /// <summary>The shared body of both wide-degree laws.</summary>
-    /// <param name="scannedTails">How many odd tails are offered to the subject at each degree.</param>
-    /// <param name="certifyCeiling">How many accepted moduli per degree are certified before the scan stops.</param>
-    /// <param name="acceptedFloor">The least number of accepted moduli each degree must produce, so the ACCEPTING arm
-    /// is exercised rather than merely available: a subject that called everything reducible would satisfy the negative
-    /// arm outright and prove nothing.</param>
-    /// <param name="reducibleRows">How many reducible-by-construction moduli each degree must reject.</param>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    private static string? WideDegreeIrreducibilityFailure(int scannedTails, int certifyCeiling, int acceptedFloor, int reducibleRows) {
-        if (GroupOrderFactorizationFailure() is { } factorizationFailure) { return factorizationFailure; }
-
-        foreach (var (degree, catalogTail) in WideCatalog) {
-            // The catalog row first: the one every wide-degree statement in the suite leans on.
-            if (!WideDecision(degree: degree, tail: catalogTail)) {
-                return $"the degree-{degree} catalog modulus t^{degree} + 0x{catalogTail:X} is called reducible";
-            }
-            if (CertificateFailure(degree: degree, tail: catalogTail) is { } catalogFailure) { return catalogFailure; }
-            if (CarrierAgreementFailure(degree: degree, tail: catalogTail) is { } catalogCarrier) { return catalogCarrier; }
-
-            var accepted = 0;
-            var certified = 0;
-
-            for (var tail = UInt128.One; (tail <= ((UInt128)((2 * scannedTails) - 1))); tail += ((UInt128)2)) {
-                var decided = WideDecision(degree: degree, tail: tail);
-
-                if (CarrierAgreementFailure(degree: degree, tail: tail) is { } scanCarrier) { return scanCarrier; }
-                if (!decided) { continue; }
-
-                ++accepted;
-
-                if (certified >= certifyCeiling) { continue; }
-
-                if (CertificateFailure(degree: degree, tail: tail) is { } scanFailure) { return scanFailure; }
-
-                ++certified;
-
-                if ((certified >= certifyCeiling) && (accepted >= acceptedFloor)) { break; }
-            }
-
-            if (accepted < acceptedFloor) {
-                return $"the subject accepted {accepted} of the first {scannedTails} odd tails at degree {degree}, below the floor of {acceptedFloor} — the accepting arm of the criterion is no longer exercised at that degree";
-            }
-
-            if (ReducibleConstructionFailure(degree: degree, rows: reducibleRows) is { } reducibleFailure) { return reducibleFailure; }
-        }
-
-        return null;
-    }
-    /// <summary>The subject's decision at a wide degree, taken on the 128-bit carrier.</summary>
-    /// <param name="degree">The extension degree.</param>
-    /// <param name="tail">The modulus below its leading term.</param>
-    /// <returns>Whether the subject calls the modulus irreducible.</returns>
-    private static bool WideDecision(int degree, UInt128 tail) =>
-        BinaryField<UInt128>.Create(degree: degree, reductionTail: tail).IsIrreducible();
     /// <summary>The same decision read back on the degree's NATURAL carrier, where the degree equals the carrier's
     /// width. Degree 128 has only the one carrier and is skipped.</summary>
     /// <param name="degree">The extension degree.</param>
@@ -153,14 +84,25 @@ internal static class BinaryFieldWideDegreeClaims {
     private static string? CarrierAgreementFailure(int degree, UInt128 tail) {
         if (128 == degree) { return null; }
 
-        var wide = WideDecision(degree: degree, tail: tail);
+        var wide = WideDecision(
+            degree: degree,
+            tail: tail
+        );
         var natural = ((32 == degree)
-            ? BinaryField<uint>.Create(degree: 32, reductionTail: ((uint)tail)).IsIrreducible()
-            : BinaryField<ulong>.Create(degree: 64, reductionTail: ((ulong)tail)).IsIrreducible());
+            ? BinaryField<uint>.Create(
+                degree: 32,
+                reductionTail: ((uint)tail)
+            ).IsIrreducible()
+            : BinaryField<ulong>.Create(
+                degree: 64,
+                reductionTail: ((ulong)tail)
+            ).IsIrreducible()
+        );
 
         return ((wide == natural)
             ? null
-            : $"t^{degree} + 0x{tail:X} is called {wide} on the 128-bit carrier and {natural} on its own {degree}-bit one");
+            : $"t^{degree} + 0x{tail:X} is called {wide} on the 128-bit carrier and {natural} on its own {degree}-bit one"
+        );
     }
     /// <summary>Certifies that a modulus the subject called irreducible really is, by exhibiting an element of the
     /// quotient ring whose multiplicative order is exactly <c>2^degree − 1</c>.</summary>
@@ -179,7 +121,12 @@ internal static class BinaryFieldWideDegreeClaims {
             // The proper-divisor tests come first: they are what discriminates, and a candidate that is not a generator
             // usually fails the smallest of them, which keeps the search from paying for a full-order power per miss.
             foreach (var prime in primes) {
-                if (!Power(degree: degree, exponent: (groupOrder / prime), reductionTail: reductionTail, value: element).IsOne) { continue; }
+                if (!Power(
+                    degree: degree,
+                    exponent: (groupOrder / prime),
+                    reductionTail: reductionTail,
+                    value: element
+                ).IsOne) { continue; }
 
                 maximal = false;
 
@@ -189,46 +136,15 @@ internal static class BinaryFieldWideDegreeClaims {
             if (!maximal) { continue; }
 
             // Order divides the group order AND no proper divisor of it: the order is the group order exactly.
-            if (Power(degree: degree, exponent: groupOrder, reductionTail: reductionTail, value: element).IsOne) { return null; }
+            if (Power(
+                degree: degree,
+                exponent: groupOrder,
+                reductionTail: reductionTail,
+                value: element
+            ).IsOne) { return null; }
         }
 
         return $"t^{degree} + 0x{tail:X} is called irreducible, but no element of order 2^{degree} − 1 exists among the first {(GeneratorCandidateCeiling - 1)} candidates, so the quotient's non-zero elements do not all invert and it is not a field";
-    }
-    /// <summary>Requires the subject to reject moduli that are reducible BY CONSTRUCTION — the carryless product of two
-    /// non-constant polynomials, formed in <see cref="BigInteger"/> without consulting the subject.</summary>
-    /// <param name="degree">The extension degree the products are built to.</param>
-    /// <param name="rows">How many products to build.</param>
-    /// <returns>The counterexample text, or <see langword="null"/> when every product is rejected.</returns>
-    private static string? ReducibleConstructionFailure(int degree, int rows) {
-        for (var row = 0; (row < rows); ++row) {
-            var (numerator, denominator) = ReducibleSplits[(row % ReducibleSplits.Length)];
-            var lowDegree = ((0 == denominator) ? 1 : ((degree * numerator) / denominator));
-            var highDegree = (degree - lowDegree);
-
-            // A perfect square whenever the split is exactly balanced and the two factor patterns coincide, which is the
-            // repeated-factor shape a squarefree-blind criterion answers differently on.
-            var low = Factor(degree: lowDegree, salt: ((row / ReducibleSplits.Length) + 1));
-            var high = Factor(degree: highDegree, salt: ((lowDegree == highDegree) ? ((row / ReducibleSplits.Length) + 1) : ((row / ReducibleSplits.Length) + 7)));
-            var product = Oracles.CarrylessProduct(left: low, right: high);
-            var tail = (product - (BigInteger.One << degree));
-
-            // Both factors carry a non-zero constant term, so the product does too and Create admits it; and the degrees
-            // add exactly in GF(2)[t], so the product lands on the intended degree. Both are asserted rather than
-            // assumed, because a construction that silently degenerated would make the whole arm vacuous.
-            if ((tail < BigInteger.Zero) || (tail >= (BigInteger.One << degree)) || tail.IsEven) {
-                return $"the degree-{degree} reducible construction at row {row} produced the tail {tail}, which is not a legal modulus below t^{degree}";
-            }
-
-            var packed = ((UInt128)tail);
-
-            if (WideDecision(degree: degree, tail: packed)) {
-                return $"t^{degree} + 0x{packed:X} is called irreducible, and it is the product of a degree-{lowDegree} and a degree-{highDegree} polynomial by construction";
-            }
-
-            if (CarrierAgreementFailure(degree: degree, tail: packed) is { } carrier) { return carrier; }
-        }
-
-        return null;
     }
     /// <summary>A deterministic monic polynomial of the requested degree with a non-zero constant term.</summary>
     /// <param name="degree">The factor's degree, at least one.</param>
@@ -266,16 +182,6 @@ internal static class BinaryFieldWideDegreeClaims {
 
         return null;
     }
-    /// <summary>The distinct prime divisors of <c>2^degree − 1</c>.</summary>
-    /// <param name="degree">The extension degree.</param>
-    /// <returns>The prime divisors.</returns>
-    private static ulong[] PrimesOf(int degree) {
-        foreach (var (candidate, primes) in WideGroupOrderFactors) {
-            if (candidate == degree) { return primes; }
-        }
-
-        throw new InvalidOperationException(message: $"no published factorization of 2^{degree} − 1 is declared.");
-    }
     /// <summary>Primality by trial division — the definition, over a carrier wide enough for the largest listed
     /// factor.</summary>
     /// <param name="value">The candidate.</param>
@@ -305,15 +211,201 @@ internal static class BinaryFieldWideDegreeClaims {
 
         for (var bit = 0; (bit < bits); ++bit) {
             if (!((exponent >> bit) & BigInteger.One).IsZero) {
-                result = Oracles.BinaryFieldProduct(degree: degree, left: result, reductionTail: reductionTail, right: square);
+                result = Oracles.BinaryFieldProduct(
+                    degree: degree,
+                    left: result,
+                    reductionTail: reductionTail,
+                    right: square
+                );
             }
 
             if ((bit + 1) < bits) {
-                square = Oracles.BinaryFieldProduct(degree: degree, left: square, reductionTail: reductionTail, right: square);
+                square = Oracles.BinaryFieldProduct(
+                    degree: degree,
+                    left: square,
+                    reductionTail: reductionTail,
+                    right: square
+                );
             }
         }
 
         return result;
     }
+    /// <summary>The distinct prime divisors of <c>2^degree − 1</c>.</summary>
+    /// <param name="degree">The extension degree.</param>
+    /// <returns>The prime divisors.</returns>
+    private static ulong[] PrimesOf(int degree) {
+        foreach (var (candidate, primes) in WideGroupOrderFactors) {
+            if (candidate == degree) { return primes; }
+        }
+
+        throw new InvalidOperationException(message: $"no published factorization of 2^{degree} − 1 is declared.");
+    }
+    /// <summary>Requires the subject to reject moduli that are reducible BY CONSTRUCTION — the carryless product of two
+    /// non-constant polynomials, formed in <see cref="BigInteger"/> without consulting the subject.</summary>
+    /// <param name="degree">The extension degree the products are built to.</param>
+    /// <param name="rows">How many products to build.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when every product is rejected.</returns>
+    private static string? ReducibleConstructionFailure(int degree, int rows) {
+        for (var row = 0; (row < rows); ++row) {
+            var (numerator, denominator) = ReducibleSplits[(row % ReducibleSplits.Length)];
+            var lowDegree = ((0 == denominator)
+                ? 1
+                : ((degree * numerator) / denominator)
+            );
+            var highDegree = (degree - lowDegree);
+
+            // A perfect square whenever the split is exactly balanced and the two factor patterns coincide, which is the
+            // repeated-factor shape a squarefree-blind criterion answers differently on.
+            var low = Factor(
+                degree: lowDegree,
+                salt: ((row / ReducibleSplits.Length) + 1)
+            );
+            var high = Factor(
+                degree: highDegree,
+                salt: ((lowDegree == highDegree)
+                ? ((row / ReducibleSplits.Length) + 1)
+                : ((row / ReducibleSplits.Length) + 7))
+            );
+            var product = Oracles.CarrylessProduct(
+                left: low,
+                right: high
+            );
+            var tail = (product - (BigInteger.One << degree));
+
+            // Both factors carry a non-zero constant term, so the product does too and Create admits it; and the degrees
+            // add exactly in GF(2)[t], so the product lands on the intended degree. Both are asserted rather than
+            // assumed, because a construction that silently degenerated would make the whole arm vacuous.
+            if (
+                (tail < BigInteger.Zero) ||
+                (tail >= (BigInteger.One << degree)) ||
+                tail.IsEven
+            ) {
+                return $"the degree-{degree} reducible construction at row {row} produced the tail {tail}, which is not a legal modulus below t^{degree}";
+            }
+
+            var packed = ((UInt128)tail);
+
+            if (WideDecision(
+                degree: degree,
+                tail: packed
+            )) {
+                return $"t^{degree} + 0x{packed:X} is called irreducible, and it is the product of a degree-{lowDegree} and a degree-{highDegree} polynomial by construction";
+            }
+
+            if (CarrierAgreementFailure(
+                degree: degree,
+                tail: packed
+            ) is { } carrier) { return carrier; }
+        }
+
+        return null;
+    }
+    /// <summary>The subject's decision at a wide degree, taken on the 128-bit carrier.</summary>
+    /// <param name="degree">The extension degree.</param>
+    /// <param name="tail">The modulus below its leading term.</param>
+    /// <returns>Whether the subject calls the modulus irreducible.</returns>
+    private static bool WideDecision(int degree, UInt128 tail) =>
+        BinaryField<UInt128>.Create(
+            degree: degree,
+            reductionTail: tail
+        ).IsIrreducible();
+    /// <summary>The shared body of both wide-degree laws.</summary>
+    /// <param name="scannedTails">How many odd tails are offered to the subject at each degree.</param>
+    /// <param name="certifyCeiling">How many accepted moduli per degree are certified before the scan stops.</param>
+    /// <param name="acceptedFloor">The least number of accepted moduli each degree must produce, so the ACCEPTING arm
+    /// is exercised rather than merely available: a subject that called everything reducible would satisfy the negative
+    /// arm outright and prove nothing.</param>
+    /// <param name="reducibleRows">How many reducible-by-construction moduli each degree must reject.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    private static string? WideDegreeIrreducibilityFailure(int scannedTails, int certifyCeiling, int acceptedFloor, int reducibleRows) {
+        if (GroupOrderFactorizationFailure() is { } factorizationFailure) { return factorizationFailure; }
+
+        foreach (var (degree, catalogTail) in WideCatalog) {
+            // The catalog row first: the one every wide-degree statement in the suite leans on.
+            if (!WideDecision(
+                degree: degree,
+                tail: catalogTail
+            )) {
+                return $"the degree-{degree} catalog modulus t^{degree} + 0x{catalogTail:X} is called reducible";
+            }
+            if (CertificateFailure(
+                degree: degree,
+                tail: catalogTail
+            ) is { } catalogFailure) { return catalogFailure; }
+            if (CarrierAgreementFailure(
+                degree: degree,
+                tail: catalogTail
+            ) is { } catalogCarrier) { return catalogCarrier; }
+
+            var accepted = 0;
+            var certified = 0;
+
+            for (var tail = UInt128.One; (tail <= ((UInt128)((2 * scannedTails) - 1))); tail += ((UInt128)2)) {
+                var decided = WideDecision(
+                    degree: degree,
+                    tail: tail
+                );
+
+                if (CarrierAgreementFailure(
+                    degree: degree,
+                    tail: tail
+                ) is { } scanCarrier) { return scanCarrier; }
+                if (!decided) { continue; }
+
+                ++accepted;
+
+                if (certified >= certifyCeiling) { continue; }
+
+                if (CertificateFailure(
+                    degree: degree,
+                    tail: tail
+                ) is { } scanFailure) { return scanFailure; }
+
+                ++certified;
+
+                if (
+                    (certified >= certifyCeiling) &&
+                    (accepted >= acceptedFloor)
+                ) { break; }
+            }
+
+            if (accepted < acceptedFloor) {
+                return $"the subject accepted {accepted} of the first {scannedTails} odd tails at degree {degree}, below the floor of {acceptedFloor} — the accepting arm of the criterion is no longer exercised at that degree";
+            }
+
+            if (ReducibleConstructionFailure(
+                degree: degree,
+                rows: reducibleRows
+            ) is { } reducibleFailure) { return reducibleFailure; }
+        }
+
+        return null;
+    }
+
+    /// <summary>Proves the irreducibility criterion at degrees 32, 64 and 128 against evidence that never runs a
+    /// decision: the exact order certificate on the catalog modulus and on the first further modulus the subject
+    /// accepts, reducible-by-construction moduli the subject must reject, and the same verdicts read back on the
+    /// 128-bit carrier at every degree.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? WideDegreeIrreducibilityCertificatesSurface() =>
+        WideDegreeIrreducibilityFailure(
+            acceptedFloor: 1,
+            certifyCeiling: 1,
+            reducibleRows: 5,
+            scannedTails: 512
+        );
+    /// <summary>The scale sibling of <see cref="WideDegreeIrreducibilityCertificatesSurface"/>: sixteen thousand moduli
+    /// scanned at each wide degree with EVERY accepted one certified, and sixty reducible constructions per degree
+    /// rejected. Written inline rather than through a <c>Domain</c>, because an Exhaustive case that consumed one would
+    /// advance the frontier counter its Default sibling reads.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? WideDegreeIrreducibilitySweepSurface() =>
+        WideDegreeIrreducibilityFailure(
+            acceptedFloor: 8,
+            certifyCeiling: int.MaxValue,
+            reducibleRows: 60,
+            scannedTails: 16_384
+        );
 }
 

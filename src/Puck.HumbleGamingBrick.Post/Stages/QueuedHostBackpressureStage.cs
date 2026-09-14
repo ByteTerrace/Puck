@@ -10,24 +10,26 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal sealed class QueuedHostBackpressureStage : IPostStage<PostContext> {
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "queued-host-backpressure";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyBackpressure(withContent: () => new MachineHost(
+            bootMode: MachineBootMode.Fast,
             model: ConsoleModel.DmgC,
             cartridgeRom: SyntheticRom.Create()
         ));
 
         return (result.Passed
             ? PostStageOutcome.Pass(detail: result.Detail)
-            : PostStageOutcome.Fail(detail: result.Detail));
+            : PostStageOutcome.Fail(detail: result.Detail)
+        );
     }
 }

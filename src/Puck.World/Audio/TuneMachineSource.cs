@@ -8,7 +8,7 @@ using MachineInstance = Puck.GamingBricks.MachineInstance<Puck.HumbleGamingBrick
 namespace Puck.World.Audio;
 
 /// <summary>
-/// The headless tune host: one <c>puck.audio.v1</c> document compiled to a cart
+/// The headless tune host: one <c>puck.tune.v1</c> document compiled to a cart
 /// (<see cref="TuneRom.Build(AudioDocument, string)"/>) and played by a synchronous Humble core stepped cycle-exactly
 /// inside <see cref="Pull"/> — never a queued worker (its worker thread is the one nondeterministic scheduling
 /// element). The exact-rational cycle accumulator (subtract-not-reset) keeps machine time locked to the
@@ -30,7 +30,7 @@ public sealed class TuneMachineSource : IAudioBlockSource, IDisposable {
 
     /// <summary>Initializes the host: compiles the document to a cart, boots the core through the pre-roll, and
     /// configures its resampler to the mixer rate.</summary>
-    /// <param name="document">The canonical (validated + normalized) <c>puck.audio.v1</c> document.</param>
+    /// <param name="document">The canonical (validated + normalized) <c>puck.tune.v1</c> document.</param>
     public TuneMachineSource(AudioDocument document) {
         ArgumentNullException.ThrowIfNull(argument: document);
         m_machine = MachineFactory.Create(

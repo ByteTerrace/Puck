@@ -63,7 +63,8 @@ public sealed partial class WorldServer : IFieldLatticeHost {
         rawValue: out var raw,
         row: out _,
         text: out _,
-        tick: tick
+        tick: tick,
+        engineTick: CompletedEngineTicks
     ) && (raw is { } value))
         ? FixedQ4816.FromRawBits(value: value)
         : FixedQ4816.Zero
@@ -84,7 +85,8 @@ public sealed partial class WorldServer : IFieldLatticeHost {
             rawValue: out var raw,
             row: out var declared,
             text: out _,
-            tick: tick
+            tick: tick,
+            engineTick: CompletedEngineTicks
         )) {
             return;
         }
@@ -106,6 +108,7 @@ public sealed partial class WorldServer : IFieldLatticeHost {
                 Kind: WorldDocumentWriteKind.Set
             ),
             tick: tick,
+            engineTick: CompletedEngineTicks,
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
             preMetered: false
@@ -118,8 +121,16 @@ public sealed partial class WorldServer : IFieldLatticeHost {
     private FixedQ4816 ReadScalarSlot(string row, ulong tick) {
         var catalog = m_definition.StateCatalog;
 
-        return (catalog.TryResolve(lane: StateLane.Document, name: row, handle: out var handle)
-            ? ReadScalarSlot(catalog: catalog, row: handle, tick: tick)
+        return (catalog.TryResolve(
+            handle: out var handle,
+            lane: StateLane.Document,
+            name: row
+        )
+            ? ReadScalarSlot(
+                catalog: catalog,
+                row: handle,
+                tick: tick
+            )
             : FixedQ4816.Zero
         );
     }
@@ -129,6 +140,7 @@ public sealed partial class WorldServer : IFieldLatticeHost {
         handle: row,
         key: body.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
         tick: tick,
+        engineTick: CompletedEngineTicks,
         row: out _,
         rawValue: out var raw,
         text: out _
@@ -155,6 +167,7 @@ public sealed partial class WorldServer : IFieldLatticeHost {
                 Kind: WorldDocumentWriteKind.Set
             ),
             tick: tick,
+            engineTick: CompletedEngineTicks,
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,
             preMetered: false

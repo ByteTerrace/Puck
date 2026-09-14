@@ -28,78 +28,227 @@ internal static class NamedArgsPhase {
         global using System.Threading.Tasks;
         """;
 
-    public static int Run(string rootArgument, bool whatIf, bool verify, string[]? targets = null) {
-        var targetFiles = targets;
+    // Builds a compilation over the project's trees against its REAL build closure, so calls into
+    // package / sibling-project types bind and get named instead of being silently skipped. Two inputs
+    // match the actual build: the SDK-generated global-usings file (obj/**/*.GlobalUsings.g.cs — the
+    // project's true implicit + explicit global usings) and every dependency assembly in the built output
+    // (bin/**/*.dll, minus the project's own output and native DLLs), unioned with the shared framework
+    // assemblies. Both need a prior build; without one, `degraded` is set and only the framework set plus
+    // a default usings list are used — a closure named-args declines to act on at all.
+    internal static CSharpCompilation BuildProjectCompilation(string projectRoot, IEnumerable<SyntaxTree> trees, CSharpParseOptions parseOptions, out bool degraded) {
+        var objDirectory = Path.Combine(
+            path1: projectRoot,
+            path2: "obj"
+        );
+        var globalUsingsFile = (Directory.Exists(path: objDirectory)
+            ? Directory.EnumerateFiles(
+                path: objDirectory,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*.GlobalUsings.g.cs"
+            ).FirstOrDefault()
+            : null
+        );
+        var globalUsings = CSharpSyntaxTree.ParseText(
+            text: ((globalUsingsFile is not null)
+            ? File.ReadAllText(path: globalUsingsFile)
+            : DefaultGlobalUsings),
+            options: parseOptions
+        );
 
-        if ((targetFiles is null) && !SourceFiles.TryEnumerate(files: out targetFiles, rootArgument: rootArgument, scanRoot: out _)) {
-            return 2;
-        }
+        // Source-generator output (interop projections, etc.) is produced in-memory during build and is
+        // absent from disk unless the project sets EmitCompilerGeneratedFiles. When it IS emitted
+        // (obj/**/generated/**/*.cs), include it so calls into generated types resolve too; otherwise
+        // those calls are reported as unresolved and left positional.
+        var generatedTrees = (Directory.Exists(path: objDirectory)
+            ? Directory.EnumerateFiles(
+                path: objDirectory,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*.cs"
+            )
+                .Where(predicate: static path => path.Contains(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: $"{Path.DirectorySeparatorChar}generated{Path.DirectorySeparatorChar}"
+            ))
+                .Select(selector: path => CSharpSyntaxTree.ParseText(
+                text: File.ReadAllText(path: path),
+                options: parseOptions,
+                path: path
+            ))
+            : Enumerable.Empty<SyntaxTree>()
+        );
 
-        // Resolve symbols against each file's OWNING project (its own trees + build closure), never one
-        // merged compilation — so a tree-wide root spanning many projects still binds every project's
-        // calls correctly. Files are grouped by owning project and processed against that project's
-        // compilation; each real method call then gets named.
-        var parseOptions = new CSharpParseOptions(languageVersion: LanguageVersion.Preview);
-        var byProject = targetFiles.GroupBy(
-            keySelector: static file => (SourceFiles.FindOwningProjectDirectory(start: Path.GetDirectoryName(path: Path.GetFullPath(path: file))!) ?? ""),
-            comparer: StringComparer.OrdinalIgnoreCase);
+        var frameworkDlls = ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!)
+            .Split(
+            options: StringSplitOptions.RemoveEmptyEntries,
+            separator: Path.PathSeparator
+        )
+            .Where(predicate: static path => path.EndsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: ".dll"
+        ));
+        var projectName = Path.GetFileNameWithoutExtension(path: (Directory.EnumerateFiles(
+            path: projectRoot,
+            searchPattern: "*.csproj"
+        ).FirstOrDefault() ?? ""));
+        var binDirectory = Path.Combine(
+            path1: projectRoot,
+            path2: "bin"
+        );
+        var outputDlls = (Directory.Exists(path: binDirectory)
+            ? Directory.EnumerateFiles(
+                path: binDirectory,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*.dll"
+            )
+                .Where(predicate: path =>
+                    (!string.Equals(
+                a: Path.GetFileNameWithoutExtension(path: path),
+                b: projectName,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )
+                    && !path.Contains(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: $"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}"
+            )))
+            : Enumerable.Empty<string>()
+        );
 
-        var drifted = new List<string>();
-        var corrupted = new List<string>();
-        var degradedProjects = new List<string>();
-        var notBuilt = new List<string>();
-        var ungrouped = 0;
-        var unresolved = 0;
+        // Built dependency assemblies and package assemblies win over the framework on a name clash —
+        // they are the exact versions the project compiles against.
+        var references = outputDlls.Concat(second: PackageReferences(projectRoot: projectRoot)).Concat(second: frameworkDlls)
+            .GroupBy(
+            keySelector: static path => Path.GetFileName(path: path),
+            comparer: StringComparer.OrdinalIgnoreCase
+        )
+            .Select(selector: static group => TryReference(path: group.First()))
+            .Where(predicate: static reference => (reference is not null))
+            .Select(selector: static reference => reference!);
 
-        foreach (var projectGroup in byProject) {
-            if ((projectGroup.Key.Length == 0)
-                || !SourceFiles.TryEnumerate(rootArgument: projectGroup.Key, scanRoot: out _, files: out var compilationFiles)) {
-                ungrouped += projectGroup.Count();
+        // The existence of `bin` (or of a generated global-usings file) is NOT evidence of a build: phase 0's own
+        // `dotnet format whitespace` run, earlier in the same invocation, loads the project through MSBuild and
+        // leaves both behind — an EMPTY bin and a GlobalUsings.g.cs — so a directory probe called every unbuilt
+        // project built and the not-built note could never fire from inside `puck format`. The project's own
+        // output assembly is the evidence; nothing but a real build writes it.
+        degraded = ((globalUsingsFile is null) || !HasOwnOutput(
+            binDirectory: binDirectory,
+            projectName: projectName
+        ));
 
-                continue;
-            }
-
-            unresolved += ProcessProject(
-                projectRoot: projectGroup.Key,
-                targets: projectGroup,
-                compilationFiles: compilationFiles,
-                parseOptions: parseOptions,
-                whatIf: whatIf,
-                verify: verify,
-                drifted: drifted,
-                corrupted: corrupted,
-                degradedProjects: degradedProjects,
-                notBuilt: notBuilt);
-        }
-
-        // A file with no owning project was silently dropped before, so the run reported a clean bill of
-        // health for source it never examined. Say so instead.
-        if (ungrouped > 0) {
-            Console.Error.WriteLine(value: $"named-args: {ungrouped} file(s) had no owning project — skipped");
-        }
-
-        if (degradedProjects.Count > 0) {
-            Console.Error.WriteLine(
-                value: $"named-args: {degradedProjects.Count} project(s) not built ({string.Join(separator: ", ", values: degradedProjects)}) — only the framework resolves there, so their files were left alone. Build them and run again.");
-        }
-
-        // Only files that WERE fully analysed reach this count now, so it can no longer point at the not-built
-        // note for its explanation: a call left positional in a built project is a reference the closure missed.
-        if (unresolved > 0) {
-            Console.Error.WriteLine(value: $"named-args: {unresolved} call(s) could not be resolved and were left positional (check the owning project's references).");
-        }
-
-        return Math.Max(val1: ((ungrouped > 0) ? 1 : 0), val2: RewriteIo.Report(
-            label: "named-args",
-            fileCount: targetFiles.Length,
-            drifted: drifted,
-            whatIf: (whatIf || verify),
-            problems: [
-                ("have syntax errors before or after rewriting — SKIPPED", corrupted),
-                ("belong to a project that is not built — SKIPPED", notBuilt),
-            ]));
+        return CSharpCompilation.Create(
+            assemblyName: "named-args",
+            syntaxTrees: trees.Append(element: globalUsings).Concat(second: generatedTrees),
+            references: references,
+            options: new CSharpCompilationOptions(
+                outputKind: OutputKind.DynamicallyLinkedLibrary,
+                allowUnsafe: true
+            )
+        );
     }
 
+    // Coverage probe: a call whose symbol binds to nothing (no symbol, no candidate) is one named-args
+    // must leave positional. Driving this to zero is the point of the real build closure; a nonzero count
+    // means the references are still incomplete. `nameof(...)` is syntactically an invocation but a
+    // contextual operator with no method symbol, so it is excluded — counting it would be a false
+    // positive.
+    private static int CountUnresolvedCalls(SyntaxNode root, SemanticModel model) =>
+        root.DescendantNodes().Count(predicate: node =>
+            ((node is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax)
+            && (node is not InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } })
+            && (model.GetSymbolInfo(node: node) is { Symbol: null, CandidateSymbols.IsEmpty: true })));
+    // True when the project's OWN output assembly sits somewhere under bin — the one artifact only a real build
+    // produces, and therefore the honest answer to "has this been built?". A project with no .csproj name to look
+    // for answers false, which is the safe direction: the closure it could assemble is not one to trust.
+    private static bool HasOwnOutput(string binDirectory, string projectName) =>
+        ((projectName.Length > 0)
+        && Directory.Exists(path: binDirectory)
+        && Directory.EnumerateFiles(
+            path: binDirectory,
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: $"{projectName}.dll"
+        ).Any());
+    // The project's package compile assemblies, read from the restore output (obj/project.assets.json).
+    // A LIBRARY project's transitive package DLLs are not copied to its own bin (they land in the
+    // consuming app's output), so bin alone misses them; the assets file lists every package's compile
+    // asset by path into the global packages folder.
+    private static IEnumerable<string> PackageReferences(string projectRoot) {
+        var assetsPath = Path.Combine(
+            path1: projectRoot,
+            path2: "obj",
+            path3: "project.assets.json"
+        );
+
+        if (!File.Exists(path: assetsPath)) {
+            return [];
+        }
+
+        using var document = JsonDocument.Parse(json: File.ReadAllText(path: assetsPath));
+        var root = document.RootElement;
+
+        if (
+            !root.TryGetProperty(
+            propertyName: "packageFolders",
+            value: out var folders
+        ) ||
+            !root.TryGetProperty(
+            propertyName: "targets",
+            value: out var targets
+        ) ||
+            !root.TryGetProperty(
+            propertyName: "libraries",
+            value: out var libraries
+        )
+        ) {
+            return [];
+        }
+
+        var packageRoots = folders.EnumerateObject().Select(selector: static folder => folder.Name).ToList();
+        var results = new List<string>();
+
+        foreach (var target in targets.EnumerateObject()) {
+            foreach (var library in target.Value.EnumerateObject()) {
+                if (
+                    !library.Value.TryGetProperty(
+                    propertyName: "compile",
+                    value: out var compile
+                ) ||
+                    !libraries.TryGetProperty(
+                    propertyName: library.Name,
+                    value: out var entry
+                ) ||
+                    !entry.TryGetProperty(
+                    propertyName: "path",
+                    value: out var libraryPath
+                )
+                ) {
+                    continue;
+                }
+
+                foreach (var asset in compile.EnumerateObject()) {
+                    if (asset.Name.EndsWith(
+                        comparisonType: StringComparison.Ordinal,
+                        value: "_._"
+                    )) {
+                        continue;
+                    }
+
+                    var relative = asset.Name;
+                    var resolved = packageRoots
+                        .Select(selector: packageRoot => Path.Combine(
+                        path1: packageRoot,
+                        path2: libraryPath.GetString()!,
+                        path3: relative
+                    ))
+                        .FirstOrDefault(predicate: File.Exists);
+
+                    if (resolved is not null) {
+                        results.Add(item: resolved);
+                    }
+                }
+            }
+        }
+
+        return results;
+    }
     // Names the target files of ONE project against a compilation of that project's trees and its real
     // build closure; accumulates drift / corruption / not-built into the shared lists and returns the
     // count of calls that could not be resolved (left positional).
@@ -118,10 +267,19 @@ internal static class NamedArgsPhase {
         var treesByPath = new Dictionary<string, SyntaxTree>(comparer: StringComparer.OrdinalIgnoreCase);
 
         foreach (var file in compilationFiles) {
-            treesByPath[Path.GetFullPath(path: file)] = CSharpSyntaxTree.ParseText(text: File.ReadAllText(path: file), options: parseOptions, path: file);
+            treesByPath[Path.GetFullPath(path: file)] = CSharpSyntaxTree.ParseText(
+                text: File.ReadAllText(path: file),
+                options: parseOptions,
+                path: file
+            );
         }
 
-        var compilation = BuildProjectCompilation(projectRoot: projectRoot, trees: treesByPath.Values, parseOptions: parseOptions, degraded: out var degraded);
+        var compilation = BuildProjectCompilation(
+            projectRoot: projectRoot,
+            trees: treesByPath.Values,
+            parseOptions: parseOptions,
+            degraded: out var degraded
+        );
 
         // A project with no build closure resolves almost nothing, and this pass acts on what it resolves: it
         // would name whatever the framework alone happens to bind and leave the rest positional — a partial
@@ -142,24 +300,36 @@ internal static class NamedArgsPhase {
         var unresolved = 0;
 
         foreach (var file in targets) {
-            if (!treesByPath.TryGetValue(key: Path.GetFullPath(path: file), value: out var tree)) {
+            if (!treesByPath.TryGetValue(
+                key: Path.GetFullPath(path: file),
+                value: out var tree
+            )) {
                 continue;
             }
 
             var model = compilation.GetSemanticModel(syntaxTree: tree);
 
-            unresolved += CountUnresolvedCalls(root: tree.GetRoot(), model: model);
+            unresolved += CountUnresolvedCalls(
+                root: tree.GetRoot(),
+                model: model
+            );
 
             var rewritten = new NamedArgsRewriter(model: model).Visit(node: tree.GetRoot())!.ToFullString();
             var original = File.ReadAllText(path: file);
 
-            if (RewriteIo.ContentEquals(a: rewritten, b: original)) {
+            if (RewriteIo.ContentEquals(
+                a: rewritten,
+                b: original
+            )) {
                 continue;
             }
 
             var relative = CliPaths.ToDisplay(fullPath: file);
 
-            if (RewriteIo.HasSyntaxErrors(original: original, rewritten: rewritten)) {
+            if (RewriteIo.HasSyntaxErrors(
+                original: original,
+                rewritten: rewritten
+            )) {
                 corrupted.Add(item: relative);
 
                 continue;
@@ -169,130 +339,18 @@ internal static class NamedArgsPhase {
 
             // named-args only ADDS names where absent, so a second run is a no-op — idempotent by
             // construction. -Verify still audits (report drift, never write) plus the guard.
-            if (!whatIf && !verify) {
-                RewriteIo.WriteText(file: file, text: rewritten);
+            if (
+                !whatIf &&
+                !verify
+            ) {
+                RewriteIo.WriteText(
+                    file: file,
+                    text: rewritten
+                );
             }
         }
 
         return unresolved;
-    }
-
-    // Builds a compilation over the project's trees against its REAL build closure, so calls into
-    // package / sibling-project types bind and get named instead of being silently skipped. Two inputs
-    // match the actual build: the SDK-generated global-usings file (obj/**/*.GlobalUsings.g.cs — the
-    // project's true implicit + explicit global usings) and every dependency assembly in the built output
-    // (bin/**/*.dll, minus the project's own output and native DLLs), unioned with the shared framework
-    // assemblies. Both need a prior build; without one, `degraded` is set and only the framework set plus
-    // a default usings list are used — a closure named-args declines to act on at all.
-    internal static CSharpCompilation BuildProjectCompilation(string projectRoot, IEnumerable<SyntaxTree> trees, CSharpParseOptions parseOptions, out bool degraded) {
-        var objDirectory = Path.Combine(path1: projectRoot, path2: "obj");
-        var globalUsingsFile = (Directory.Exists(path: objDirectory)
-            ? Directory.EnumerateFiles(path: objDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*.GlobalUsings.g.cs").FirstOrDefault()
-            : null);
-        var globalUsings = CSharpSyntaxTree.ParseText(
-            text: ((globalUsingsFile is not null) ? File.ReadAllText(path: globalUsingsFile) : DefaultGlobalUsings),
-            options: parseOptions);
-
-        // Source-generator output (interop projections, etc.) is produced in-memory during build and is
-        // absent from disk unless the project sets EmitCompilerGeneratedFiles. When it IS emitted
-        // (obj/**/generated/**/*.cs), include it so calls into generated types resolve too; otherwise
-        // those calls are reported as unresolved and left positional.
-        var generatedTrees = (Directory.Exists(path: objDirectory)
-            ? Directory.EnumerateFiles(path: objDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*.cs")
-                .Where(predicate: static path => path.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: $"{Path.DirectorySeparatorChar}generated{Path.DirectorySeparatorChar}"))
-                .Select(selector: path => CSharpSyntaxTree.ParseText(text: File.ReadAllText(path: path), options: parseOptions, path: path))
-            : Enumerable.Empty<SyntaxTree>());
-
-        var frameworkDlls = ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(options: StringSplitOptions.RemoveEmptyEntries, separator: Path.PathSeparator)
-            .Where(predicate: static path => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".dll"));
-        var projectName = Path.GetFileNameWithoutExtension(path: (Directory.EnumerateFiles(path: projectRoot, searchPattern: "*.csproj").FirstOrDefault() ?? ""));
-        var binDirectory = Path.Combine(path1: projectRoot, path2: "bin");
-        var outputDlls = (Directory.Exists(path: binDirectory)
-            ? Directory.EnumerateFiles(path: binDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*.dll")
-                .Where(predicate: path =>
-                    (!string.Equals(a: Path.GetFileNameWithoutExtension(path: path), b: projectName, comparisonType: StringComparison.OrdinalIgnoreCase)
-                    && !path.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: $"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}")))
-            : Enumerable.Empty<string>());
-
-        // Built dependency assemblies and package assemblies win over the framework on a name clash —
-        // they are the exact versions the project compiles against.
-        var references = outputDlls.Concat(second: PackageReferences(projectRoot: projectRoot)).Concat(second: frameworkDlls)
-            .GroupBy(keySelector: static path => Path.GetFileName(path: path), comparer: StringComparer.OrdinalIgnoreCase)
-            .Select(selector: static group => TryReference(path: group.First()))
-            .Where(predicate: static reference => (reference is not null))
-            .Select(selector: static reference => reference!);
-
-        // The existence of `bin` (or of a generated global-usings file) is NOT evidence of a build: phase 0's own
-        // `dotnet format whitespace` run, earlier in the same invocation, loads the project through MSBuild and
-        // leaves both behind — an EMPTY bin and a GlobalUsings.g.cs — so a directory probe called every unbuilt
-        // project built and the not-built note could never fire from inside `puck format`. The project's own
-        // output assembly is the evidence; nothing but a real build writes it.
-        degraded = ((globalUsingsFile is null) || !HasOwnOutput(binDirectory: binDirectory, projectName: projectName));
-
-        return CSharpCompilation.Create(
-            assemblyName: "named-args",
-            syntaxTrees: trees.Append(element: globalUsings).Concat(second: generatedTrees),
-            references: references,
-            options: new CSharpCompilationOptions(outputKind: OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
-    }
-
-    // True when the project's OWN output assembly sits somewhere under bin — the one artifact only a real build
-    // produces, and therefore the honest answer to "has this been built?". A project with no .csproj name to look
-    // for answers false, which is the safe direction: the closure it could assemble is not one to trust.
-    private static bool HasOwnOutput(string binDirectory, string projectName) =>
-        ((projectName.Length > 0)
-        && Directory.Exists(path: binDirectory)
-        && Directory.EnumerateFiles(path: binDirectory, searchOption: SearchOption.AllDirectories, searchPattern: $"{projectName}.dll").Any());
-    // The project's package compile assemblies, read from the restore output (obj/project.assets.json).
-    // A LIBRARY project's transitive package DLLs are not copied to its own bin (they land in the
-    // consuming app's output), so bin alone misses them; the assets file lists every package's compile
-    // asset by path into the global packages folder.
-    private static IEnumerable<string> PackageReferences(string projectRoot) {
-        var assetsPath = Path.Combine(path1: projectRoot, path2: "obj", path3: "project.assets.json");
-
-        if (!File.Exists(path: assetsPath)) {
-            return [];
-        }
-
-        using var document = JsonDocument.Parse(json: File.ReadAllText(path: assetsPath));
-        var root = document.RootElement;
-
-        if (!root.TryGetProperty(propertyName: "packageFolders", value: out var folders)
-            || !root.TryGetProperty(propertyName: "targets", value: out var targets)
-            || !root.TryGetProperty(propertyName: "libraries", value: out var libraries)) {
-            return [];
-        }
-
-        var packageRoots = folders.EnumerateObject().Select(selector: static folder => folder.Name).ToList();
-        var results = new List<string>();
-
-        foreach (var target in targets.EnumerateObject()) {
-            foreach (var library in target.Value.EnumerateObject()) {
-                if (!library.Value.TryGetProperty(propertyName: "compile", value: out var compile)
-                    || !libraries.TryGetProperty(propertyName: library.Name, value: out var entry)
-                    || !entry.TryGetProperty(propertyName: "path", value: out var libraryPath)) {
-                    continue;
-                }
-
-                foreach (var asset in compile.EnumerateObject()) {
-                    if (asset.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: "_._")) {
-                        continue;
-                    }
-
-                    var relative = asset.Name.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/');
-                    var resolved = packageRoots
-                        .Select(selector: packageRoot => Path.Combine(path1: packageRoot, path2: libraryPath.GetString()!, path3: relative))
-                        .FirstOrDefault(predicate: File.Exists);
-
-                    if (resolved is not null) {
-                        results.Add(item: resolved);
-                    }
-                }
-            }
-        }
-
-        return results;
     }
     // Some assemblies in a build output are native and are not valid managed metadata references.
     // CreateFromFile is lazy (it would not throw until the compilation reads the file), so probe the PE
@@ -303,20 +361,108 @@ internal static class NamedArgsPhase {
             using var stream = File.OpenRead(path: path);
             using var peReader = new PEReader(peStream: stream);
 
-            return (peReader.HasMetadata ? MetadataReference.CreateFromFile(path: path) : null);
+            return (peReader.HasMetadata
+                ? MetadataReference.CreateFromFile(path: path)
+                : null
+            );
         } catch (Exception exception) when ((exception is BadImageFormatException or IOException)) {
             return null;
         }
     }
-    // Coverage probe: a call whose symbol binds to nothing (no symbol, no candidate) is one named-args
-    // must leave positional. Driving this to zero is the point of the real build closure; a nonzero count
-    // means the references are still incomplete. `nameof(...)` is syntactically an invocation but a
-    // contextual operator with no method symbol, so it is excluded — counting it would be a false
-    // positive.
-    private static int CountUnresolvedCalls(SyntaxNode root, SemanticModel model) =>
-        root.DescendantNodes().Count(predicate: node =>
-            ((node is InvocationExpressionSyntax or BaseObjectCreationExpressionSyntax)
-            && (node is not InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } })
-            && (model.GetSymbolInfo(node: node) is { Symbol: null, CandidateSymbols.IsEmpty: true })));
+
+    public static int Run(string rootArgument, bool whatIf, bool verify, string[]? targets = null) {
+        var targetFiles = targets;
+
+        if (
+            (targetFiles is null) &&
+            !SourceFiles.TryEnumerate(
+            files: out targetFiles,
+            rootArgument: rootArgument,
+            scanRoot: out _
+        )
+        ) {
+            return 2;
+        }
+
+        // Resolve symbols against each file's OWNING project (its own trees + build closure), never one
+        // merged compilation — so a tree-wide root spanning many projects still binds every project's
+        // calls correctly. Files are grouped by owning project and processed against that project's
+        // compilation; each real method call then gets named.
+        var parseOptions = new CSharpParseOptions(languageVersion: LanguageVersion.Preview);
+        var byProject = targetFiles.GroupBy(
+            keySelector: static file => (SourceFiles.FindOwningProjectDirectory(start: Path.GetDirectoryName(path: Path.GetFullPath(path: file))!) ?? ""),
+            comparer: StringComparer.OrdinalIgnoreCase
+        );
+
+        var drifted = new List<string>();
+        var corrupted = new List<string>();
+        var degradedProjects = new List<string>();
+        var notBuilt = new List<string>();
+        var ungrouped = 0;
+        var unresolved = 0;
+
+        foreach (var projectGroup in byProject) {
+            if (
+                (projectGroup.Key.Length == 0) ||
+                !SourceFiles.TryEnumerate(
+                rootArgument: projectGroup.Key,
+                scanRoot: out _,
+                files: out var compilationFiles
+            )
+            ) {
+                ungrouped += projectGroup.Count();
+
+                continue;
+            }
+
+            unresolved += ProcessProject(
+                projectRoot: projectGroup.Key,
+                targets: projectGroup,
+                compilationFiles: compilationFiles,
+                parseOptions: parseOptions,
+                whatIf: whatIf,
+                verify: verify,
+                drifted: drifted,
+                corrupted: corrupted,
+                degradedProjects: degradedProjects,
+                notBuilt: notBuilt
+            );
+        }
+
+        // A file with no owning project was silently dropped before, so the run reported a clean bill of
+        // health for source it never examined. Say so instead.
+        if (ungrouped > 0) {
+            Console.Error.WriteLine(value: $"named-args: {ungrouped} file(s) had no owning project — skipped");
+        }
+
+        if (degradedProjects.Count > 0) {
+            Console.Error.WriteLine(value: $"named-args: {degradedProjects.Count} project(s) not built ({string.Join(
+                separator: ", ",
+                values: degradedProjects
+            )}) — only the framework resolves there, so their files were left alone. Build them and run again.");
+        }
+
+        // Only files that WERE fully analysed reach this count now, so it can no longer point at the not-built
+        // note for its explanation: a call left positional in a built project is a reference the closure missed.
+        if (unresolved > 0) {
+            Console.Error.WriteLine(value: $"named-args: {unresolved} call(s) could not be resolved and were left positional (check the owning project's references).");
+        }
+
+        return Math.Max(
+            val1: ((ungrouped > 0)
+            ? 1
+            : 0),
+            val2: RewriteIo.Report(
+                label: "named-args",
+                fileCount: targetFiles.Length,
+                drifted: drifted,
+                whatIf: (whatIf || verify),
+                problems: [
+                ("have syntax errors before or after rewriting — SKIPPED", corrupted),
+                ("belong to a project that is not built — SKIPPED", notBuilt),
+            ]
+            )
+        );
+    }
 
 }

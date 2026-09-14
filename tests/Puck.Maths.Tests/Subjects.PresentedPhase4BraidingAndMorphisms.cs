@@ -1429,9 +1429,9 @@ internal static partial class Subjects {
 
         for (var symbol = 0; (symbol < Letters); ++symbol) {
             word = free.Multiply(
-            left: word,
-            right: free.Generator(symbol: symbol)
-        );
+                left: word,
+                right: free.Generator(symbol: symbol)
+            );
         }
 
         BigInteger[][] draws = [[3, 1, 4, 1, 5], [1, 1, 1, 1, 1], [2, 7, 1, 8, 2]];
@@ -1604,9 +1604,9 @@ internal static partial class Subjects {
 
         foreach (var letter in word) {
             result = algebra.Multiply(
-            left: result,
-            right: algebra.Generator(symbol: letter)
-        );
+                left: result,
+                right: algebra.Generator(symbol: letter)
+            );
         }
 
         return result;
@@ -1649,9 +1649,9 @@ internal static partial class Subjects {
 
         for (var row = 0; (row < rows.Length); ++row) {
             images[row] = target.FromSupport(
-            keys: [0L],
-            coefficients: [signs[row]]
-        );
+                keys: [0L],
+                coefficients: [signs[row]]
+            );
         }
 
         if (MorphismHolds(
@@ -1720,9 +1720,9 @@ internal static partial class Subjects {
 
         for (var key = 0; (key < basis.Length); ++key) {
             basis[key] = quiver.FromSupport(
-            keys: [key],
-            coefficients: [BigInteger.One]
-        );
+                keys: [key],
+                coefficients: [BigInteger.One]
+            );
         }
 
         if (MorphismHolds(
@@ -1984,9 +1984,9 @@ internal static partial class Subjects {
 
             for (var index = 0; (index < scaled.Length); ++index) {
                 scaled[index] = target.Presentation.Material.Multiply(
-                left: obstruction.Rule.Charges[term],
-                right: folded.Coefficients[index]
-            );
+                    left: obstruction.Rule.Charges[term],
+                    right: folded.Coefficients[index]
+                );
             }
 
             total = target.Add(
@@ -2022,9 +2022,9 @@ internal static partial class Subjects {
 
         foreach (var letter in word) {
             result = target.Multiply(
-            left: result,
-            right: images[letter]
-        );
+                left: result,
+                right: images[letter]
+            );
         }
 
         return result;
@@ -2043,9 +2043,9 @@ internal static partial class Subjects {
 
         for (var key = 0; (key < keys); ++key) {
             draws[key] = algebra.FromSupport(
-            keys: [key],
-            coefficients: [material.One]
-        );
+                keys: [key],
+                coefficients: [material.One]
+            );
         }
 
         for (var extra = 0; (extra < 3); ++extra) {
@@ -2064,9 +2064,9 @@ internal static partial class Subjects {
                     minimum: 0U
                 ); (0U != repeat); --repeat) {
                     weight = material.Add(
-                    left: weight,
-                    right: material.One
-                );
+                        left: weight,
+                        right: material.One
+                    );
                 }
 
                 combination = algebra.Add(
@@ -2101,9 +2101,9 @@ internal static partial class Subjects {
 
             for (var letter = 0; (letter < word.Length); ++letter) {
                 word[letter] = ((int)rng.NextUInt32(
-                maximum: ((uint)(letterCount - 1)),
-                minimum: 0U
-            ));
+                    maximum: ((uint)(letterCount - 1)),
+                    minimum: 0U
+                ));
             }
 
             draws[index] = MorphismWordElement(

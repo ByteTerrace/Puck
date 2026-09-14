@@ -45,33 +45,29 @@ internal sealed class SerialLinkStage : IPostStage<PostContext> {
     public PostTier Tier =>
         PostTier.C;
 
-    /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        var first = RunLinkedScenario();
+    // The lowercase token used in stage pass/fail details for a console model.
+    private static string Label(ConsoleModel model) =>
+        model switch {
+            ConsoleModel.DmgC => "dmg",
+            ConsoleModel.CgbE => "cgb",
+            ConsoleModel.Agb => "agb",
+            _ => model.ToString().ToLowerInvariant(),
+        };
+    private static LinkSideVerdict ReadVerdict(MachineInstance instance) {
+        var bus = instance.GetRequiredService<ISystemBus>();
+        var received = new byte[SerialLinkRom.TransferCount];
 
-        if (Verify(result: first) is { } failure) {
-            return PostStageOutcome.Fail(detail: failure);
+        for (var index = 0; (index < received.Length); ++index) {
+            received[index] = bus.ReadByte(address: ((ushort)(SerialLinkRom.ReceiveBufferAddress + index)));
         }
 
-        var second = RunLinkedScenario();
-
-        if (!first.MasterState.ContentEquals(other: second.MasterState)) {
-            return PostStageOutcome.Fail(detail: $"the master machine's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(
-                a: first.MasterState,
-                b: second.MasterState
-            )}");
-        }
-
-        if (!first.SlaveState.ContentEquals(other: second.SlaveState)) {
-            return PostStageOutcome.Fail(detail: $"the slave machine's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(
-                a: first.SlaveState,
-                b: second.SlaveState
-            )}");
-        }
-
-        return PostStageOutcome.Pass(detail: $"{SerialLinkRom.TransferCount} bytes exchanged each way ({Label(model: m_masterModel)} master ↔ {Label(model: m_slaveModel)} slave), {SerialLinkRom.TransferCount} serial interrupts observed per side, replay-identical across two runs ({first.MasterState.Size}+{first.SlaveState.Size} state bytes)");
+        return new LinkSideVerdict(
+            CompletionMarker: bus.ReadByte(address: SerialLinkRom.CompletionMarkerAddress),
+            InterruptCount: bus.ReadByte(address: SerialLinkRom.InterruptCountAddress),
+            Received: received,
+            SerialControl: bus.ReadByte(address: SerialControlAddress)
+        );
     }
-
     // One complete linked scenario from freshly built machines: connect, run the per-frame budget schedule, read the
     // protocol's work-RAM verdicts, snapshot. Fully self-contained so the determinism leg can repeat it identically.
     private LinkScenarioResult RunLinkedScenario() {
@@ -105,33 +101,18 @@ internal sealed class SerialLinkStage : IPostStage<PostContext> {
             SlaveState: slave.Machine.Snapshot()
         );
     }
-    private static LinkSideVerdict ReadVerdict(MachineInstance instance) {
-        var bus = instance.GetRequiredService<ISystemBus>();
-        var received = new byte[SerialLinkRom.TransferCount];
-
-        for (var index = 0; (index < received.Length); ++index) {
-            received[index] = bus.ReadByte(address: ((ushort)(SerialLinkRom.ReceiveBufferAddress + index)));
-        }
-
-        return new LinkSideVerdict(
-            CompletionMarker: bus.ReadByte(address: SerialLinkRom.CompletionMarkerAddress),
-            InterruptCount: bus.ReadByte(address: SerialLinkRom.InterruptCountAddress),
-            Received: received,
-            SerialControl: bus.ReadByte(address: SerialControlAddress)
-        );
-    }
     // Judges the first run's protocol outcomes; null means every expectation held.
     private static string? Verify(LinkScenarioResult result) =>
         (VerifySide(
-        verdict: result.MasterVerdict,
-        side: "master",
-        expectedBase: SlaveSendBase
-    )
+            verdict: result.MasterVerdict,
+            side: "master",
+            expectedBase: SlaveSendBase
+        )
             ?? VerifySide(
-        verdict: result.SlaveVerdict,
-        side: "slave",
-        expectedBase: MasterSendBase
-    ));
+            verdict: result.SlaveVerdict,
+            side: "slave",
+            expectedBase: MasterSendBase
+        ));
     private static string? VerifySide(LinkSideVerdict verdict, string side, byte expectedBase) {
         if (verdict.CompletionMarker != SerialLinkRom.CompletionMarker) {
             return $"the {side} never completed its {SerialLinkRom.TransferCount} transfers (marker 0x{verdict.CompletionMarker:X2})";
@@ -155,14 +136,33 @@ internal sealed class SerialLinkStage : IPostStage<PostContext> {
 
         return null;
     }
-    // The lowercase token used in stage pass/fail details for a console model.
-    private static string Label(ConsoleModel model) =>
-        model switch {
-            ConsoleModel.DmgC => "dmg",
-            ConsoleModel.CgbE => "cgb",
-            ConsoleModel.Agb => "agb",
-            _ => model.ToString().ToLowerInvariant(),
-        };
+
+    /// <inheritdoc/>
+    public PostStageOutcome Run(PostContext context) {
+        var first = RunLinkedScenario();
+
+        if (Verify(result: first) is { } failure) {
+            return PostStageOutcome.Fail(detail: failure);
+        }
+
+        var second = RunLinkedScenario();
+
+        if (!first.MasterState.ContentEquals(other: second.MasterState)) {
+            return PostStageOutcome.Fail(detail: $"the master machine's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(
+                a: first.MasterState,
+                b: second.MasterState
+            )}");
+        }
+
+        if (!first.SlaveState.ContentEquals(other: second.SlaveState)) {
+            return PostStageOutcome.Fail(detail: $"the slave machine's final state differed between two identical linked runs — {HashDivergenceProbe.DescribeDivergence(
+                a: first.SlaveState,
+                b: second.SlaveState
+            )}");
+        }
+
+        return PostStageOutcome.Pass(detail: $"{SerialLinkRom.TransferCount} bytes exchanged each way ({Label(model: m_masterModel)} master ↔ {Label(model: m_slaveModel)} slave), {SerialLinkRom.TransferCount} serial interrupts observed per side, replay-identical across two runs ({first.MasterState.Size}+{first.SlaveState.Size} state bytes)");
+    }
 
     private readonly record struct LinkScenarioResult(
         LinkSideVerdict MasterVerdict,

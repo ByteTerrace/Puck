@@ -14,14 +14,14 @@ internal sealed class AgbCostumeStage : IPostStage<PostContext> {
     private const int Frames = 300;
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "agb-costume";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -62,6 +62,7 @@ internal sealed class AgbCostumeStage : IPostStage<PostContext> {
 
         return (agbPixels.SequenceEqual(other: cgbPixels)
             ? PostStageOutcome.Pass(detail: $"Agb deterministic and pixel-identical to Cgb after {Frames} frames of a non-detecting ROM")
-            : PostStageOutcome.Fail(detail: $"Agb framebuffer diverged from Cgb after {Frames} frames of a non-detecting ROM"));
+            : PostStageOutcome.Fail(detail: $"Agb framebuffer diverged from Cgb after {Frames} frames of a non-detecting ROM")
+        );
     }
 }

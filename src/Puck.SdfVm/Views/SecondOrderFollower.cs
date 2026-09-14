@@ -13,7 +13,12 @@ namespace Puck.SdfVm.Views;
 /// <param name="A22">Row 2, column 2 (dimensionless).</param>
 public readonly record struct SecondOrderPropagator(float A11, float A12, float A21, float A22) {
     /// <summary>Gets the identity propagator — a follower left untouched.</summary>
-    public static SecondOrderPropagator Identity => new(A11: 1f, A12: 0f, A21: 0f, A22: 1f);
+    public static SecondOrderPropagator Identity => new(
+        A11: 1f,
+        A12: 0f,
+        A21: 0f,
+        A22: 1f
+    );
 }
 /// <summary>
 /// The presentation-side twin of <see cref="Puck.Maths.SecondOrderDynamics"/>: the same t3ssel8r-style second-order
@@ -24,16 +29,16 @@ public readonly record struct SecondOrderPropagator(float A11, float A12, float 
 /// never persisted, never hashed.
 /// </summary>
 public readonly record struct SecondOrderResponse {
-    /// <summary>The authored natural frequency, in Hz.</summary>
-    public required float Frequency { get; init; }
-    /// <summary>The authored damping ratio (dimensionless).</summary>
-    public required float DampingRatio { get; init; }
-    /// <summary>The authored initial response (dimensionless).</summary>
-    public required float InitialResponse { get; init; }
     /// <summary>The analytic branch <see cref="DampingRatio"/> selected.</summary>
     public required SecondOrderDynamicsBranch Branch { get; init; }
+    /// <summary>The authored damping ratio (dimensionless).</summary>
+    public required float DampingRatio { get; init; }
     /// <summary>ζω, in reciprocal seconds.</summary>
     public required float DecayRate { get; init; }
+    /// <summary>The authored natural frequency, in Hz.</summary>
+    public required float Frequency { get; init; }
+    /// <summary>The authored initial response (dimensionless).</summary>
+    public required float InitialResponse { get; init; }
     /// <summary>The damped oscillation rate ω_d (underdamped) or the real half-difference σ (overdamped), in
     /// radians per second. Exactly zero at <see cref="SecondOrderDynamicsBranch.CriticallyDamped"/>.</summary>
     public required float OscillationRate { get; init; }
@@ -50,13 +55,19 @@ public readonly record struct SecondOrderResponse {
     /// <exception cref="ArgumentOutOfRangeException">A parameter is non-finite, <paramref name="frequencyHz"/> is not
     /// strictly positive, or <paramref name="dampingRatio"/> is negative.</exception>
     public static SecondOrderResponse Create(float frequencyHz, float dampingRatio, float initialResponse) {
-        if (!float.IsFinite(f: frequencyHz) || (frequencyHz <= 0f)) {
+        if (
+            !float.IsFinite(f: frequencyHz) ||
+            (frequencyHz <= 0f)
+        ) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(frequencyHz),
                 message: "The natural frequency must be finite and strictly positive."
             );
         }
-        if (!float.IsFinite(f: dampingRatio) || (dampingRatio < 0f)) {
+        if (
+            !float.IsFinite(f: dampingRatio) ||
+            (dampingRatio < 0f)
+        ) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(dampingRatio),
                 message: "The damping ratio must be finite and non-negative."
@@ -75,10 +86,12 @@ public readonly record struct SecondOrderResponse {
             ? SecondOrderDynamicsBranch.Underdamped
             : ((dampingRatio == 1f)
                 ? SecondOrderDynamicsBranch.CriticallyDamped
-                : SecondOrderDynamicsBranch.Overdamped));
+                : SecondOrderDynamicsBranch.Overdamped
+        ));
         var oscillationRate = ((branch == SecondOrderDynamicsBranch.CriticallyDamped)
             ? 0f
-            : (omega * MathF.Sqrt(x: MathF.Abs(x: (1f - (dampingRatio * dampingRatio))))));
+            : (omega * MathF.Sqrt(x: MathF.Abs(x: (1f - (dampingRatio * dampingRatio)))))
+        );
 
         return new() {
             Branch = branch,
@@ -96,7 +109,10 @@ public readonly record struct SecondOrderResponse {
     /// <returns><see cref="SecondOrderPropagator.Identity"/> when <paramref name="deltaSeconds"/> is non-positive or
     /// non-finite; otherwise the propagator for that interval.</returns>
     public SecondOrderPropagator Propagator(float deltaSeconds) {
-        if (!float.IsFinite(f: deltaSeconds) || (deltaSeconds <= 0f)) {
+        if (
+            !float.IsFinite(f: deltaSeconds) ||
+            (deltaSeconds <= 0f)
+        ) {
             return SecondOrderPropagator.Identity;
         }
 
@@ -158,7 +174,10 @@ public readonly record struct SecondOrderResponse {
         var nextE = ((propagator.A11 * e) + (propagator.A12 * v));
         var nextV = ((propagator.A21 * e) + (propagator.A22 * v));
 
-        if (!float.IsFinite(f: nextE) || !float.IsFinite(f: nextV)) {
+        if (
+            !float.IsFinite(f: nextE) ||
+            !float.IsFinite(f: nextV)
+        ) {
             position = xStar;
             velocity = 0f;
 
@@ -184,6 +203,11 @@ public struct SecondOrderFollower3 {
     /// <summary>Gets a value indicating whether this follower has been seeded at least once.</summary>
     public bool Seeded;
 
+    /// <summary>Marks the follower unseeded — the next <see cref="Step"/> re-seeds at rest rather than lagging
+    /// across the gap (a hard cut).</summary>
+    public void Reseed() {
+        Seeded = false;
+    }
     /// <summary>Seeds the follower at rest on a target, discarding any prior state.</summary>
     /// <param name="target">The target to seed at.</param>
     public void Seed(Vector3 target) {
@@ -191,11 +215,6 @@ public struct SecondOrderFollower3 {
         Velocity = Vector3.Zero;
         PreviousTarget = target;
         Seeded = true;
-    }
-    /// <summary>Marks the follower unseeded — the next <see cref="Step"/> re-seeds at rest rather than lagging
-    /// across the gap (a hard cut).</summary>
-    public void Reseed() {
-        Seeded = false;
     }
     /// <summary>Advances the follower by one frame.</summary>
     /// <param name="response">The follower's derived constants.</param>
@@ -229,12 +248,41 @@ public struct SecondOrderFollower3 {
         var vy = Velocity.Y;
         var vz = Velocity.Z;
 
-        SecondOrderResponse.Step(ref x, ref vx, target.X, targetVelocity.X, propagator, response.TargetVelocityGain);
-        SecondOrderResponse.Step(ref y, ref vy, target.Y, targetVelocity.Y, propagator, response.TargetVelocityGain);
-        SecondOrderResponse.Step(ref z, ref vz, target.Z, targetVelocity.Z, propagator, response.TargetVelocityGain);
+        SecondOrderResponse.Step(
+            ref x,
+            ref vx,
+            target.X,
+            targetVelocity.X,
+            propagator,
+            response.TargetVelocityGain
+        );
+        SecondOrderResponse.Step(
+            ref y,
+            ref vy,
+            target.Y,
+            targetVelocity.Y,
+            propagator,
+            response.TargetVelocityGain
+        );
+        SecondOrderResponse.Step(
+            ref z,
+            ref vz,
+            target.Z,
+            targetVelocity.Z,
+            propagator,
+            response.TargetVelocityGain
+        );
 
-        Value = new(x: x, y: y, z: z);
-        Velocity = new(x: vx, y: vy, z: vz);
+        Value = new(
+            x: x,
+            y: y,
+            z: z
+        );
+        Velocity = new(
+            x: vx,
+            y: vy,
+            z: vz
+        );
 
         return Value;
     }
@@ -254,6 +302,11 @@ public struct SecondOrderFollower4 {
     /// <summary>Gets a value indicating whether this follower has been seeded at least once.</summary>
     public bool Seeded;
 
+    /// <summary>Marks the follower unseeded — the next <see cref="Step"/> re-seeds at rest rather than lagging
+    /// across the gap (a hard cut).</summary>
+    public void Reseed() {
+        Seeded = false;
+    }
     /// <summary>Seeds the follower at rest on a target, discarding any prior state.</summary>
     /// <param name="target">The target to seed at.</param>
     public void Seed(Vector4 target) {
@@ -261,11 +314,6 @@ public struct SecondOrderFollower4 {
         Velocity = Vector4.Zero;
         PreviousTarget = target;
         Seeded = true;
-    }
-    /// <summary>Marks the follower unseeded — the next <see cref="Step"/> re-seeds at rest rather than lagging
-    /// across the gap (a hard cut).</summary>
-    public void Reseed() {
-        Seeded = false;
     }
     /// <summary>Advances the follower by one frame.</summary>
     /// <param name="response">The follower's derived constants.</param>
@@ -302,13 +350,51 @@ public struct SecondOrderFollower4 {
         var vz = Velocity.Z;
         var vw = Velocity.W;
 
-        SecondOrderResponse.Step(ref x, ref vx, target.X, targetVelocity.X, propagator, response.TargetVelocityGain);
-        SecondOrderResponse.Step(ref y, ref vy, target.Y, targetVelocity.Y, propagator, response.TargetVelocityGain);
-        SecondOrderResponse.Step(ref z, ref vz, target.Z, targetVelocity.Z, propagator, response.TargetVelocityGain);
-        SecondOrderResponse.Step(ref w, ref vw, target.W, targetVelocity.W, propagator, response.TargetVelocityGain);
+        SecondOrderResponse.Step(
+            ref x,
+            ref vx,
+            target.X,
+            targetVelocity.X,
+            propagator,
+            response.TargetVelocityGain
+        );
+        SecondOrderResponse.Step(
+            ref y,
+            ref vy,
+            target.Y,
+            targetVelocity.Y,
+            propagator,
+            response.TargetVelocityGain
+        );
+        SecondOrderResponse.Step(
+            ref z,
+            ref vz,
+            target.Z,
+            targetVelocity.Z,
+            propagator,
+            response.TargetVelocityGain
+        );
+        SecondOrderResponse.Step(
+            ref w,
+            ref vw,
+            target.W,
+            targetVelocity.W,
+            propagator,
+            response.TargetVelocityGain
+        );
 
-        Value = new(w: w, x: x, y: y, z: z);
-        Velocity = new(w: vw, x: vx, y: vy, z: vz);
+        Value = new(
+            w: w,
+            x: x,
+            y: y,
+            z: z
+        );
+        Velocity = new(
+            w: vw,
+            x: vx,
+            y: vy,
+            z: vz
+        );
 
         return Value;
     }
@@ -342,11 +428,19 @@ public static class SecondOrderPoseFollower {
             response: in response,
             target: targetPosition
         );
-        var targetVector = new Vector4(w: targetOrientation.W, x: targetOrientation.X, y: targetOrientation.Y, z: targetOrientation.Z);
+        var targetVector = new Vector4(
+            w: targetOrientation.W,
+            x: targetOrientation.X,
+            y: targetOrientation.Y,
+            z: targetOrientation.Z
+        );
 
         if (
             orientation.Seeded &&
-            (Vector4.Dot(vector1: orientation.PreviousTarget, vector2: targetVector) < 0f)
+            (Vector4.Dot(
+            vector1: orientation.PreviousTarget,
+            vector2: targetVector
+        ) < 0f)
         ) {
             targetVector = -targetVector;
         }
@@ -357,8 +451,14 @@ public static class SecondOrderPoseFollower {
             target: targetVector
         );
         var easedOrientation = ((easedVector.LengthSquared() > 1e-12f)
-            ? Quaternion.Normalize(value: new Quaternion(w: easedVector.W, x: easedVector.X, y: easedVector.Y, z: easedVector.Z))
-            : targetOrientation);
+            ? Quaternion.Normalize(value: new Quaternion(
+                w: easedVector.W,
+                x: easedVector.X,
+                y: easedVector.Y,
+                z: easedVector.Z
+            ))
+            : targetOrientation
+        );
 
         return (easedPosition, easedOrientation);
     }

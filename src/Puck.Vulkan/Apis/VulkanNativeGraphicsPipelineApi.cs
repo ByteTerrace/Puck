@@ -12,17 +12,6 @@ namespace Puck.Vulkan;
 /// pipeline-layout, and descriptor-set-layout entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipelineApi {
-    private readonly IAllocator m_allocator;
-
-    /// <summary>Initializes a new instance of the <see cref="VulkanNativeGraphicsPipelineApi"/> class.</summary>
-    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
-    public VulkanNativeGraphicsPipelineApi(IAllocator allocator) {
-        ArgumentNullException.ThrowIfNull(argument: allocator);
-
-        m_allocator = allocator;
-    }
-
     private const uint False = 0;
     private const uint LogicOpCopy = 3;
     private const uint ShaderStageFragmentBit = 0x00000010;
@@ -36,6 +25,151 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
     private const uint StructureTypePipelineShaderStageCreateInfo = 18;
     private const uint StructureTypePipelineVertexInputStateCreateInfo = 19;
     private const uint StructureTypePipelineViewportStateCreateInfo = 22;
+
+    private readonly IAllocator m_allocator;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanNativeGraphicsPipelineApi"/> class.</summary>
+    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
+    public VulkanNativeGraphicsPipelineApi(IAllocator allocator) {
+        ArgumentNullException.ThrowIfNull(argument: allocator);
+
+        m_allocator = allocator;
+    }
+
+    private unsafe void FreeIfAllocated(nint pointer, Type? structureType) {
+        if (0 == pointer) {
+            return;
+        }
+
+        if (structureType == typeof(VkGraphicsPipelineCreateInfo)) {
+            var info = Marshal.PtrToStructure<VkGraphicsPipelineCreateInfo>(ptr: pointer);
+
+            FreeIfAllocated(
+                pointer: info.PDynamicState,
+                structureType: typeof(VkPipelineDynamicStateCreateInfo)
+            );
+            FreeIfAllocated(
+                pointer: info.PColorBlendState,
+                structureType: typeof(VkPipelineColorBlendStateCreateInfo)
+            );
+            FreeIfAllocated(
+                pointer: info.PMultisampleState,
+                structureType: typeof(VkPipelineMultisampleStateCreateInfo)
+            );
+            FreeIfAllocated(
+                pointer: info.PRasterizationState,
+                structureType: typeof(VkPipelineRasterizationStateCreateInfo)
+            );
+            FreeIfAllocated(
+                pointer: info.PViewportState,
+                structureType: typeof(VkPipelineViewportStateCreateInfo)
+            );
+            FreeIfAllocated(
+                pointer: info.PInputAssemblyState,
+                structureType: typeof(VkPipelineInputAssemblyStateCreateInfo)
+            );
+            FreeIfAllocated(
+                pointer: info.PVertexInputState,
+                structureType: typeof(VkPipelineVertexInputStateCreateInfo)
+            );
+        }
+
+        if (structureType == typeof(VkPipelineDynamicStateCreateInfo)) {
+            var info = Marshal.PtrToStructure<VkPipelineDynamicStateCreateInfo>(ptr: pointer);
+
+            FreeIfAllocated(
+                pointer: info.PDynamicStates,
+                structureType: null
+            );
+        }
+
+        if (structureType == typeof(VkPipelineVertexInputStateCreateInfo)) {
+            var info = Marshal.PtrToStructure<VkPipelineVertexInputStateCreateInfo>(ptr: pointer);
+
+            FreeIfAllocated(
+                pointer: info.PVertexBindingDescriptions,
+                structureType: typeof(VkVertexInputBindingDescription)
+            );
+            FreeIfAllocated(
+                pointer: info.PVertexAttributeDescriptions,
+                structureType: typeof(VkVertexInputAttributeDescription)
+            );
+        }
+
+        m_allocator.Free(ptr: pointer);
+    }
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                CreateGraphicsPipelines = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateGraphicsPipelines"u8
+            )),
+                CreatePipelineLayout = ((delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreatePipelineLayout"u8
+            )),
+                CreateDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateDescriptorSetLayout"u8
+            )),
+                DestroyPipeline = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyPipeline"u8
+            )),
+                DestroyDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyDescriptorSetLayout"u8
+            )),
+                DestroyPipelineLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyPipelineLayout"u8
+            )),
+            }
+        );
+    }
+    private static unsafe void ValidateRequest(VulkanGraphicsPipelineCreateRequest request) {
+        VulkanArgument.RequireHandle(
+            handle: request.DeviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(request)
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: request.RenderPassHandle,
+            handleDescription: "render-pass",
+            paramName: nameof(request)
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: request.VertexShaderModuleHandle,
+            handleDescription: "vertex shader-module",
+            paramName: nameof(request)
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: request.FragmentShaderModuleHandle,
+            handleDescription: "fragment shader-module",
+            paramName: nameof(request)
+        );
+
+        if (0 == request.Width) {
+            throw new ArgumentOutOfRangeException(
+                message: "Vulkan graphics-pipeline width must be greater than zero.",
+                paramName: nameof(request)
+            );
+        }
+
+        if (0 == request.Height) {
+            throw new ArgumentOutOfRangeException(
+                message: "Vulkan graphics-pipeline height must be greater than zero.",
+                paramName: nameof(request)
+            );
+        }
+    }
 
     /// <inheritdoc/>
     public VkResult CreateGraphicsPipeline(
@@ -122,11 +256,14 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 );
             }
 
-            pushConstantRangePointer = AllocateStruct(allocator: m_allocator, value: new VkPushConstantRange {
+            pushConstantRangePointer = AllocateStruct(
+                allocator: m_allocator,
+                value: new VkPushConstantRange {
                 Offset = 0,
                 Size = request.PushConstantSize,
                 StageFlags = request.PushConstantStageFlags,
-            });
+            }
+            );
             pipelineLayoutCreateInfo.PushConstantRangeCount = 1;
             pipelineLayoutCreateInfo.PPushConstantRanges = pushConstantRangePointer;
         }
@@ -304,8 +441,8 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 LogicOp = LogicOpCopy,
                 LogicOpEnable = False,
                 PAttachments = ((colorBlendAttachments.Count > 0)
-                    ? m_allocator.Alloc(size: (colorBlendStride * colorBlendAttachments.Count))
-                    : nint.Zero),
+                ? m_allocator.Alloc(size: (colorBlendStride * colorBlendAttachments.Count))
+                : nint.Zero),
                 SType = StructureTypePipelineColorBlendStateCreateInfo,
             };
 
@@ -322,21 +459,45 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                     BasePipelineHandle = 0,
                     BasePipelineIndex = -1,
                     Layout = pipelineLayoutHandle,
-                    PColorBlendState = AllocateStruct(allocator: m_allocator, value: colorBlendState),
-                    PDynamicState = AllocateStruct(allocator: m_allocator, value: dynamicState),
-                    PInputAssemblyState = AllocateStruct(allocator: m_allocator, value: inputAssemblyState),
-                    PMultisampleState = AllocateStruct(allocator: m_allocator, value: multisampleState),
-                    PRasterizationState = AllocateStruct(allocator: m_allocator, value: rasterizationState),
+                    PColorBlendState = AllocateStruct(
+                    allocator: m_allocator,
+                    value: colorBlendState
+                ),
+                    PDynamicState = AllocateStruct(
+                    allocator: m_allocator,
+                    value: dynamicState
+                ),
+                    PInputAssemblyState = AllocateStruct(
+                    allocator: m_allocator,
+                    value: inputAssemblyState
+                ),
+                    PMultisampleState = AllocateStruct(
+                    allocator: m_allocator,
+                    value: multisampleState
+                ),
+                    PRasterizationState = AllocateStruct(
+                    allocator: m_allocator,
+                    value: rasterizationState
+                ),
                     PStages = stagesPointer,
-                    PVertexInputState = AllocateStruct(allocator: m_allocator, value: vertexInputState),
-                    PViewportState = AllocateStruct(allocator: m_allocator, value: viewportState),
+                    PVertexInputState = AllocateStruct(
+                    allocator: m_allocator,
+                    value: vertexInputState
+                ),
+                    PViewportState = AllocateStruct(
+                    allocator: m_allocator,
+                    value: viewportState
+                ),
                     RenderPass = request.RenderPassHandle,
                     SType = StructureTypeGraphicsPipelineCreateInfo,
                     StageCount = 2,
                     Subpass = 0,
                 };
 
-                pipelineCreateInfoPointer = AllocateStruct(allocator: m_allocator, value: pipelineCreateInfo);
+                pipelineCreateInfoPointer = AllocateStruct(
+                    allocator: m_allocator,
+                    value: pipelineCreateInfo
+                );
                 var result = createGraphicsPipelines(
                     request.DeviceHandle,
                     0,
@@ -401,23 +562,6 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
         }
     }
     /// <inheritdoc/>
-    public void DestroyPipeline(nint deviceHandle, nint pipelineHandle) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == pipelineHandle)
-        ) {
-            return;
-        }
-
-        var destroyPipeline = GetPointers(deviceHandle: deviceHandle).DestroyPipeline;
-
-        destroyPipeline(
-            deviceHandle,
-            pipelineHandle,
-            0
-        );
-    }
-    /// <inheritdoc/>
     public void DestroyDescriptorSetLayout(nint deviceHandle, nint descriptorSetLayoutHandle) {
         if (
             (0 == deviceHandle) ||
@@ -431,6 +575,23 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
         destroyDescriptorSetLayout(
             deviceHandle,
             descriptorSetLayoutHandle,
+            0
+        );
+    }
+    /// <inheritdoc/>
+    public void DestroyPipeline(nint deviceHandle, nint pipelineHandle) {
+        if (
+            (0 == deviceHandle) ||
+            (0 == pipelineHandle)
+        ) {
+            return;
+        }
+
+        var destroyPipeline = GetPointers(deviceHandle: deviceHandle).DestroyPipeline;
+
+        destroyPipeline(
+            deviceHandle,
+            pipelineHandle,
             0
         );
     }
@@ -459,122 +620,5 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyPipeline;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyDescriptorSetLayout;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyPipelineLayout;
-    }
-
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateGraphicsPipelines = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateGraphicsPipelines"u8)),
-                CreatePipelineLayout = ((delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreatePipelineLayout"u8)),
-                CreateDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateDescriptorSetLayout"u8)),
-                DestroyPipeline = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipeline"u8)),
-                DestroyDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDescriptorSetLayout"u8)),
-                DestroyPipelineLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipelineLayout"u8)),
-            }
-        );
-    }
-    private unsafe void FreeIfAllocated(nint pointer, Type? structureType) {
-        if (0 == pointer) {
-            return;
-        }
-
-        if (structureType == typeof(VkGraphicsPipelineCreateInfo)) {
-            var info = Marshal.PtrToStructure<VkGraphicsPipelineCreateInfo>(ptr: pointer);
-
-            FreeIfAllocated(
-                pointer: info.PDynamicState,
-                structureType: typeof(VkPipelineDynamicStateCreateInfo)
-            );
-            FreeIfAllocated(
-                pointer: info.PColorBlendState,
-                structureType: typeof(VkPipelineColorBlendStateCreateInfo)
-            );
-            FreeIfAllocated(
-                pointer: info.PMultisampleState,
-                structureType: typeof(VkPipelineMultisampleStateCreateInfo)
-            );
-            FreeIfAllocated(
-                pointer: info.PRasterizationState,
-                structureType: typeof(VkPipelineRasterizationStateCreateInfo)
-            );
-            FreeIfAllocated(
-                pointer: info.PViewportState,
-                structureType: typeof(VkPipelineViewportStateCreateInfo)
-            );
-            FreeIfAllocated(
-                pointer: info.PInputAssemblyState,
-                structureType: typeof(VkPipelineInputAssemblyStateCreateInfo)
-            );
-            FreeIfAllocated(
-                pointer: info.PVertexInputState,
-                structureType: typeof(VkPipelineVertexInputStateCreateInfo)
-            );
-        }
-
-        if (structureType == typeof(VkPipelineDynamicStateCreateInfo)) {
-            var info = Marshal.PtrToStructure<VkPipelineDynamicStateCreateInfo>(ptr: pointer);
-
-            FreeIfAllocated(
-                pointer: info.PDynamicStates,
-                structureType: null
-            );
-        }
-
-        if (structureType == typeof(VkPipelineVertexInputStateCreateInfo)) {
-            var info = Marshal.PtrToStructure<VkPipelineVertexInputStateCreateInfo>(ptr: pointer);
-
-            FreeIfAllocated(
-                pointer: info.PVertexBindingDescriptions,
-                structureType: typeof(VkVertexInputBindingDescription)
-            );
-            FreeIfAllocated(
-                pointer: info.PVertexAttributeDescriptions,
-                structureType: typeof(VkVertexInputAttributeDescription)
-            );
-        }
-
-        m_allocator.Free(ptr: pointer);
-    }
-    private static unsafe void ValidateRequest(VulkanGraphicsPipelineCreateRequest request) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(request)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: request.RenderPassHandle,
-            handleDescription: "render-pass",
-            paramName: nameof(request)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: request.VertexShaderModuleHandle,
-            handleDescription: "vertex shader-module",
-            paramName: nameof(request)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: request.FragmentShaderModuleHandle,
-            handleDescription: "fragment shader-module",
-            paramName: nameof(request)
-        );
-
-        if (0 == request.Width) {
-            throw new ArgumentOutOfRangeException(
-                message: "Vulkan graphics-pipeline width must be greater than zero.",
-                paramName: nameof(request)
-            );
-        }
-
-        if (0 == request.Height) {
-            throw new ArgumentOutOfRangeException(
-                message: "Vulkan graphics-pipeline height must be greater than zero.",
-                paramName: nameof(request)
-            );
-        }
     }
 }

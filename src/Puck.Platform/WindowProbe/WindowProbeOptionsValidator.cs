@@ -8,7 +8,12 @@ public sealed class WindowProbeOptionsValidator : IValidateOptions<WindowProbeOp
 
         var failures = new List<string>(capacity: 7);
 
-        WindowOptionsValidation.AddFailures(failures: failures, title: options.Title, width: options.Width, height: options.Height);
+        WindowOptionsValidation.AddFailures(
+            failures: failures,
+            title: options.Title,
+            width: options.Width,
+            height: options.Height
+        );
 
         if (options.MaxPumpIterations < 0) {
             failures.Add(item: $"{nameof(WindowProbeOptions.MaxPumpIterations)} must be zero or greater.");
@@ -20,6 +25,7 @@ public sealed class WindowProbeOptionsValidator : IValidateOptions<WindowProbeOp
 
         return ((failures.Count == 0)
             ? ValidateOptionsResult.Success
-            : ValidateOptionsResult.Fail(failures: failures));
+            : ValidateOptionsResult.Fail(failures: failures)
+        );
     }
 }

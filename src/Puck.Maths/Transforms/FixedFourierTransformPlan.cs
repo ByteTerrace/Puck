@@ -35,18 +35,25 @@ public sealed class FixedFourierTransformPlan {
         var half = (length >> 1);
         var forward = new FixedComplex[half];
         var inverse = new FixedComplex[half];
-        var phaseShift = (64 - BitOperations.Log2((uint)length));
+        var phaseShift = (64 - BitOperations.Log2(value: ((uint)length)));
 
         for (var k = 0; (k < half); ++k) {
             if (k <= (length >> 2)) {
                 // length == 1 has no twiddles and never executes the otherwise masked shift by 64.
-                var phase = unchecked((0UL - (ulong)k) << phaseShift);
+                var phase = unchecked(((0UL - ((ulong)k)) << phaseShift));
+
                 var (sin, cos) = FixedQ4816.SinCosTurns(fractionalTurns: phase);
-                forward[k] = new(Real: cos, Imaginary: sin);
-            }
-            else {
-                var reflected = forward[half - k];
-                forward[k] = new(Real: -reflected.Real, Imaginary: reflected.Imaginary);
+                forward[k] = new(
+                    Imaginary: sin,
+                    Real: cos
+                );
+            } else {
+                var reflected = forward[(half - k)];
+
+                forward[k] = new(
+                    Real: -reflected.Real,
+                    Imaginary: reflected.Imaginary
+                );
             }
             inverse[k] = forward[k].Conjugate();
         }

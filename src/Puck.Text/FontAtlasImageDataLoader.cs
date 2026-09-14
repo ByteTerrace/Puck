@@ -60,11 +60,10 @@ public sealed class FontAtlasImageDataLoader : IFontAtlasImageDataLoader {
 
         var image = PngDecoder.Decode(pngBytes: pngBytes.Span);
 
-        return new FontAtlasImageData(
+        return FontAtlasImageData.TakeOwnership(
             rgbaPixels: image.RgbaPixels,
             height: image.Height,
-            width: image.Width,
-            contentHash: AssetContentHash.Compute(content: pngBytes.Span)
+            width: image.Width
         );
     }
 }

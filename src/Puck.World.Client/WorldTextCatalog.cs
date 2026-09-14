@@ -156,7 +156,7 @@ public sealed class WorldTextCatalog(WorldDefinitionSource source) {
 
         Catalog = catalog;
         GlyphAtlas = new SdfGlyphAtlas(
-            Rgba: catalog.ImageData.RgbaPixels,
+            Rgba: catalog.ImageData.RgbaPixels.ToArray(),
             Width: ((uint)catalog.ImageData.Width),
             Height: ((uint)catalog.ImageData.Height)
         );

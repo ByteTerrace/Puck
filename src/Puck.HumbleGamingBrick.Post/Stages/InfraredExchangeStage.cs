@@ -37,206 +37,92 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
     public PostTier Tier =>
         PostTier.C;
 
-    /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        if (RunSelfSensingProbes() is { } selfSensingFailure) {
-            return PostStageOutcome.Fail(detail: selfSensingFailure);
+    // Compares a later run against the reference: both received transcripts and both final snapshots must match exactly.
+    private static string? Difference(InfraredScenarioResult expected, InfraredScenarioResult actual, string leg) {
+        if (!expected.FirstReceived.AsSpan().SequenceEqual(other: actual.FirstReceived)) {
+            return $"the {leg} first-machine received transcript diverged";
         }
 
-        var firstPattern = InfraredRom.ExpandPattern(sourceBytes: FirstPatternSource);
-        var secondPattern = InfraredRom.ExpandPattern(sourceBytes: SecondPatternSource);
-        var reference = RunScenario(
-            churnAtStep: -1,
-            firstPattern: firstPattern,
-            secondPattern: secondPattern
-        );
-
-        if (Judge(
-            firstPattern: firstPattern,
-            result: reference,
-            secondPattern: secondPattern
-        ) is { } failure) {
-            return PostStageOutcome.Fail(detail: failure);
+        if (!expected.SecondReceived.AsSpan().SequenceEqual(other: actual.SecondReceived)) {
+            return $"the {leg} second-machine received transcript diverged";
         }
 
-        // The probed progress is the FIRST machine's RECEIVE progress — how many of the SECOND machine's bits it has
-        // received so far (its own transmit phase never touches ProgressAddress).
-        var churnStep = PickChurnStep(
-            probes: reference.Probes,
-            total: secondPattern.Length
-        );
-
-        if (churnStep < 0) {
-            return PostStageOutcome.Fail(detail: "no mid-exchange budget boundary appeared; the pattern length or budget schedule is wrong");
+        if (!expected.FirstState.ContentEquals(other: actual.FirstState)) {
+            return $"the {leg} first-machine final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.FirstState,
+                b: actual.FirstState
+            )}";
         }
 
-        // Determinism: a second fresh run on the same schedule reproduces both transcripts and both final snapshots.
-        var replay = RunScenario(
-            churnAtStep: -1,
-            firstPattern: firstPattern,
-            secondPattern: secondPattern
-        );
-
-        if (Difference(
-            actual: replay,
-            expected: reference,
-            leg: "replay"
-        ) is { } replayFailure) {
-            return PostStageOutcome.Fail(detail: replayFailure);
-        }
-
-        // Churn: suspend/snapshot/restore/reconnect (with the resume token) mid-exchange, continue, demand the identical tail.
-        var churned = RunScenario(
-            churnAtStep: churnStep,
-            firstPattern: firstPattern,
-            secondPattern: secondPattern
-        );
-
-        if (Difference(
-            actual: churned,
-            expected: reference,
-            leg: "churn"
-        ) is { } churnFailure) {
-            return PostStageOutcome.Fail(detail: churnFailure);
-        }
-
-        return PostStageOutcome.Pass(detail: $"self-sensing (unpaired CGB via RP and HuC1, unpaired Agb suppressed without a HuC cartridge, cross-view consistency with one present) plus {firstPattern.Length} IR bits exchanged each way (two cgb machines over RP), each side received the peer's pattern exactly, replay- and churn-identical (severed mid-exchange at budget step {churnStep}, {reference.FirstState.Size}+{reference.SecondState.Size} state bytes)");
-    }
-
-    // M-02 probes: hardware self-sensing (SameBoy Core/memory.c ~723, Core/timing.c ~136-140 — see
-    // InfraredPort.ReceivedLight for the full citation and the deliberate cross-view unification). Single, unpaired
-    // machines — no link session — since self-sensing is defined with NO peer attached.
-    private static string? RunSelfSensingProbes() {
-        if (VerifyCgbSelfSensesOwnLedViaRp() is { } rpFailure) {
-            return rpFailure;
-        }
-
-        if (VerifyCgbSelfSensesOwnCartLedViaHuC1Window() is { } huc1Failure) {
-            return huc1Failure;
-        }
-
-        if (VerifyAgbRpSelfSenseSuppressedWithoutHuC() is { } agbFailure) {
-            return agbFailure;
-        }
-
-        if (VerifyCrossViewConsistencyWithHuCCartridge() is { } crossViewFailure) {
-            return crossViewFailure;
+        if (!expected.SecondState.ContentEquals(other: actual.SecondState)) {
+            return $"the {leg} second-machine final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.SecondState,
+                b: actual.SecondState
+            )}";
         }
 
         return null;
     }
-    // An unpaired CGB arms RP's data-read-enable bits and lights its own LED bit — with no peer at all, it must read its
-    // own light back (RP bit 1 clear), not dark.
-    private static string? VerifyCgbSelfSensesOwnLedViaRp() {
-        using var machine = PostMachine.Build(
-            model: ConsoleModel.CgbE,
-            rom: SyntheticRom.Create(supportsColor: true)
-        );
-        var bus = machine.GetRequiredService<ISystemBus>();
-
-        bus.WriteByte(
-            address: MemoryMap.InfraredPort,
-            value: 0xC1
-        );
-
-        var value = bus.ReadByte(address: MemoryMap.InfraredPort);
-
-        return ((value == 0xFD)
-            ? null
-            : $"an unpaired CGB with RP's own LED lit read RP=0x{value:X2}; expected 0xFD (bit 1 clear — self-sensed light)");
-    }
-    // An unpaired CGB selects a HuC1 cartridge's IR window and lights the shared cart LED through it — the SAME window
-    // must read its own light back.
-    private static string? VerifyCgbSelfSensesOwnCartLedViaHuC1Window() {
-        var rom = SyntheticRom.Create(
-            cartridgeType: 0xFF,
-            ramSize: 0x02,
-            supportsColor: true
-        ); // HuC1 + RAM + battery
-
-        using var machine = PostMachine.Build(
-            model: ConsoleModel.CgbE,
-            rom: rom
-        );
-
-        var cartridge = machine.GetRequiredService<ICartridge>();
-
-        cartridge.WriteControl(
-            address: 0x0000,
-            value: 0x0E
-        ); // route the external window to the IR register
-        cartridge.WriteRam(
-            address: 0xA000,
-            value: 0x01
-        ); // light the shared cart LED
-
-        var value = cartridge.ReadRam(address: 0xA000);
-
-        return ((value == 0xC1)
-            ? null
-            : $"an unpaired CGB with its cart IR LED lit read the HuC1 window=0x{value:X2}; expected 0xC1 (bit 0 set — self-sensed light)");
-    }
-    // An unpaired Agb costume with no HuC cartridge lights its own RP LED bit and must still read dark — Puck's
-    // pre-existing correct behavior, now guarded as a regression probe against the self-sensing fix.
-    private static string? VerifyAgbRpSelfSenseSuppressedWithoutHuC() {
-        using var machine = PostMachine.Build(
-            model: ConsoleModel.Agb,
-            rom: SyntheticRom.Create(supportsColor: true)
-        );
-        var bus = machine.GetRequiredService<ISystemBus>();
-
-        bus.WriteByte(
-            address: MemoryMap.InfraredPort,
-            value: 0xC1
-        );
-
-        var value = bus.ReadByte(address: MemoryMap.InfraredPort);
-
-        return ((value == 0xFF)
-            ? null
-            : $"an unpaired Agb costume with no HuC cartridge and RP's own LED lit read RP=0x{value:X2}; expected 0xFF (bit 1 set — RP self-sensing stays suppressed)");
-    }
-    // An Agb costume WITH a HuC1 cartridge present: a HuC cartridge widens Agb self-sensing (SameBoy's "unless a HuC
-    // cartridge is present" exception), and because Puck's one shared transceiver feeds every view identically, driving
-    // the LED through RP alone must be visible through the HuC1 window too — cross-view consistency.
-    private static string? VerifyCrossViewConsistencyWithHuCCartridge() {
-        var rom = SyntheticRom.Create(
-            cartridgeType: 0xFF,
-            ramSize: 0x02,
-            supportsColor: true
-        ); // HuC1 + RAM + battery
-
-        using var machine = PostMachine.Build(
-            model: ConsoleModel.Agb,
-            rom: rom
-        );
-
-        var bus = machine.GetRequiredService<ISystemBus>();
-        var cartridge = machine.GetRequiredService<ICartridge>();
-
-        bus.WriteByte(
-            address: MemoryMap.InfraredPort,
-            value: 0xC1
-        );
-
-        var rpValue = bus.ReadByte(address: MemoryMap.InfraredPort);
-
-        cartridge.WriteControl(
-            address: 0x0000,
-            value: 0x0E
-        );
-
-        var huc1Value = cartridge.ReadRam(address: 0xA000);
-
-        if (rpValue != 0xFD) {
-            return $"an Agb costume with a HuC1 cartridge present and RP's own LED lit read RP=0x{rpValue:X2}; expected 0xFD (a present HuC cartridge widens Agb self-sensing)";
+    // Judges the reference run: both sides finished every bit, and each side received the OTHER side's exact pattern — so
+    // the light really crossed both ways and was read back bit-for-bit.
+    private static string? Judge(InfraredScenarioResult result, byte[] firstPattern, byte[] secondPattern) {
+        if (result.FirstMarker != InfraredRom.CompletionMarker) {
+            return $"the first machine never finished its exchange (marker 0x{result.FirstMarker:X2})";
         }
 
-        if (huc1Value != 0xC1) {
-            return $"the same Agb+HuC1 machine's HuC1 window read 0x{huc1Value:X2} for the RP-driven LED; expected 0xC1 (cross-view: RP and HuC1 must see the same effective light)";
+        if (result.SecondMarker != InfraredRom.CompletionMarker) {
+            return $"the second machine never finished its exchange (marker 0x{result.SecondMarker:X2})";
+        }
+
+        if (result.FirstProgress != secondPattern.Length) {
+            return $"the first machine received {result.FirstProgress} bits; expected {secondPattern.Length}";
+        }
+
+        if (result.SecondProgress != firstPattern.Length) {
+            return $"the second machine received {result.SecondProgress} bits; expected {firstPattern.Length}";
+        }
+
+        // The first machine must have received the SECOND's pattern, and vice versa — the attributable transcript match.
+        if (!result.FirstReceived.AsSpan().SequenceEqual(other: secondPattern)) {
+            return "the first machine's received transcript did not match the second machine's sent pattern";
+        }
+
+        if (!result.SecondReceived.AsSpan().SequenceEqual(other: firstPattern)) {
+            return "the second machine's received transcript did not match the first machine's sent pattern";
         }
 
         return null;
+    }
+    // The first budget boundary with at least one bit received but not all — a genuine mid-exchange severable instant. (Any
+    // IR boundary is a clean severing instant — no bit is ever mid-shift — so only the mid-exchange window matters here.)
+    private static int PickChurnStep(List<int> probes, int total) {
+        for (var step = 0; (step < probes.Count); ++step) {
+            if (
+                (probes[index: step] >= 1) &&
+                (probes[index: step] < total)
+            ) {
+                return step;
+            }
+        }
+
+        return -1;
+    }
+    private static byte ReadByte(MachineInstance instance, ushort address) =>
+        instance.GetRequiredService<ISystemBus>().ReadByte(address: address);
+    private static int ReadProgress(MachineInstance instance) =>
+        ReadByte(
+            address: InfraredRom.ProgressAddress,
+            instance: instance
+        );
+    private static byte[] ReadReceived(MachineInstance instance, int count) {
+        var bus = instance.GetRequiredService<ISystemBus>();
+        var received = new byte[count];
+
+        for (var index = 0; (index < count); ++index) {
+            received[index] = bus.ReadByte(address: ((ushort)(InfraredRom.ReceiveBufferAddress + index)));
+        }
+
+        return received;
     }
     // One complete linked scenario on the fixed budget schedule. The first machine transmits its pattern, then receives
     // the second's; the second receives first, then transmits — pairing the two roles keeps each transmit phase inside
@@ -335,93 +221,210 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
             second.Dispose();
         }
     }
-    // Judges the reference run: both sides finished every bit, and each side received the OTHER side's exact pattern — so
-    // the light really crossed both ways and was read back bit-for-bit.
-    private static string? Judge(InfraredScenarioResult result, byte[] firstPattern, byte[] secondPattern) {
-        if (result.FirstMarker != InfraredRom.CompletionMarker) {
-            return $"the first machine never finished its exchange (marker 0x{result.FirstMarker:X2})";
+    // M-02 probes: hardware self-sensing (SameBoy Core/memory.c ~723, Core/timing.c ~136-140 — see
+    // InfraredPort.ReceivedLight for the full citation and the deliberate cross-view unification). Single, unpaired
+    // machines — no link session — since self-sensing is defined with NO peer attached.
+    private static string? RunSelfSensingProbes() {
+        if (VerifyCgbSelfSensesOwnLedViaRp() is { } rpFailure) {
+            return rpFailure;
         }
 
-        if (result.SecondMarker != InfraredRom.CompletionMarker) {
-            return $"the second machine never finished its exchange (marker 0x{result.SecondMarker:X2})";
+        if (VerifyCgbSelfSensesOwnCartLedViaHuC1Window() is { } huc1Failure) {
+            return huc1Failure;
         }
 
-        if (result.FirstProgress != secondPattern.Length) {
-            return $"the first machine received {result.FirstProgress} bits; expected {secondPattern.Length}";
+        if (VerifyAgbRpSelfSenseSuppressedWithoutHuC() is { } agbFailure) {
+            return agbFailure;
         }
 
-        if (result.SecondProgress != firstPattern.Length) {
-            return $"the second machine received {result.SecondProgress} bits; expected {firstPattern.Length}";
-        }
-
-        // The first machine must have received the SECOND's pattern, and vice versa — the attributable transcript match.
-        if (!result.FirstReceived.AsSpan().SequenceEqual(other: secondPattern)) {
-            return "the first machine's received transcript did not match the second machine's sent pattern";
-        }
-
-        if (!result.SecondReceived.AsSpan().SequenceEqual(other: firstPattern)) {
-            return "the second machine's received transcript did not match the first machine's sent pattern";
+        if (VerifyCrossViewConsistencyWithHuCCartridge() is { } crossViewFailure) {
+            return crossViewFailure;
         }
 
         return null;
     }
-    // Compares a later run against the reference: both received transcripts and both final snapshots must match exactly.
-    private static string? Difference(InfraredScenarioResult expected, InfraredScenarioResult actual, string leg) {
-        if (!expected.FirstReceived.AsSpan().SequenceEqual(other: actual.FirstReceived)) {
-            return $"the {leg} first-machine received transcript diverged";
+    // An unpaired Agb costume with no HuC cartridge lights its own RP LED bit and must still read dark — Puck's
+    // pre-existing correct behavior, now guarded as a regression probe against the self-sensing fix.
+    private static string? VerifyAgbRpSelfSenseSuppressedWithoutHuC() {
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Agb,
+            rom: SyntheticRom.Create(supportsColor: true)
+        );
+        var bus = machine.GetRequiredService<ISystemBus>();
+
+        bus.WriteByte(
+            address: MemoryMap.InfraredPort,
+            value: 0xC1
+        );
+
+        var value = bus.ReadByte(address: MemoryMap.InfraredPort);
+
+        return ((value == 0xFF)
+            ? null
+            : $"an unpaired Agb costume with no HuC cartridge and RP's own LED lit read RP=0x{value:X2}; expected 0xFF (bit 1 set — RP self-sensing stays suppressed)"
+        );
+    }
+    // An unpaired CGB selects a HuC1 cartridge's IR window and lights the shared cart LED through it — the SAME window
+    // must read its own light back.
+    private static string? VerifyCgbSelfSensesOwnCartLedViaHuC1Window() {
+        var rom = SyntheticRom.Create(
+            cartridgeType: 0xFF,
+            ramSize: 0x02,
+            supportsColor: true
+        ); // HuC1 + RAM + battery
+
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.CgbE,
+            rom: rom
+        );
+
+        var cartridge = machine.GetRequiredService<ICartridge>();
+
+        cartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0E
+        ); // route the external window to the IR register
+        cartridge.WriteRam(
+            address: 0xA000,
+            value: 0x01
+        ); // light the shared cart LED
+
+        var value = cartridge.ReadRam(address: 0xA000);
+
+        return ((value == 0xC1)
+            ? null
+            : $"an unpaired CGB with its cart IR LED lit read the HuC1 window=0x{value:X2}; expected 0xC1 (bit 0 set — self-sensed light)"
+        );
+    }
+    // An unpaired CGB arms RP's data-read-enable bits and lights its own LED bit — with no peer at all, it must read its
+    // own light back (RP bit 1 clear), not dark.
+    private static string? VerifyCgbSelfSensesOwnLedViaRp() {
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.CgbE,
+            rom: SyntheticRom.Create(supportsColor: true)
+        );
+        var bus = machine.GetRequiredService<ISystemBus>();
+
+        bus.WriteByte(
+            address: MemoryMap.InfraredPort,
+            value: 0xC1
+        );
+
+        var value = bus.ReadByte(address: MemoryMap.InfraredPort);
+
+        return ((value == 0xFD)
+            ? null
+            : $"an unpaired CGB with RP's own LED lit read RP=0x{value:X2}; expected 0xFD (bit 1 clear — self-sensed light)"
+        );
+    }
+    // An Agb costume WITH a HuC1 cartridge present: a HuC cartridge widens Agb self-sensing (SameBoy's "unless a HuC
+    // cartridge is present" exception), and because Puck's one shared transceiver feeds every view identically, driving
+    // the LED through RP alone must be visible through the HuC1 window too — cross-view consistency.
+    private static string? VerifyCrossViewConsistencyWithHuCCartridge() {
+        var rom = SyntheticRom.Create(
+            cartridgeType: 0xFF,
+            ramSize: 0x02,
+            supportsColor: true
+        ); // HuC1 + RAM + battery
+
+        using var machine = PostMachine.Build(
+            model: ConsoleModel.Agb,
+            rom: rom
+        );
+
+        var bus = machine.GetRequiredService<ISystemBus>();
+        var cartridge = machine.GetRequiredService<ICartridge>();
+
+        bus.WriteByte(
+            address: MemoryMap.InfraredPort,
+            value: 0xC1
+        );
+
+        var rpValue = bus.ReadByte(address: MemoryMap.InfraredPort);
+
+        cartridge.WriteControl(
+            address: 0x0000,
+            value: 0x0E
+        );
+
+        var huc1Value = cartridge.ReadRam(address: 0xA000);
+
+        if (rpValue != 0xFD) {
+            return $"an Agb costume with a HuC1 cartridge present and RP's own LED lit read RP=0x{rpValue:X2}; expected 0xFD (a present HuC cartridge widens Agb self-sensing)";
         }
 
-        if (!expected.SecondReceived.AsSpan().SequenceEqual(other: actual.SecondReceived)) {
-            return $"the {leg} second-machine received transcript diverged";
-        }
-
-        if (!expected.FirstState.ContentEquals(other: actual.FirstState)) {
-            return $"the {leg} first-machine final state diverged — {HashDivergenceProbe.DescribeDivergence(
-                a: expected.FirstState,
-                b: actual.FirstState
-            )}";
-        }
-
-        if (!expected.SecondState.ContentEquals(other: actual.SecondState)) {
-            return $"the {leg} second-machine final state diverged — {HashDivergenceProbe.DescribeDivergence(
-                a: expected.SecondState,
-                b: actual.SecondState
-            )}";
+        if (huc1Value != 0xC1) {
+            return $"the same Agb+HuC1 machine's HuC1 window read 0x{huc1Value:X2} for the RP-driven LED; expected 0xC1 (cross-view: RP and HuC1 must see the same effective light)";
         }
 
         return null;
     }
-    // The first budget boundary with at least one bit received but not all — a genuine mid-exchange severable instant. (Any
-    // IR boundary is a clean severing instant — no bit is ever mid-shift — so only the mid-exchange window matters here.)
-    private static int PickChurnStep(List<int> probes, int total) {
-        for (var step = 0; (step < probes.Count); ++step) {
-            if (
-                (probes[index: step] >= 1) &&
-                (probes[index: step] < total)
-            ) {
-                return step;
-            }
+
+    /// <inheritdoc/>
+    public PostStageOutcome Run(PostContext context) {
+        if (RunSelfSensingProbes() is { } selfSensingFailure) {
+            return PostStageOutcome.Fail(detail: selfSensingFailure);
         }
 
-        return -1;
-    }
-    private static byte[] ReadReceived(MachineInstance instance, int count) {
-        var bus = instance.GetRequiredService<ISystemBus>();
-        var received = new byte[count];
+        var firstPattern = InfraredRom.ExpandPattern(sourceBytes: FirstPatternSource);
+        var secondPattern = InfraredRom.ExpandPattern(sourceBytes: SecondPatternSource);
+        var reference = RunScenario(
+            churnAtStep: -1,
+            firstPattern: firstPattern,
+            secondPattern: secondPattern
+        );
 
-        for (var index = 0; (index < count); ++index) {
-            received[index] = bus.ReadByte(address: ((ushort)(InfraredRom.ReceiveBufferAddress + index)));
+        if (Judge(
+            firstPattern: firstPattern,
+            result: reference,
+            secondPattern: secondPattern
+        ) is { } failure) {
+            return PostStageOutcome.Fail(detail: failure);
         }
 
-        return received;
+        // The probed progress is the FIRST machine's RECEIVE progress — how many of the SECOND machine's bits it has
+        // received so far (its own transmit phase never touches ProgressAddress).
+        var churnStep = PickChurnStep(
+            probes: reference.Probes,
+            total: secondPattern.Length
+        );
+
+        if (churnStep < 0) {
+            return PostStageOutcome.Fail(detail: "no mid-exchange budget boundary appeared; the pattern length or budget schedule is wrong");
+        }
+
+        // Determinism: a second fresh run on the same schedule reproduces both transcripts and both final snapshots.
+        var replay = RunScenario(
+            churnAtStep: -1,
+            firstPattern: firstPattern,
+            secondPattern: secondPattern
+        );
+
+        if (Difference(
+            actual: replay,
+            expected: reference,
+            leg: "replay"
+        ) is { } replayFailure) {
+            return PostStageOutcome.Fail(detail: replayFailure);
+        }
+
+        // Churn: suspend/snapshot/restore/reconnect (with the resume token) mid-exchange, continue, demand the identical tail.
+        var churned = RunScenario(
+            churnAtStep: churnStep,
+            firstPattern: firstPattern,
+            secondPattern: secondPattern
+        );
+
+        if (Difference(
+            actual: churned,
+            expected: reference,
+            leg: "churn"
+        ) is { } churnFailure) {
+            return PostStageOutcome.Fail(detail: churnFailure);
+        }
+
+        return PostStageOutcome.Pass(detail: $"self-sensing (unpaired CGB via RP and HuC1, unpaired Agb suppressed without a HuC cartridge, cross-view consistency with one present) plus {firstPattern.Length} IR bits exchanged each way (two cgb machines over RP), each side received the peer's pattern exactly, replay- and churn-identical (severed mid-exchange at budget step {churnStep}, {reference.FirstState.Size}+{reference.SecondState.Size} state bytes)");
     }
-    private static int ReadProgress(MachineInstance instance) =>
-        ReadByte(
-        address: InfraredRom.ProgressAddress,
-        instance: instance
-    );
-    private static byte ReadByte(MachineInstance instance, ushort address) =>
-        instance.GetRequiredService<ISystemBus>().ReadByte(address: address);
 
     private sealed record InfraredScenarioResult(
         byte[] FirstReceived,

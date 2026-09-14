@@ -56,22 +56,25 @@ public sealed class WorldOwnedWorldSync {
     // The one spelling of the basis-chain namespace segment — BasisAddressFor and DiscoverCloudIds' skip check both
     // read this constant rather than each re-spelling "puck/worlds/basis".
     internal const string BasisNamespace = (WorldsNamespace + "/basis");
+    // A sibling of WorldsNamespace, never a child of it, so the desktop catalog's puck/worlds/-prefixed List can
+    // never discover a hosted checkpoint or journal page as a phantom owned world.
+    internal const string HostedNamespace = "puck/hosted";
     // Engine-owned data sits under a puck/ root so the per-user container stays shared with the platform's own
     // namespaces (private/keys, private/message.txt) rather than colonizing the container root. Internal (not
     // private): WorldStorageNeighbourResolver addresses a neighbour's blob under this SAME namespace, and quoting
     // one constant is how the two never drift apart.
     internal const string WorldsNamespace = "puck/worlds";
-    // A sibling of WorldsNamespace, never a child of it, so the desktop catalog's puck/worlds/-prefixed List can
-    // never discover a hosted checkpoint or journal page as a phantom owned world.
-    internal const string HostedNamespace = "puck/hosted";
+
+    // Bounds a discovery transport exception's message to one flat console line — see DiscoverCloudIds' catch.
+    private const int DiscoveryDetailLengthLimit = 200;
+
     // The platform's public content edge rewrites a /public/* GET onto this prefix in the account, so a hosted
     // definition or projection meant to be publicly reachable has to live under it; every other hosted leaf (a
     // checkpoint, a journal page) is simulation state and stays under HostedNamespace, reachable only with the
     // identity's own storage token.
-    internal const string HostedPrivateNamespace = ("private/" + HostedNamespace);
-
-    // Bounds a discovery transport exception's message to one flat console line — see DiscoverCloudIds' catch.
-    private const int DiscoveryDetailLengthLimit = 200;
+    /// <summary>Account-relative namespace for hosted authority state and release bookkeeping. Access requires
+    /// the owning identity's storage authorization; credential values themselves belong in the secret store.</summary>
+    public const string HostedPrivateNamespace = ("private/" + HostedNamespace);
 
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(seconds: 15);
 
@@ -83,11 +86,9 @@ public sealed class WorldOwnedWorldSync {
     private readonly WorldOwnedWorlds m_worlds;
 
     private long m_lastSyncedRevision;
-
-    private string m_lastClaimDetail = "no counterpart claim posted this session";
-
     private WorldAuthorityStoreOutcomeKind m_lastWrite;
 
+    private string m_lastClaimDetail = "no counterpart claim posted this session";
     private readonly Dictionary<string, string> m_basisTokens = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, string> m_tokens = new(comparer: StringComparer.Ordinal);
 
@@ -308,6 +309,37 @@ public sealed class WorldOwnedWorldSync {
             m_tokens.Clear();
             m_lastSyncedRevision = 0;
         }
+    }
+    // The document write is the primary effect; a claim-post failure is reported, never fatal to the push. document
+    // names this world under the exact spelling a peer's WorldReference.NeighbourKey computes for an owner-named
+    // reference to it (ValidateAttestedCounterpart refuses any other spelling), never a filename.
+    private string PublishCounterpartClaim(WorldDefinition document, string worldId) {
+        if (m_publisher is null) {
+            return "no counterpart publisher configured";
+        }
+
+        if (
+            !WorldCounterpartAttestation.TryCompose(
+            attestation: out var counterpart,
+            definition: document,
+            document: $"owner/{m_containerId:D}/{worldId}",
+            reason: out var composeReason
+        ) ||
+            (counterpart is null)
+        ) {
+            return $"counterpart claim compose refused — {composeReason}";
+        }
+
+        var payload = WorldCounterpartAttestationProtocol.Payload(attestation: counterpart);
+
+        return (m_publisher.TryPublish(
+            detail: out var publishDetail,
+            payload: payload,
+            worldId: worldId
+        )
+            ? $"counterpart claim posted — {publishDetail}"
+            : $"counterpart claim post refused — {publishDetail}"
+        );
     }
     private WorldSyncOutcome PullOne(string id) {
         if (KeyRefusal(
@@ -588,35 +620,6 @@ public sealed class WorldOwnedWorldSync {
                 Detail: $"transport error — {exception.Message}"
             );
         }
-    }
-    // The document write is the primary effect; a claim-post failure is reported, never fatal to the push. document
-    // names this world under the exact spelling a peer's WorldReference.NeighbourKey computes for an owner-named
-    // reference to it (ValidateAttestedCounterpart refuses any other spelling), never a filename.
-    private string PublishCounterpartClaim(WorldDefinition document, string worldId) {
-        if (m_publisher is null) {
-            return "no counterpart publisher configured";
-        }
-
-        if (!WorldCounterpartAttestation.TryCompose(
-            attestation: out var counterpart,
-            definition: document,
-            document: $"owner/{m_containerId:D}/{worldId}",
-            reason: out var composeReason
-        ) ||
-            (counterpart is null)
-        ) {
-            return $"counterpart claim compose refused — {composeReason}";
-        }
-
-        var payload = WorldCounterpartAttestationProtocol.Payload(attestation: counterpart);
-
-        return (m_publisher.TryPublish(
-            detail: out var publishDetail,
-            payload: payload,
-            worldId: worldId
-        )
-            ? $"counterpart claim posted — {publishDetail}"
-            : $"counterpart claim post refused — {publishDetail}");
     }
     // The tip push (chain[0]) and each basis link (chain[1..]) share one worst-of ordering; PushOne folds them
     // together so a caller sees ONE write outcome per identity regardless of how many blobs its chain touched.

@@ -11,15 +11,24 @@ public static class ConfinedFile {
     public static byte[] ReadAllBytes(string path, int maximumBytes) {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumBytes);
-        var full = Path.GetFullPath(path);
-        var name = Path.GetFileName(full);
-        _ = ObjectBlobAddressPath.GetKeySegments(new(Guid.Empty, name));
-        using var directory = ConfinedDirectory.Open(Path.GetDirectoryName(full)!, create: false)
-            ?? throw new FileNotFoundException("Host configuration directory does not exist.");
-        using var stream = directory.OpenFile(name) ?? throw new FileNotFoundException("Host configuration file does not exist.");
-        if (stream.Length > maximumBytes) { throw new IOException("Host configuration exceeds its byte budget."); }
+        var full = Path.GetFullPath(path: path);
+        var name = Path.GetFileName(path: full);
+
+        _ = ObjectBlobAddressPath.GetKeySegments(address: new(
+            Key: name,
+            ObjectId: Guid.Empty
+        ));
+        using var directory = (ConfinedDirectory.Open(
+            Path.GetDirectoryName(path: full)!,
+            create: false
+        )
+            ?? throw new FileNotFoundException(message: "Host configuration directory does not exist."));
+        using var stream = (directory.OpenFile(name) ?? throw new FileNotFoundException(message: "Host configuration file does not exist."));
+
+        if (stream.Length > maximumBytes) { throw new IOException(message: "Host configuration exceeds its byte budget."); }
         var bytes = new byte[checked((int)stream.Length)];
-        stream.ReadExactly(bytes);
+
+        stream.ReadExactly(buffer: bytes);
         return bytes;
     }
 }

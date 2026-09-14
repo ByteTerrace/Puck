@@ -2,10 +2,11 @@
     <PropertyGroup>
         <AssemblyName>Puck.AdvancedGamingBrick</AssemblyName>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-        <Description>The native ARM7TDMI machine costumed as AGB hardware: CPU (ARM and Thumb), PPU, APU, DMA, timers, interrupts, cartridge, and link cable, hosted through the IScreenMachineEngine adapter over Puck.GamingBricks. It shares no CPU core with the SM83 compatibility machine; only the master-clock and link abstractions are shared where the hardware itself shares them.</Description>
+        <Description>The native ARM7TDMI machine costumed as AGB hardware: CPU (ARM and Thumb), PPU, APU, DMA, timers, interrupts, cartridge, and link cable, hosted through the IMachineEngine adapter over Puck.GamingBricks. It shares no CPU core with the SM83 compatibility machine; only the master-clock and link abstractions are shared where the hardware itself shares them.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.AdvancedGamingBrick</PackageId>
         <PackageTags>agb;arm7tdmi;determinism;emulation</PackageTags>
+        <PuckLicenseKind>OpenSource</PuckLicenseKind>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
         <RootNamespace>Puck.AdvancedGamingBrick</RootNamespace>
@@ -20,5 +21,11 @@
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.GamingBricks" />
+    </ItemGroup>
+    <ItemGroup>
+        <EmbeddedResource Include="Firmware\puck-agb.bin" LogicalName="Puck.AdvancedGamingBrick.Firmware.puck-agb.bin" />
+        <!-- Ship firmware notices; usage and provenance guides remain in the linked source documentation. -->
+        <None Remove="Firmware\LICENSE" />
+        <None Include="Firmware\LICENSE" Pack="true" PackagePath="Firmware\" />
     </ItemGroup>
 </Project>

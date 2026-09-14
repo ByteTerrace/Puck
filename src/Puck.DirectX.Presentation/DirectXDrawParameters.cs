@@ -7,12 +7,12 @@ namespace Puck.DirectX.Presentation;
 /// be non-zero, matching the invariant <c>DrawInstanced</c> requires.
 /// </summary>
 public readonly record struct DirectXDrawParameters {
+    /// <summary>Gets the number of instances to draw.</summary>
+    public uint InstanceCount { get; }
     /// <summary>Gets the index of the first instance to draw.</summary>
     public uint StartInstanceLocation { get; }
     /// <summary>Gets the index of the first vertex in the vertex buffer to draw from.</summary>
     public uint StartVertexLocation { get; }
-    /// <summary>Gets the number of instances to draw.</summary>
-    public uint InstanceCount { get; }
     /// <summary>Gets the number of vertices per instance.</summary>
     public uint VertexCount { get; }
 

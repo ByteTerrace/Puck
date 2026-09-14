@@ -10,6 +10,7 @@
         <RootNamespace>Puck.Text</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+        <InternalsVisibleTo Include="Puck.Text.Tests" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>

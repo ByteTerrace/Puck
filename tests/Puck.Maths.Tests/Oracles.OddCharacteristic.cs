@@ -73,15 +73,24 @@ internal static partial class Oracles {
 
                 var residue = (lower % 8);
 
-                if ((3 == residue) || (5 == residue)) { sign = -sign; }
+                if (
+                    (3 == residue) ||
+                    (5 == residue)
+                ) { sign = -sign; }
             }
 
-            if ((3 == (upper % 4)) && (3 == (lower % 4))) { sign = -sign; }
+            if (
+                (3 == (upper % 4)) &&
+                (3 == (lower % 4))
+            ) { sign = -sign; }
 
             (lower, upper) = (upper, (lower % upper));
         }
 
-        return (lower.IsOne ? sign : 0);
+        return (lower.IsOne
+            ? sign
+            : 0
+        );
     }
     /// <summary>One strong-probable-prime round of <paramref name="value"/> to base <paramref name="witness"/>,
     /// evaluated entirely in <see cref="BigInteger"/> plain residues.</summary>
@@ -113,9 +122,16 @@ internal static partial class Oracles {
 
         var wide = new BigInteger(value: value);
         var last = (wide - BigInteger.One);
-        var power = BigInteger.ModPow(value: new BigInteger(value: residue), exponent: new BigInteger(value: oddPart), modulus: wide);
+        var power = BigInteger.ModPow(
+            value: new BigInteger(value: residue),
+            exponent: new BigInteger(value: oddPart),
+            modulus: wide
+        );
 
-        if (power.IsOne || (power == last)) { return true; }
+        if (
+            power.IsOne ||
+            (power == last)
+        ) { return true; }
 
         for (var round = 1; (round < twoExponent); ++round) {
             power = ((power * power) % wide);
@@ -160,7 +176,10 @@ internal static partial class Oracles {
         }
 
         foreach (var witness in StrongPrimeWitnessBases) {
-            if (!ModularStrongProbablePrime(value: value, witness: witness)) { return false; }
+            if (!ModularStrongProbablePrime(
+                value: value,
+                witness: witness
+            )) { return false; }
         }
 
         return true;
@@ -198,18 +217,27 @@ internal static partial class Oracles {
 
         // Method A: 5, −7, 9, −11, 13, … with the sign carried as a sign, not derived from a magnitude's low bits.
         while (true) {
-            var symbol = JacobiSymbolReciprocity(denominator: wide, numerator: discriminant);
+            var symbol = JacobiSymbolReciprocity(
+                denominator: wide,
+                numerator: discriminant
+            );
 
             if (-1 == symbol) { break; }
             // A vanishing symbol means the candidate shares a factor with the discriminant. That factor is a proper
             // divisor unless the value divides the discriminant outright, which leaves the search uninformed.
-            if ((0 == symbol) && !(discriminant % wide).IsZero) { return false; }
+            if (
+                (0 == symbol) &&
+                !(discriminant % wide).IsZero
+            ) { return false; }
 
             ++step;
 
             var magnitude = (BigInteger.Abs(value: discriminant) + 2);
 
-            discriminant = ((1 == (step & 1)) ? (-magnitude) : magnitude);
+            discriminant = ((1 == (step & 1))
+                ? (-magnitude)
+                : magnitude
+            );
         }
 
         // P = 1 and Q = (1 − D)/4, exact in BigInteger in either sign class: no shift, no ring negation.
@@ -222,12 +250,23 @@ internal static partial class Oracles {
             ++twoExponent;
         }
 
-        var (atIndex, atNextIndex) = LucasNumeratorPair(index: ((ulong)order), modulus: wide, q: q);
+        var (atIndex, atNextIndex) = LucasNumeratorPair(
+            index: ((ulong)order),
+            modulus: wide,
+            q: q
+        );
         var v = (((((2 * atNextIndex) - atIndex) % wide) + wide) % wide);
 
-        if (atIndex.IsZero || v.IsZero) { return true; }
+        if (
+            atIndex.IsZero ||
+            v.IsZero
+        ) { return true; }
 
-        var qPower = BigInteger.ModPow(exponent: order, modulus: wide, value: q);
+        var qPower = BigInteger.ModPow(
+            exponent: order,
+            modulus: wide,
+            value: q
+        );
 
         for (var round = 1; (round < twoExponent); ++round) {
             v = (((((v * v) - (2 * qPower)) % wide) + wide) % wide);
@@ -255,14 +294,20 @@ internal static partial class Oracles {
         var previousCoefficient = BigInteger.Zero;
 
         while (!remainder.IsZero) {
-            var quotient = BigInteger.Divide(dividend: previousRemainder, divisor: remainder);
+            var quotient = BigInteger.Divide(
+                dividend: previousRemainder,
+                divisor: remainder
+            );
 
             (previousRemainder, remainder) = (remainder, (previousRemainder - (quotient * remainder)));
             (previousCoefficient, coefficient) = (coefficient, (previousCoefficient - (quotient * coefficient)));
         }
 
         if (!previousRemainder.IsOne) {
-            throw new ArgumentException(message: "The value is not invertible modulo the modulus.", paramName: nameof(value));
+            throw new ArgumentException(
+                message: "The value is not invertible modulo the modulus.",
+                paramName: nameof(value)
+            );
         }
 
         return (((previousCoefficient % modulus) + modulus) % modulus);
@@ -293,9 +338,16 @@ internal static partial class Oracles {
 
         if (residue.IsZero) { return 0; }
 
-        var power = BigInteger.ModPow(value: residue, exponent: ((modulus - BigInteger.One) / 2), modulus: modulus);
+        var power = BigInteger.ModPow(
+            value: residue,
+            exponent: ((modulus - BigInteger.One) / 2),
+            modulus: modulus
+        );
 
-        return (power.IsOne ? 1 : -1);
+        return (power.IsOne
+            ? 1
+            : -1
+        );
     }
     /// <summary>The least value at or above two whose quadratic character over the modulus is <c>-1</c>.</summary>
     /// <param name="modulus">The odd prime.</param>
@@ -310,7 +362,10 @@ internal static partial class Oracles {
         var candidate = new BigInteger(value: 2);
 
         for (var step = 0; (step < budget); ++step) {
-            if (-1 == PrimeFieldCharacter(modulus: modulus, value: candidate)) { return candidate; }
+            if (-1 == PrimeFieldCharacter(
+                modulus: modulus,
+                value: candidate
+            )) { return candidate; }
 
             candidate += BigInteger.One;
         }
@@ -372,7 +427,13 @@ internal static partial class Oracles {
         tail[0] = ((modulus - (nonSquare % modulus)) % modulus);
         tail[1] = 0UL;
 
-        PrimeFieldPolynomialProduct(left: left, modulus: modulus, result: result, right: right, tail: tail);
+        PrimeFieldPolynomialProduct(
+            left: left,
+            modulus: modulus,
+            result: result,
+            right: right,
+            tail: tail
+        );
 
         return (result[0], result[1]);
     }
@@ -407,11 +468,23 @@ internal static partial class Oracles {
         if (0UL == exponent) { return (accumulator[0], accumulator[1]); }
 
         for (var bit = BitOperations.Log2(value: exponent); (bit >= 0); --bit) {
-            PrimeFieldPolynomialProduct(left: accumulator, modulus: modulus, result: scratch, right: accumulator, tail: tail);
+            PrimeFieldPolynomialProduct(
+                left: accumulator,
+                modulus: modulus,
+                result: scratch,
+                right: accumulator,
+                tail: tail
+            );
             scratch.CopyTo(destination: accumulator);
 
             if (0UL != ((exponent >>> bit) & 1UL)) {
-                PrimeFieldPolynomialProduct(left: accumulator, modulus: modulus, result: scratch, right: baseValue, tail: tail);
+                PrimeFieldPolynomialProduct(
+                    left: accumulator,
+                    modulus: modulus,
+                    result: scratch,
+                    right: baseValue,
+                    tail: tail
+                );
                 scratch.CopyTo(destination: accumulator);
             }
         }
@@ -542,9 +615,17 @@ internal static partial class Oracles {
                         partner[position] = opener;
                     }
 
-                    if ((depth != 0) || (openers.Count != 0)) { continue; }
+                    if (
+                        (depth != 0) ||
+                        (openers.Count != 0)
+                    ) { continue; }
 
-                    diagrams.Add(item: new PlanarDiagram(Code: code, InputWidth: inputs, OutputWidth: outputs, Partner: partner));
+                    diagrams.Add(item: new PlanarDiagram(
+                        Code: code,
+                        InputWidth: inputs,
+                        OutputWidth: outputs,
+                        Partner: partner
+                    ));
                 }
             }
         }
@@ -621,14 +702,20 @@ internal static partial class Oracles {
 
         for (var position = 0; (position < free.Count); ++position) {
             for (var other = 0; (other < free.Count); ++other) {
-                if ((position != other) && (Root(node: free[position]) == Root(node: free[other]))) { composite[position] = other; }
+                if (
+                    (position != other) &&
+                    (Root(node: free[position]) == Root(node: free[other]))
+                ) { composite[position] = other; }
             }
         }
 
         var code = 0;
 
         for (var position = 0; (position < composite.Length); ++position) {
-            code = (code << 1) | ((composite[position] < position) ? 1 : 0);
+            code = (code << 1) | ((composite[position] < position)
+                ? 1
+                : 0
+            );
         }
 
         return (first.InputWidth, second.OutputWidth, code, new BigInteger(value: (components.Count - openComponents.Count)));
@@ -646,7 +733,10 @@ internal static partial class Oracles {
     /// subject counts by reading three shorter cells. The multiplicities are <see cref="BigInteger"/> throughout, and the
     /// enumeration is exponential in the combined length, which is what keeps its callers small.</remarks>
     public static IReadOnlyList<(int[] Word, BigInteger Multiplicity)> Interleavings(int[] left, int[] right, int[] letterProduct, int letterCount) {
-        var kinds = ((0 == letterProduct.Length) ? 2L : 3L);
+        var kinds = ((0 == letterProduct.Length)
+            ? 2L
+            : 3L
+        );
         var multiplicities = new List<BigInteger>();
         var words = new List<int[]>();
 
@@ -666,8 +756,14 @@ internal static partial class Oracles {
 
                     scan /= kinds;
 
-                    if (((0 == kind) || (2 == kind)) && (taken >= left.Length)) { taken = -1; break; }
-                    if (((1 == kind) || (2 == kind)) && (used >= right.Length)) { taken = -1; break; }
+                    if (
+                        ((0 == kind) || (2 == kind)) &&
+                        (taken >= left.Length)
+                    ) { taken = -1; break; }
+                    if (
+                        ((1 == kind) || (2 == kind)) &&
+                        (used >= right.Length)
+                    ) { taken = -1; break; }
 
                     word[block] = kind switch {
                         0 => left[taken++],
@@ -676,14 +772,20 @@ internal static partial class Oracles {
                     };
                 }
 
-                if ((taken != left.Length) || (used != right.Length)) { continue; }
+                if (
+                    (taken != left.Length) ||
+                    (used != right.Length)
+                ) { continue; }
 
                 var low = 0;
                 var high = words.Count;
 
                 while (low < high) {
                     var middle = ((low + high) >> 1);
-                    var order = CompareWords(left: words[middle], right: word);
+                    var order = CompareWords(
+                        left: words[middle],
+                        right: word
+                    );
 
                     if (0 == order) {
                         multiplicities[middle] += BigInteger.One;
@@ -698,8 +800,14 @@ internal static partial class Oracles {
 
                 if (low < 0) { continue; }
 
-                multiplicities.Insert(index: low, item: BigInteger.One);
-                words.Insert(index: low, item: word);
+                multiplicities.Insert(
+                    index: low,
+                    item: BigInteger.One
+                );
+                words.Insert(
+                    index: low,
+                    item: word
+                );
             }
         }
 
@@ -723,7 +831,8 @@ internal static partial class Oracles {
             for (var column = 0; (column <= row); ++column) {
                 triangle[row][column] = (((0 == column) || (row == column))
                     ? BigInteger.One
-                    : (triangle[(row - 1)][(column - 1)] + triangle[(row - 1)][column]));
+                    : (triangle[(row - 1)][(column - 1)] + triangle[(row - 1)][column])
+                );
             }
         }
 
@@ -767,8 +876,14 @@ internal static partial class Oracles {
 
             // The closure: the cups below and the caps above, each joining an adjacent pair.
             for (var wire = 0; (wire < strandCount); wire += 2) {
-                Join(left: wire, right: (wire + 1));
-                Join(left: (top + wire), right: ((top + wire) + 1));
+                Join(
+                    left: wire,
+                    right: (wire + 1)
+                );
+                Join(
+                    left: (top + wire),
+                    right: ((top + wire) + 1)
+                );
             }
 
             var exponent = 0;
@@ -782,17 +897,38 @@ internal static partial class Oracles {
                 // One crossing smooths two ways. The straight-through smoothing carries the crossing's own charge and
                 // the joined one carries its inverse, which is what the mirror crossing swaps.
                 if (0 == ((state >> layer) & 1)) {
-                    exponent += ((letter > 0) ? 1 : -1);
+                    exponent += ((letter > 0)
+                        ? 1
+                        : -1
+                    );
 
-                    for (var wire = 0; (wire < strandCount); ++wire) { Join(left: (lower + wire), right: (upper + wire)); }
+                    for (var wire = 0; (wire < strandCount); ++wire) { Join(
+                        left: (lower + wire),
+                        right: (upper + wire)
+                    ); }
                 } else {
-                    exponent -= ((letter > 0) ? 1 : -1);
+                    exponent -= ((letter > 0)
+                        ? 1
+                        : -1
+                    );
 
-                    Join(left: ((lower + strand) - 1), right: (lower + strand));
-                    Join(left: ((upper + strand) - 1), right: (upper + strand));
+                    Join(
+                        left: ((lower + strand) - 1),
+                        right: (lower + strand)
+                    );
+                    Join(
+                        left: ((upper + strand) - 1),
+                        right: (upper + strand)
+                    );
 
                     for (var wire = 0; (wire < strandCount); ++wire) {
-                        if ((wire != (strand - 1)) && (wire != strand)) { Join(left: (lower + wire), right: (upper + wire)); }
+                        if (
+                            (wire != (strand - 1)) &&
+                            (wire != strand)
+                        ) { Join(
+                            left: (lower + wire),
+                            right: (upper + wire)
+                        ); }
                     }
                 }
             }
@@ -803,9 +939,15 @@ internal static partial class Oracles {
 
             var term = (exponent, new[] { BigInteger.One });
 
-            for (var curve = 0; (curve < curves.Count); ++curve) { term = LaurentMultiply(left: term, right: (-2, LoopCharge)); }
+            for (var curve = 0; (curve < curves.Count); ++curve) { term = LaurentMultiply(
+                left: term,
+                right: (-2, LoopCharge)
+            ); }
 
-            total = LaurentAdd(left: total, right: term);
+            total = LaurentAdd(
+                left: total,
+                right: term
+            );
         }
 
         return total;
@@ -821,10 +963,19 @@ internal static partial class Oracles {
     /// diagram's own. Reading them through this is how a table of published numbers becomes a prediction about one
     /// diagram — and the state-sum enumeration, which knows neither, is what says the prediction was right.</remarks>
     public static (int Lowest, BigInteger[] Coefficients) BracketNormalization(int kinkExponent, int lowest, ReadOnlySpan<BigInteger> coefficients) {
-        var value = LaurentMultiply(left: (lowest, coefficients.ToArray()), right: (-2, LoopCharge));
-        var factor = ((kinkExponent >= 0) ? (3, KinkFactor) : (-3, KinkFactor));
+        var value = LaurentMultiply(
+            left: (lowest, coefficients.ToArray()),
+            right: (-2, LoopCharge)
+        );
+        var factor = ((kinkExponent >= 0)
+            ? (3, KinkFactor)
+            : (-3, KinkFactor)
+        );
 
-        for (var kink = 0; (kink < Math.Abs(value: kinkExponent)); ++kink) { value = LaurentMultiply(left: value, right: factor); }
+        for (var kink = 0; (kink < Math.Abs(value: kinkExponent)); ++kink) { value = LaurentMultiply(
+            left: value,
+            right: factor
+        ); }
 
         return value;
     }
@@ -842,8 +993,15 @@ internal static partial class Oracles {
         for (var index = (coefficients.Length - 1); (index >= 0); --index) { numerator = ((numerator * point) + coefficients[index]); }
 
         return ((lowest >= 0)
-            ? ((numerator * BigInteger.Pow(exponent: lowest, value: point)), BigInteger.One)
-            : (numerator, BigInteger.Pow(exponent: -lowest, value: point)));
+            ? ((numerator * BigInteger.Pow(
+                exponent: lowest,
+                value: point
+            )), BigInteger.One)
+            : (numerator, BigInteger.Pow(
+                exponent: -lowest,
+                value: point
+            ))
+        );
     }
 
     // The charge one closed curve carries, as a Laurent polynomial from the exponent minus two: the second move forces
@@ -863,17 +1021,29 @@ internal static partial class Oracles {
         if (0 == left.Coefficients.Length) { return right; }
         if (0 == right.Coefficients.Length) { return left; }
 
-        var lowest = Math.Min(val1: left.Lowest, val2: right.Lowest);
-        var highest = Math.Max(val1: ((left.Lowest + left.Coefficients.Length) - 1), val2: ((right.Lowest + right.Coefficients.Length) - 1));
+        var lowest = Math.Min(
+            val1: left.Lowest,
+            val2: right.Lowest
+        );
+        var highest = Math.Max(
+            val1: ((left.Lowest + left.Coefficients.Length) - 1),
+            val2: ((right.Lowest + right.Coefficients.Length) - 1)
+        );
         var coefficients = new BigInteger[((highest - lowest) + 1)];
 
         for (var index = 0; (index < left.Coefficients.Length); ++index) { coefficients[((left.Lowest + index) - lowest)] += left.Coefficients[index]; }
         for (var index = 0; (index < right.Coefficients.Length); ++index) { coefficients[((right.Lowest + index) - lowest)] += right.Coefficients[index]; }
 
-        return LaurentTrim(coefficients: coefficients, lowest: lowest);
+        return LaurentTrim(
+            coefficients: coefficients,
+            lowest: lowest
+        );
     }
     private static (int Lowest, BigInteger[] Coefficients) LaurentMultiply((int Lowest, BigInteger[] Coefficients) left, (int Lowest, BigInteger[] Coefficients) right) {
-        if ((0 == left.Coefficients.Length) || (0 == right.Coefficients.Length)) { return (0, []); }
+        if (
+            (0 == left.Coefficients.Length) ||
+            (0 == right.Coefficients.Length)
+        ) { return (0, []); }
 
         var coefficients = new BigInteger[((left.Coefficients.Length + right.Coefficients.Length) - 1)];
 
@@ -883,7 +1053,10 @@ internal static partial class Oracles {
             }
         }
 
-        return LaurentTrim(coefficients: coefficients, lowest: (left.Lowest + right.Lowest));
+        return LaurentTrim(
+            coefficients: coefficients,
+            lowest: (left.Lowest + right.Lowest)
+        );
     }
     // A Laurent polynomial is canonical when its first and last coefficients are nonzero, so equality is a span
     // comparison and cancellation is visible in the exponent rather than hidden in a zero.
@@ -891,24 +1064,42 @@ internal static partial class Oracles {
         var high = (coefficients.Length - 1);
         var low = 0;
 
-        while ((low <= high) && coefficients[low].IsZero) { ++low; }
-        while ((high >= low) && coefficients[high].IsZero) { --high; }
+        while (
+            (low <= high) &&
+            coefficients[low].IsZero
+        ) { ++low; }
+        while (
+            (high >= low) &&
+            coefficients[high].IsZero
+        ) { --high; }
 
         if (low > high) { return (0, []); }
 
         var trimmed = new BigInteger[((high - low) + 1)];
 
-        Array.Copy(sourceArray: coefficients, sourceIndex: low, destinationArray: trimmed, destinationIndex: 0, length: trimmed.Length);
+        Array.Copy(
+            sourceArray: coefficients,
+            sourceIndex: low,
+            destinationArray: trimmed,
+            destinationIndex: 0,
+            length: trimmed.Length
+        );
 
         return ((lowest + low), trimmed);
     }
     // The canonical word order the presented algebra keys by: shorter first, then lexicographically. It is shared
     // because it IS the key scheme, exactly as the planar oracle shares the diagram order.
     private static int CompareWords(int[] left, int[] right) {
-        if (left.Length != right.Length) { return ((left.Length < right.Length) ? -1 : 1); }
+        if (left.Length != right.Length) { return ((left.Length < right.Length)
+            ? -1
+            : 1
+        ); }
 
         for (var index = 0; (index < left.Length); ++index) {
-            if (left[index] != right[index]) { return ((left[index] < right[index]) ? -1 : 1); }
+            if (left[index] != right[index]) { return ((left[index] < right[index])
+                ? -1
+                : 1
+            ); }
         }
 
         return 0;
@@ -936,30 +1127,55 @@ internal static partial class Oracles {
     /// <param name="Right">The second branch.</param>
     public sealed record WordPattern(WordPatternKind Kind, int Symbol, WordPattern? Left, WordPattern? Right) {
         /// <summary>The empty-span pattern.</summary>
-        public static WordPattern Empty { get; } = new(Kind: WordPatternKind.Empty, Left: null, Right: null, Symbol: -1);
+        public static WordPattern Empty { get; } = new(
+            Kind: WordPatternKind.Empty,
+            Left: null,
+            Right: null,
+            Symbol: -1
+        );
 
-        /// <summary>Builds a one-letter pattern.</summary>
-        /// <param name="letter">The letter.</param>
-        /// <returns>The pattern.</returns>
-        public static WordPattern Letter(int letter) =>
-            new(Kind: WordPatternKind.Letter, Left: null, Right: null, Symbol: letter);
-        /// <summary>Builds a union.</summary>
-        /// <param name="left">The first branch.</param>
-        /// <param name="right">The second branch.</param>
-        /// <returns>The pattern.</returns>
-        public static WordPattern Union(WordPattern left, WordPattern right) =>
-            new(Kind: WordPatternKind.Union, Left: left, Right: right, Symbol: -1);
         /// <summary>Builds a concatenation.</summary>
         /// <param name="left">The first branch.</param>
         /// <param name="right">The second branch.</param>
         /// <returns>The pattern.</returns>
         public static WordPattern Concatenate(WordPattern left, WordPattern right) =>
-            new(Kind: WordPatternKind.Concatenate, Left: left, Right: right, Symbol: -1);
+            new(
+                Kind: WordPatternKind.Concatenate,
+                Left: left,
+                Right: right,
+                Symbol: -1
+            );
         /// <summary>Builds an iteration.</summary>
         /// <param name="value">The repeated branch, which must not derive the empty span.</param>
         /// <returns>The pattern.</returns>
         public static WordPattern Iterate(WordPattern value) =>
-            new(Kind: WordPatternKind.Iterate, Left: value, Right: null, Symbol: -1);
+            new(
+                Kind: WordPatternKind.Iterate,
+                Left: value,
+                Right: null,
+                Symbol: -1
+            );
+        /// <summary>Builds a one-letter pattern.</summary>
+        /// <param name="letter">The letter.</param>
+        /// <returns>The pattern.</returns>
+        public static WordPattern Letter(int letter) =>
+            new(
+                Kind: WordPatternKind.Letter,
+                Left: null,
+                Right: null,
+                Symbol: letter
+            );
+        /// <summary>Builds a union.</summary>
+        /// <param name="left">The first branch.</param>
+        /// <param name="right">The second branch.</param>
+        /// <returns>The pattern.</returns>
+        public static WordPattern Union(WordPattern left, WordPattern right) =>
+            new(
+                Kind: WordPatternKind.Union,
+                Left: left,
+                Right: right,
+                Symbol: -1
+            );
     }
 
     /// <summary>Counts the derivations of one word under a pattern tree, by backtracking over every split.</summary>
@@ -971,26 +1187,57 @@ internal static partial class Oracles {
     /// recursion terminates; a branch that derives the empty span would make the count infinite and is rejected by the
     /// caller rather than silently truncated.</remarks>
     public static BigInteger WordDerivations(WordPattern pattern, ReadOnlySpan<int> word) =>
-        Derivations(pattern: pattern, word: word, start: 0, end: word.Length);
+        Derivations(
+            pattern: pattern,
+            word: word,
+            start: 0,
+            end: word.Length
+        );
 
     private static BigInteger Derivations(WordPattern pattern, ReadOnlySpan<int> word, int start, int end) {
         switch (pattern.Kind) {
             case WordPatternKind.Empty:
-                return ((start == end) ? BigInteger.One : BigInteger.Zero);
+                return ((start == end)
+                    ? BigInteger.One
+                    : BigInteger.Zero
+                );
             case WordPatternKind.Letter:
-                return ((((start + 1) == end) && (word[start] == pattern.Symbol)) ? BigInteger.One : BigInteger.Zero);
+                return ((((start + 1) == end) && (word[start] == pattern.Symbol))
+                    ? BigInteger.One
+                    : BigInteger.Zero
+                );
             case WordPatternKind.Union:
-                return (Derivations(pattern: pattern.Left!, word: word, start: start, end: end)
-                    + Derivations(pattern: pattern.Right!, word: word, start: start, end: end));
+                return (Derivations(
+                    pattern: pattern.Left!,
+                    word: word,
+                    start: start,
+                    end: end
+                )
+                    + Derivations(
+                    pattern: pattern.Right!,
+                    word: word,
+                    start: start,
+                    end: end
+                ));
             case WordPatternKind.Concatenate: {
                     var total = BigInteger.Zero;
 
                     for (var split = start; (split <= end); ++split) {
-                        var head = Derivations(pattern: pattern.Left!, word: word, start: start, end: split);
+                        var head = Derivations(
+                            pattern: pattern.Left!,
+                            word: word,
+                            start: start,
+                            end: split
+                        );
 
                         if (head.IsZero) { continue; }
 
-                        total += (head * Derivations(pattern: pattern.Right!, word: word, start: split, end: end));
+                        total += (head * Derivations(
+                            pattern: pattern.Right!,
+                            word: word,
+                            start: split,
+                            end: end
+                        ));
                     }
 
                     return total;
@@ -1002,11 +1249,21 @@ internal static partial class Oracles {
 
                     // Every repetition consumes at least one letter, which is what bounds the recursion.
                     for (var split = (start + 1); (split <= end); ++split) {
-                        var head = Derivations(pattern: pattern.Left!, word: word, start: start, end: split);
+                        var head = Derivations(
+                            pattern: pattern.Left!,
+                            word: word,
+                            start: start,
+                            end: split
+                        );
 
                         if (head.IsZero) { continue; }
 
-                        total += (head * Derivations(end: end, pattern: pattern, start: split, word: word));
+                        total += (head * Derivations(
+                            end: end,
+                            pattern: pattern,
+                            start: split,
+                            word: word
+                        ));
                     }
 
                     return total;
@@ -1015,6 +1272,9 @@ internal static partial class Oracles {
     }
     // The doubling conjugation's sign on a basis vector: the real unit is fixed, every imaginary unit is negated.
     private static int ConjugationSign(int index) =>
-        ((0 == index) ? 1 : -1);
+        ((0 == index)
+            ? 1
+            : -1
+        );
 
 }

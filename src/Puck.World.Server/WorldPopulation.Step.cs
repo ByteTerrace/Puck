@@ -8,8 +8,9 @@ namespace Puck.World.Server;
 public sealed partial class WorldPopulation {
     /// <summary>Gets the latest peer-advance cadence work. Counts only bodies whose kit authors a nonzero cadence.</summary>
     public WorldAutonomyStatistics AutonomyStatistics { get; private set; }
+
     private static void ApplyVariation(Entry entry, CompiledBodyProducer producer, FixedQ4816 phase, FixedQ4816 weaveUnit, FixedQ4816 activityUnit, bool resetPhase) {
-        entry.ProducerState.WeaveFrequency = (producer.Scalar(BodyProducerParameter.WeaveFrequencyBase) + (producer.Scalar(BodyProducerParameter.WeaveFrequencyRange) * weaveUnit));
+        entry.ProducerState.WeaveFrequency = (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyBase) + (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyRange) * weaveUnit));
 
         if (resetPhase) {
             entry.ProducerState.AcquiredTarget = -1;
@@ -17,9 +18,10 @@ public sealed partial class WorldPopulation {
             entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
             entry.ProducerState.ActivityPhase = (phase + (TwoPi * activityUnit));
-            entry.ProducerState.ActivityRate = (producer.Scalar(BodyProducerParameter.ActivityRateBase) + (producer.Scalar(BodyProducerParameter.ActivityRateRange) * activityUnit));
+            entry.ProducerState.ActivityRate = (producer.Scalar(parameter: BodyProducerParameter.ActivityRateBase) + (producer.Scalar(parameter: BodyProducerParameter.ActivityRateRange) * activityUnit));
         }
     }
+
     internal bool HasLineOfSight(in FixedVector3 from, in FixedQuaternion fromOrientation, in FixedVector3 to, in FixedQuaternion toOrientation) {
         var start = (from + fromOrientation.Rotate(vector: LocalSightOffset));
         var end = (to + toOrientation.Rotate(vector: LocalSightOffset));
@@ -29,6 +31,7 @@ public sealed partial class WorldPopulation {
             to: end
         ) ?? false);
     }
+
     // The distribution for one inhabited body is anchored at the placement's own COMPOSED (world) frame — see
     // WorldDefinitionRows.ResolvedFrame — never its authored (possibly parent-relative) Position directly.
     private static FixedVector3 InhabitantSpawn(CompiledPlacementFrame frame, WorldDistribution distribution, int ordinal, int count) {
@@ -58,7 +61,7 @@ public sealed partial class WorldPopulation {
     }
     private FixedQ4816 PreferredAltitudeFor(in FixedWorldKit kit, CompiledBodyProducer producer, FixedQ4816 altitudeUnit) {
         return (kit.BodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
-            ? (producer.Scalar(BodyProducerParameter.AltitudeBase) + (producer.Scalar(BodyProducerParameter.AltitudeRange) * altitudeUnit))
+            ? (producer.Scalar(parameter: BodyProducerParameter.AltitudeBase) + (producer.Scalar(parameter: BodyProducerParameter.AltitudeRange) * altitudeUnit))
             : FixedQ4816.Zero
         );
     }
@@ -77,7 +80,7 @@ public sealed partial class WorldPopulation {
     private BodyProducerSensors ReadProducerSensors(int selfIndex, Entry entry, int currentTarget, in FixedVector3 self, in FixedVector3 forward, CompiledBodyProducer producer) {
         var candidate = BodySensorTarget.None;
         var targetSource = producer.Target;
-        var frozen = producer.Flock is not null;
+        var frozen = (producer.Flock is not null);
 
         if (targetSource?.Source is BodyTargetSource.Designated) {
             var designated = entry.Designations[targetSource.Value.RegisterIndex];
@@ -93,7 +96,10 @@ public sealed partial class WorldPopulation {
                 m_entries[designated.Index].Active &&
                 (m_entries[designated.Index].Body is { } designatedBody)
             ) {
-                var position = frozen ? m_flockPositions[designated.Index] : designatedBody.FixedPosition;
+                var position = (frozen
+                    ? m_flockPositions[designated.Index]
+                    : designatedBody.FixedPosition
+                );
 
                 candidate = new BodySensorTarget(
                     Index: designated.Index,
@@ -101,8 +107,14 @@ public sealed partial class WorldPopulation {
                     DistanceSquared: (position - self).LengthSquared
                 );
             }
-        } else if (frozen && targetSource?.Source is BodyTargetSource.Sensed) {
-            candidate = ReadFlockTarget(entry, self);
+        } else if (
+            frozen &&
+            (targetSource?.Source is BodyTargetSource.Sensed)
+        ) {
+            candidate = ReadFlockTarget(
+                entry: entry,
+                self: self
+            );
         } else if (targetSource?.Source is BodyTargetSource.Sensed sensed) {
             var fixedSource = targetSource.Value;
 
@@ -116,7 +128,10 @@ public sealed partial class WorldPopulation {
                     continue;
                 }
 
-                var position = frozen ? m_flockPositions[index] : body.FixedPosition;
+                var position = (frozen
+                    ? m_flockPositions[index]
+                    : body.FixedPosition
+                );
 
                 if (
                     !BodyTargetConeSense.Contains(
@@ -129,9 +144,13 @@ public sealed partial class WorldPopulation {
                 ) ||
                     (sensed.RequiresLineOfSight && !HasLineOfSight(
                     from: self,
-                    fromOrientation: frozen ? m_flockOrientations[selfIndex] : m_entries[selfIndex].Body!.FixedOrientation,
+                    fromOrientation: (frozen
+                    ? m_flockOrientations[selfIndex]
+                    : m_entries[selfIndex].Body!.FixedOrientation),
                     to: position,
-                    toOrientation: frozen ? m_flockOrientations[index] : body.FixedOrientation
+                    toOrientation: (frozen
+                    ? m_flockOrientations[index]
+                    : body.FixedOrientation)
                 ))
                 ) {
                     continue;
@@ -174,15 +193,22 @@ public sealed partial class WorldPopulation {
             );
         }
 
-        var current = frozen ? (candidate.Index == currentTarget ? candidate : BodySensorTarget.None) :
-            (((currentTarget >= 0) && (currentTarget < Capacity) && m_entries[currentTarget].Active && (m_entries[currentTarget].Body is { } held))
-            ? new BodySensorTarget(
-                Index: currentTarget,
-                Position: frozen ? m_flockPositions[currentTarget] : held.FixedPosition,
-                DistanceSquared: ((frozen ? m_flockPositions[currentTarget] : held.FixedPosition) - self).LengthSquared
-            )
-            : BodySensorTarget.None
-        );
+        var current = (frozen
+            ? ((candidate.Index == currentTarget)
+                ? candidate
+                : BodySensorTarget.None)
+            : (((currentTarget >= 0) && (currentTarget < Capacity) && m_entries[currentTarget].Active && (m_entries[currentTarget].Body is { } held))
+                ? new BodySensorTarget(
+                    Index: currentTarget,
+                    Position: (frozen
+                    ? m_flockPositions[currentTarget]
+                    : held.FixedPosition),
+                    DistanceSquared: ((frozen
+                    ? m_flockPositions[currentTarget]
+                    : held.FixedPosition) - self).LengthSquared
+                )
+                : BodySensorTarget.None
+        ));
 
         return new BodyProducerSensors(
             Candidate: candidate,
@@ -191,6 +217,7 @@ public sealed partial class WorldPopulation {
     }
     private BodySensorTarget ReadNavigatedTarget(Entry entry, in FixedVector3 self, in FixedBodyTargetSource target, bool frozen) {
         var state = entry.NavigationState;
+
         state.ExpandedLast = 0;
         var designation = entry.Designations[target.RegisterIndex];
         FixedVector3 goal;
@@ -200,44 +227,80 @@ public sealed partial class WorldPopulation {
             goal = designation.Point;
         } else if (
             designation.HasBody &&
-            designation.Index < Capacity &&
+            (designation.Index < Capacity) &&
             m_entries[designation.Index].Active &&
-            m_entries[designation.Index].Body is { } designatedBody
+            (m_entries[designation.Index].Body is { } designatedBody)
         ) {
-            goal = frozen ? m_flockPositions[designation.Index] : designatedBody.FixedPosition;
+            goal = (frozen
+                ? m_flockPositions[designation.Index]
+                : designatedBody.FixedPosition
+            );
             targetIndex = designation.Index;
         } else {
             state.Clear(status: NavigationStatus.NoTarget);
             return BodySensorTarget.None;
         }
 
-        if ((uint)target.NavigationDomainIndex >= (uint)m_navigation.Count) {
+        if (((uint)target.NavigationDomainIndex) >= ((uint)m_navigation.Count)) {
             state.Clear(status: NavigationStatus.OutsideDomain);
             return BodySensorTarget.None;
         }
 
         var domain = m_navigation[target.NavigationDomainIndex];
-        if (!domain.TryCell(position: in self, node: out var start) || !domain.TryCell(position: in goal, node: out var goalCell)) {
+
+        if (
+            !domain.TryCell(
+            node: out var start,
+            position: in self
+        ) ||
+            !domain.TryCell(
+            node: out var goalCell,
+            position: in goal
+        )
+        ) {
             state.Clear(status: NavigationStatus.OutsideDomain);
             return BodySensorTarget.None;
         }
 
-        var onCachedRoute = state.PathLength != 0 && state.DomainIndex == target.NavigationDomainIndex && state.GoalCell == goalCell;
+        var onCachedRoute = ((state.PathLength != 0) && (state.DomainIndex == target.NavigationDomainIndex) && (state.GoalCell == goalCell));
+
         if (onCachedRoute) {
-            var previous = Math.Max(0, state.Waypoint - 1);
-            onCachedRoute = state.Path[previous] == start || (state.Waypoint < state.PathLength && state.Path[state.Waypoint] == start);
-            if (onCachedRoute && state.Waypoint < state.PathLength) {
-                onCachedRoute = domain.IsTraversableEdge(current: state.Path[previous], next: state.Path[state.Waypoint]);
+            var previous = Math.Max(
+                val1: 0,
+                val2: (state.Waypoint - 1)
+            );
+
+            onCachedRoute = ((state.Path[previous] == start) || ((state.Waypoint < state.PathLength) && (state.Path[state.Waypoint] == start)));
+            if (
+                onCachedRoute &&
+                (state.Waypoint < state.PathLength)
+            ) {
+                onCachedRoute = domain.IsTraversableEdge(
+                    current: state.Path[previous],
+                    next: state.Path[state.Waypoint]
+                );
             }
         }
-Replan:
+    Replan:
         if (!onCachedRoute) {
             state.DomainIndex = target.NavigationDomainIndex;
             state.GoalCell = goalCell;
             state.Waypoint = 1;
-            state.Status = domain.Sharing is not null
-                ? domain.RequestShared(start, goalCell, state.WritablePath(), out state.PathLength)
-                : domain.FindPath(start, goalCell, state.WritablePath(), out state.PathLength, out state.ExpandedLast);
+            state.Status = ((domain.Sharing is not null)
+                ? domain.RequestShared(
+                    start,
+                    goalCell,
+                    state.WritablePath(),
+                    out state.PathLength
+                )
+                : domain.FindPath(
+                    start,
+                    goalCell,
+                    state.WritablePath(),
+                    out state.PathLength,
+                    out state.ExpandedLast
+                )
+            );
             if (state.PathLength == 0) {
                 state.Waypoint = 0;
                 return BodySensorTarget.None;
@@ -245,12 +308,20 @@ Replan:
         }
 
         var arrivalSquared = (domain.Tuning.ArrivalDistance * domain.Tuning.ArrivalDistance);
+
         while (state.Waypoint < state.PathLength) {
-            if (state.Waypoint > 0 && !domain.IsTraversableEdge(current: state.Path[state.Waypoint - 1], next: state.Path[state.Waypoint])) {
+            if (
+                (state.Waypoint > 0) &&
+                !domain.IsTraversableEdge(
+                current: state.Path[(state.Waypoint - 1)],
+                next: state.Path[state.Waypoint]
+            )
+            ) {
                 onCachedRoute = false;
                 goto Replan;
             }
             var waypoint = domain.Position(node: state.Path[state.Waypoint]);
+
             if ((waypoint - self).LengthSquared > arrivalSquared) {
                 state.Status = NavigationStatus.Active;
                 return new BodySensorTarget(
@@ -263,8 +334,16 @@ Replan:
         }
 
         var distanceSquared = (goal - self).LengthSquared;
-        state.Status = (distanceSquared <= arrivalSquared ? NavigationStatus.Arrived : NavigationStatus.Active);
-        return new BodySensorTarget(Index: targetIndex, Position: goal, DistanceSquared: distanceSquared);
+
+        state.Status = ((distanceSquared <= arrivalSquared)
+            ? NavigationStatus.Arrived
+            : NavigationStatus.Active
+        );
+        return new BodySensorTarget(
+            DistanceSquared: distanceSquared,
+            Index: targetIndex,
+            Position: goal
+        );
     }
     // Advances a curve-follow arc position by one compiled step, then wraps (closed) or clamps (open) it back inside
     // [0, totalLengthRaw] — the persisted state never grows past the curve's own length, so it stays bounded across
@@ -313,7 +392,10 @@ Replan:
                 continue;
             }
 
-            var kitIndex = ((entry.Kind == PopulationKind.LocalSeat) ? m_seatKit : entry.KitIndex);
+            var kitIndex = ((entry.Kind == PopulationKind.LocalSeat)
+                ? m_seatKit
+                : entry.KitIndex
+            );
 
             if (
                 m_kits[kitIndex].Producers.TryGetValue(
@@ -399,10 +481,13 @@ Replan:
         );
         var entry = m_entries[index];
 
-        entry.ProducerState.PreferredAltitude = producer is null ? FixedQ4816.Zero : PreferredAltitudeFor(
-            kit: m_kits[entry.KitIndex],
-            producer: producer,
-            altitudeUnit: altitudeUnit
+        entry.ProducerState.PreferredAltitude = ((producer is null)
+            ? FixedQ4816.Zero
+            : PreferredAltitudeFor(
+                kit: m_kits[entry.KitIndex],
+                producer: producer,
+                altitudeUnit: altitudeUnit
+            )
         );
         if (m_distribution.Points is { Length: > 0 } points) {
             var basePoint = points[(offset % points.Length)];
@@ -471,7 +556,7 @@ Replan:
     }
     // Run the named producer before motion. Live and Idle name no producer.
     private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks) {
-        body.SetFlockMovementDomain(null);
+        body.SetFlockMovementDomain(domain: null);
         var kitIndex = ((entry.Kind == PopulationKind.LocalSeat)
             ? m_seatKit
             : entry.KitIndex
@@ -512,7 +597,11 @@ Replan:
         }
 
         if (
-            !string.Equals(a: entry.ProducerState.ActiveProducerName, b: name, comparisonType: StringComparison.Ordinal) ||
+            !string.Equals(
+            a: entry.ProducerState.ActiveProducerName,
+            b: name,
+            comparisonType: StringComparison.Ordinal
+        ) ||
             (entry.ProducerState.ActiveProducerCurveIndex != curveIndex) ||
             (entry.ProducerState.ActiveProducerNavigationDomainIndex != navigationDomainIndex)
         ) {
@@ -526,9 +615,14 @@ Replan:
 
         if (producer.Flock is not null) {
             if (producer.Flock.MovementDomainIndex >= 0) {
-                body.SetFlockMovementDomain(m_navigation[producer.Flock.MovementDomainIndex]);
+                body.SetFlockMovementDomain(domain: m_navigation[producer.Flock.MovementDomainIndex]);
             }
-            RefreshFlockPerception(index, entry, producer, stepTicks);
+            RefreshFlockPerception(
+                entry: entry,
+                index: index,
+                producer: producer,
+                stepTicks: stepTicks
+            );
         }
         var sensors = ReadProducerSensors(
             selfIndex: index,
@@ -538,8 +632,14 @@ Replan:
             forward: body.FixedOrientation.Rotate(vector: LocalForward),
             producer: producer
         );
+
         if (producer.Flock is not null) {
-            sensors = sensors with { FlockDesired = BlendFlockPreference(index, entry, producer.Flock, sensors.Candidate) };
+            sensors = sensors with { FlockDesired = BlendFlockPreference(
+                index,
+                entry,
+                producer.Flock,
+                sensors.Candidate
+            ) };
         } else {
             entry.ProducerState.FlockSeeded = false;
         }
@@ -627,7 +727,7 @@ Replan:
                     stepTicks: stepTicks,
                     tick: tick
                 );
-                RecordFlockMotion(body);
+                RecordFlockMotion(body: body);
             }
         }
     }
@@ -664,7 +764,6 @@ Replan:
 
         gravity.Solve(targets: m_gravityTargets);
     }
-
     private static void BindCadence(ulong period, int ordinal, int count, ref ulong boundPeriod, ref ulong elapsed, ref ulong remaining) {
         if (boundPeriod == period) {
             return;
@@ -676,7 +775,7 @@ Replan:
             ? 0UL
             : Math.Max(
                 val1: 1UL,
-                val2: (((checked((ulong)(ordinal + 1)) * period) + checked((ulong)count - 1UL)) / checked((ulong)count))
+                val2: (((checked((ulong)(ordinal + 1)) * period) + checked((((ulong)count) - 1UL))) / checked((ulong)count))
             )
         );
     }
@@ -686,8 +785,11 @@ Replan:
             return true;
         }
 
-        elapsed = checked(elapsed + stepTicks);
-        remaining = ((remaining > stepTicks) ? (remaining - stepTicks) : 0UL);
+        elapsed = checked((elapsed + stepTicks));
+        remaining = ((remaining > stepTicks)
+            ? (remaining - stepTicks)
+            : 0UL
+        );
         if (remaining > 0UL) {
             elapsedTicks = 0UL;
             return false;
@@ -750,20 +852,42 @@ Replan:
                 !player.HasMotionTape &&
                 !player.RequiresFullRateAutonomy
             );
-            var motionPeriod = (locallyAutonomous ? kit.AutonomousMotionTicks : 0UL);
-            var steeringPeriod = ((!entry.IsRemoteHuman && player.Source.IsProducer) ? kit.AutonomousSteeringTicks : 0UL);
+            var motionPeriod = (locallyAutonomous
+                ? kit.AutonomousMotionTicks
+                : 0UL
+            );
+            var steeringPeriod = ((!entry.IsRemoteHuman && player.Source.IsProducer)
+                ? kit.AutonomousSteeringTicks
+                : 0UL
+            );
             ref var autonomy = ref entry.AutonomyState;
             var ordinal = (index - LocalSeatCount);
-            BindCadence(motionPeriod, ordinal, PeerCapacity, ref autonomy.MotionPeriodTicks, ref autonomy.MotionElapsedTicks, ref autonomy.MotionRemainingTicks);
-            BindCadence(steeringPeriod, ordinal, PeerCapacity, ref autonomy.SteeringPeriodTicks, ref autonomy.SteeringElapsedTicks, ref autonomy.SteeringRemainingTicks);
+
+            BindCadence(
+                motionPeriod,
+                ordinal,
+                PeerCapacity,
+                ref autonomy.MotionPeriodTicks,
+                ref autonomy.MotionElapsedTicks,
+                ref autonomy.MotionRemainingTicks
+            );
+            BindCadence(
+                steeringPeriod,
+                ordinal,
+                PeerCapacity,
+                ref autonomy.SteeringPeriodTicks,
+                ref autonomy.SteeringElapsedTicks,
+                ref autonomy.SteeringRemainingTicks
+            );
 
             var steeringDue = CadenceDue(
-                period: steeringPeriod,
-                stepTicks: stepTicks,
                 elapsed: ref autonomy.SteeringElapsedTicks,
+                elapsedTicks: out var steeringTicks,
+                period: steeringPeriod,
                 remaining: ref autonomy.SteeringRemainingTicks,
-                elapsedTicks: out var steeringTicks
+                stepTicks: stepTicks
             );
+
             if (steeringDue) {
                 StageProducer(
                     body: player,
@@ -771,7 +895,10 @@ Replan:
                     index: index,
                     stepTicks: steeringTicks
                 );
-                if (player.Source.IsProducer && ((steeringPeriod != 0UL) || (motionPeriod != 0UL))) {
+                if (
+                    player.Source.IsProducer &&
+                    ((steeringPeriod != 0UL) || (motionPeriod != 0UL))
+                ) {
                     autonomy.SteeringIntent = player.StagedProducerIntent;
                     autonomy.SteeringSeeded = true;
                 } else {
@@ -779,36 +906,40 @@ Replan:
                     autonomy.SteeringSeeded = false;
                 }
                 if (steeringPeriod != 0UL) {
-                    AutonomyStatistics = AutonomyStatistics with { SteeringUpdates = AutonomyStatistics.SteeringUpdates + 1 };
+                    AutonomyStatistics = AutonomyStatistics with { SteeringUpdates = (AutonomyStatistics.SteeringUpdates + 1) };
                 }
             }
 
             if (!CadenceDue(
-                period: motionPeriod,
-                stepTicks: stepTicks,
                 elapsed: ref autonomy.MotionElapsedTicks,
+                elapsedTicks: out var motionTicks,
+                period: motionPeriod,
                 remaining: ref autonomy.MotionRemainingTicks,
-                elapsedTicks: out var motionTicks
+                stepTicks: stepTicks
             )) {
                 player.DeferOrdinaryAdvance();
                 if (motionPeriod != 0UL) {
-                    AutonomyStatistics = AutonomyStatistics with { MotionDeferred = AutonomyStatistics.MotionDeferred + 1 };
+                    AutonomyStatistics = AutonomyStatistics with { MotionDeferred = (AutonomyStatistics.MotionDeferred + 1) };
                 }
                 continue;
             }
 
             if (motionPeriod != 0UL) {
-                AutonomyStatistics = AutonomyStatistics with { MotionUpdates = AutonomyStatistics.MotionUpdates + 1 };
+                AutonomyStatistics = AutonomyStatistics with { MotionUpdates = (AutonomyStatistics.MotionUpdates + 1) };
             }
 
-            var accumulatedStart = checked(stepStartEngineTick + stepTicks - motionTicks);
+            var accumulatedStart = checked(((stepStartEngineTick + stepTicks) - motionTicks));
+
             if (!player.TryBeginOrdinaryAdvance(stepStartEngineTick: accumulatedStart)) {
                 autonomy.MotionElapsedTicks = 0UL;
                 autonomy.MotionRemainingTicks = motionPeriod;
                 continue;
             }
 
-            if (!steeringDue && autonomy.SteeringSeeded) {
+            if (
+                !steeringDue &&
+                autonomy.SteeringSeeded
+            ) {
                 player.StageProducerIntent(intent: in autonomy.SteeringIntent);
             }
             var targets = ReadEffectTargets(
@@ -829,7 +960,7 @@ Replan:
                 sleepAfterTicks: m_sleepAfterTicks,
                 contactFieldVersion: contactFieldVersion
             );
-            RecordFlockMotion(player);
+            RecordFlockMotion(body: player);
         }
     }
     /// <summary>Overrides an already-active seat's own pose and velocity — the mapped-arrival half of a portal
@@ -989,9 +1120,11 @@ Replan:
             Registers: registers
         );
     }
+
     // Sentinel meaning "no cell-driven inhabit count has ever been read for this placement ordinal" — distinct from
     // every representable raw cell value, including 0 (an authored count cell legitimately starts empty).
     private const long NoInhabitCountObserved = long.MinValue;
+
     // Per-placement-ordinal cache of the last raw cell value ReconcileInhabitCounts resolved for a cell-driven
     // inhabit facet — a placement with no such facet, or a literal count, is never written here. Resized (and its
     // fresh slots re-seeded to NoInhabitCountObserved) only when the placement count itself changes, which already
@@ -1002,7 +1135,10 @@ Replan:
     // Forces the next ReconcileInhabitCounts call to re-resolve every cell-driven placement from scratch — a
     // structural install's own defensive reset (ReconcileInhabitants), since a placement's ordinal can carry a
     // different row reference after a reorder or replacement without its overall count changing.
-    private void InvalidateInhabitCountCache() => Array.Fill(array: m_inhabitCountCache, value: NoInhabitCountObserved);
+    private void InvalidateInhabitCountCache() => Array.Fill(
+        array: m_inhabitCountCache,
+        value: NoInhabitCountObserved
+    );
 
     /// <summary>Reconciles every cell-driven inhabit facet's live count against its bound cell's current value —
     /// the value half of the count-cell primitive (<see cref="ReconcileInhabitants"/> is the structural half, and
@@ -1026,7 +1162,10 @@ Replan:
         if (m_inhabitCountCache.Length != placements.Count) {
             var cache = new long[placements.Count];
 
-            Array.Fill(array: cache, value: NoInhabitCountObserved);
+            Array.Fill(
+                array: cache,
+                value: NoInhabitCountObserved
+            );
             m_inhabitCountCache = cache;
         }
 
@@ -1047,7 +1186,10 @@ Replan:
                 continue;
             }
 
-            var raw = (inhabit.Count.Resolve(definition: definition, tick: tick) ?? 0L);
+            var raw = (inhabit.Count.Resolve(
+                definition: definition,
+                tick: tick
+            ) ?? 0L);
 
             if (raw == m_inhabitCountCache[ordinal]) {
                 continue;
@@ -1057,11 +1199,24 @@ Replan:
             changed = true;
 
             var sampleCount = ((inhabit.Distribution?.Region as WorldDistributionRegion.Disc)?.SampleCount);
-            var bound = Math.Min(val1: PeerCapacity, val2: (sampleCount ?? PeerCapacity));
-            var desired = (int)Math.Clamp(value: raw, min: 0L, max: (long)bound);
+            var bound = Math.Min(
+                val1: PeerCapacity,
+                val2: (sampleCount ?? PeerCapacity)
+            );
+            var desired = ((int)Math.Clamp(
+                max: ((long)bound),
+                min: 0L,
+                value: raw
+            ));
 
-            if ((desired != raw) && (NarrationHub is { HasNarrationSink: true })) {
-                NarrationHub?.Narrate(channel: "world.placement", text: $"[world.placement: inhabited '{placement.Id}' count {desired} of {row} (clamped by {bound})]");
+            if (
+                (desired != raw) &&
+                (NarrationHub is { HasNarrationSink: true })
+            ) {
+                NarrationHub?.Narrate(
+                    channel: "world.placement",
+                    text: $"[world.placement: inhabited '{placement.Id}' count {desired} of {row} (clamped by {bound})]"
+                );
             }
 
             ReconcileOneInhabitedCount(

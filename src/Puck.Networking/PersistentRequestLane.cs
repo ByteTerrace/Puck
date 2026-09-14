@@ -103,8 +103,8 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     where TResponseKind : struct, Enum {
     private readonly record struct PendingRequest(TRequestKind Kind, byte[] Body, TaskCompletionSource<LaneResponse<TResponseKind>> Completion);
 
-    private readonly TimeSpan m_connectRetryDelay;
     private readonly Func<EndPoint, CancellationToken, ValueTask<Stream>> m_connect;
+    private readonly TimeSpan m_connectRetryDelay;
     private readonly CancellationTokenSource m_lifetime;
     private readonly Action<Exception>? m_onUnavailable;
     private readonly ILaneProtocol<TRequestKind, TResponseKind> m_protocol;
@@ -196,9 +196,8 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     private LaneResponse<TResponseKind> Closed() =>
         LaneResponse<TResponseKind>.Refused(
             detail: ((m_routeDescription.Length == 0)
-                ? "the lane closed before the request was sent"
-                : $"the lane to '{m_routeDescription}' closed before the request was sent"
-            ),
+            ? "the lane closed before the request was sent"
+            : $"the lane to '{m_routeDescription}' closed before the request was sent"),
             refusal: WireRefusal.LaneUnavailable
         );
     private void Drop() {
@@ -208,6 +207,7 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
             location1: ref m_stream,
             value: null
         );
+
         stream?.Dispose();
         m_connectedEndpoint = string.Empty;
     }
@@ -225,7 +225,10 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
 
         Drop();
 
-        var stream = await m_connect(route.Endpoint, ct).ConfigureAwait(false);
+        var stream = await m_connect(
+            route.Endpoint,
+            ct
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
         m_stream = stream;
         m_connectedEndpoint = route.Description;
@@ -460,9 +463,8 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     private LaneResponse<TResponseKind> TimedOut(PendingRequest request, LaneRoute route, bool written) =>
         LaneResponse<TResponseKind>.Refused(
             detail: (written
-                ? $"'{route.Description}' did not answer {request.Kind} inside {m_requestTimeout}; the request was written and is not re-sent, so it may or may not have been applied"
-                : $"'{route.Description}' did not take {request.Kind} inside {m_requestTimeout}; the request write did not complete and is not re-sent, so it may or may not have been applied"
-            ),
+            ? $"'{route.Description}' did not answer {request.Kind} inside {m_requestTimeout}; the request was written and is not re-sent, so it may or may not have been applied"
+            : $"'{route.Description}' did not take {request.Kind} inside {m_requestTimeout}; the request write did not complete and is not re-sent, so it may or may not have been applied"),
             refusal: WireRefusal.RequestTimedOut
         );
     private LaneResponse<TResponseKind> Unreachable(Exception exception, LaneRoute route) {
@@ -475,10 +477,13 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
             )))
         );
 
-        if ((Interlocked.Exchange(
+        if (
+            (Interlocked.Exchange(
             location1: ref m_unavailableNoted,
             value: 1
-        ) == 0) && (m_onUnavailable is { } onUnavailable)) {
+        ) == 0) &&
+            (m_onUnavailable is { } onUnavailable)
+        ) {
             // Off the worker, so a callback that disposes the lane (and so joins the worker) cannot deadlock against
             // the very task it runs on; contained, so its own failure never strands a request or takes the worker
             // down.

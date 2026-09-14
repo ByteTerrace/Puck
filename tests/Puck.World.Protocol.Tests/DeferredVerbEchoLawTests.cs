@@ -10,6 +10,27 @@ namespace Puck.World.Protocol.Tests;
 /// </summary>
 public sealed class DeferredVerbEchoLawTests {
     [Fact]
+    public void PendingEntries_EvictOldestPastCapacity() {
+        var echoes = new WorldDeferredVerbEchoes();
+
+        for (var id = 1L; (id <= (WorldDeferredVerbEchoes.Capacity + 1)); id++) {
+            echoes.Register(
+                correlationId: id,
+                verb: "world.row.set"
+            );
+        }
+
+        // The oldest entry fell off the bound; the newest survives.
+        Assert.False(condition: echoes.TryTake(
+            correlationId: 1,
+            verb: out _
+        ));
+        Assert.True(condition: echoes.TryTake(
+            correlationId: (WorldDeferredVerbEchoes.Capacity + 1),
+            verb: out _
+        ));
+    }
+    [Fact]
     public void RegisteredEntry_IsTakenExactlyOnce() {
         var echoes = new WorldDeferredVerbEchoes();
 
@@ -28,50 +49,6 @@ public sealed class DeferredVerbEchoLawTests {
         );
         Assert.False(condition: echoes.TryTake(
             correlationId: 7,
-            verb: out _
-        ));
-    }
-    [Fact]
-    public void ZeroCorrelation_NeverRegisters() {
-        var echoes = new WorldDeferredVerbEchoes();
-
-        echoes.Register(
-            correlationId: 0,
-            verb: "world.row.set"
-        );
-
-        Assert.False(condition: echoes.TryTake(
-            correlationId: 0,
-            verb: out _
-        ));
-    }
-    [Fact]
-    public void UnknownCorrelation_TakesNothing() {
-        var echoes = new WorldDeferredVerbEchoes();
-
-        Assert.False(condition: echoes.TryTake(
-            correlationId: 42,
-            verb: out _
-        ));
-    }
-    [Fact]
-    public void PendingEntries_EvictOldestPastCapacity() {
-        var echoes = new WorldDeferredVerbEchoes();
-
-        for (var id = 1L; (id <= (WorldDeferredVerbEchoes.Capacity + 1)); id++) {
-            echoes.Register(
-                correlationId: id,
-                verb: "world.row.set"
-            );
-        }
-
-        // The oldest entry fell off the bound; the newest survives.
-        Assert.False(condition: echoes.TryTake(
-            correlationId: 1,
-            verb: out _
-        ));
-        Assert.True(condition: echoes.TryTake(
-            correlationId: (WorldDeferredVerbEchoes.Capacity + 1),
             verb: out _
         ));
     }
@@ -105,5 +82,28 @@ public sealed class DeferredVerbEchoLawTests {
             actual: verb,
             expected: "world.row.step"
         );
+    }
+    [Fact]
+    public void UnknownCorrelation_TakesNothing() {
+        var echoes = new WorldDeferredVerbEchoes();
+
+        Assert.False(condition: echoes.TryTake(
+            correlationId: 42,
+            verb: out _
+        ));
+    }
+    [Fact]
+    public void ZeroCorrelation_NeverRegisters() {
+        var echoes = new WorldDeferredVerbEchoes();
+
+        echoes.Register(
+            correlationId: 0,
+            verb: "world.row.set"
+        );
+
+        Assert.False(condition: echoes.TryTake(
+            correlationId: 0,
+            verb: out _
+        ));
     }
 }

@@ -62,6 +62,29 @@ public sealed class OverlayGlyphAtlasSet {
     /// resolves.</summary>
     public FontAtlas? MonoFont => m_monoFont.Value;
 
+    // The appended codepoint list's key contribution — plain int32 little-endian, in caller order, so two callers
+    // requesting the same repertoire in the same order (the ordinary case: one WorldIconTable per boot) hash equal.
+    private static void HashExtraCodePoints(IReadOnlyList<int>? codePoints, Span<byte> destination) {
+        if ((codePoints is not { Count: > 0 })) {
+            destination.Clear();
+
+            return;
+        }
+
+        Span<byte> bytes = stackalloc byte[(codePoints.Count * sizeof(int))];
+
+        for (var index = 0; (index < codePoints.Count); index++) {
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(
+                destination: bytes[(index * sizeof(int))..],
+                value: codePoints[index]
+            );
+        }
+
+        _ = SHA256.HashData(
+            destination: destination,
+            source: bytes
+        );
+    }
     private FontAtlasImageData? TryDecodeCombinedImage() {
         var imagePath = Path.Combine(
             path1: m_fontsDirectory,
@@ -219,29 +242,5 @@ public sealed class OverlayGlyphAtlasSet {
         );
 
         return built;
-    }
-
-    // The appended codepoint list's key contribution — plain int32 little-endian, in caller order, so two callers
-    // requesting the same repertoire in the same order (the ordinary case: one WorldIconTable per boot) hash equal.
-    private static void HashExtraCodePoints(IReadOnlyList<int>? codePoints, Span<byte> destination) {
-        if ((codePoints is not { Count: > 0 })) {
-            destination.Clear();
-
-            return;
-        }
-
-        Span<byte> bytes = stackalloc byte[(codePoints.Count * sizeof(int))];
-
-        for (var index = 0; (index < codePoints.Count); index++) {
-            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(
-                destination: bytes[(index * sizeof(int))..],
-                value: codePoints[index]
-            );
-        }
-
-        _ = SHA256.HashData(
-            destination: destination,
-            source: bytes
-        );
     }
 }

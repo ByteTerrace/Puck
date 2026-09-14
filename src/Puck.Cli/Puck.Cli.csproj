@@ -23,6 +23,7 @@
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="[5.*, )" />
         <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="[5.*, )" />
         <PackageReference Include="Resharp" Version="[1.*, )" />
+        <PackageReference Include="System.CommandLine" Version="[2.*, )" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.World.Silo\Puck.World.Silo.csproj" />
@@ -44,12 +45,17 @@
         <!-- The `puck bench world` lane boots a real WorldServer over the shipped world and a checked-in Klondike
              fixture document. -->
         <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
-        <!-- The screen-machine host (WorldMachineHost) and its shipped engines moved here from Puck.World.Server —
-             WorldBenchServer constructs the real host, with no registered engines, exactly like
-             tests/Puck.World.Tests/Fixtures.cs's FreshServer does. -->
-        <ProjectReference Include="..\Puck.World.Addons\Puck.World.Addons.csproj" />
+        <ProjectReference Include="..\Puck.World.Machines\Puck.World.Machines.csproj" />
+        <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
+        <ProjectReference Include="..\Puck.HumbleGamingBrick.Forge\Puck.HumbleGamingBrick.Forge.csproj" />
+        <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
+        <ProjectReference Include="..\Puck.AdvancedGamingBrick.Forge\Puck.AdvancedGamingBrick.Forge.csproj" />
         <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
+        <ProjectReference Include="..\Puck.World.Azure\Puck.World.Azure.csproj" />
+        <ProjectReference Include="..\Puck.GamingBricks.Transpiler\Puck.GamingBricks.Transpiler.csproj" />
+        <ProjectReference Include="..\Puck.Transpiler\Puck.Transpiler.csproj" />
+        <ProjectReference Include="..\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
         <ProjectReference Include="..\Puck.Mcp\Puck.Mcp.csproj" />
     </ItemGroup>
     <Target Name="PublishPuckLauncher" AfterTargets="Publish">
@@ -67,4 +73,5 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <Import Project="..\..\build\WorldAssets.targets" />
 </Project>

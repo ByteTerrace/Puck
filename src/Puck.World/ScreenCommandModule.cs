@@ -4,103 +4,70 @@ using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.Assets.Qr;
 using Puck.World.Server;
+using Puck.World.Machines;
 
 namespace Puck.World;
 
 /// <summary>
-/// The diegetic screens' console surface — the wire verbs that boot, eject, and inspect the deterministic machines
-/// behind the world's screens. <c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/<c>.options</c>/<c>.link</c>/
-/// <c>.unlink</c> submit a <see cref="WorldScreenOp"/> through the ordered submission domain
-/// (<see cref="ServerLinkSubmissions.SubmitScreenOp"/>) — <see cref="Server.WorldMachineHost"/> applies it synchronously and
-/// authoritatively, so an agent scripts a cabinet over the pipe with no
-/// restart and the op reproduces on replay; <c>screen.source &lt;index&gt; &lt;kind&gt; [args…]</c> (kind: camera | probe |
-/// capture | desktop | qr | view — absorbing the five former per-kind verbs into one dispatcher) stays genuinely
-/// presentation, calling <see cref="WorldScreenBinder"/> directly (never a machine, never tape-covered).
-/// <c>screen.state</c>/<c>screen.peek</c>/<c>screen.camera</c> are read-only queries that make the live state
-/// pipe-assertable (a booted machine's engine, bound handle, stepped-frame count, engaged players, one memory byte,
-/// and the shared camera device's control surface). The world speaks the
-/// engine-neutral machine vocabulary — a machine is resolved against a registered engine by id, and each engine owns its
-/// own options string. Every verb is wire-native — each failure marks <see cref="CommandResult.IsError"/> so
-/// <c>wire.ack quiet</c> drops only successes, and the two queries always echo their data.
+/// The diegetic screens' console surface — the wire verbs that insert content, detach displays, and inspect machines
+/// behind the world's screens. Named <c>screen.insert</c> submits the provider's content operation;
+/// <c>screen.eject</c> detaches the display through <see cref="WorldMutation.UpsertScreen"/>. Both use the ordered domain;
+/// <c>screen.source &lt;index&gt; &lt;kind&gt; [args…]</c> stays genuinely presentation, calling
+/// <see cref="WorldScreenBinder"/> directly (never a machine, never tape-covered).
+/// <c>screen.state</c>/<c>screen.peek</c>/<c>screen.camera</c>/<c>world.machines</c> are read-only queries that make the
+/// live state pipe-assertable. The world speaks the engine-neutral machine vocabulary.
 /// </summary>
-internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer server, IServerLink link) : ICommandModule {
+internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer server, IServerLink link, WorldMachineCatalog machines) : ICommandModule {
     private readonly WorldScreenBinder m_binder = binder;
     private readonly WorldEngagement m_engagement = server.Engagement;
     private readonly WorldServer m_server = server;
     private readonly IServerLink m_link = link;
 
-    // Advance a magazine selector by delta, wrapping or clamping per the magazine policy.
-    private static int Advance(int selected, int delta, int count, bool wrap) {
-        if (count <= 0) {
-            return 0;
-        }
-
-        var next = (selected + delta);
-
-        return (wrap
-            ? (((next % count) + count) % count)
-            : Math.Clamp(
-                max: (count - 1),
-                min: 0,
-                value: next
-            )
-        );
-    }
-    // The Control check over a screen subject, under whichever identity this dispatch's ingress door stamped —
-    // a CLIENT-SIDE precheck for a fast, friendly denial; Server.WorldMachineHost's own apply re-checks the
-    // identical pair AUTHORITATIVELY for screen-op verbs (see TryApplyScreenOp), so this is defense in depth, not
-    // the only gate, exactly like body.engage's own documented precheck/re-check split. Console and every seat
-    // hold Control over every screen by the permissive local defaults, so this is transparent until someone narrows
-    // the trust (world.grant/world.revoke).
+    // The Control check over a screen subject, under whichever identity this dispatch's ingress door stamped.
     private bool AllowsControl(WorldPrincipal principal, int index) =>
         m_server.Grants.Allows(
             principal: principal,
             capability: WorldCapability.Control,
             subject: GrantSubject.Screen(index: index)
         );
+    private CommandResult CameraHandler(CommandContext context, WireArgs args) {
+        if (CommandResult.RequireNoArguments(
+            args: args,
+            verb: "screen.camera"
+        ) is { } refusal) {
+            return refusal;
+        }
+
+        return ((m_binder.DescribeCamera() is { } description)
+            ? new CommandResult(Output: $"[screen.camera: {description}]")
+            : CommandResult.Error(output: "[screen.camera: no camera feed (bind a camera screen first)]")
+        );
+    }
     private IEnumerable<CommandDefinition> Commands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.insert",
-            description: "Boots content onto a declared screen, live: screen.insert <index> <contentPath> [engine] [options…] — <index> the engine screen index, <contentPath> a content file (a cartridge ROM, or a puck.cartridge.v1 document whose path ends in .cartridge.json, compiled through the engine's forge at bind), the optional [engine] a registered screen-machine engine id (omit it when one is registered — the mechanical default), and the trailing tokens the engine's own options string (the gaming-brick engine reads a family token dmg|cgb|agb or a revision token such as dmg0, sgb2 or cgb0, plus dmgspeed). Submits a WorldScreenOp.Insert through the ordered submission domain — Server.WorldMachineHost applies it synchronously and authoritatively, CAS-pinning the exact bytes read (the replay tape's negative control refuses a re-drive whose re-read disagrees); an existing machine on the slot is live-swapped. The server's own loud accept/reject line prints when it applies. Errors on an undeclared screen, an unresolved engine, an unreadable file, or rejected options.",
+            description: "Inserts content into the named machine displayed by a screen: screen.insert <index> <contentPath>. Uses the current generation and provider content.insert operation, requiring Control over the screen and machine. The machine retains its authored configuration. Empty legacy slots additionally accept [engine] [options…] through the screen-operation protocol.",
             handler: InsertHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.source",
-            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin). Genuinely presentation for every kind (never a machine, never tape-covered) — a booted machine on the slot is ejected FIRST, through the ordered domain, exactly as each former verb did. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal (a missing capture target, an unavailable capture service, an unrecognized EC-level letter, a negative quiet zone, a payload too large for the encoder); an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead (a seat's camera can attach after the bind).",
+            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin). Changes the presentation binding. A named machine keeps its identity and continues running when the screen changes source; a legacy slot-owned machine is ejected through the ordered domain first. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal; an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead.",
             handler: SourceHandler,
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.eject",
-            description: "Ejects a screen's live source, live: screen.eject <index>. A booted machine ejects through a WorldScreenOp.Eject submission (ordered domain, tape-covered, the server prints the accept/reject line); the webcam or a window capture ejects directly through the binder (genuinely presentation, unchanged). The slot reverts to its declared test pattern or to the engine's procedural no-signal fallback. Errors on an undeclared screen or a slot with no live source.",
+            description: "Ejects a screen's live source, live: screen.eject <index>. A named machine display removes only the screen source through a WorldMutation.UpsertScreen submission and keeps its producer alive; a legacy screen-owned machine uses the same source removal, while a presentation source ejects directly through the binder.",
             handler: EjectHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
-            name: "screen.select",
-            description: "Advances a screen's source magazine, live: screen.select <index> [next|prev|<entry>]. No third token echoes the current selection. The selector move ALWAYS submits a WorldScreenOp.Select (ordered domain, tape-covered) — Server.WorldMachineHost boots the entry authoritatively when it is a Machine row; for a non-machine entry (camera/capture/view) the selector still moves authoritatively and this verb ALSO applies the entry locally through the binder (genuinely presentation), so this verb echoes both outcomes. Errors on an undeclared screen, a screen with no magazine, or an out-of-range entry.",
-            handler: SelectHandler
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "screen.options",
-            description: "Reconfigures a screen's live machine across the engine's options vocabulary, live: screen.options <index> [options…]. No options echoes the machine's current string. With options, submits a WorldScreenOp.SetOptions through the ordered submission domain to retarget the running machine (the dmg|cgb|agb device swap — no reboot, no lost progress); the server's own loud accept/reject line prints when it applies. Errors on an undeclared screen, a slot with no machine, a machine without the reconfigure capability, or rejected options.",
-            handler: OptionsHandler
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "screen.link",
-            description: "Cable-links two or more declared screens' machines into one deterministically stepped group: screen.link <name> <index> <index> [index…] — the runtime twin of the machine sources' authored cable ports (world.save folds the live set back onto them). Submits a WorldScreenOp.Link through the ordered submission domain; Server.WorldMachineHost applies it authoritatively and the server's own loud line prints the live/dormant outcome. A group whose members cannot currently be linked (a member with no machine, mixed engines, an engine with no linking capability) is recorded DORMANT with a reason. Errors on an undeclared screen, a duplicate member, or a member already in another link.",
-            handler: LinkHandler
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "screen.unlink",
-            description: "Severs a runtime cable link by name: screen.unlink <name>. Submits a WorldScreenOp.Unlink through the ordered submission domain. Its members resume individual stepping. Errors when no link of that name is live.",
-            handler: UnlinkHandler
+            name: "world.machines",
+            description: "Echoes the registered screen-machine engines and cartridge forge compilers: world.machines. A query (always echoes).",
+            handler: MachinesHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
@@ -123,7 +90,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.peek",
-            description: "Reads one memory byte from a screen's machine: screen.peek <index> <addr> — <addr> a 0x-prefixed hex machine address (the gaming-brick's work RAM is [0xC000, 0xDFFF]). A read only, never a write into machine state, so a piped proof can assert a game's stored bytes. A query (always echoes). Errors when the screen carries no machine, or its machine has no memory-peek capability.",
+            description: "Reads one memory byte from a screen's machine: screen.peek <index> <addr> — <addr> a 0x-prefixed hex machine address (or variable symbol for compiled cartridges). A read only, never a write into machine state, so a piped proof can assert a game's stored bytes. A query (always echoes). Errors when the screen carries no machine, or its machine has no memory-peek capability.",
             handler: PeekHandler
         );
     }
@@ -142,8 +109,6 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         return null;
     }
     private static CommandResult Denied(WorldPrincipal principal, string verb, int index) =>
-        // The grant subject is ONE colon-joined token: `screen:{index}`, not `screen {index}` (which the parser refuses
-        // for both the split subject and the arity it pushes past).
         CommandResult.Error(output: $"[{verb}: {principal.Describe()} lacks Control over screen {index} — grant it (world.grant {principal.Describe()} control screen:{index})]");
     private CommandResult EjectHandler(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
@@ -170,13 +135,18 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             );
         }
 
-        if (m_server.Machines.HasMachine(index: index)) {
-            m_link.SubmitScreenOp(
-                op: new WorldScreenOp.Eject(Index: index),
-                principal: principal
-            );
+        if (
+            (DeclaredScreen(index: index) is { } existing) &&
+            (m_server.Machines.HasMachine(index: index) || (existing.Source is WorldScreenSource.Machine))
+        ) {
+            if (existing.Source is WorldScreenSource.Machine) {
+                var updated = existing with { Source = new WorldScreenSource.None() };
 
-            return CommandResult.None;
+                return m_link.Submit(mutation: new WorldMutation.UpsertScreen(
+                    Principal: principal,
+                    Screen: updated
+                ));
+            }
         }
 
         var (ok, message) = m_binder.TryEject(index: index);
@@ -186,15 +156,19 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             : CommandResult.Error(output: $"[screen.eject: {message}]")
         );
     }
-    // A machine present on the target index is ejected FIRST, through the ordered domain, so a camera/capture/view
-    // bind (all genuinely presentation) never has to reach past this project's own architecture firewall to dispose
-    // one — Server.WorldMachineHost owns that lifetime now. A no-op (no submission) when no machine is present.
     private void EjectMachineFirst(int index, WorldPrincipal principal) {
-        if (m_server.Machines.HasMachine(index: index)) {
-            m_link.SubmitScreenOp(
-                op: new WorldScreenOp.Eject(Index: index),
-                principal: principal
-            );
+        if (
+            m_server.Machines.HasMachine(index: index) &&
+            (DeclaredScreen(index: index)?.Source is not WorldScreenSource.Machine)
+        ) {
+            if (DeclaredScreen(index: index) is { } existing) {
+                var updated = existing with { Source = new WorldScreenSource.None() };
+
+                _ = m_link.Submit(mutation: new WorldMutation.UpsertScreen(
+                    Principal: principal,
+                    Screen: updated
+                ));
+            }
         }
     }
     private CommandResult InsertHandler(CommandContext context, WireArgs args) {
@@ -223,15 +197,12 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         }
 
         var contentPath = args[1].ToString();
-        // Grammar: <index> <contentPath> [engine] [options…]. The first trailing token is the engine id ONLY when it
-        // matches a registered engine; otherwise it belongs to the options string and the engine defaults (the sole
-        // registered engine). The remaining trailing tokens join, space-separated, into the engine's options string.
         var token = 2;
         string? engineId = null;
 
         if (
             (token < args.Count) &&
-            m_binder.HasEngine(engineId: args[token].ToString())
+            machines.IsRegistered(engineId: args[token].ToString())
         ) {
             engineId = args[token].ToString();
             token++;
@@ -253,6 +224,52 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             options = optionsBuilder.ToString();
         }
 
+        var existing = DeclaredScreen(index: index);
+
+        if (existing?.Source is WorldScreenSource.Machine named) {
+            if (m_server.Machines.InstanceState(name: named.Instance) is not { } state) {
+                return CommandResult.Error(output: $"[screen.insert: named machine '{named.Instance}' is unavailable]");
+            }
+            if (
+                ((engineId is not null) && (engineId != state.Engine)) ||
+                !string.IsNullOrWhiteSpace(value: options)
+            ) {
+                return CommandResult.Error(output: $"[screen.insert: '{named.Instance}' keeps its authored engine and configuration; use machine.operation for provider changes]");
+            }
+            return WorldMachineCommandModule.InsertContent(
+                m_link,
+                m_server.Machines,
+                principal,
+                named.Instance,
+                contentPath,
+                verb: "screen.insert"
+            );
+        }
+
+        if (engineId is null) {
+            if (
+                (existing?.Source is WorldScreenSource.Machine m) &&
+                (m_server.Machines.InstanceState(name: m.Instance) is { } state)
+            ) {
+                engineId = state.Engine;
+            } else {
+                var allEngines = machines.Engines.Values.ToArray();
+
+                if (allEngines.Length == 1) {
+                    engineId = allEngines[0].Id;
+                } else if (allEngines.Length > 1) {
+                    engineId = "gaming-brick";
+                }
+            }
+        }
+
+        if (
+            (engineId is null) ||
+            !machines.IsRegistered(engineId: engineId)
+        ) {
+            return CommandResult.Error(output: $"[screen.insert: no screen-machine engine '{(engineId ?? "unspecified")}' registered]");
+        }
+
         m_link.SubmitScreenOp(
             op: new WorldScreenOp.Insert(
                 ContentPath: contentPath,
@@ -265,113 +282,55 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
 
         return CommandResult.None;
     }
-    private CommandResult LinkHandler(CommandContext context, WireArgs args) {
-        if (args.Count < 3) {
-            return CommandResult.Error(output: "[screen.link: expected <name> <index> <index> [index…]]");
-        }
-
-        var name = args[0].ToString();
-        var members = new List<int>(capacity: (args.Count - 1));
-        var principal = context.ActingPrincipal();
-
-        for (var token = 1; (token < args.Count); token++) {
-            if (!args.TryInt(
-                index: token,
-                value: out var member
-            )) {
-                return CommandResult.Error(output: $"[screen.link: '{args[token].ToString()}' must be an integer]");
-            }
-
-            if (!AllowsControl(
-                index: member,
-                principal: principal
-            )) {
-                return Denied(
-                    index: member,
-                    principal: principal,
-                    verb: "screen.link"
-                );
-            }
-
-            members.Add(item: member);
-        }
-
-        m_link.SubmitScreenOp(
-            op: new WorldScreenOp.Link(
-                Members: members,
-                Name: name
-            ),
-            principal: principal
-        );
-
-        return CommandResult.None;
-    }
     private CommandResult LinksHandler(CommandContext context, WireArgs args) {
-        if (CommandResult.RequireNoArguments(args: args, verb: "screen.links") is { } refusal) {
+        if (CommandResult.RequireNoArguments(
+            args: args,
+            verb: "screen.links"
+        ) is { } refusal) {
             return refusal;
         }
 
         return new CommandResult(Output: $"[screen.links: {m_binder.DescribeLinks()}]");
     }
-    private CommandResult OptionsHandler(CommandContext context, WireArgs args) {
-        if (args.Count < 1) {
-            return CommandResult.Error(output: "[screen.options: expected <index> [options…]]");
+    private CommandResult MachinesHandler(CommandContext context, WireArgs args) {
+        if (CommandResult.RequireNoArguments(
+            args: args,
+            verb: "world.machines"
+        ) is { } refusal) {
+            return refusal;
         }
 
-        if (!args.TryInt(
-            index: 0,
-            value: out var index
-        )) {
-            return CommandResult.Error(output: $"[screen.options: index '{args[0].ToString()}' must be an integer]");
-        }
+        var engines = machines.Engines.Values.ToArray();
+        var compilers = machines.ContentProviders;
+        var sb = new StringBuilder();
 
-        var principal = context.ActingPrincipal();
+        _ = sb.Append(value: "[world.machines: ");
 
-        if (!AllowsControl(
-            index: index,
-            principal: principal
-        )) {
-            return Denied(
-                index: index,
-                principal: principal,
-                verb: "screen.options"
-            );
-        }
+        if (engines.Length == 0) {
+            _ = sb.Append(value: "none registered");
+        } else {
+            for (var i = 0; (i < engines.Length); i++) {
+                if (i > 0) {
+                    _ = sb.Append(value: ", ");
+                }
 
-        // No options: echo the machine's current string.
-        if (args.Count == 1) {
-            return (m_binder.TryReadOptions(
-                index: index,
-                out var current
-            )
-                ? new CommandResult(Output: $"[screen.options: {index} '{current}']")
-                : CommandResult.Error(output: $"[screen.options: screen {index} has no reconfigurable machine]")
-            );
-        }
+                var eng = engines[i];
 
-        var optionsBuilder = new StringBuilder();
+                _ = sb.Append(value: eng.Id);
 
-        for (var token = 1; (token < args.Count); token++) {
-            if (optionsBuilder.Length > 0) {
-                _ = optionsBuilder.Append(value: ' ');
+                if (compilers.ContainsKey(key: eng.Id)) {
+                    _ = sb.Append(value: " (forge)");
+                }
             }
-
-            _ = optionsBuilder.Append(value: args[token].ToString());
         }
 
-        m_link.SubmitScreenOp(
-            op: new WorldScreenOp.SetOptions(
-                Index: index,
-                Options: optionsBuilder.ToString()
-            ),
-            principal: principal
-        );
+        _ = sb.Append(value: ']');
 
-        return CommandResult.None;
+        return new CommandResult(Output: sb.ToString());
     }
     private CommandResult PeekHandler(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Error(output: "[screen.peek: expected <index> <addr> — addr a 0x-prefixed hex address]");
+            return CommandResult.Error(output: "[screen.peek: expected <index> <addr> — addr a 0x-prefixed hex address or symbol]");
         }
 
         if (!args.TryInt(
@@ -381,11 +340,21 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             return CommandResult.Error(output: $"[screen.peek: index '{args[0].ToString()}' must be an integer]");
         }
 
-        if (!TryParseHex(
+        ushort address;
+
+        if (TryParseHex(
             token: args[1],
-            value: out var address
+            value: out var parsedAddr
         )) {
-            return CommandResult.Error(output: $"[screen.peek: addr '{args[1].ToString()}' must be a 0x-prefixed hex address]");
+            address = parsedAddr;
+        } else if (m_server.Machines.TryResolveSymbol(
+            index: index,
+            symbol: args[1].ToString(),
+            address: out var symAddr
+        )) {
+            address = unchecked((ushort)symAddr);
+        } else {
+            return CommandResult.Error(output: $"[screen.peek: addr '{args[1].ToString()}' must be a 0x-prefixed hex address or recognized symbol]");
         }
 
         var (ok, message) = m_binder.TryPeek(
@@ -403,110 +372,6 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             handler: $"[screen.peek: {index} 0x{address:X4}=0x{value:X2}]"
         ));
     }
-    private CommandResult SelectHandler(CommandContext context, WireArgs args) {
-        if (args.Count is < 1 or > 2) {
-            return CommandResult.Error(output: "[screen.select: expected <index> [next|prev|<entry>]]");
-        }
-
-        if (!args.TryInt(
-            index: 0,
-            value: out var index
-        )) {
-            return CommandResult.Error(output: $"[screen.select: index '{args[0].ToString()}' must be an integer]");
-        }
-
-        var principal = context.ActingPrincipal();
-
-        if (!AllowsControl(
-            index: index,
-            principal: principal
-        )) {
-            return Denied(
-                index: index,
-                principal: principal,
-                verb: "screen.select"
-            );
-        }
-
-        if (!m_binder.TryMagazine(
-            index: index,
-            magazine: out var magazine,
-            selected: out var selected
-        )) {
-            return CommandResult.Error(output: $"[screen.select: screen {index} has no magazine]");
-        }
-
-        // No third token: echo the current selection without moving.
-        if (args.Count == 1) {
-            return new CommandResult(Output: $"[screen.select: {index} entry {selected}/{magazine.Entries.Count} (unchanged)]");
-        }
-
-        var token = args[1].ToString();
-        int target;
-
-        if (string.Equals(
-            a: token,
-            b: "next",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            target = Advance(
-                selected: selected,
-                delta: 1,
-                count: magazine.Entries.Count,
-                wrap: magazine.Wrap
-            );
-        } else if (string.Equals(
-            a: token,
-            b: "prev",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            target = Advance(
-                selected: selected,
-                delta: -1,
-                count: magazine.Entries.Count,
-                wrap: magazine.Wrap
-            );
-        } else if (!CommandArgs.TryParseInt(
-            text: token,
-            value: out target
-        )) {
-            return CommandResult.Error(output: $"[screen.select: '{token}' must be next, prev, or an entry index]");
-        }
-
-        if (
-            (target < 0) ||
-            (target >= magazine.Entries.Count)
-        ) {
-            return CommandResult.Error(output: $"[screen.select: entry {target} is outside 0..{(magazine.Entries.Count - 1)}]");
-        }
-
-        // The selector move is ALWAYS a WorldScreenOp.Select submission — Server.WorldMachineHost applies it
-        // authoritatively (booting a Machine entry, or simply moving the pointer for a non-machine one) and its own
-        // loud accept/reject line prints. A non-machine entry ALSO gets applied locally, right here, since that
-        // half is genuinely presentation (see this module's own remarks).
-        m_link.SubmitScreenOp(
-            op: new WorldScreenOp.Select(
-                Entry: target,
-                Index: index
-            ),
-            principal: principal
-        );
-
-        if (magazine.Entries[target] is WorldScreenSource.Machine) {
-            return CommandResult.None;
-        }
-
-        var (ok, message) = m_binder.ApplyNonMachineSource(
-            index: index,
-            source: magazine.Entries[target]
-        );
-
-        return new CommandResult(Output: $"[screen.select: {index} entry {target}/{magazine.Entries.Count} {(ok
-            ? message
-            : $"selected (presentation apply failed: {message})")}]") {
-            IsError = !ok,
-        };
-    }
     private CommandResult SourceCamera(int index, WorldPrincipal principal, in WireArgs args) {
         if (args.Count > 5) {
             return CommandResult.Error(output: "[screen.source: camera expects [color|infrared] [seat N]]");
@@ -520,13 +385,24 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
 
         if (
             (token < args.Count) &&
-            !args.Is(index: token, value: "seat")
+            !args.Is(
+            index: token,
+            value: "seat"
+        )
         ) {
             var sensorToken = args[token].ToString();
 
-            if (string.Equals(a: sensorToken, b: "infrared", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (string.Equals(
+                a: sensorToken,
+                b: "infrared",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
                 sensor = WorldCameraSensor.Infrared;
-            } else if (!string.Equals(a: sensorToken, b: "color", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            } else if (!string.Equals(
+                a: sensorToken,
+                b: "color",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
                 return CommandResult.Error(output: $"[screen.source: unknown camera sensor '{sensorToken}' — expected color or infrared]");
             }
 
@@ -534,7 +410,10 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         }
 
         if (token < args.Count) {
-            if (!args.Is(index: token, value: "seat")) {
+            if (!args.Is(
+                index: token,
+                value: "seat"
+            )) {
                 return CommandResult.Error(output: $"[screen.source: unexpected token '{args[token].ToString()}' — expected 'seat <N>']");
             }
 
@@ -542,7 +421,10 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
 
             if (
                 (token >= args.Count) ||
-                !args.TryInt(index: token, value: out seat)
+                !args.TryInt(
+                index: token,
+                value: out seat
+            )
             ) {
                 return CommandResult.Error(output: "[screen.source: seat expects an integer]");
             }
@@ -735,6 +617,29 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
 
         return CommandResult.Error(output: $"[screen.source: '{args[1].ToString()}' must be camera, capture, desktop, qr, or view]");
     }
+    private CommandResult SourceProbe(int index, WorldPrincipal principal, in WireArgs args) {
+        if (args.Count != 3) {
+            return CommandResult.Error(output: "[screen.source: probe expects <probeId>]");
+        }
+
+        EjectMachineFirst(
+            index: index,
+            principal: principal
+        );
+
+        var (ok, message) = m_binder.TryProbe(
+            index: index,
+            id: args[2].ToString()
+        );
+
+        return (ok
+            ? Success(
+                args: in args,
+                message: $"[screen.source: {message}]"
+            )
+            : CommandResult.Error(output: $"[screen.source: {message}]")
+        );
+    }
     private CommandResult SourceQr(int index, WorldPrincipal principal, in WireArgs args) {
         if (args.Count is < 2 or > 5) {
             return CommandResult.Error(output: "[screen.source: qr expects [payload] [ecLevel] [quietZoneModules]]");
@@ -787,29 +692,6 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             : CommandResult.Error(output: $"[screen.source: {message}]")
         );
     }
-    private CommandResult SourceProbe(int index, WorldPrincipal principal, in WireArgs args) {
-        if (args.Count != 3) {
-            return CommandResult.Error(output: "[screen.source: probe expects <probeId>]");
-        }
-
-        EjectMachineFirst(
-            index: index,
-            principal: principal
-        );
-
-        var (ok, message) = m_binder.TryProbe(
-            index: index,
-            id: args[2].ToString()
-        );
-
-        return (ok
-            ? Success(
-                args: in args,
-                message: $"[screen.source: {message}]"
-            )
-            : CommandResult.Error(output: $"[screen.source: {message}]")
-        );
-    }
     private CommandResult SourceView(int index, WorldPrincipal principal, in WireArgs args) {
         if (args.Count != 3) {
             return CommandResult.Error(output: "[screen.source: view expects <cameraName>]");
@@ -831,16 +713,6 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
                 message: $"[screen.source: {message}]"
             )
             : CommandResult.Error(output: $"[screen.source: {message}]")
-        );
-    }
-    private CommandResult CameraHandler(CommandContext context, WireArgs args) {
-        if (CommandResult.RequireNoArguments(args: args, verb: "screen.camera") is { } refusal) {
-            return refusal;
-        }
-
-        return ((m_binder.DescribeCamera() is { } description)
-            ? new CommandResult(Output: $"[screen.camera: {description}]")
-            : CommandResult.Error(output: "[screen.camera: no camera feed (bind a camera screen first)]")
         );
     }
     private CommandResult StateHandler(CommandContext context, WireArgs args) {
@@ -935,8 +807,16 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
                     _ = builder.Append(value: ',');
                 }
 
-                var tag = ((binding.Direction == WorldScreenMemoryDirection.Write) ? 'W' : 'R');
-                var text = (m_server.TryMachineMemoryObserved(screen: index, address: binding.Address, direction: binding.Direction, value: out var value)
+                var tag = ((binding.Direction == WorldScreenMemoryDirection.Write)
+                    ? 'W'
+                    : 'R'
+                );
+                var text = (m_server.TryMachineMemoryObserved(
+                    screen: index,
+                    address: binding.Address,
+                    direction: binding.Direction,
+                    value: out var value
+                )
                     ? value.ToString(provider: CultureInfo.InvariantCulture)
                     : "none"
                 );
@@ -974,47 +854,11 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             result: out value
         );
     }
-    private CommandResult UnlinkHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 1) {
-            return CommandResult.Error(output: "[screen.unlink: expected one <name>]");
-        }
-
-        var name = args[0].ToString();
-        var principal = context.ActingPrincipal();
-
-        // Control over every member is required to sever (the grant table's Screen(index)-for-every-member rule) — the
-        // same gate screen.link applies when the link is formed. A missing link falls through to the server's own
-        // honest "no link" refusal.
-        if (m_binder.TryReadLinkMembers(
-            members: out var members,
-            name: name
-        )) {
-            foreach (var member in members) {
-                if (!AllowsControl(
-                    index: member,
-                    principal: principal
-                )) {
-                    return Denied(
-                        index: member,
-                        principal: principal,
-                        verb: "screen.unlink"
-                    );
-                }
-            }
-        }
-
-        m_link.SubmitScreenOp(
-            op: new WorldScreenOp.Unlink(Name: name),
-            principal: principal
-        );
-
-        return CommandResult.None;
-    }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         foreach (var command in Commands()) {
-            yield return ((command.Name is "screen.state" or "screen.peek" or "screen.links")
+            yield return ((command.Name is "screen.state" or "screen.peek" or "screen.links" or "world.machines")
                 ? command
                 : command with { Routing = CommandRouting.Simulation }
             );

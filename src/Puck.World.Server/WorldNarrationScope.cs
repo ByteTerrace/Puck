@@ -7,12 +7,12 @@ namespace Puck.World.Server;
 /// was written.
 /// </summary>
 public static class WorldNarrationScope {
-    private static readonly AsyncLocal<string?> s_current = new();
+    private static readonly AsyncLocal<string?> CurrentValue = new();
 
     /// <summary>Gets or sets the row label ambient on the current logical call context, or <see langword="null"/>
     /// outside any row's own work.</summary>
     public static string? Current {
-        get => s_current.Value;
-        set => s_current.Value = value;
+        get => CurrentValue.Value;
+        set => CurrentValue.Value = value;
     }
 }

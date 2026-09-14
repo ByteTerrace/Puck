@@ -34,6 +34,7 @@ public sealed record WorldObserverDisclosure(
 ) {
     /// <summary>The greatest supported remote snapshot interval.</summary>
     public const float MaximumUpdateSeconds = 1f;
+
     /// <summary>Gets the disclose-all policy an unauthored world resolves to.</summary>
     public static WorldObserverDisclosure Default { get; } = new();
 }

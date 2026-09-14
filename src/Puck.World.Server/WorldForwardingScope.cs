@@ -4,18 +4,18 @@ namespace Puck.World.Server;
 internal readonly struct WorldForwardingScope : IDisposable {
     // Stack-safety bound, not an authored gameplay rule. Remote request workers own their own traversal scope.
     private const int MaximumDepth = 64;
-    [ThreadStatic] private static int s_depth;
 
+    [ThreadStatic] private static int Depth;
+
+    public void Dispose() => Depth--;
     public static bool TryEnter(out WorldForwardingScope scope, out string reason) {
         scope = default;
-        if (s_depth >= MaximumDepth) {
+        if (Depth >= MaximumDepth) {
             reason = $"local forwarding exceeds {MaximumDepth} hops; the route may contain a cycle";
             return false;
         }
-        s_depth++;
+        Depth++;
         reason = string.Empty;
         return true;
     }
-
-    public void Dispose() => s_depth--;
 }

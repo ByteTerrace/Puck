@@ -11,7 +11,10 @@ public sealed class Win32MediaFoundationCameraServiceTests {
     public void Enumerate_devices_reports_a_color_camera() {
         var devices = new Win32MediaFoundationCameraService().EnumerateDevices();
 
-        if (!TryFindColorDevice(device: out var device, devices: devices)) {
+        if (!TryFindColorDevice(
+            device: out var device,
+            devices: devices
+        )) {
             Assert.Skip(reason: "no color camera is attached to this machine.");
 
             return;
@@ -19,25 +22,46 @@ public sealed class Win32MediaFoundationCameraServiceTests {
 
         Assert.False(condition: string.IsNullOrEmpty(value: device.Id));
         Assert.False(condition: string.IsNullOrEmpty(value: device.Name));
-        Assert.Contains(expected: CameraSensor.Color, collection: device.Sensors);
+        Assert.Contains(
+            expected: CameraSensor.Color,
+            collection: device.Sensors
+        );
     }
     [Fact]
     public void Opening_a_color_device_by_id_on_the_pixel_tier_delivers_a_frame() {
         var service = new Win32MediaFoundationCameraService();
         var devices = service.EnumerateDevices();
 
-        if (!TryFindColorDevice(device: out var device, devices: devices)) {
+        if (!TryFindColorDevice(
+            device: out var device,
+            devices: devices
+        )) {
             Assert.Skip(reason: "no color camera is attached to this machine.");
 
             return;
         }
 
-        ReadOnlySpan<CameraStreamRequest> streams = [new CameraStreamRequest(Height: 240, RateHz: 0, Sensor: CameraSensor.Color, Width: 320)];
+        ReadOnlySpan<CameraStreamRequest> streams = [new CameraStreamRequest(
+                Height: 240,
+                RateHz: 0,
+                Sensor: CameraSensor.Color,
+                Width: 320
+            )];
 
-        Assert.True(condition: service.TryOpenPixels(deviceId: device.Id, streams: streams, graph: out var graph), userMessage: $"'{device.Name}' refused to open on the pixel tier.");
+        Assert.True(
+            condition: service.TryOpenPixels(
+                deviceId: device.Id,
+                streams: streams,
+                graph: out var graph
+            ),
+            userMessage: $"'{device.Name}' refused to open on the pixel tier."
+        );
 
         using (graph) {
-            Assert.Equal(expected: device.Id, actual: graph!.DeviceId);
+            Assert.Equal(
+                expected: device.Id,
+                actual: graph!.DeviceId
+            );
 
             var stream = Assert.Single(collection: graph.Streams);
 
@@ -45,8 +69,14 @@ public sealed class Win32MediaFoundationCameraServiceTests {
                 condition: stream.TryCapture(surface: out var surface),
                 userMessage: $"'{device.Name}' opened without a published {stream.NativeFormat.Subtype} {stream.Width}x{stream.Height} frame at {stream.NativeFormat.RateHz:F2} Hz."
             );
-            Assert.Equal(expected: ((uint)stream.Width), actual: surface.Width);
-            Assert.Equal(expected: ((uint)stream.Height), actual: surface.Height);
+            Assert.Equal(
+                expected: ((uint)stream.Width),
+                actual: surface.Width
+            );
+            Assert.Equal(
+                expected: ((uint)stream.Height),
+                actual: surface.Height
+            );
             Assert.True(condition: (surface.Pixels.Length >= checked(((stream.Width * stream.Height) * 4))));
         }
     }
@@ -75,16 +105,34 @@ public sealed class Win32MediaFoundationCameraServiceTests {
         var openedNames = new List<string>();
 
         foreach (var device in colorDevices) {
-            ReadOnlySpan<CameraStreamRequest> streams = [new CameraStreamRequest(Height: 240, RateHz: 0, Sensor: CameraSensor.Color, Width: 320)];
+            ReadOnlySpan<CameraStreamRequest> streams = [new CameraStreamRequest(
+                    Height: 240,
+                    RateHz: 0,
+                    Sensor: CameraSensor.Color,
+                    Width: 320
+                )];
 
-            Assert.True(condition: service.TryOpenPixels(deviceId: device.Id, streams: streams, graph: out var graph), userMessage: $"'{device.Name}' refused to open on the pixel tier.");
+            Assert.True(
+                condition: service.TryOpenPixels(
+                    deviceId: device.Id,
+                    streams: streams,
+                    graph: out var graph
+                ),
+                userMessage: $"'{device.Name}' refused to open on the pixel tier."
+            );
 
             using (graph) {
-                Assert.Equal(expected: device.Id, actual: graph!.DeviceId);
+                Assert.Equal(
+                    expected: device.Id,
+                    actual: graph!.DeviceId
+                );
                 // graph.DeviceId echoes the request; graph.Name is read back from the activated Media Foundation
                 // source, so this is the only assertion that proves the requested device (not the driver's default)
                 // actually opened.
-                Assert.Equal(expected: device.Name, actual: graph.Name);
+                Assert.Equal(
+                    expected: device.Name,
+                    actual: graph.Name
+                );
                 openedNames.Add(item: graph.Name);
 
                 var stream = Assert.Single(collection: graph.Streams);
@@ -93,14 +141,23 @@ public sealed class Win32MediaFoundationCameraServiceTests {
                     condition: stream.TryCapture(surface: out var surface),
                     userMessage: $"'{device.Name}' opened without a published {stream.NativeFormat.Subtype} {stream.Width}x{stream.Height} frame at {stream.NativeFormat.RateHz:F2} Hz."
                 );
-                Assert.Equal(expected: ((uint)stream.Width), actual: surface.Width);
-                Assert.Equal(expected: ((uint)stream.Height), actual: surface.Height);
+                Assert.Equal(
+                    expected: ((uint)stream.Width),
+                    actual: surface.Width
+                );
+                Assert.Equal(
+                    expected: ((uint)stream.Height),
+                    actual: surface.Height
+                );
                 Assert.True(condition: (surface.Pixels.Length >= checked(((stream.Width * stream.Height) * 4))));
             }
         }
 
         if (openedNames.Count > 1) {
-            Assert.Equal(expected: openedNames.Count, actual: openedNames.Distinct().Count());
+            Assert.Equal(
+                expected: openedNames.Count,
+                actual: openedNames.Distinct().Count()
+            );
         }
     }
     [Fact]
@@ -108,28 +165,52 @@ public sealed class Win32MediaFoundationCameraServiceTests {
         var service = new Win32MediaFoundationCameraService();
         var devices = service.EnumerateDevices();
 
-        if (!TryFindColorDevice(device: out var device, devices: devices)) {
+        if (!TryFindColorDevice(
+            device: out var device,
+            devices: devices
+        )) {
             Assert.Skip(reason: "no color camera is attached to this machine.");
 
             return;
         }
 
-        ReadOnlySpan<CameraStreamRequest> unknownDeviceStreams = [new CameraStreamRequest(Height: 240, RateHz: 0, Sensor: CameraSensor.Color, Width: 320)];
+        ReadOnlySpan<CameraStreamRequest> unknownDeviceStreams = [new CameraStreamRequest(
+                Height: 240,
+                RateHz: 0,
+                Sensor: CameraSensor.Color,
+                Width: 320
+            )];
 
-        Assert.False(condition: service.TryOpenPixels(deviceId: "not-an-enumerated-camera-id", graph: out var refusedGraph, streams: unknownDeviceStreams));
+        Assert.False(condition: service.TryOpenPixels(
+            deviceId: "not-an-enumerated-camera-id",
+            graph: out var refusedGraph,
+            streams: unknownDeviceStreams
+        ));
         Assert.Null(@object: refusedGraph);
 
-        ReadOnlySpan<CameraStreamRequest> streams = [new CameraStreamRequest(Height: 240, RateHz: 0, Sensor: CameraSensor.Color, Width: 320)];
+        ReadOnlySpan<CameraStreamRequest> streams = [new CameraStreamRequest(
+                Height: 240,
+                RateHz: 0,
+                Sensor: CameraSensor.Color,
+                Width: 320
+            )];
 
         Assert.True(
-            condition: service.TryOpenPixels(deviceId: device.Id, streams: streams, graph: out var graph),
+            condition: service.TryOpenPixels(
+                deviceId: device.Id,
+                streams: streams,
+                graph: out var graph
+            ),
             userMessage: $"'{device.Name}' refused to open after an unknown device id was refused first."
         );
 
         using (graph) {
             var stream = Assert.Single(collection: graph!.Streams);
 
-            Assert.True(condition: stream.TryCapture(surface: out _), userMessage: $"'{device.Name}' opened without a published frame.");
+            Assert.True(
+                condition: stream.TryCapture(surface: out _),
+                userMessage: $"'{device.Name}' opened without a published frame."
+            );
         }
     }
 

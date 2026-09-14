@@ -25,12 +25,18 @@ public sealed class ProbeTests {
     }
 
     private static void ProbeCorner() {
-        var world = SpikeFixtures.Corner(options: SpikeFixtures.CornerOptions(rateHz: 60, substepCount: 4));
+        var world = SpikeFixtures.Corner(options: SpikeFixtures.CornerOptions(
+            rateHz: 60,
+            substepCount: 4
+        ));
 
         for (var step = 0; (step < 240); ++step) {
             world.Advance();
 
-            if ((step < 4) || (((step + 1) % 60) == 0)) {
+            if (
+                (step < 4) ||
+                (((step + 1) % 60) == 0)
+            ) {
                 MeasurementReport.Write(line: $"corner step={(step + 1)} x={MeasurementReport.Format(value: world.Pose.Center.X)} y={MeasurementReport.Format(value: world.Pose.Center.Y)} candidates={world.LastStepCandidateCount} active={world.Slots.ActiveCount} iterations={world.Solver.LastStepIterationsToConverge} refusals={world.Solver.RefusalCount}");
             }
         }
@@ -53,7 +59,10 @@ public sealed class ProbeTests {
         for (var step = 0; (step < 120); ++step) {
             world.Advance();
 
-            if ((step < 3) || (((step + 1) % 30) == 0)) {
+            if (
+                (step < 3) ||
+                (((step + 1) % 30) == 0)
+            ) {
                 MeasurementReport.Write(line: $"capsule[{mode}] step={(step + 1)} y={MeasurementReport.Format(value: world.Pose.Center.Y)} candidates={world.LastStepCandidateCount} samples={world.LastStepSampleCount} endpointSeparation={MeasurementReport.Format(value: surface.LastEndpointSeparation)} witnessSeparation={MeasurementReport.Format(value: surface.LastWitnessSeparation)} refusals={world.Solver.RefusalCount}");
             }
         }
@@ -64,7 +73,10 @@ public sealed class ProbeTests {
         for (var step = 0; (step < 300); ++step) {
             world.Advance();
 
-            if ((step < 4) || (((step + 1) % 60) == 0)) {
+            if (
+                (step < 4) ||
+                (((step + 1) % 60) == 0)
+            ) {
                 MeasurementReport.Write(line: $"box step={(step + 1)} y={MeasurementReport.Format(value: world.Pose.Center.Y)} spinZ={MeasurementReport.Format(value: world.Body.AngularVelocity.Z)} vy={MeasurementReport.Format(value: world.Body.LinearVelocity.Y)} candidates={world.LastStepCandidateCount} iterations={world.Solver.LastStepIterationsToConverge} refusals={world.Solver.RefusalCount}");
             }
         }
@@ -87,18 +99,27 @@ public sealed class ProbeTests {
         for (var step = 0; (step < 120); ++step) {
             world.Advance();
 
-            if ((step < 3) || (((step + 1) % 20) == 0)) {
+            if (
+                (step < 3) ||
+                (((step + 1) % 20) == 0)
+            ) {
                 MeasurementReport.Write(line: $"deep[recovery={recovery}] step={(step + 1)} y={MeasurementReport.Format(value: world.Pose.Center.Y)} vy={MeasurementReport.Format(value: world.Body.LinearVelocity.Y)} candidates={world.LastStepCandidateCount} maxImpulse={world.Solver.LastStepMaximumImpulseRaw} refusals={world.Solver.RefusalCount}");
             }
         }
     }
     private static void ProbeBoxInCorner() {
-        var world = SpikeFixtures.BoxInCorner(options: SpikeFixtures.BoxInCornerOptions(rateHz: 60, substepCount: 4));
+        var world = SpikeFixtures.BoxInCorner(options: SpikeFixtures.BoxInCornerOptions(
+            rateHz: 60,
+            substepCount: 4
+        ));
 
         for (var step = 0; (step < 240); ++step) {
             world.Advance();
 
-            if ((step < 3) || (((step + 1) % 60) == 0)) {
+            if (
+                (step < 3) ||
+                (((step + 1) % 60) == 0)
+            ) {
                 MeasurementReport.Write(line: $"boxCorner step={(step + 1)} x={MeasurementReport.Format(value: world.Pose.Center.X)} y={MeasurementReport.Format(value: world.Pose.Center.Y)} candidates={world.LastStepCandidateCount} active={world.Slots.ActiveCount} digest={world.Digest:X16} refusals={world.Solver.RefusalCount}");
             }
         }

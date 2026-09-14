@@ -33,9 +33,9 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
     /// stays acceptable after a narrower one is issued. Kept short and deliberately not described as freshness.</summary>
     public static readonly TimeSpan MaximumClaimAge = TimeSpan.FromHours(value: 1);
 
-    private const string OwnerKeyPrefix = "owner/";
-
     private static readonly IAttestationCodec Codec = new CborAttestationCodec();
+
+    private const string OwnerKeyPrefix = "owner/";
 
     private readonly IReadOnlyList<WorldAdmissionEntry>? m_admissionEntries;
     private readonly TokenCredential m_credential;
@@ -129,7 +129,10 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
                 method: HttpMethod.Get,
                 requestUri: $"api/worlds/{owner:D}/{world}/counterpart"
             ) {
-                Headers = { Authorization = new AuthenticationHeaderValue(scheme: "Bearer", parameter: token.Token) },
+                Headers = { Authorization = new AuthenticationHeaderValue(
+                scheme: "Bearer",
+                parameter: token.Token
+            ) },
             };
 
             response = m_httpClient.Send(
@@ -159,7 +162,8 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
                 return WorldNeighbourResolution.Unavailable(reason: $"could not read the counterpart claim response body for '{document}' — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
             }
 
-            if (!AttestationChainEnvelope.TryDecode(
+            if (
+                !AttestationChainEnvelope.TryDecode(
                 chain: out var chainBytes,
                 claim: out var claimBytes,
                 reason: out var envelopeReason,
@@ -190,7 +194,8 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
                 return WorldNeighbourResolution.Unavailable(reason: $"'{document}' counterpart claim/chain does not decode — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
             }
 
-            if (!WorldCounterpartAttestationProtocol.TryVerify(
+            if (
+                !WorldCounterpartAttestationProtocol.TryVerify(
                 attestation: out var attestation,
                 chain: chain,
                 claim: claim,

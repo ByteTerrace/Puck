@@ -7,6 +7,14 @@ using Windows.Win32.Foundation;
 namespace Puck.Platform.Windows.Hid;
 
 internal static class HidThrowHelper {
+    [DoesNotReturn]
+    internal static void ThrowLastWin32Exception(string source, WIN32_ERROR? errorCode = default) {
+        throw CreateWin32Exception(
+            errorCode: ((int?)errorCode),
+            source: source
+        );
+    }
+
     [MethodImpl(methodImplOptions: MethodImplOptions.NoInlining)]
     private static Win32Exception CreateWin32Exception(
         string source,
@@ -17,13 +25,5 @@ internal static class HidThrowHelper {
         }
 
         return new Win32Exception(message: $"Unhandled exception from {source}: [{errorCode}] \"{Marshal.GetPInvokeErrorMessage(error: errorCode.Value)}\".");
-    }
-
-    [DoesNotReturn]
-    internal static void ThrowLastWin32Exception(string source, WIN32_ERROR? errorCode = default) {
-        throw CreateWin32Exception(
-            errorCode: ((int?)errorCode),
-            source: source
-        );
     }
 }

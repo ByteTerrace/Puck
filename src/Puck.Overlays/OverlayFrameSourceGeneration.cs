@@ -15,14 +15,6 @@ public sealed class OverlayFrameSourceGeneration(Action<int> retain, Action<int>
     private ulong m_generation;
     private bool m_open;
 
-    /// <summary>Gets whether <paramref name="key"/> is retained by the current active set.</summary>
-    /// <param name="key">The stable non-negative source key.</param>
-    /// <returns><see langword="true"/> when the key is currently retained.</returns>
-    public bool IsActive(int key) => (
-        (key >= 0) &&
-        (key < m_entries.Count) &&
-        m_entries[key].Active
-    );
     /// <summary>Begins one active-source generation.</summary>
     /// <exception cref="InvalidOperationException">A generation is already open.</exception>
     public void BeginGeneration() {
@@ -55,7 +47,10 @@ public sealed class OverlayFrameSourceGeneration(Action<int> retain, Action<int>
             var key = m_activeKeys[activeIndex];
             var entry = m_entries[key];
 
-            if (!entry.Active || (entry.SeenGeneration == m_generation)) {
+            if (
+                !entry.Active ||
+                (entry.SeenGeneration == m_generation)
+            ) {
                 continue;
             }
 
@@ -67,6 +62,14 @@ public sealed class OverlayFrameSourceGeneration(Action<int> retain, Action<int>
             m_release(key);
         }
     }
+    /// <summary>Gets whether <paramref name="key"/> is retained by the current active set.</summary>
+    /// <param name="key">The stable non-negative source key.</param>
+    /// <returns><see langword="true"/> when the key is currently retained.</returns>
+    public bool IsActive(int key) => (
+        (key >= 0) &&
+        (key < m_entries.Count) &&
+        m_entries[key].Active
+    );
     /// <summary>Marks one stable key active in the open generation, retaining it exactly once when it enters the
     /// active set.</summary>
     /// <param name="key">The stable non-negative source key.</param>

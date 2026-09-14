@@ -5,10 +5,16 @@ namespace Puck.Launcher.Release;
 /// <param name="RefusalReason">Why verification refused, or <see langword="null"/> when <paramref name="Accepted"/> is <see langword="true"/>.</param>
 public sealed record ReleaseVerifyOutcome(bool Accepted, string? RefusalReason) {
     /// <summary>Builds an accepted outcome.</summary>
-    public static ReleaseVerifyOutcome Accept() => new(Accepted: true, RefusalReason: null);
+    public static ReleaseVerifyOutcome Accept() => new(
+        Accepted: true,
+        RefusalReason: null
+    );
     /// <summary>Builds a refused outcome.</summary>
     /// <param name="reason">A human-readable refusal reason — never used for control flow, only for reporting.</param>
-    public static ReleaseVerifyOutcome Refuse(string reason) => new(Accepted: false, RefusalReason: reason);
+    public static ReleaseVerifyOutcome Refuse(string reason) => new(
+        Accepted: false,
+        RefusalReason: reason
+    );
 }
 /// <summary>
 /// Decides whether a fetched <see cref="ReleaseManifest"/> may be staged: its signature verifies against a pinned

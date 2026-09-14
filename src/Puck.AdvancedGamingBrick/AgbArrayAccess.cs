@@ -14,9 +14,15 @@ internal static class AgbArrayAccess {
         if (width == 1) {
             array[index] = ((byte)value);
         } else if (width == 2) {
-            BinaryPrimitives.WriteUInt16LittleEndian(destination: array.AsSpan(start: ((int)index)), value: ((ushort)value));
+            BinaryPrimitives.WriteUInt16LittleEndian(
+                destination: array.AsSpan(start: ((int)index)),
+                value: ((ushort)value)
+            );
         } else {
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: array.AsSpan(start: ((int)index)), value: value);
+            BinaryPrimitives.WriteUInt32LittleEndian(
+                destination: array.AsSpan(start: ((int)index)),
+                value: value
+            );
         }
     }
 }

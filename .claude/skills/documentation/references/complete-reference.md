@@ -63,11 +63,10 @@ punctuation marks.
 
 ### No content bleed
 
-An agent's routing table, tier-selection procedure, run-this-command block, or
-"load skill X" instruction does not belong in a human document. A first-person
-discovery narrative does not belong in a `SKILL.md`. When you find one on the
-wrong surface, move it to the right surface in the same change rather than
-translating it in place.
+Agent orchestration and skill-loading instructions belong in agent guidance.
+Human procedures can include commands, verification steps, and troubleshooting
+when those help a person complete the task. Move agent-only operational content
+to its proper home while preserving every applicable constraint.
 
 ### Entry points route; owners hold depth
 
@@ -76,7 +75,7 @@ lives there, and links out. The child owns the contract table, the invariant
 list, and the worked detail. Entry points on different surfaces name each other
 explicitly — the human entry point states that it is the human entry point, and
 the agent-facing counterpart states which document wins a disagreement.
-[`src/Puck.Maths/README.md`](../../../../src/Puck.Maths/README.md) and
+[Deterministic numerics](../../../../docs/reference/maths.md) and
 [`maths-usage`](../../maths-usage/SKILL.md) are the working example of that
 pairing.
 
@@ -90,7 +89,7 @@ one a reader believes.
 
 **A deferral must never dangle.** If the owning document sheds a fact, that fact
 moves **into** the deferring document in the same change. This is already tree
-law: [`docs/agent-guide.md`](../../../../docs/agent-guide.md) § *Documentation
+law: [`docs/development/contributing.md`](../../../../docs/development/contributing.md) § *Documentation
 policy* requires moving any still-live contract, limitation, or procedure into
 its canonical reference before deleting the document that held it.
 
@@ -119,19 +118,9 @@ edit in a separate pass if the prose needs it.
 
 ### Voice
 
-Human narrative documents are written in this register. Calibrate against
-these traits, never against other prose found in the repository or elsewhere.
-
-- Plain **first-person curiosity** and genuine interest in the subject.
-- **Self-aware candor** — say plainly what is not understood or not settled.
-- Explanation through **concrete negatives and personal discovery**: "there is
-  no line anywhere that says X" teaches better than an abstract claim.
-- **Warm direct address** to the reader.
-- **Invitational rather than commanding** — offer the next step.
-
-Carry that sensibility inside the structure §1 requires: the document is a
-reference first, and the voice serves the reader's understanding rather than
-the writer's account of it.
+Follow [Writing documentation](../../../../docs/development/documentation.md).
+Its human voice is concrete, connected, approachable, and precise. Teach through
+examples and their consequences; do not manufacture a personal discovery story.
 
 ### The student floor
 
@@ -261,7 +250,7 @@ behavior writes `<inheritdoc/>` plus a `<remarks>` carrying only the increment.
 
 ### Completeness is a contract, not a courtesy
 
-[`docs/agent-guide.md`](../../../../docs/agent-guide.md) § *Code and documentation
+[`docs/development/contributing.md`](../../../../docs/development/contributing.md) § *Code and documentation
 conventions* states the obligation: public APIs describe current behavior,
 parameter units, ownership, lifetime, failure behavior, and determinism where
 relevant, and never narrate the change that introduced the API. A missing
@@ -294,8 +283,7 @@ Two consequences for the agent:
   parameter list is CS1573, which fails the build.
 
 Run `dotnet build Puck.slnx -c Release` after any edit that changes a `cref`,
-per [`docs/agent-guide.md`](../../../../docs/agent-guide.md) § *Analyze C#
-semantically*, step 4. `puck declarations --doc` inventories `cref` targets
+per [`docs/development/contributing.md`](../../../../docs/development/contributing.md) § *Find code and references*, step 4. `puck declarations --doc` inventories `cref` targets
 without a build (`symbol-analysis`).
 
 ### When the documentation and the behavior disagree
@@ -319,19 +307,17 @@ goal. The prose standard and purge list in §1 apply here in full: a `SKILL.md`
 written in manifesto cadence breaks them exactly as a README would.
 
 A skill records **settled facts and procedures**, not architecture that may not
-be questioned: [`docs/agent-guide.md`](../../../../docs/agent-guide.md) §
-*Engineering doctrine* makes skills evidence, outranked by the current request.
+be questioned: [`docs/development/contributing.md`](../../../../docs/development/contributing.md) §
+*Verification practices* makes skills evidence, outranked by the current request.
 
 ### Authoring a skill
 
 **The name** uses lowercase letters, digits, and hyphens, stays within 64
 characters, and matches the directory. Within this repository, preserve the
-established short kebab noun-phrase convention: `content-search`,
-`symbol-analysis`, `sdf-world`, `gaming-bricks`, `rom-forge`, `maths-usage`,
-`maths-laws`, `boy-scout`, `dotnet10-performance`, `documentation`. Avoid an
-unnecessary `puck-` prefix. Gerund and action-oriented names are valid Agent
-Skills names, but do not rename this repository's existing roster merely to
-change naming style.
+established short kebab noun-phrase convention — list the directories under
+`.claude/skills/` to see the current roster. Avoid an unnecessary `puck-`
+prefix. Gerund and action-oriented names are valid Agent Skills names, but do
+not rename this repository's existing roster merely to change naming style.
 
 **The frontmatter** uses exactly two keys in this repository, `name` and
 `description`. Write the description in third person. Include the capability,
@@ -368,8 +354,7 @@ an explicit handoff for adjacent work.
 
 Other files link into headings by GitHub-style slug: lowercase, spaces to
 hyphens, punctuation and backticks dropped. **Renaming a heading means sweeping
-every referrer in the same change.** Treat a heading that any other file links
-to as frozen text.
+every referrer in the same change.** Rename a referenced heading only with a complete incoming-reference repair.
 
 **Derive a slug from the target file's real heading, never from memory** —
 print them with `puck search "^#{1,6} " <file> -M 0`. Backticked type names in
@@ -397,21 +382,26 @@ document under `docs/` that names the skill.
 
 ### Placement and scope rules
 
-- **A single-owner document lives with its owner.** A project's design
-  rationale and specifications fold into that project's README (or the README
-  itself); `docs/` holds only cross-project material (vision, campaign, agent
-  guide, world model, project map, research corpora, verification runners,
-  reviews). There is no `docs/` index: the root `README.md` routes to the
-  document set, and its routing updates whenever the set changes.
-- **Documentation describes the current product.**
-  [`docs/agent-guide.md`](../../../../docs/agent-guide.md) §
-  *Documentation policy*: design history, completed rollout logs, migration
-  diaries, commit archaeology, and superseded plans belong in version control
-  history. Measurements survive only while they still explain a current
-  threshold, limitation, or decision.
-- **Never narrate the change inside the document.** No "recently added", "as of
-  this change", "previously this was" — on any surface, XML documentation
-  included.
+- **The engine manual starts at `docs/README.md`.** Its overview, getting-started
+  guide and topic pages help developers and agents learn and navigate the engine.
+  Manual topics own library usage and detailed human contracts; package READMEs
+  identify their component and link to those topics. XML comments own member
+  contracts. Existing specialized source references retain their ownership until
+  migrated; never copy them into a competing manual page.
+  Keep plans and design decisions distinct from current reference material.
+  The root `README.md` routes into the manual, and both entry points are updated
+  when their destinations change. Do not duplicate a contract to fill an index.
+- **Separate current behavior from proposals and evidence.** Guides and
+  references explain the current product. Plans preserve requested work,
+  dependencies and completion criteria. Decision pages preserve consequential
+  reasoning. Dated verification records identify their candidate and environment;
+  they must not imply permanent capability certification. Consolidate session
+  handoffs into those homes instead of requiring readers to follow transcripts.
+  Do not discard an unresolved idea or requirement merely because its source
+  document is being reorganized.
+- **Current references describe current behavior.** Avoid “recently added,”
+  “as of this change,” and “previously this was” in reference prose and XML
+  documentation. Dated evidence and decision records may describe past states.
 - **Machine-written artifacts are never hand-edited.** Two sets, with different
   owners. `tests/Puck.Maths.Tests/coverage-manifest.json`, `leg-ledger.md`,
   `RESULTS.md`, and `frontier.json` are regenerated by the runs that own them,
@@ -442,10 +432,10 @@ document under `docs/` that names the skill.
    ledger is in the change description.
 5. **Routing is current** — the root `README.md` updated if the set of
    top-level documents changed.
-6. **A voice pass preserved every fact and every heading.** The house method is a
+6. **A voice pass preserved every fact and repaired changed headings.** The house method is a
    token audit against the pre-edit copy: keep a copy in the scratchpad, then
    diff the claim inventory. A voice edit that drops a fact has changed the
-   content, and a voice edit that renames a heading has broken a link.
+   content, and a heading edit requires checking and repairing its incoming links.
 7. **`dotnet build Puck.slnx -c Release`** when the edit touched XML
    documentation — required for a changed `cref`, and the only check that the
    structural diagnostics in §4 still pass. A pure Markdown edit does not owe a

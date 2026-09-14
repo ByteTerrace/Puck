@@ -7,7 +7,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm.Views;
 
 /// <summary>
-/// A session-observed world's independent render, built for docs/vision.md's "Observation and display" section.
+/// A session-observed world's independent render, built for docs/architecture/worlds.md's "Observation and display" section.
 /// Wraps an independent <see cref="ISdfFrameSource"/> (a <see cref="SdfCompositionFrameSource"/> composing a
 /// destination's own static geometry) through its own offscreen <see cref="SdfWorldEngine"/>, exactly like
 /// <see cref="SdfCameraView"/> films the host world — the difference that matters is how it captures: never
@@ -15,7 +15,7 @@ namespace Puck.SdfVm.Views;
 /// </summary>
 /// <remarks>
 /// <para><b>Timing.</b> The host presentation clock (<c>context.Host.FrameDeltaSeconds</c>/
-/// <c>InterpolationAlpha</c>) is what docs/vision.md's "Ruled out" table rejects outright ("Host interpolation for
+/// <c>InterpolationAlpha</c>) is what docs/architecture/worlds.md's "Decisions and exclusions" table rejects outright ("Host interpolation for
 /// destination views": independently scheduled or remote worlds do not share a presentation coordinate). This type
 /// instead measures its own produced-frame interval — real wall time between this view's own
 /// <see cref="Resolve"/> calls, zero on the first — and hands that to

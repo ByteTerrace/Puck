@@ -6,18 +6,18 @@ namespace Puck.AdvancedGamingBrick.Post;
 // flags, which the output-results patch writes to address 0x00000004 after each test returns.
 internal sealed class TracingAgbBus : IAgbBus {
     private readonly IAgbBus m_inner;
-    private readonly uint m_watchAddress;
-    private readonly Action<uint> m_onStore;
-    private readonly uint m_readWatchAddress;
     private readonly Action<uint>? m_onRead;
-    private readonly uint m_readWatchAddress2;
     private readonly Action<uint, uint>? m_onRead2; // (address, value)
+    private readonly Action<uint, uint>? m_onReadRange; // (address, value) for any hit in [base, end)
+    private readonly Action<uint> m_onStore;
+    private readonly Action<uint, uint>? m_onWriteRange;
     private readonly uint m_readRangeBase;
     private readonly uint m_readRangeEnd;
-    private readonly Action<uint, uint>? m_onReadRange; // (address, value) for any hit in [base, end)
+    private readonly uint m_readWatchAddress;
+    private readonly uint m_readWatchAddress2;
+    private readonly uint m_watchAddress;
     private readonly uint m_writeRangeBase;
     private readonly uint m_writeRangeEnd;
-    private readonly Action<uint, uint>? m_onWriteRange;
 
     public TracingAgbBus(IAgbBus inner, uint watchAddress, Action<uint> onStore, uint readWatchAddress = 0xFFFFFFFFu, Action<uint>? onRead = null, uint readWatchAddress2 = 0xFFFFFFFFu, Action<uint, uint>? onRead2 = null, uint readRangeBase = 0xFFFFFFFFu, uint readRangeEnd = 0u, Action<uint, uint>? onReadRange = null, uint writeRangeBase = 0xFFFFFFFFu, uint writeRangeEnd = 0u, Action<uint, uint>? onWriteRange = null) {
         m_inner = inner;
@@ -35,12 +35,33 @@ internal sealed class TracingAgbBus : IAgbBus {
         m_onWriteRange = onWriteRange;
     }
 
+    public bool Halted => m_inner.Halted;
     public bool IrqPending => m_inner.IrqPending;
+    public bool PrefetchDisabled => m_inner.PrefetchDisabled;
 
-    public byte Read8(uint address, BusAccessType access) => m_inner.Read8(
-        access: access,
-        address: address
-    );
+    private void Watch(uint address, uint value) {
+        if ((address & ~0x3u) == (m_watchAddress & ~0x3u)) {
+            m_onStore(obj: value);
+        }
+    }
+    private void WatchWriteRange(uint address, uint value) {
+        var aligned = address & ~1u;
+
+        if (
+            (m_onWriteRange is not null) &&
+            (aligned >= m_writeRangeBase) &&
+            (aligned < m_writeRangeEnd)
+        ) {
+            m_onWriteRange(
+                arg1: aligned,
+                arg2: value
+            );
+        }
+    }
+
+    public void Halt(bool stop) => m_inner.Halt(stop: stop);
+    public void Idle(int cycles) => m_inner.Idle(cycles: cycles);
+    public void ProcessEvents() => m_inner.ProcessEvents();
     public ushort Read16(uint address, BusAccessType access) {
         var value = m_inner.Read16(
             access: access,
@@ -82,6 +103,10 @@ internal sealed class TracingAgbBus : IAgbBus {
         access: access,
         address: address
     );
+    public byte Read8(uint address, BusAccessType access) => m_inner.Read8(
+        access: access,
+        address: address
+    );
     public ushort ReadCode16(uint address, BusAccessType access) => m_inner.ReadCode16(
         access: access,
         address: address
@@ -90,17 +115,7 @@ internal sealed class TracingAgbBus : IAgbBus {
         access: access,
         address: address
     );
-    public void Write8(uint address, byte value, BusAccessType access) {
-        Watch(
-            address: address,
-            value: value
-        );
-        m_inner.Write8(
-            access: access,
-            address: address,
-            value: value
-        );
-    }
+    public void StepHalted() => m_inner.StepHalted();
     public void Write16(uint address, ushort value, BusAccessType access) {
         Watch(
             address: address,
@@ -131,32 +146,15 @@ internal sealed class TracingAgbBus : IAgbBus {
             value: value
         );
     }
-    public void Idle(int cycles) => m_inner.Idle(cycles: cycles);
-    public void ProcessEvents() => m_inner.ProcessEvents();
-
-    public bool Halted => m_inner.Halted;
-
-    public void Halt(bool stop) => m_inner.Halt(stop: stop);
-    public void StepHalted() => m_inner.StepHalted();
-    public bool PrefetchDisabled => m_inner.PrefetchDisabled;
-
-    private void Watch(uint address, uint value) {
-        if ((address & ~0x3u) == (m_watchAddress & ~0x3u)) {
-            m_onStore(obj: value);
-        }
-    }
-    private void WatchWriteRange(uint address, uint value) {
-        var aligned = address & ~1u;
-
-        if (
-            (m_onWriteRange is not null) &&
-            (aligned >= m_writeRangeBase) &&
-            (aligned < m_writeRangeEnd)
-        ) {
-            m_onWriteRange(
-                arg1: aligned,
-                arg2: value
-            );
-        }
+    public void Write8(uint address, byte value, BusAccessType access) {
+        Watch(
+            address: address,
+            value: value
+        );
+        m_inner.Write8(
+            access: access,
+            address: address,
+            value: value
+        );
     }
 }

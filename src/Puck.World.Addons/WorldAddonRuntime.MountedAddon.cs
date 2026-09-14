@@ -83,21 +83,10 @@ public sealed partial class WorldAddonRuntime {
         public int DisclosedRevision { get; set; } = -1;
         public bool DisclosureOverflowReported { get; set; }
         public bool DiscrepancyReported { get; set; }
-
-        // Latches the once-per-episode QuotaExhausted host line separately from every other Reported flag above —
-        // this one names a per-row budget and its offending subject, which none of the shared-latch discrepancy
-        // lines do, so it earns its own gate rather than silently sharing (and starving) DiscrepancyReported's.
-        public DispatchLatches Observe;
-
         /// <summary>Gets this tick's per-body Observe query dispatch count, indexed by body index — the meter
         /// <see cref="WorldGrants.TryGetBudget"/>'s per-row budget is charged against. Cleared once per tick in
         /// <c>StageBatch</c>, the same sweep that resets <see cref="AnswerCount"/>.</summary>
         public int[] DispatchCounts { get; }
-
-        // The Drive twin of Observe, beside it for the same reason (a shared latch across capabilities would let one
-        // capability's line starve the other's).
-        public DispatchLatches Drive;
-
         /// <summary>Gets this tick's per-body Drive act dispatch count, indexed by body index — the Drive twin of
         /// <see cref="DispatchCounts"/>. Cleared once per tick in <c>FoldActs</c>, since pump point 2 runs before
         /// <c>StageBatch</c>'s own reset.</summary>
@@ -149,11 +138,6 @@ public sealed partial class WorldAddonRuntime {
         /// <summary>Gets this tick's running mutation-payload byte total for this addon, metered against
         /// <see cref="AddonAbi.MaxMutationBytesPerTickPerAddon"/>.</summary>
         public int MutateBytesThisTick { get; set; }
-
-        // The Mutate twin of Observe/Drive, beside them for the identical reason (a shared latch across capabilities
-        // would let one starve another's line).
-        public DispatchLatches Mutate;
-
         /// <summary>Gets the host-owned scratch buffer stage 5's pointer-safety copy reads a <c>SubmitMutation</c>
         /// payload into, reused every act and every tick.</summary>
         public byte[] MutationPayloadBuffer { get; }
@@ -200,5 +184,16 @@ public sealed partial class WorldAddonRuntime {
         public ulong TotalFuelConsumed { get; set; }
         public bool UndeliverableReported { get; set; }
         public bool UnrequestedActReported { get; set; }
+
+        // The Drive twin of Observe, beside it for the same reason (a shared latch across capabilities would let one
+        // capability's line starve the other's).
+        public DispatchLatches Drive;
+        // The Mutate twin of Observe/Drive, beside them for the identical reason (a shared latch across capabilities
+        // would let one starve another's line).
+        public DispatchLatches Mutate;
+        // Latches the once-per-episode QuotaExhausted host line separately from every other Reported flag above —
+        // this one names a per-row budget and its offending subject, which none of the shared-latch discrepancy
+        // lines do, so it earns its own gate rather than silently sharing (and starving) DiscrepancyReported's.
+        public DispatchLatches Observe;
     }
 }

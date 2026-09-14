@@ -8,12 +8,12 @@ namespace Puck.World.Client;
 /// movement-driven gait: the distance clamp and cadence that turn walked distance into limb-swing phase, and the
 /// per-avatar palette registration (rig/scale/gait-amplitude identity plus its two catalog materials).</summary>
 internal static class WorldMirroredAvatarBand {
-    /// <summary>The walked distance one frame may add to gait phase — clamps a teleport/server snap so it cannot
-    /// spin the limbs through dozens of cycles in one frame.</summary>
-    public const float MaxGaitTravelPerFrame = 0.25f;
     /// <summary>The walked-distance-to-phase cadence: phase advances by distance, not wall time, so idle avatars
     /// hold their pose and walking speed controls the swing rate.</summary>
     public const float GaitCadence = 8.0f;
+    /// <summary>The walked distance one frame may add to gait phase — clamps a teleport/server snap so it cannot
+    /// spin the limbs through dozens of cycles in one frame.</summary>
+    public const float MaxGaitTravelPerFrame = 0.25f;
 
     /// <summary>Advances one avatar's gait phase by its walked distance since the last call, or reseeds (phase 0,
     /// no travel charged) when the entity address changed — a body index reused by a different inhabitant, or this

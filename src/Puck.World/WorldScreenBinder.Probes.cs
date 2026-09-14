@@ -40,7 +40,12 @@ internal sealed partial class WorldScreenBinder {
 
         feed.Request = (Width: width, Height: height);
 
-        if ((feed.Targets is { } targets) && (feed.Output is { } provisioned) && (provisioned.Width == width) && (provisioned.Height == height)) {
+        if (
+            (feed.Targets is { } targets) &&
+            (feed.Output is { } provisioned) &&
+            (provisioned.Width == width) &&
+            (provisioned.Height == height)
+        ) {
             output = provisioned;
             generation = targets;
             fault = "";
@@ -58,7 +63,10 @@ internal sealed partial class WorldScreenBinder {
     /// <see cref="TryGetProbeOutput"/>.</summary>
     /// <param name="id">The <c>probes[].id</c>.</param>
     public void ReleaseProbeOutput(string id) {
-        if (m_probeFeeds.TryGetValue(key: id, value: out var feed)) {
+        if (m_probeFeeds.TryGetValue(
+            key: id,
+            value: out var feed
+        )) {
             feed.Request = null;
             feed.Release();
         }
@@ -69,10 +77,19 @@ internal sealed partial class WorldScreenBinder {
     /// <param name="id">The <c>probes[].id</c>.</param>
     /// <returns>Whether the bind succeeded, and a message describing the outcome.</returns>
     public (bool Ok, string Message) TryProbe(int index, string id) {
-        if (!m_slots.TryGetValue(key: index, value: out var slot)) {
+        if (!m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        )) {
             return (Ok: false, Message: $"no screen {index} declared");
         }
-        if (!m_probeFeeds.TryGetValue(key: id, value: out var feed) || !feed.Declared) {
+        if (
+            !m_probeFeeds.TryGetValue(
+            key: id,
+            value: out var feed
+        ) ||
+            !feed.Declared
+        ) {
             return (Ok: false, Message: $"probe '{id}' declares no texture output");
         }
 
@@ -111,7 +128,11 @@ internal sealed partial class WorldScreenBinder {
 
         if (
             !m_hostsOnDirectX ||
-            !OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)
+            !OperatingSystem.IsWindowsVersionAtLeast(
+            major: 10,
+            minor: 0,
+            build: 10240
+        )
         ) {
             fault = "view export needs the DirectX host";
 
@@ -132,14 +153,20 @@ internal sealed partial class WorldScreenBinder {
         if (
             (0 == handle) ||
             !feed.Slots.HasCompletedFrame ||
-            !ReferenceEquals(objA: feed.CompletedGeneration, objB: generation)
+            !ReferenceEquals(
+            objA: feed.CompletedGeneration,
+            objB: generation
+        )
         ) {
             fault = "view export awaiting a first rendered frame";
 
             return false;
         }
 
-        if (!ReferenceEquals(objA: feed.InputGeneration, objB: generation)) {
+        if (!ReferenceEquals(
+            objA: feed.InputGeneration,
+            objB: generation
+        )) {
             feed.Input = new ProbeKernelInput.Ring(
                 Format: SurfaceFormat.R8G8B8A8Unorm,
                 Height: ((int)camera.RenderHeight),
@@ -157,7 +184,13 @@ internal sealed partial class WorldScreenBinder {
     }
     /// <summary>Retains one live probe instance's use of a named view export.</summary>
     public void RetainViewExport(string cameraName) {
-        m_viewExportReferences[cameraName] = (m_viewExportReferences.TryGetValue(key: cameraName, value: out var count) ? (count + 1) : 1);
+        m_viewExportReferences[cameraName] = (m_viewExportReferences.TryGetValue(
+            key: cameraName,
+            value: out var count
+        )
+            ? (count + 1)
+            : 1
+        );
     }
     /// <summary>Drops a view export requested through <see cref="TryGetViewExport"/> and rebuilds the view's engine
     /// without export on its next resolve. A camera still filmed by a jumbotron screen keeps rendering (the release
@@ -165,7 +198,13 @@ internal sealed partial class WorldScreenBinder {
     /// <see cref="ReleaseOrphanedCameraView"/>'s own orphan contract.</summary>
     /// <param name="cameraName">The <c>cameras[]</c> row name.</param>
     public void ReleaseViewExport(string cameraName) {
-        if (m_viewExportReferences.TryGetValue(key: cameraName, value: out var references) && (references > 1)) {
+        if (
+            m_viewExportReferences.TryGetValue(
+            key: cameraName,
+            value: out var references
+        ) &&
+            (references > 1)
+        ) {
             m_viewExportReferences[cameraName] = (references - 1);
 
             return;
@@ -173,7 +212,10 @@ internal sealed partial class WorldScreenBinder {
 
         _ = m_viewExportReferences.Remove(key: cameraName);
 
-        if (!m_viewExports.Remove(key: cameraName, value: out var feed)) {
+        if (!m_viewExports.Remove(
+            key: cameraName,
+            value: out var feed
+        )) {
             return;
         }
 
@@ -194,7 +236,10 @@ internal sealed partial class WorldScreenBinder {
 
     private bool HasViewExportReferences(string cameraName) => m_viewExportReferences.ContainsKey(key: cameraName);
     private void RetireViewExportForRecreation(string cameraName) {
-        if (m_viewExports.Remove(key: cameraName, value: out var feed)) {
+        if (m_viewExports.Remove(
+            key: cameraName,
+            value: out var feed
+        )) {
             feed.Detach();
         }
     }
@@ -215,8 +260,14 @@ internal sealed partial class WorldScreenBinder {
             seat: DefaultViewSeat
         )].View;
 
-        if (m_viewExports.TryGetValue(key: camera.Name, value: out var existing)) {
-            if (ReferenceEquals(objA: existing.View, objB: view)) {
+        if (m_viewExports.TryGetValue(
+            key: camera.Name,
+            value: out var existing
+        )) {
+            if (ReferenceEquals(
+                objA: existing.View,
+                objB: view
+            )) {
                 return existing;
             }
 
@@ -241,7 +292,10 @@ internal sealed partial class WorldScreenBinder {
         return feed;
     }
     private ProbeFeed GetOrAddProbeFeed(string id) {
-        if (!m_probeFeeds.TryGetValue(key: id, value: out var feed)) {
+        if (!m_probeFeeds.TryGetValue(
+            key: id,
+            value: out var feed
+        )) {
             feed = new ProbeFeed(id: id);
             m_probeFeeds[id] = feed;
         }
@@ -253,13 +307,25 @@ internal sealed partial class WorldScreenBinder {
     private void ServiceProbeFeeds(IGpuDeviceContext deviceContext) {
         foreach (var feed in m_probeFeeds.Values) {
             if (feed.Request is { Width: > 0, Height: > 0 } request) {
-                if ((feed.Output is not { } output) || (output.Width != request.Width) || (output.Height != request.Height)) {
-                    ProvisionProbeOutput(deviceContext: deviceContext, feed: feed, height: request.Height, width: request.Width);
+                if (
+                    (feed.Output is not { } output) ||
+                    (output.Width != request.Width) ||
+                    (output.Height != request.Height)
+                ) {
+                    ProvisionProbeOutput(
+                        deviceContext: deviceContext,
+                        feed: feed,
+                        height: request.Height,
+                        width: request.Width
+                    );
                 }
             }
 
             feed.Live = (feed.Output is { Slots.LatestSlot: >= 0 });
-            feed.Fault = (feed.Live ? null : (feed.Fault ?? "probe awaiting a first frame"));
+            feed.Fault = (feed.Live
+                ? null
+                : (feed.Fault ?? "probe awaiting a first frame")
+            );
         }
     }
     private void ProvisionProbeOutput(IGpuDeviceContext deviceContext, ProbeFeed feed, int width, int height) {
@@ -270,12 +336,26 @@ internal sealed partial class WorldScreenBinder {
 
             return;
         }
-        if (!OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(
+            major: 10,
+            minor: 0,
+            build: 10240
+        )) {
             feed.Fault = "shared probe textures need Windows 10";
 
             return;
         }
-        if (!TryProvisionSharedRing(adapterLuid: adapterLuid, deviceContext: deviceContext, fault: out var fault, format: SurfaceFormat.R8G8B8A8Unorm, height: height, images: out var images, importedViews: out var views, imports: out var imports, width: width)) {
+        if (!TryProvisionSharedRing(
+            adapterLuid: adapterLuid,
+            deviceContext: deviceContext,
+            fault: out var fault,
+            format: SurfaceFormat.R8G8B8A8Unorm,
+            height: height,
+            images: out var images,
+            importedViews: out var views,
+            imports: out var imports,
+            width: width
+        )) {
             feed.Fault = fault;
 
             return;
@@ -324,28 +404,36 @@ internal sealed partial class WorldScreenBinder {
         public bool Declared { get; set; }
         public string? Fault { get; set; }
         public string Id { get; } = id;
+        public Vector3 Light => Vector3.Zero;
         public bool Live { get; set; }
         public ProbeKernelOutput? Output { get; set; }
         public (int Width, int Height)? Request { get; set; }
         public CameraGpuTargetSet? Targets { get; set; }
 
         public SdfScreenSourceFrame AcquireFrame() {
-            if (!Live || (Targets is not { } targets)) {
+            if (
+                !Live ||
+                (Targets is not { } targets)
+            ) {
                 return 0;
             }
 
-            return (targets.TryAcquire(frame: out var frame) ? frame : 0);
+            return (targets.TryAcquire(frame: out var frame)
+                ? frame
+                : 0
+            );
         }
         public nint Handle() {
-            if (!Live || (Output is not { } output) || (Targets is not { } targets)) {
+            if (
+                !Live ||
+                (Output is not { } output) ||
+                (Targets is not { } targets)
+            ) {
                 return 0;
             }
 
             return targets.Handle(slot: output.Slots.LatestSlot);
         }
-
-        public Vector3 Light => Vector3.Zero;
-
         public void Release() {
             var targets = Targets;
 
@@ -364,19 +452,13 @@ internal sealed partial class WorldScreenBinder {
             view.EndExportWrite = EndWrite;
         }
 
-        public object? CompletedGeneration { get; private set; }
-        public SdfCameraView View { get; }
-        public ViewExportRing Slots { get; } = new();
-        public ProbeKernelInput.Ring? Input { get; set; }
-        public object? InputGeneration { get; set; }
-
         private object? PendingGeneration { get; set; }
 
-        public void Detach() {
-            Slots.RetireAndWait();
-            View.TryBeginExportWrite = null;
-            View.EndExportWrite = null;
-        }
+        public object? CompletedGeneration { get; private set; }
+        public ProbeKernelInput.Ring? Input { get; set; }
+        public object? InputGeneration { get; set; }
+        public ViewExportRing Slots { get; } = new();
+        public SdfCameraView View { get; }
 
         private void EndWrite(bool completed) {
             if (completed) {
@@ -398,6 +480,12 @@ internal sealed partial class WorldScreenBinder {
 
             return true;
         }
+
+        public void Detach() {
+            Slots.RetireAndWait();
+            View.TryBeginExportWrite = null;
+            View.EndExportWrite = null;
+        }
     }
     // The single-image counterpart of the multi-buffer camera/probe rings above: a view export has exactly one
     // physical texture, so producer and consumers coordinate through one atomic state instead of rotating slots.
@@ -412,39 +500,17 @@ internal sealed partial class WorldScreenBinder {
         private int m_state;
 
         public bool HasCompletedFrame => (Volatile.Read(location: ref m_state) >= 1);
-        public int LatestSlot => (HasCompletedFrame ? 0 : -1);
+        public int LatestSlot => (HasCompletedFrame
+            ? 0
+            : -1
+        );
 
-        public void EndWrite(bool completed) => Volatile.Write(location: ref m_state, value: ((completed || m_hadCompletedBeforeWrite) ? 1 : 0));
-        public bool TryBeginWrite() {
-            while (true) {
-                var state = Volatile.Read(location: ref m_state);
-
-                if ((state > 1) || (state < 0)) {
-                    return false;
-                }
-                if (Interlocked.CompareExchange(comparand: state, location1: ref m_state, value: -2) == state) {
-                    m_hadCompletedBeforeWrite = (state == 1);
-
-                    return true;
-                }
-            }
-        }
-        public bool TryAcquireLatest(out int slot) {
-            while (true) {
-                var state = Volatile.Read(location: ref m_state);
-
-                if ((state < 1) || (state == int.MaxValue)) {
-                    slot = -1;
-
-                    return false;
-                }
-                if (Interlocked.CompareExchange(comparand: state, location1: ref m_state, value: (state + 1)) == state) {
-                    slot = 0;
-
-                    return true;
-                }
-            }
-        }
+        public void EndWrite(bool completed) => Volatile.Write(
+            location: ref m_state,
+            value: ((completed || m_hadCompletedBeforeWrite)
+            ? 1
+            : 0)
+        );
         public void Release(int slot) {
             if (slot != 0) {
                 return;
@@ -456,7 +522,11 @@ internal sealed partial class WorldScreenBinder {
                 if (state <= 1) {
                     return;
                 }
-                if (Interlocked.CompareExchange(comparand: state, location1: ref m_state, value: (state - 1)) == state) {
+                if (Interlocked.CompareExchange(
+                    comparand: state,
+                    location1: ref m_state,
+                    value: (state - 1)
+                ) == state) {
                     return;
                 }
             }
@@ -470,11 +540,62 @@ internal sealed partial class WorldScreenBinder {
                 if (state == -1) {
                     return;
                 }
-                if ((state is 0 or 1) && (Interlocked.CompareExchange(comparand: state, location1: ref m_state, value: -1) == state)) {
+                if (
+                    (state is 0 or 1) &&
+                    (Interlocked.CompareExchange(
+                    comparand: state,
+                    location1: ref m_state,
+                    value: -1
+                ) == state)
+                ) {
                     return;
                 }
 
                 spinner.SpinOnce();
+            }
+        }
+        public bool TryAcquireLatest(out int slot) {
+            while (true) {
+                var state = Volatile.Read(location: ref m_state);
+
+                if (
+                    (state < 1) ||
+                    (state == int.MaxValue)
+                ) {
+                    slot = -1;
+
+                    return false;
+                }
+                if (Interlocked.CompareExchange(
+                    comparand: state,
+                    location1: ref m_state,
+                    value: (state + 1)
+                ) == state) {
+                    slot = 0;
+
+                    return true;
+                }
+            }
+        }
+        public bool TryBeginWrite() {
+            while (true) {
+                var state = Volatile.Read(location: ref m_state);
+
+                if (
+                    (state > 1) ||
+                    (state < 0)
+                ) {
+                    return false;
+                }
+                if (Interlocked.CompareExchange(
+                    comparand: state,
+                    location1: ref m_state,
+                    value: -2
+                ) == state) {
+                    m_hadCompletedBeforeWrite = (state == 1);
+
+                    return true;
+                }
             }
         }
     }

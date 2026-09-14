@@ -17,24 +17,6 @@ public sealed class VulkanGpuSurfaceExportFactory(
     VulkanQueueSubmitter queueSubmitter
 ) : IGpuSurfaceExportFactory {
     /// <inheritdoc/>
-    public IGpuExportableRenderTarget CreateExportableTarget(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) {
-        var vkContext = ((IVulkanDeviceContext)deviceContext);
-
-        return new VulkanGpuExportableRenderTarget(
-            commandBufferRecordingApi: commandBufferRecordingApi,
-            commandResourcesFactory: commandResourcesFactory,
-            externalMemoryApi: externalMemoryApi,
-            format: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format),
-            framebufferSetApi: framebufferSetApi,
-            height: height,
-            instance: vkContext.Instance,
-            logicalDevice: vkContext.LogicalDevice,
-            queueSubmitter: queueSubmitter,
-            renderPassApi: renderPassApi,
-            width: width
-        );
-    }
-    /// <inheritdoc/>
     public IGpuExportableStorageImage CreateExportableStorageImage(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) {
         var vkContext = ((IVulkanDeviceContext)deviceContext);
         var logicalDevice = vkContext.LogicalDevice;
@@ -52,7 +34,11 @@ public sealed class VulkanGpuSurfaceExportFactory(
 
         framebufferSetApi.CreateImageView(
             imageViewHandle: out var imageViewHandle,
-            request: new VulkanImageViewCreateRequest(DeviceHandle: deviceHandle, Format: vkFormat, ImageHandle: image.ImageHandle)
+            request: new VulkanImageViewCreateRequest(
+                DeviceHandle: deviceHandle,
+                Format: vkFormat,
+                ImageHandle: image.ImageHandle
+            )
         ).ThrowIfFailed(operation: "vkCreateImageView");
 
         return new VulkanGpuExportableStorageImage(
@@ -64,6 +50,24 @@ public sealed class VulkanGpuSurfaceExportFactory(
             logicalDevice: logicalDevice,
             memoryHandle: image.MemoryHandle,
             sharedHandle: image.SharedHandle,
+            width: width
+        );
+    }
+    /// <inheritdoc/>
+    public IGpuExportableRenderTarget CreateExportableTarget(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) {
+        var vkContext = ((IVulkanDeviceContext)deviceContext);
+
+        return new VulkanGpuExportableRenderTarget(
+            commandBufferRecordingApi: commandBufferRecordingApi,
+            commandResourcesFactory: commandResourcesFactory,
+            externalMemoryApi: externalMemoryApi,
+            format: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format),
+            framebufferSetApi: framebufferSetApi,
+            height: height,
+            instance: vkContext.Instance,
+            logicalDevice: vkContext.LogicalDevice,
+            queueSubmitter: queueSubmitter,
+            renderPassApi: renderPassApi,
             width: width
         );
     }

@@ -15,15 +15,6 @@ public sealed class PlacementSamplingValidationLawTests {
     private const string PlacementId = "field";
     private const string PrototypeId = "marker";
 
-    private static void AssertValidates(WorldDefinition definition) {
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: definition,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-    }
     private static void AssertRefusedNaming(WorldDefinition definition, string needle) {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: definition,
@@ -32,6 +23,15 @@ public sealed class PlacementSamplingValidationLawTests {
         Assert.Contains(
             actualString: reason,
             expectedSubstring: needle
+        );
+    }
+    private static void AssertValidates(WorldDefinition definition) {
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: definition,
+                reason: out var reason
+            ),
+            userMessage: reason
         );
     }
     private static WorldPrototype Creation() {
@@ -66,6 +66,23 @@ public sealed class PlacementSamplingValidationLawTests {
             HashRaw: canonical.Hash
         );
     }
+    private static WorldDistributionRegion.Noise WellFormedNoise() => new(
+        CellSize: 1f,
+        Depth: 16,
+        Frequency: 4,
+        Octaves: 3,
+        Seed: 7u,
+        Threshold: 0.4f,
+        Width: 16
+    );
+    private static WorldDistributionRegion.Scatter WellFormedScatter() => new(
+        CellSize: 1f,
+        Depth: 10,
+        Radius: 1,
+        Seed: 3u,
+        Spacing: 3,
+        Width: 10
+    );
     private static WorldDefinition With(WorldDistributionRegion region) {
         var document = Fixtures.BuildDocument();
 
@@ -73,39 +90,40 @@ public sealed class PlacementSamplingValidationLawTests {
             CreationsRaw = [Creation()],
             PlacementRowsRaw = [
                 new WorldPlacement(
-                    Id: PlacementId,
-                    PrototypeId: PrototypeId,
-                    Position: new DocumentVector3(value: Vector3.Zero),
-                    YawDegrees: 0f,
-                    Scale: 1f,
-                    Distribution: new WorldDistribution(
-                        Region: region,
-                        Fill: new WorldSequence(Name: WorldSequence.None, Offset: 0, Step: 0f)
+                Id: PlacementId,
+                PrototypeId: PrototypeId,
+                Position: new DocumentVector3(value: Vector3.Zero),
+                YawDegrees: 0f,
+                Scale: 1f,
+                Distribution: new WorldDistribution(
+                    Region: region,
+                    Fill: new WorldSequence(
+                        Name: WorldSequence.None,
+                        Offset: 0,
+                        Step: 0f
                     )
-                ),
+                )
+            ),
             ],
         });
     }
-    private static WorldDistributionRegion.Noise WellFormedNoise() => new(CellSize: 1f, Depth: 16, Frequency: 4, Octaves: 3, Seed: 7u, Threshold: 0.4f, Width: 16);
-    private static WorldDistributionRegion.Scatter WellFormedScatter() => new(CellSize: 1f, Depth: 10, Radius: 1, Seed: 3u, Spacing: 3, Width: 10);
 
-    [Fact]
-    public void ANoiseThresholdMustLieInZeroOneHalfOpen() {
-        AssertRefusedNaming(
-            definition: With(region: (WellFormedNoise() with { Threshold = -0.01f })),
-            needle: "region.threshold must be in [0, 1)"
-        );
-        AssertRefusedNaming(
-            definition: With(region: (WellFormedNoise() with { Threshold = 1f })),
-            needle: "region.threshold must be in [0, 1)"
-        );
-        AssertValidates(definition: With(region: WellFormedNoise()));
-    }
     [Fact]
     public void ANoiseFrequencyMustBeAtLeastOne() {
         AssertRefusedNaming(
             definition: With(region: (WellFormedNoise() with { Frequency = 0 })),
             needle: "region.frequency must be at least 1"
+        );
+        AssertValidates(definition: With(region: WellFormedNoise()));
+    }
+    [Fact]
+    public void ANoiseGridWorstCaseCannotExceedTheEngineInstanceCeiling() {
+        var oversized = (WellFormedNoise() with { Width = 300, Depth = 300 });
+
+        Assert.True(condition: ((300L * 300L) > SdfProgramBuilder.MaxInstances));
+        AssertRefusedNaming(
+            definition: With(region: oversized),
+            needle: $"worst-case exceeds the {SdfProgramBuilder.MaxInstances}-instance engine ceiling"
         );
         AssertValidates(definition: With(region: WellFormedNoise()));
     }
@@ -122,24 +140,16 @@ public sealed class PlacementSamplingValidationLawTests {
         AssertValidates(definition: With(region: WellFormedNoise()));
     }
     [Fact]
-    public void AScatterSpacingMustBeAtLeastTwoCells() {
+    public void ANoiseThresholdMustLieInZeroOneHalfOpen() {
         AssertRefusedNaming(
-            definition: With(region: (WellFormedScatter() with { Spacing = 1 })),
-            needle: "region.spacing must be at least 2 cells"
-        );
-        AssertValidates(definition: With(region: WellFormedScatter()));
-    }
-    [Fact]
-    public void AScatterRadiusMustFitInsideHalfTheSpacing() {
-        AssertRefusedNaming(
-            definition: With(region: (WellFormedScatter() with { Radius = 0 })),
-            needle: "region.radius must be at least 1 and at most spacing/2"
+            definition: With(region: (WellFormedNoise() with { Threshold = -0.01f })),
+            needle: "region.threshold must be in [0, 1)"
         );
         AssertRefusedNaming(
-            definition: With(region: (WellFormedScatter() with { Radius = 2, Spacing = 3 })),
-            needle: "region.radius must be at least 1 and at most spacing/2"
+            definition: With(region: (WellFormedNoise() with { Threshold = 1f })),
+            needle: "region.threshold must be in [0, 1)"
         );
-        AssertValidates(definition: With(region: WellFormedScatter()));
+        AssertValidates(definition: With(region: WellFormedNoise()));
     }
     [Fact]
     public void ASampledGridNeedsAPositiveCellSizeAndAtLeastOneCellPerAxis() {
@@ -158,14 +168,23 @@ public sealed class PlacementSamplingValidationLawTests {
         AssertValidates(definition: With(region: WellFormedScatter()));
     }
     [Fact]
-    public void ANoiseGridWorstCaseCannotExceedTheEngineInstanceCeiling() {
-        var oversized = (WellFormedNoise() with { Width = 200, Depth = 200 });
-
-        Assert.True(condition: ((200L * 200L) > SdfProgramBuilder.MaxInstances));
+    public void AScatterRadiusMustFitInsideHalfTheSpacing() {
         AssertRefusedNaming(
-            definition: With(region: oversized),
-            needle: $"worst-case exceeds the {SdfProgramBuilder.MaxInstances}-instance engine ceiling"
+            definition: With(region: (WellFormedScatter() with { Radius = 0 })),
+            needle: "region.radius must be at least 1 and at most spacing/2"
         );
-        AssertValidates(definition: With(region: WellFormedNoise()));
+        AssertRefusedNaming(
+            definition: With(region: (WellFormedScatter() with { Radius = 2, Spacing = 3 })),
+            needle: "region.radius must be at least 1 and at most spacing/2"
+        );
+        AssertValidates(definition: With(region: WellFormedScatter()));
+    }
+    [Fact]
+    public void AScatterSpacingMustBeAtLeastTwoCells() {
+        AssertRefusedNaming(
+            definition: With(region: (WellFormedScatter() with { Spacing = 1 })),
+            needle: "region.spacing must be at least 2 cells"
+        );
+        AssertValidates(definition: With(region: WellFormedScatter()));
     }
 }

@@ -10,14 +10,89 @@ namespace Puck.Vulkan;
 /// and mapping entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferApi {
-    private const uint BufferUsageStorageBufferBit = 0x00000020;
-    // Also a transfer source so a host-visible storage buffer can stage uploads (e.g. CPU pixels into an image).
-    private const uint BufferUsageTransferSourceBit = 0x00000001;
     // Lets the buffer back vkCmdDispatchIndirect / vkCmdDrawIndirect (the GPU reads the group/draw counts from it).
     private const uint BufferUsageIndirectBufferBit = 0x00000100;
+    private const uint BufferUsageStorageBufferBit = 0x00000020;
+    private const uint BufferUsageTransferDestinationBit = 0x00000002;
+    // Also a transfer source so a host-visible storage buffer can stage uploads (e.g. CPU pixels into an image).
+    private const uint BufferUsageTransferSourceBit = 0x00000001;
     private const uint DeviceLocalMemoryPropertyBit = 0x00000001;
     private const uint HostCoherentMemoryPropertyBit = 0x00000004;
     private const uint HostVisibleMemoryPropertyBit = 0x00000002;
+
+    private static unsafe nint CreateBuffer(delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult> createBuffer, nint deviceHandle, ulong size, uint extraUsage) {
+        return VulkanNativeBufferSupport.CreateBuffer(
+            createBuffer: createBuffer,
+            deviceHandle: deviceHandle,
+            size: size,
+            usage: BufferUsageStorageBufferBit | BufferUsageTransferSourceBit | BufferUsageTransferDestinationBit | extraUsage
+        );
+    }
+    private InstancePointers GetInstancePointers(nint instanceHandle) {
+        return m_instancePointers.GetOrAdd(
+            key: instanceHandle,
+            valueFactory: static handle => new InstancePointers {
+                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkGetPhysicalDeviceMemoryProperties"u8,
+                instanceHandle: handle
+            )),
+            }
+        );
+    }
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkAllocateMemory"u8
+            )),
+                BindBufferMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkBindBufferMemory"u8
+            )),
+                CreateBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateBuffer"u8
+            )),
+                DestroyBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyBuffer"u8
+            )),
+                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkFreeMemory"u8
+            )),
+                GetBufferMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkGetBufferMemoryRequirements"u8
+            )),
+                MapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkMapMemory"u8
+            )),
+                UnmapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkUnmapMemory"u8
+            )),
+            }
+        );
+    }
+    private static unsafe void ValidateCreateRequest(VulkanStorageBufferCreateRequest request) {
+        VulkanNativeBufferSupport.ValidateBufferHandles(
+            argumentName: nameof(request),
+            deviceHandle: request.DeviceHandle,
+            instanceHandle: request.InstanceHandle,
+            physicalDeviceHandle: request.PhysicalDeviceHandle
+        );
+        if (0 == request.SizeBytes) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: request.SizeBytes,
+                message: "Storage-buffer size must be greater than zero.",
+                paramName: nameof(request)
+            );
+        }
+    }
 
     /// <inheritdoc/>
     public VulkanStorageBufferCreateResult CreateStorageBuffer(VulkanStorageBufferCreateRequest request) {
@@ -39,7 +114,9 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
             bufferHandle = CreateBuffer(
                 createBuffer: createBuffer,
                 deviceHandle: request.DeviceHandle,
-                extraUsage: (request.IndirectArgs ? BufferUsageIndirectBufferBit : 0u),
+                extraUsage: (request.IndirectArgs
+                ? BufferUsageIndirectBufferBit
+                : 0u),
                 size: request.SizeBytes
             );
             memoryHandle = VulkanNativeBufferSupport.AllocateAndBindMemory(
@@ -54,8 +131,8 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
                 // Device-local memory is GPU-only (never host-mapped — the buffer's Map/Write is never called for it);
                 // the default host-visible+coherent memory backs buffers the CPU writes.
                 preferredProperties: (request.DeviceLocal
-                    ? DeviceLocalMemoryPropertyBit
-                    : HostVisibleMemoryPropertyBit | HostCoherentMemoryPropertyBit),
+                ? DeviceLocalMemoryPropertyBit
+                : HostVisibleMemoryPropertyBit | HostCoherentMemoryPropertyBit),
                 requireProperties: true,
                 resourceDescription: "a storage buffer"
             );
@@ -149,51 +226,4 @@ public unsafe sealed class VulkanNativeStorageBufferApi : IVulkanStorageBufferAp
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_instancePointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8)),
-                BindBufferMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindBufferMemory"u8)),
-                CreateBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateBuffer"u8)),
-                DestroyBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyBuffer"u8)),
-                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8)),
-                GetBufferMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetBufferMemoryRequirements"u8)),
-                MapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkMapMemory"u8)),
-                UnmapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUnmapMemory"u8)),
-            }
-        );
-    }
-    private InstancePointers GetInstancePointers(nint instanceHandle) {
-        return m_instancePointers.GetOrAdd(
-            key: instanceHandle,
-            valueFactory: static handle => new InstancePointers {
-                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceMemoryProperties"u8, instanceHandle: handle)),
-            }
-        );
-    }
-    private static unsafe void ValidateCreateRequest(VulkanStorageBufferCreateRequest request) {
-        VulkanNativeBufferSupport.ValidateBufferHandles(
-            argumentName: nameof(request),
-            deviceHandle: request.DeviceHandle,
-            instanceHandle: request.InstanceHandle,
-            physicalDeviceHandle: request.PhysicalDeviceHandle
-        );
-        if (0 == request.SizeBytes) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: request.SizeBytes,
-                message: "Storage-buffer size must be greater than zero.",
-                paramName: nameof(request)
-            );
-        }
-    }
-    private static unsafe nint CreateBuffer(delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult> createBuffer, nint deviceHandle, ulong size, uint extraUsage) {
-        return VulkanNativeBufferSupport.CreateBuffer(
-            createBuffer: createBuffer,
-            deviceHandle: deviceHandle,
-            size: size,
-            usage: BufferUsageStorageBufferBit | BufferUsageTransferSourceBit | extraUsage
-        );
-    }
 }

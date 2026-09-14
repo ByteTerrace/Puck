@@ -9,7 +9,7 @@
 replay.status
 world.wait 5
 world.grant addon:channelwalk drive body:0 budget:60 channels:forward
-# The seat's ceiling grant below still succeeds but is a no-op post owner ruling 2026-08-02 (headless P6b) — a
+# The seat's ceiling grant below still succeeds but is a no-op under the trusted-by-authorship model — a
 # document-mounted addon is trusted-by-authorship, added outside the pool, gated by its OWN declared Reach only;
 # it never touches — and needs no — a seat-authored ceiling. Kept so this script matches its historical shape.
 world.grant seat1 drive body:0 channels:forward ceiling:1.0

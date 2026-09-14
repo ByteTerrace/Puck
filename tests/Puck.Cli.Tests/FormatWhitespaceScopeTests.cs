@@ -16,11 +16,36 @@ namespace Puck.Cli.Tests;
 /// </summary>
 public sealed class FormatWhitespaceScopeTests {
     [Fact]
+    public void ADifferentVolumeIsNotSpelledAtAll() {
+        // Path.GetRelativePath hands back the absolute path when no relative one exists, and an absolute --include
+        // matches nothing.
+        Assert.Null(@object: WhitespacePhase.IncludePattern(
+            scanRoot: "D:\\other\\src",
+            workingDirectory: "C:\\repo"
+        ));
+    }
+    [Fact]
     public void ARootBelowTheWorkingDirectoryBecomesARelativeDirectoryPattern() {
         Assert.Equal(
-            actual: WhitespacePhase.IncludePattern(scanRoot: "C:\\repo\\src\\Puck.Commands", workingDirectory: "C:\\repo"),
+            actual: WhitespacePhase.IncludePattern(
+                scanRoot: "C:\\repo\\src\\Puck.Commands",
+                workingDirectory: "C:\\repo"
+            ),
             expected: "src/Puck.Commands/"
         );
+    }
+    [Fact]
+    public void ARootOutsideTheWorkingDirectoryIsNotSpelledAtAll() {
+        // A "../" pattern matches nothing, which would make a verify run pass over a tree it never read. Answering
+        // null instead is what lets the caller run unscoped and say so.
+        Assert.Null(@object: WhitespacePhase.IncludePattern(
+            scanRoot: "C:\\elsewhere\\src",
+            workingDirectory: "C:\\repo"
+        ));
+        Assert.Null(@object: WhitespacePhase.IncludePattern(
+            scanRoot: "C:\\repo",
+            workingDirectory: "C:\\repo\\src"
+        ));
     }
     [Fact]
     public void TheWorkingDirectoryItselfBecomesTheCurrentDirectoryPattern() {
@@ -28,21 +53,11 @@ public sealed class FormatWhitespaceScopeTests {
         // directory. Formatting everything the projects carry is the right answer for a root that IS the working
         // directory, but only because the pattern still says so.
         Assert.Equal(
-            actual: WhitespacePhase.IncludePattern(scanRoot: "C:\\repo", workingDirectory: "C:\\repo"),
+            actual: WhitespacePhase.IncludePattern(
+                scanRoot: "C:\\repo",
+                workingDirectory: "C:\\repo"
+            ),
             expected: "./"
         );
-    }
-    [Fact]
-    public void ARootOutsideTheWorkingDirectoryIsNotSpelledAtAll() {
-        // A "../" pattern matches nothing, which would make a verify run pass over a tree it never read. Answering
-        // null instead is what lets the caller run unscoped and say so.
-        Assert.Null(@object: WhitespacePhase.IncludePattern(scanRoot: "C:\\elsewhere\\src", workingDirectory: "C:\\repo"));
-        Assert.Null(@object: WhitespacePhase.IncludePattern(scanRoot: "C:\\repo", workingDirectory: "C:\\repo\\src"));
-    }
-    [Fact]
-    public void ADifferentVolumeIsNotSpelledAtAll() {
-        // Path.GetRelativePath hands back the absolute path when no relative one exists, and an absolute --include
-        // matches nothing.
-        Assert.Null(@object: WhitespacePhase.IncludePattern(scanRoot: "D:\\other\\src", workingDirectory: "C:\\repo"));
     }
 }

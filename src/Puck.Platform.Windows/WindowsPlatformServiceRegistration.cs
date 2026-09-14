@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Puck.Abstractions.Recording;
 using Puck.Platform.Audio;
-using Puck.Platform.Recording;
 using Puck.Platform.Windows.Audio;
 using Puck.Platform.Windows.Recording;
 
@@ -18,15 +17,15 @@ namespace Puck.Platform.Windows;
 /// underneath, and it is the one place the Windows-versus-Linux platform choice is made.
 /// </summary>
 public static class WindowsPlatformServiceRegistration {
-    /// <summary>Registers the Win32 clipboard service and the Win32 native-window backend.</summary>
+    /// <summary>Registers the WASAPI render-device factory the world speaker device opens its endpoint through.</summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
-    public static IServiceCollection AddWindowsPlatformWindowing(this IServiceCollection services) {
+    [SupportedOSPlatform("windows")]
+    public static IServiceCollection AddWindowsAudioRender(this IServiceCollection services) {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.TryAddSingleton<IClipboardService, Win32ClipboardService>();
-        services.TryAddEnumerable(descriptor: ServiceDescriptor.Singleton<INativeWindowBackend, Win32NativeWindowBackend>());
+        services.TryAddSingleton<IAudioRenderDeviceFactory, WasapiAudioRenderDeviceFactory>();
 
         return services;
     }
@@ -44,31 +43,15 @@ public static class WindowsPlatformServiceRegistration {
 
         return services;
     }
-    /// <summary>Registers the Media Foundation hardware video-encoder ladder and the WASAPI loopback/microphone audio
-    /// sources, plus the shared <see cref="RecordingSessionClock"/> both stamp against.</summary>
+    /// <summary>Registers the Win32 clipboard service and the Win32 native-window backend.</summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
-    [SupportedOSPlatform("windows")]
-    public static IServiceCollection AddWindowsRecordingPlatform(this IServiceCollection services) {
+    public static IServiceCollection AddWindowsPlatformWindowing(this IServiceCollection services) {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.TryAddSingleton<RecordingSessionClock>();
-        services.TryAddSingleton<IVideoEncoderFactory, MediaFoundationVideoEncoderFactory>();
-        services.TryAddSingleton<IAudioCaptureSourceFactory>(implementationFactory: static provider =>
-            new WasapiAudioCaptureSourceFactory(clock: provider.GetRequiredService<RecordingSessionClock>()));
-
-        return services;
-    }
-    /// <summary>Registers the WASAPI render-device factory the world speaker device opens its endpoint through.</summary>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The same service collection, for chaining.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
-    [SupportedOSPlatform("windows")]
-    public static IServiceCollection AddWindowsAudioRender(this IServiceCollection services) {
-        ArgumentNullException.ThrowIfNull(services);
-
-        services.TryAddSingleton<IAudioRenderDeviceFactory, WasapiAudioRenderDeviceFactory>();
+        services.TryAddSingleton<IClipboardService, Win32ClipboardService>();
+        services.TryAddEnumerable(descriptor: ServiceDescriptor.Singleton<INativeWindowBackend, Win32NativeWindowBackend>());
 
         return services;
     }
@@ -84,6 +67,22 @@ public static class WindowsPlatformServiceRegistration {
         if (Win32PrecisionWaiter.TryCreate() is { } waiter) {
             services.TryAddSingleton<IPrecisionWaiter>(instance: waiter);
         }
+
+        return services;
+    }
+    /// <summary>Registers the Media Foundation hardware video-encoder ladder and the WASAPI loopback/microphone audio
+    /// sources, plus the shared <see cref="RecordingSessionClock"/> both stamp against.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The same service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
+    [SupportedOSPlatform("windows")]
+    public static IServiceCollection AddWindowsRecordingPlatform(this IServiceCollection services) {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<RecordingSessionClock>();
+        services.TryAddSingleton<IVideoEncoderFactory, MediaFoundationVideoEncoderFactory>();
+        services.TryAddSingleton<IAudioCaptureSourceFactory>(implementationFactory: static provider =>
+            new WasapiAudioCaptureSourceFactory(clock: provider.GetRequiredService<RecordingSessionClock>()));
 
         return services;
     }

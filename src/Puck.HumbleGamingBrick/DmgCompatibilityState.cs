@@ -46,14 +46,9 @@ public sealed class DmgCompatibilityState : IModeSwitchable, ISnapshotable {
     public bool IsActive =>
         m_isActive;
 
-    /// <inheritdoc/>
-    public void ApplyModel(ConsoleModel model) =>
-        m_isActive = (m_key0Latched
-            ? (m_isActive && model.SupportsColor())
-            : Derive(
-                header: m_header,
-                model: model
-            ));
+    private static bool Derive(ConsoleModel model, CartridgeHeader header) =>
+        (model.SupportsColor() && !header.SupportsColor);
+
     /// <summary>Applies a real boot ROM's write to KEY0 (<c>0xFF4C</c>) — the hardware event that hands the mode to
     /// the cartridge, and the only writer of the mode once it has run. Bit 2 is the documented DMG-compatibility flag;
     /// the undocumented PGB bits are not modeled.</summary>
@@ -63,16 +58,22 @@ public sealed class DmgCompatibilityState : IModeSwitchable, ISnapshotable {
         m_key0Latched = true;
     }
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteBoolean(value: m_isActive);
-        writer.WriteBoolean(value: m_key0Latched);
-    }
+    public void ApplyModel(ConsoleModel model) =>
+        m_isActive = (m_key0Latched
+            ? (m_isActive && model.SupportsColor())
+            : Derive(
+                header: m_header,
+                model: model
+            )
+        );
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         m_isActive = reader.ReadBoolean();
         m_key0Latched = reader.ReadBoolean();
     }
-
-    private static bool Derive(ConsoleModel model, CartridgeHeader header) =>
-        (model.SupportsColor() && !header.SupportsColor);
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        writer.WriteBoolean(value: m_isActive);
+        writer.WriteBoolean(value: m_key0Latched);
+    }
 }

@@ -455,7 +455,10 @@ public sealed partial class InputRouter : IDisposable {
             );
         }
 
-        var slot = (authoredLane ? signal.Slot : m_slotResolver(arg: signal.DeviceId));
+        var slot = (authoredLane
+            ? signal.Slot
+            : m_slotResolver(arg: signal.DeviceId)
+        );
 
         if (slot < 0) {
             return;
@@ -518,9 +521,9 @@ public sealed partial class InputRouter : IDisposable {
             !focusExemptOnly ||
             (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) ||
             (!signal.Value.IsActive && m_bindings.HoldsSource(
-                slot: slot,
-                source: signal.Source
-            ))
+            slot: slot,
+            source: signal.Source
+        ))
         );
         var resolvedPageBindings = (forwardsToResolver
             ? m_bindings.Resolve(
@@ -532,8 +535,7 @@ public sealed partial class InputRouter : IDisposable {
         );
         var pageBindings = ResolveBindings(bindings: (focusExemptOnly
             ? null
-            : resolvedPageBindings
-        ));
+            : resolvedPageBindings));
         var alwaysActiveBindings = ResolveBindings(bindings: m_alwaysActiveBindings?.Resolve(
             slot: slot,
             source: signal.Source
@@ -647,10 +649,10 @@ public sealed partial class InputRouter : IDisposable {
                 memos[memoIndex] = new SignalMemo {
                     CommandId = commandId,
                     OwnsHeldState = IsHeldByControl(
-                        commandId: commandId,
-                        control: controlId,
-                        slot: slot
-                    ),
+                    commandId: commandId,
+                    control: controlId,
+                    slot: slot
+                ),
                 };
             }
 
@@ -1069,11 +1071,17 @@ public sealed partial class InputRouter : IDisposable {
     // whatever case it was typed in. Reading the prefix any more strictly than the id is resolved would seat a
     // mis-cased keyboard as a gamepad.
     private static InputDeviceKind ClassifyDeviceKind(string source) {
-        if (source.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "keyboard.")) {
+        if (source.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "keyboard."
+        )) {
             return InputDeviceKind.Keyboard;
         }
 
-        if (source.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "mouse.")) {
+        if (source.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "mouse."
+        )) {
             return InputDeviceKind.Mouse;
         }
 
@@ -1791,8 +1799,8 @@ public sealed partial class InputRouter : IDisposable {
             Principal: default,
             Slot: slot,
             Text: ((activation.Text is { Length: > 0 } text)
-                ? $"{activation.Command} {text}"
-                : null)
+            ? $"{activation.Command} {text}"
+            : null)
         ));
 
         return true;
@@ -2291,7 +2299,8 @@ public sealed partial class InputRouter : IDisposable {
     private static string? TextLine(string command, string? text, CommandPhase phase, bool dispatch) =>
         (((text is { Length: > 0 }) && dispatch && (phase == CommandPhase.Started))
             ? $"{command} {text}"
-            : null);
+            : null
+        );
     private static bool IsActivity(in InputSignal signal) {
         if (signal.Posture) {
             return false;

@@ -25,10 +25,22 @@ public class DualFixMul {
 
     [GlobalSetup]
     public void Setup() {
-        m_seed = new FixedDual<FixedQ4816>(Real: FixedQ4816.One, Dual: FixedQ4816.FromDouble(value: 0.5));
-        m_step = new FixedDual<FixedQ4816>(Real: FixedQ4816.One, Dual: FixedQ4816.FromRawBits(value: 1L));
-        m_eSeed = new QFixElem(U: m_seed.Real, V: m_seed.Dual);
-        m_eStep = new QFixElem(U: m_step.Real, V: m_step.Dual);
+        m_seed = new FixedDual<FixedQ4816>(
+            Real: FixedQ4816.One,
+            Dual: FixedQ4816.FromDouble(value: 0.5)
+        );
+        m_step = new FixedDual<FixedQ4816>(
+            Real: FixedQ4816.One,
+            Dual: FixedQ4816.FromRawBits(value: 1L)
+        );
+        m_eSeed = new QFixElem(
+            U: m_seed.Real,
+            V: m_seed.Dual
+        );
+        m_eStep = new QFixElem(
+            U: m_step.Real,
+            V: m_step.Dual
+        );
     }
     [Benchmark(Baseline = true, OperationsPerInvoke = Ops)]
     public long Hand() {
@@ -48,7 +60,10 @@ public class DualFixMul {
         var sink = 0L;
 
         for (var n = 0; (n < Ops); ++n) {
-            accumulator = Operands.DualFix.Multiply(left: accumulator, right: m_eStep);
+            accumulator = Operands.DualFix.Multiply(
+                left: accumulator,
+                right: m_eStep
+            );
             sink ^= accumulator.V.Value;
         }
 
@@ -56,7 +71,11 @@ public class DualFixMul {
     }
     [Benchmark(OperationsPerInvoke = Ops)]
     public long GenericLocal() =>
-        Local(algebra: Operands.DualFix, seed: m_eSeed, step: m_eStep);
+        Local(
+            algebra: Operands.DualFix,
+            seed: m_eSeed,
+            step: m_eStep
+        );
 
     [MethodImpl(methodImplOptions: MethodImplOptions.NoInlining)]
     private static long Local(QuadraticAlgebra<FixedQ4816> algebra, QFixElem seed, QFixElem step) {
@@ -64,7 +83,10 @@ public class DualFixMul {
         var sink = 0L;
 
         for (var n = 0; (n < Ops); ++n) {
-            accumulator = algebra.Multiply(left: accumulator, right: step);
+            accumulator = algebra.Multiply(
+                left: accumulator,
+                right: step
+            );
             sink ^= accumulator.V.Value;
         }
 
@@ -90,14 +112,47 @@ public class DualQuaternionMul {
 
     [GlobalSetup]
     public void Setup() {
-        var rotSeed = FixedQuaternion.FromAxisAngle(axis: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero), angle: FixedQ4816.FromDouble(value: 0.6));
-        var dualSeed = FixedQuaternion.FromAxisAngle(axis: new FixedVector3(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), angle: FixedQ4816.FromDouble(value: 0.3));
-        var rotStep = FixedQuaternion.FromAxisAngle(axis: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.One), angle: FixedQ4816.FromDouble(value: 0.02));
+        var rotSeed = FixedQuaternion.FromAxisAngle(
+            axis: new FixedVector3(
+                X: FixedQ4816.Zero,
+                Y: FixedQ4816.One,
+                Z: FixedQ4816.Zero
+            ),
+            angle: FixedQ4816.FromDouble(value: 0.6)
+        );
+        var dualSeed = FixedQuaternion.FromAxisAngle(
+            axis: new FixedVector3(
+                X: FixedQ4816.One,
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.Zero
+            ),
+            angle: FixedQ4816.FromDouble(value: 0.3)
+        );
+        var rotStep = FixedQuaternion.FromAxisAngle(
+            axis: new FixedVector3(
+                X: FixedQ4816.Zero,
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.One
+            ),
+            angle: FixedQ4816.FromDouble(value: 0.02)
+        );
 
-        m_seed = new FixedDual<FixedQuaternion>(Dual: dualSeed, Real: rotSeed);
-        m_step = new FixedDual<FixedQuaternion>(Real: rotStep, Dual: FixedQuaternion.AdditiveIdentity);
-        m_eSeed = new QQuatElem(U: m_seed.Real, V: m_seed.Dual);
-        m_eStep = new QQuatElem(U: m_step.Real, V: m_step.Dual);
+        m_seed = new FixedDual<FixedQuaternion>(
+            Dual: dualSeed,
+            Real: rotSeed
+        );
+        m_step = new FixedDual<FixedQuaternion>(
+            Real: rotStep,
+            Dual: FixedQuaternion.AdditiveIdentity
+        );
+        m_eSeed = new QQuatElem(
+            U: m_seed.Real,
+            V: m_seed.Dual
+        );
+        m_eStep = new QQuatElem(
+            U: m_step.Real,
+            V: m_step.Dual
+        );
     }
     [Benchmark(Baseline = true, OperationsPerInvoke = Ops)]
     public long Hand() {
@@ -117,7 +172,10 @@ public class DualQuaternionMul {
         var sink = 0L;
 
         for (var n = 0; (n < Ops); ++n) {
-            accumulator = Operands.DualQuat.Multiply(left: accumulator, right: m_eStep);
+            accumulator = Operands.DualQuat.Multiply(
+                left: accumulator,
+                right: m_eStep
+            );
             sink ^= accumulator.V.W.Value;
         }
 
@@ -125,7 +183,11 @@ public class DualQuaternionMul {
     }
     [Benchmark(OperationsPerInvoke = Ops)]
     public long GenericLocal() =>
-        Local(algebra: Operands.DualQuat, seed: m_eSeed, step: m_eStep);
+        Local(
+            algebra: Operands.DualQuat,
+            seed: m_eSeed,
+            step: m_eStep
+        );
 
     [MethodImpl(methodImplOptions: MethodImplOptions.NoInlining)]
     private static long Local(QuadraticAlgebra<FixedQuaternion> algebra, QQuatElem seed, QQuatElem step) {
@@ -133,7 +195,10 @@ public class DualQuaternionMul {
         var sink = 0L;
 
         for (var n = 0; (n < Ops); ++n) {
-            accumulator = algebra.Multiply(left: accumulator, right: step);
+            accumulator = algebra.Multiply(
+                left: accumulator,
+                right: step
+            );
             sink ^= accumulator.V.W.Value;
         }
 

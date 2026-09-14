@@ -5,13 +5,13 @@ namespace Puck.Vulkan;
 /// these spec constants, so the swapchain factory and the renderer's neutral-preference mapping cannot drift apart.
 /// </summary>
 public static class VulkanPresentMode {
-    /// <summary>The <c>VK_PRESENT_MODE_IMMEDIATE_KHR</c> present mode (no vsync; may tear).</summary>
-    public const uint Immediate = 0;
-    /// <summary>The <c>VK_PRESENT_MODE_MAILBOX_KHR</c> present mode (vsync, latest-frame-wins; low latency).</summary>
-    public const uint Mailbox = 1;
     /// <summary>The <c>VK_PRESENT_MODE_FIFO_KHR</c> present mode (vsync; guaranteed always supported).</summary>
     public const uint Fifo = 2;
     /// <summary>The <c>VK_PRESENT_MODE_FIFO_RELAXED_KHR</c> present mode — adaptive vsync: synchronize when on time, but
     /// tear when a frame arrives after the vblank, so a missed frame does not stutter. The variable-refresh-friendly mode.</summary>
     public const uint FifoRelaxed = 3;
+    /// <summary>The <c>VK_PRESENT_MODE_IMMEDIATE_KHR</c> present mode (no vsync; may tear).</summary>
+    public const uint Immediate = 0;
+    /// <summary>The <c>VK_PRESENT_MODE_MAILBOX_KHR</c> present mode (vsync, latest-frame-wins; low latency).</summary>
+    public const uint Mailbox = 1;
 }

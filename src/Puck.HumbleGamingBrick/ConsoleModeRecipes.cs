@@ -30,6 +30,21 @@ internal static class ConsoleModeRecipes {
     // colour-detection flag (say, one gated on a HRAM byte) and ships an authored other-mode render path to switch onto.
     private static readonly (string TitlePrefix, ModeFlag[] Flags)[] Recipes = [];
 
+    /// <summary>Returns a value indicating whether a known recipe exists for <paramref name="title"/> — the host distinguishes a real live retarget
+    /// (the game re-renders natively) from a presentation-only re-interpretation when it echoes the swap.</summary>
+    /// <param name="title">The cartridge header title.</param>
+    public static bool HasRecipe(string title) {
+        foreach (var (prefix, _) in Recipes) {
+            if (title.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: prefix
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Returns the flag pokes that flip <paramref name="title"/> onto <paramref name="target"/>'s code path, or
     /// an empty array when no recipe is known (the caller then does a presentation-only swap).</summary>
     /// <param name="title">The cartridge header title.</param>
@@ -60,20 +75,5 @@ internal static class ConsoleModeRecipes {
         }
 
         return [];
-    }
-    /// <summary>Returns a value indicating whether a known recipe exists for <paramref name="title"/> — the host distinguishes a real live retarget
-    /// (the game re-renders natively) from a presentation-only re-interpretation when it echoes the swap.</summary>
-    /// <param name="title">The cartridge header title.</param>
-    public static bool HasRecipe(string title) {
-        foreach (var (prefix, _) in Recipes) {
-            if (title.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: prefix
-            )) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

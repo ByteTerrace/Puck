@@ -15,16 +15,6 @@ public sealed class CartridgeHeader {
     private const byte FirstPartyOldLicensee = 0x01;
     // The region the companion console's boot ROM forwards, one bit at a time: 0x0104 through 0x014F inclusive.
     private const int ForwardedEnd = 0x014F;
-    /// <summary>The header offset of the 48-byte boot logo bitmap the boot program forwards and compares.</summary>
-    public const int LogoOffset = 0x0104;
-
-    /// <summary>Gets the 48-byte boot logo bitmap every bootable cartridge carries at <see cref="LogoOffset"/>.</summary>
-    public static ReadOnlySpan<byte> Logo =>
-        [
-            0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
-            0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
-            0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E,
-        ];
     private const int ForwardedStart = 0x0104;
     private const int NewLicenseeOffset = 0x0144;
     private const byte NewLicenseeSentinel = 0x33;
@@ -33,6 +23,81 @@ public sealed class CartridgeHeader {
     private const int RomSizeOffset = 0x0148;
     private const int TitleEnd = 0x0143;
     private const int TitleStart = 0x0134;
+
+    /// <summary>The header offset of the 48-byte boot logo bitmap the boot program forwards and compares.</summary>
+    public const int LogoOffset = 0x0104;
+
+    /// <summary>Gets the 48-byte boot logo bitmap a ByteTerrace cartridge carries at <see cref="LogoOffset"/>.</summary>
+    /// <remarks>
+    /// Same encoding as <see cref="Logo"/>: a 48 by 8 half-resolution image the boot program doubles to 96 by 16. The
+    /// first 24 bytes are the upper tile row and the rest the lower; within a half, two bytes a column, each byte two
+    /// four-pixel rows, high nibble first.
+    /// </remarks>
+    public static ReadOnlySpan<byte> ByteTerraceLogo =>
+        [
+            0xF0, 0x32, 0xF0, 0x2A, 0xF0, 0xB9, 0xF0, 0xB2, 0xF0, 0xB1, 0xF0, 0xB2, 0xF0, 0xB2, 0xF0, 0x3A,
+            0xF0, 0x1A, 0xF0, 0x1A, 0xF0, 0xB2, 0xF0, 0x80, 0x32, 0x3F, 0x19, 0x1F, 0x11, 0x1F, 0x32, 0x3F,
+            0x11, 0x9F, 0x32, 0x3F, 0x33, 0xAF, 0x33, 0xAF, 0x32, 0xAF, 0xAA, 0x9F, 0x32, 0xBF, 0x00, 0x8F,
+        ];
+    /// <summary>Gets whether the cartridge requires a Color console (header flag <c>0xC0</c>).</summary>
+    public bool ColorOnly { get; }
+    /// <summary>Gets the number of set bits in <c>0x0104</c>–<c>0x014F</c>. The companion console's boot ROM forwards
+    /// that region bit by bit and sends a set bit one machine cycle faster than a clear one, so its running time — and
+    /// therefore the divider value it hands off — is a linear function of this count.</summary>
+    public int ForwardedSetBitCount { get; }
+    /// <summary>Gets the fourth title byte, the boot ROM's tie-breaker between titles that share a checksum.</summary>
+    public byte FourthTitleLetter { get; }
+    /// <summary>Gets whether the cartridge has a battery backing its RAM.</summary>
+    public bool HasBattery { get; }
+    /// <summary>Gets whether the cartridge has external RAM.</summary>
+    public bool HasRam { get; }
+    /// <summary>Gets whether the cartridge is an MBC5 rumble variant (header type <c>0x1C</c>-<c>0x1E</c>): RAM-bank
+    /// select bit 3 drives the motor instead of selecting a bank.</summary>
+    public bool HasRumble { get; }
+    /// <summary>Gets the 48-byte boot logo bitmap a cartridge this repository forges carries at
+    /// <see cref="LogoOffset"/>.</summary>
+    /// <remarks>
+    /// Same encoding as <see cref="Logo"/>: a 48 by 8 half-resolution image the boot program doubles to 96 by 16. The
+    /// first 24 bytes are the upper tile row and the rest the lower; within a half, two bytes a column, each byte two
+    /// four-pixel rows of four pixels, high nibble the upper row, most significant bit leftmost.
+    /// </remarks>
+    public static ReadOnlySpan<byte> HouseLogo =>
+        [
+            0xF0, 0x32, 0xF0, 0x2A, 0xF0, 0xB9, 0xF0, 0xB2, 0xF0, 0xB1, 0xF0, 0xB2, 0xF0, 0xB2, 0xF0, 0x3A,
+            0xF0, 0x1A, 0xF0, 0x1A, 0xF0, 0xB2, 0xF0, 0x80, 0x32, 0x3F, 0x19, 0x1F, 0x11, 0x1F, 0x32, 0x3F,
+            0x11, 0x9F, 0x32, 0x3F, 0x33, 0xAF, 0x33, 0xAF, 0x32, 0xAF, 0xAA, 0x9F, 0x32, 0xBF, 0x00, 0x8F,
+        ];
+    /// <summary>Gets whether the cartridge carries the first-party publisher code (legacy <c>0x01</c>, or legacy
+    /// <c>0x33</c> with new code <c>"01"</c>) — the gate for the boot ROM's title-based colorization and timing paths.</summary>
+    public bool IsFirstPartyGame =>
+        ((OldLicenseeCode == FirstPartyOldLicensee)
+        || ((OldLicenseeCode == NewLicenseeSentinel) && (NewLicenseeCode0 == ((byte)'0')) && (NewLicenseeCode1 == ((byte)'1'))));
+    /// <summary>Gets the 48-byte boot logo bitmap every bootable cartridge carries at <see cref="LogoOffset"/>.</summary>
+    public static ReadOnlySpan<byte> Logo =>
+        [
+            0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
+            0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
+            0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E,
+        ];
+    /// <summary>Gets the mapper the cartridge carries.</summary>
+    public MapperKind Mapper { get; }
+    /// <summary>Gets the first character of the new licensee code (<c>0x0144</c>).</summary>
+    public byte NewLicenseeCode0 { get; }
+    /// <summary>Gets the second character of the new licensee code (<c>0x0145</c>).</summary>
+    public byte NewLicenseeCode1 { get; }
+    /// <summary>Gets the legacy licensee code (<c>0x014B</c>).</summary>
+    public byte OldLicenseeCode { get; }
+    /// <summary>Gets the size of external RAM in bytes (zero when the cartridge has none).</summary>
+    public int RamByteCount { get; }
+    /// <summary>Gets the number of 16&#160;KiB ROM banks.</summary>
+    public int RomBankCount { get; }
+    /// <summary>Gets whether the cartridge advertises Color enhancements (header flag <c>0x80</c> or <c>0xC0</c>).</summary>
+    public bool SupportsColor { get; }
+    /// <summary>Gets the cartridge title as printable ASCII.</summary>
+    public string Title { get; }
+    /// <summary>Gets the 8-bit sum of the sixteen title-region bytes (<c>0x0134</c>–<c>0x0143</c>), the hash the Color
+    /// boot ROM uses to pick a compatibility palette and that steers its header-dependent timing.</summary>
+    public byte TitleChecksum { get; }
 
     private CartridgeHeader(
         string title,
@@ -68,99 +133,6 @@ public sealed class CartridgeHeader {
         TitleChecksum = titleChecksum;
     }
 
-    /// <summary>Gets the cartridge title as printable ASCII.</summary>
-    public string Title { get; }
-    /// <summary>Gets whether the cartridge advertises Color enhancements (header flag <c>0x80</c> or <c>0xC0</c>).</summary>
-    public bool SupportsColor { get; }
-    /// <summary>Gets whether the cartridge requires a Color console (header flag <c>0xC0</c>).</summary>
-    public bool ColorOnly { get; }
-    /// <summary>Gets the mapper the cartridge carries.</summary>
-    public MapperKind Mapper { get; }
-    /// <summary>Gets whether the cartridge has external RAM.</summary>
-    public bool HasRam { get; }
-    /// <summary>Gets whether the cartridge has a battery backing its RAM.</summary>
-    public bool HasBattery { get; }
-    /// <summary>Gets whether the cartridge is an MBC5 rumble variant (header type <c>0x1C</c>-<c>0x1E</c>): RAM-bank
-    /// select bit 3 drives the motor instead of selecting a bank.</summary>
-    public bool HasRumble { get; }
-    /// <summary>Gets the number of 16&#160;KiB ROM banks.</summary>
-    public int RomBankCount { get; }
-    /// <summary>Gets the size of external RAM in bytes (zero when the cartridge has none).</summary>
-    public int RamByteCount { get; }
-    /// <summary>Gets the 8-bit sum of the sixteen title-region bytes (<c>0x0134</c>–<c>0x0143</c>), the hash the Color
-    /// boot ROM uses to pick a compatibility palette and that steers its header-dependent timing.</summary>
-    public byte TitleChecksum { get; }
-    /// <summary>Gets the fourth title byte, the boot ROM's tie-breaker between titles that share a checksum.</summary>
-    public byte FourthTitleLetter { get; }
-    /// <summary>Gets the legacy licensee code (<c>0x014B</c>).</summary>
-    public byte OldLicenseeCode { get; }
-    /// <summary>Gets the first character of the new licensee code (<c>0x0144</c>).</summary>
-    public byte NewLicenseeCode0 { get; }
-    /// <summary>Gets the second character of the new licensee code (<c>0x0145</c>).</summary>
-    public byte NewLicenseeCode1 { get; }
-    /// <summary>Gets the number of set bits in <c>0x0104</c>–<c>0x014F</c>. The companion console's boot ROM forwards
-    /// that region bit by bit and sends a set bit one machine cycle faster than a clear one, so its running time — and
-    /// therefore the divider value it hands off — is a linear function of this count.</summary>
-    public int ForwardedSetBitCount { get; }
-    /// <summary>Gets whether the cartridge carries the first-party publisher code (legacy <c>0x01</c>, or legacy
-    /// <c>0x33</c> with new code <c>"01"</c>) — the gate for the boot ROM's title-based colorization and timing paths.</summary>
-    public bool IsFirstPartyGame =>
-        ((OldLicenseeCode == FirstPartyOldLicensee)
-        || ((OldLicenseeCode == NewLicenseeSentinel) && (NewLicenseeCode0 == ((byte)'0')) && (NewLicenseeCode1 == ((byte)'1'))));
-
-    /// <summary>Parses the header out of a full ROM image.</summary>
-    /// <param name="rom">The cartridge ROM image; must be at least <c>0x0150</c> bytes.</param>
-    /// <returns>The decoded header.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="rom"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="rom"/> is too small to contain a header.</exception>
-    public static CartridgeHeader Parse(byte[] rom) {
-        ArgumentNullException.ThrowIfNull(argument: rom);
-        ArgumentOutOfRangeException.ThrowIfLessThan(
-            value: rom.Length,
-            other: 0x0150,
-            paramName: nameof(rom)
-        );
-
-        var colorFlag = rom[ColorFlagOffset];
-        var typeCode = rom[CartridgeTypeOffset];
-
-        DecodeType(
-            hasBattery: out var hasBattery,
-            hasRam: out var hasRam,
-            hasRumble: out var hasRumble,
-            mapper: out var mapper,
-            typeCode: typeCode
-        );
-
-        return new CartridgeHeader(
-            title: ReadTitle(rom: rom),
-            supportsColor: ((colorFlag == 0x80) || (colorFlag == 0xC0)),
-            colorOnly: (colorFlag == 0xC0),
-            mapper: mapper,
-            hasRam: hasRam,
-            hasBattery: hasBattery,
-            hasRumble: hasRumble,
-            romBankCount: DecodeRomBankCount(sizeCode: rom[RomSizeOffset]),
-            ramByteCount: DecodeRamByteCount(sizeCode: rom[RamSizeOffset]),
-            titleChecksum: ComputeTitleChecksum(rom: rom),
-            fourthTitleLetter: rom[(TitleStart + 3)],
-            oldLicenseeCode: rom[OldLicenseeOffset],
-            newLicenseeCode0: rom[NewLicenseeOffset],
-            newLicenseeCode1: rom[(NewLicenseeOffset + 1)],
-            forwardedSetBitCount: CountForwardedSetBits(rom: rom)
-        );
-    }
-
-    private static int CountForwardedSetBits(byte[] rom) {
-        var count = 0;
-
-        for (var offset = ForwardedStart; (offset <= ForwardedEnd); ++offset) {
-            count += BitOperations.PopCount(value: rom[offset]);
-        }
-
-        return count;
-    }
-
     // The boot ROM's title hash: the 8-bit sum of every byte from 0x0134 through 0x0143 (the color flag included).
     private static byte ComputeTitleChecksum(byte[] rom) {
         byte sum = 0;
@@ -170,6 +142,15 @@ public sealed class CartridgeHeader {
         }
 
         return sum;
+    }
+    private static int CountForwardedSetBits(byte[] rom) {
+        var count = 0;
+
+        for (var offset = ForwardedStart; (offset <= ForwardedEnd); ++offset) {
+            count += BitOperations.PopCount(value: rom[offset]);
+        }
+
+        return count;
     }
     private static int DecodeRamByteCount(byte sizeCode) =>
         sizeCode switch {
@@ -182,8 +163,9 @@ public sealed class CartridgeHeader {
         };
     private static int DecodeRomBankCount(byte sizeCode) =>
         ((sizeCode <= 0x08)
-        ? (2 << sizeCode)
-        : 2);
+            ? (2 << sizeCode)
+            : 2
+        );
     private static void DecodeType(byte typeCode, out MapperKind mapper, out bool hasRam, out bool hasBattery, out bool hasRumble) {
         (mapper, hasRam, hasBattery, hasRumble) = typeCode switch {
             0x00 => (MapperKind.RomOnly, false, false, false),
@@ -236,5 +218,48 @@ public sealed class CartridgeHeader {
         }
 
         return builder.ToString().TrimEnd();
+    }
+
+    /// <summary>Parses the header out of a full ROM image.</summary>
+    /// <param name="rom">The cartridge ROM image; must be at least <c>0x0150</c> bytes.</param>
+    /// <returns>The decoded header.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="rom"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="rom"/> is too small to contain a header.</exception>
+    public static CartridgeHeader Parse(byte[] rom) {
+        ArgumentNullException.ThrowIfNull(argument: rom);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: rom.Length,
+            other: 0x0150,
+            paramName: nameof(rom)
+        );
+
+        var colorFlag = rom[ColorFlagOffset];
+        var typeCode = rom[CartridgeTypeOffset];
+
+        DecodeType(
+            hasBattery: out var hasBattery,
+            hasRam: out var hasRam,
+            hasRumble: out var hasRumble,
+            mapper: out var mapper,
+            typeCode: typeCode
+        );
+
+        return new CartridgeHeader(
+            title: ReadTitle(rom: rom),
+            supportsColor: ((colorFlag == 0x80) || (colorFlag == 0xC0)),
+            colorOnly: (colorFlag == 0xC0),
+            mapper: mapper,
+            hasRam: hasRam,
+            hasBattery: hasBattery,
+            hasRumble: hasRumble,
+            romBankCount: DecodeRomBankCount(sizeCode: rom[RomSizeOffset]),
+            ramByteCount: DecodeRamByteCount(sizeCode: rom[RamSizeOffset]),
+            titleChecksum: ComputeTitleChecksum(rom: rom),
+            fourthTitleLetter: rom[(TitleStart + 3)],
+            oldLicenseeCode: rom[OldLicenseeOffset],
+            newLicenseeCode0: rom[NewLicenseeOffset],
+            newLicenseeCode1: rom[(NewLicenseeOffset + 1)],
+            forwardedSetBitCount: CountForwardedSetBits(rom: rom)
+        );
     }
 }

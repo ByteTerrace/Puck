@@ -61,7 +61,7 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// </summary>
 /// <param name="AuthoringHeadroomScreens">Boot-consumed. The extra screen slots the probe reserves, bounded by the
 /// engine's <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/> ceiling.</param>
-    /// <param name="AuthoringHeadroomPlacements">Boot-consumed. The placement rows of headroom the probe reserves beyond
+/// <param name="AuthoringHeadroomPlacements">Boot-consumed. The placement rows of headroom the probe reserves beyond
 /// the boot placements. Each slot reserves both a whole-creation stamp and the maximum per-shape instance count;
 /// these independent conservative buffer floors are not a strict row quota.</param>
 /// <param name="MinPlacementScale">Live-consumed. The placement uniform-scale envelope's floor — a pure validator
@@ -102,6 +102,7 @@ public sealed record WorldPlacementPolicyDefaults(
         MinPlacementScale: 0f,
         PreviewDeadlineFrames: 0
     );
+
     /// <summary>Derives what an unauthored <c>placements.policy</c> means: no live placement authoring — zero
     /// headroom (placements and screens), no derived faces, no candidate ring, no preview deadline — and a scale
     /// envelope spanning exactly the placement rows' authored scales, so a static world validates exactly what it
@@ -119,7 +120,10 @@ public sealed record WorldPlacementPolicyDefaults(
         for (var index = 0; (index < placements.Count); index++) {
             var scale = placements[index].Scale;
 
-            if (!float.IsFinite(f: scale) || (scale <= 0f)) {
+            if (
+                !float.IsFinite(f: scale) ||
+                (scale <= 0f)
+            ) {
                 continue;
             }
 
@@ -270,6 +274,13 @@ public enum WorldHostPresentation : byte {
 /// <param name="Backend">The preferred graphics backend (<see cref="WorldBackendPreference.Auto"/> is OS-portable), or
 /// <see langword="null"/> when <paramref name="BackendRow"/> reads it from a row — omitting both reads as
 /// <see cref="WorldBackendPreference.Auto"/>.</param>
+/// <param name="Title">The window title the OS shows in the caption bar, the taskbar, and Alt+Tab, or
+/// <see langword="null"/> for the engine's own. Shape-only validation (null or non-whitespace).</param>
+/// <param name="Icon">The window and taskbar icon: a <c>.ico</c> path resolved against the world document's own
+/// directory, or an absolute path taken as-is, so an author's icon travels beside their world file.
+/// <see langword="null"/> — and equally a path naming a file this OS cannot read as an icon — wears the host
+/// executable's own icon resource instead, which no world has to ship. Shape-only validation (null or
+/// non-whitespace); the platform window backend is what reads the file.</param>
 /// <param name="JournalDepth">The undo horizon, in journal entries: <c>world.undo</c> can never reach past this many
 /// trailing entries. <c>0</c> is unbounded — every world authored before this field existed keeps growing its journal
 /// for the life of the process, exactly as before. A positive depth bounds it: once the journal holds more than this
@@ -288,15 +299,19 @@ public sealed record WorldHostDefaults(
     int ExitAfterSeconds,
     bool RayQuery,
     bool Timing,
-    string? Genlock,
-    string? Listen,
+    // OPTIONAL: both are documented as null-by-default (loopback-only, no genlock), so absence is the ordinary
+    // case and saying so with a default is what keeps a world document from spelling the absence out.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Genlock = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Listen = null,
     string? Authority = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBackendPreference? Backend = null,
     // OPTIONAL — the authored-randomness facet over Backend above (see the param docs). XOR-BY-PRESENCE against it:
     // WorldHostDefaults is a CLASS, so a null Backend is honestly distinguishable from an authored one and declaring
     // both is refused BY NAME. (the capacity-row site needs no such guard — see its own remarks.)
     [property: JsonPropertyName("backendRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BackendRow = null,
-    int JournalDepth = 0
+    int JournalDepth = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Title = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Icon = null
 ) {
     /// <summary>Gets the inert absence — no presentation (<see cref="WorldHostPresentation.None"/>: no window, no
     /// GPU device), zero extent, no pacing, no listener. The engine holds no boot shape of its own: the standard
@@ -317,14 +332,16 @@ public sealed record WorldHostDefaults(
         Genlock: null,
         Listen: null,
         Authority: null,
-        JournalDepth: 0
+        JournalDepth: 0,
+        Title: null,
+        Icon: null
     );
 }
 /// <summary>
 /// A world's self-update OPERATIONAL configuration — the deployment-facet fields <c>Puck.Launcher.AddSelfUpdate</c>
 /// needs from a document field, matching <see cref="WorldHostDefaults"/>'s own posture for fields carrying no
 /// simulation-state weight. The SECURITY-CRITICAL trust anchor and the durable replay high-water mark are never
-/// document fields — a synced <c>puck.world.def.v1</c> a user's own storage container could rewrite is not a trust
+/// document fields — a synced <c>puck.world.definition.v1</c> a user's own storage container could rewrite is not a trust
 /// anchor; the composition root compiles the anchor in as a constant.
 /// </summary>
 /// <param name="Channel">The release channel this install tracks (e.g. <c>stable</c>, <c>beta</c>). Null = the app's own default channel.</param>

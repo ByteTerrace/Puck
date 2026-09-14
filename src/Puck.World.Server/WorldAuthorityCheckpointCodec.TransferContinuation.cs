@@ -4,40 +4,82 @@ namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
     private static void WriteTransferContinuation(WireWriter writer, WorldTransferContinuationCheckpoint row) {
-        WriteArray(writer, row.CohortSlots, static (w, slot) => w.WriteInt32(slot));
-        writer.WriteInt32(row.SourceSlot);
-        writer.WriteString(row.Border);
-        writer.WriteNullableString(row.AdjacencyCounterpart);
-        writer.WriteFixedVector(row.SourceCrossingPoint);
-        writer.WriteBoolean(row.SourceFrame.HasValue);
+        WriteArray(
+            writer,
+            row.CohortSlots,
+            static (w, slot) => w.WriteInt32(value: slot)
+        );
+        writer.WriteInt32(value: row.SourceSlot);
+        writer.WriteString(value: row.Border);
+        writer.WriteNullableString(value: row.AdjacencyCounterpart);
+        writer.WriteFixedVector(value: row.SourceCrossingPoint);
+        writer.WriteBoolean(value: row.SourceFrame.HasValue);
         if (row.SourceFrame is { } frame) {
-            writer.WriteFixedVector(frame.Origin);
-            writer.WriteFixedVector(frame.Right);
-            writer.WriteFixedVector(frame.Up);
-            writer.WriteFixedVector(frame.Normal);
-            writer.WriteFixed(frame.HalfWidth);
-            writer.WriteFixed(frame.HalfHeight);
-            writer.WriteFixed(frame.HalfDepth);
+            writer.WriteFixedVector(value: frame.Origin);
+            writer.WriteFixedVector(value: frame.Right);
+            writer.WriteFixedVector(value: frame.Up);
+            writer.WriteFixedVector(value: frame.Normal);
+            writer.WriteFixed(value: frame.HalfWidth);
+            writer.WriteFixed(value: frame.HalfHeight);
+            writer.WriteFixed(value: frame.HalfDepth);
         }
-        writer.WriteNullableString(row.DestinationName);
-        writer.WriteNullableString(row.ScopeKey);
-        writer.WriteBoolean(row.GenerationId.HasValue);
-        if (row.GenerationId is { } generation) { writer.WriteUInt64(generation); }
+        writer.WriteNullableString(value: row.DestinationName);
+        writer.WriteNullableString(value: row.ScopeKey);
+        writer.WriteBoolean(value: row.GenerationId.HasValue);
+        if (row.GenerationId is { } generation) { writer.WriteUInt64(value: generation); }
     }
-
     private static WorldTransferContinuationCheckpoint ReadTransferContinuation(ref WireReader reader) {
-        var slots = ReadArray(ref reader, "transfer continuation slots", static (ref WireReader r) => r.ReadInt32(), WorldBodiesLimits.CapacityCeiling);
+        var slots = ReadArray(
+            ref reader,
+            "transfer continuation slots",
+            static (ref WireReader r) => r.ReadInt32(),
+            WorldBodiesLimits.CapacityCeiling
+        );
         var sourceSlot = reader.ReadInt32();
-        var border = reader.ReadString("transfer continuation border", MaxStringBytes);
-        var counterpart = reader.ReadNullableString("transfer continuation counterpart", MaxStringBytes);
+        var border = reader.ReadString(
+            field: "transfer continuation border",
+            maxBytes: MaxStringBytes
+        );
+        var counterpart = reader.ReadNullableString(
+            field: "transfer continuation counterpart",
+            maxBytes: MaxStringBytes
+        );
         var point = reader.ReadFixedVector();
-        WorldFaceFrame? frame = reader.ReadBoolean()
-            ? new(reader.ReadFixedVector(), reader.ReadFixedVector(), reader.ReadFixedVector(), reader.ReadFixedVector(),
-                reader.ReadFixed(), reader.ReadFixed(), reader.ReadFixed())
-            : null;
-        var destination = reader.ReadNullableString("transfer continuation destination", MaxStringBytes);
-        var scope = reader.ReadNullableString("transfer continuation scope", MaxStringBytes);
-        ulong? generation = reader.ReadBoolean() ? reader.ReadUInt64() : null;
-        return new(slots, sourceSlot, border, counterpart, point, frame, destination, scope, generation);
+        WorldFaceFrame? frame = (reader.ReadBoolean()
+            ? new(
+                reader.ReadFixedVector(),
+                reader.ReadFixedVector(),
+                reader.ReadFixedVector(),
+                reader.ReadFixedVector(),
+                reader.ReadFixed(),
+                reader.ReadFixed(),
+                reader.ReadFixed()
+            )
+            : null
+        );
+        var destination = reader.ReadNullableString(
+            field: "transfer continuation destination",
+            maxBytes: MaxStringBytes
+        );
+        var scope = reader.ReadNullableString(
+            field: "transfer continuation scope",
+            maxBytes: MaxStringBytes
+        );
+        ulong? generation = (reader.ReadBoolean()
+            ? reader.ReadUInt64()
+            : null
+        );
+
+        return new(
+            AdjacencyCounterpart: counterpart,
+            Border: border,
+            CohortSlots: slots,
+            DestinationName: destination,
+            GenerationId: generation,
+            ScopeKey: scope,
+            SourceCrossingPoint: point,
+            SourceFrame: frame,
+            SourceSlot: sourceSlot
+        );
     }
 }

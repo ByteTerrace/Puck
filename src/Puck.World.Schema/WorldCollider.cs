@@ -69,16 +69,11 @@ public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requi
     [property: JsonPropertyName("events"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollisionEvents? EventsRaw = null,
     [property: JsonPropertyName("bodyContacts"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBodyContactPolicy? BodyContactsRaw = null,
     float GridCellSize = 0f) {
-    /// <summary>The smallest accepted non-zero <see cref="GridCellSize"/>, in world units.</summary>
-    public const float MinGridCellSize = 0.05f;
     /// <summary>The largest accepted <see cref="GridCellSize"/>, in world units.</summary>
     public const float MaxGridCellSize = 64f;
-    /// <summary>Gets the effective bounded body-overlap event policy.</summary>
-    [JsonIgnore]
-    public WorldCollisionEvents Events => (EventsRaw ?? WorldCollisionEvents.Default);
-    /// <summary>Gets the effective bounded dynamic-body contact policy.</summary>
-    [JsonIgnore]
-    public WorldBodyContactPolicy BodyContacts => (BodyContactsRaw ?? WorldBodyContactPolicy.Default);
+    /// <summary>The smallest accepted non-zero <see cref="GridCellSize"/>, in world units.</summary>
+    public const float MinGridCellSize = 0.05f;
+
     /// <summary>Gets the inert absence — no requirements, zero skin, zero iterations, a solver that never relaxes.
     /// The engine holds no contact tuning of its own: the standard tuning is AUTHORED, in
     /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis. A
@@ -94,6 +89,12 @@ public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requi
         MaxSlopeDegrees: 0f,
         Requirements: []
     );
+    /// <summary>Gets the effective bounded dynamic-body contact policy.</summary>
+    [JsonIgnore]
+    public WorldBodyContactPolicy BodyContacts => (BodyContactsRaw ?? WorldBodyContactPolicy.Default);
+    /// <summary>Gets the effective bounded body-overlap event policy.</summary>
+    [JsonIgnore]
+    public WorldCollisionEvents Events => (EventsRaw ?? WorldCollisionEvents.Default);
 }
 /// <summary>Bounds body-pair overlap sensing independently of physical contact. The event feed retains established
 /// overlaps first, then considers at most <see cref="CandidateBudget"/> broadphase candidates per body, starts at
@@ -107,12 +108,13 @@ public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requi
 /// <param name="BeginBudget">The maximum collision-begin relationships admitted in one authority tick. Existing
 /// relationships and their ends are not delayed.</param>
 public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairsPerBody = 8, int BeginBudget = 1024) {
+    /// <summary>The largest accepted per-tick begin budget.</summary>
+    public const int MaximumBeginBudget = 8192;
     /// <summary>The largest accepted per-body candidate budget.</summary>
     public const int MaximumCandidateBudget = 256;
     /// <summary>The largest accepted retained overlap degree per body.</summary>
     public const int MaximumPairsPerBody = 64;
-    /// <summary>The largest accepted per-tick begin budget.</summary>
-    public const int MaximumBeginBudget = 8192;
+
     /// <summary>The policy used when <c>collision.events</c> is absent.</summary>
     public static WorldCollisionEvents Default { get; } = new();
 }
@@ -169,14 +171,15 @@ public sealed record WorldBodyContactPolicy(int CandidateBudget = 16, int MaxPai
     public const int MaximumCandidateBudget = 32;
     /// <summary>The largest accepted resolved-contact degree per solid body.</summary>
     public const int MaximumPairsPerBody = 16;
-    /// <summary>The largest accepted rigid-body substep ceiling.</summary>
-    public const int MaximumRigidSubstepCeiling = 32;
     /// <summary>The largest accepted ground-manifold sequential-impulse pass count.</summary>
     public const int MaximumRigidManifoldIterations = 16;
-    /// <summary>The largest accepted rigid-pair extra-pass ceiling.</summary>
-    public const int MaximumRigidPairIterationCeiling = 16;
     /// <summary>The largest accepted rigid-pair extra-pass work budget.</summary>
     public const int MaximumRigidPairIterationBudget = 4096;
+    /// <summary>The largest accepted rigid-pair extra-pass ceiling.</summary>
+    public const int MaximumRigidPairIterationCeiling = 16;
+    /// <summary>The largest accepted rigid-body substep ceiling.</summary>
+    public const int MaximumRigidSubstepCeiling = 32;
+
     /// <summary>The policy used when <c>collision.bodyContacts</c> is absent.</summary>
     public static WorldBodyContactPolicy Default { get; } = new();
 }

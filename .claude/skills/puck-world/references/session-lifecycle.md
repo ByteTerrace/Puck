@@ -1,7 +1,7 @@
 # Session lifecycle — join, leave, and reconnect
 
 Local-seat and peer join/leave, and the park-with-grace reconnect primitive
-layered onto them (reconnect-primitives wave, 2026-08-06). Read this before
+layered onto them. Read this before
 touching `WorldPopulation.Entry`'s occupancy fields, `WorldServer.ApplySession`,
 or the `$parked:` reserved rule channel.
 
@@ -36,11 +36,17 @@ or the `$parked:` reserved rule channel.
 
 Before this wave, both doors' leave/disconnect path nulled `Entry.Body`,
 cleared `Entry.Active` (and, for a peer, `Entry.IsRemoteHuman`) IMMEDIATELY.
-Now, when `definition.Population.ReconnectGraceTicks` is positive (the
-authored document field; default 720 = 3s at 240 Hz; `0` keeps the exact
-pre-park immediate-teardown behavior), the SAME call instead:
+Now, when the compiled `definition.PopulationReconnectGraceTicks`
+(`WorldDefinition.cs:322`, a `CompiledTickDuration` derived from the authored
+`population.reconnectGraceSeconds` field at the world's own simulation rate;
+default 3.0s = 720 ticks at 240 Hz) is finite and positive — `IsZero` keeps
+the exact pre-park immediate-teardown behavior, and `IsNever` (a positive
+authored grace compiled at simulation rate 0) parks the body forever, never
+sweeping it — the SAME call instead:
 
-1. Sets `Entry.Parked = true` and `Entry.ParkedUntilTick = tick + ReconnectGraceTicks` (derived at compile from the document-authored `reconnectGraceSeconds`)
+1. Sets `Entry.Parked = true` and `Entry.ParkedUntilTick = tick +` the
+   compiled grace's tick count (`WorldPopulation`'s own cache of
+   `WorldDefinition.PopulationReconnectGraceTicks`, recompiled on any Rebuild)
    (`tick` is `WorldServer.NextInputTick` at the synchronous call site, or the
    `Step`-local `tick` inside the tick loop — both name the same instant).
 2. Leaves `Entry.Body`, `Entry.Active`, and (for a peer) `Entry.IsRemoteHuman`
@@ -125,7 +131,7 @@ without ever reusing it.
 
 ## The `$parked:<bodyRef>` reserved rule channel
 
-`WorldRuleFacts.ParkedPrefix` (`WorldRules.cs`, alongside `$tick`/`$population`/
+`WorldRuleFacts.ParkedPrefix` (`WorldRuleFacts.cs`, alongside `$tick`/`$population`/
 `$region:`/`$machine:`/`$reduce:`/`$argmax:`/`$argmin:`/`$distance:`/`$los:`).
 `<bodyRef>` is the SAME single-body-reference grammar `$distance:`/`$los:`
 spend one half of theirs on — `body:<n>` (a literal 0-based index) or
@@ -158,7 +164,7 @@ gate (see the gotcha below).
 
 Everything past park-with-grace/body-resume/`$parked:` above is an ordinary
 authored `WorldRule` — no further engine surface exists or is needed.
-The retired `reconnect.world.json` scenario (git history; deleted 2026-09-06 with `combat.world.json`,
+The retired `reconnect.world.json` scenario (git history; retired alongside `combat.world.json`,
 whose rules now live in `modules/arena.world.json`) was the worked forcing-function demo: a CC countdown (`stunRemaining`, a plain
 `Level`-mode decrement rule) keeps ticking through a park because rule
 evaluation never consults occupancy (see "Park-with-grace" above); a

@@ -1,6 +1,7 @@
 // Tile-cull prepass: one invocation per (tile, viewport). It cone-marches the distance field over the tile and
 // writes a conservative march-start depth — or TileEmpty when no ray in the tile can hit — that Stage 1
 // (sdf-world-views.comp) uses to fast-forward, or skip, the per-pixel march.
+// Programs admitted to independent part tracing use only a short entry search; others also search gap/tail bounds.
 //
 // MASK-FIRST: this kernel runs AFTER the instance-cull pass (sdf-instance-cull.comp) and cone-marches the
 // TILE-MASKED field (mapMasked at this tile's mask base) — each march sample walks only the instances whose bounds
@@ -26,7 +27,7 @@
 #define SDF_DYNAMIC_TRANSFORMS
 // The per-tile instance mask, READ here by the cone march (the instance-cull pass wrote it). register(t3): the
 // Direct3D 12 SRV order follows the engine's beam binding list (program t0, viewports t1, dynamicTransforms t2,
-// instanceMasks t3) — Stage 1 binds the SAME buffer at its own t13 (sdf-vm.hlsli's default register).
+// instanceMasks t3) — the hit passes bind the SAME buffer at their own t37.
 #define SDF_INSTANCE_MASKS
 // The serial tile-beam walk measured faster with its two payload vectors fetched together before the opcode switch;
 // Stage 1's wider per-pixel interpreter benefits from the default case-local loads instead.
@@ -37,10 +38,10 @@
 // the engine's beam binding list (program t0, viewports t1, dynamicTransforms t2, instanceMasks t3, brickPool t4).
 #define SDF_SAMPLED_REGIONS
 #define SDF_BRICK_POOL_REGISTER t4
-#include "sdf-world.hlsli"
-
-// The per-tile cull buffer (binding 3), written here and read read-only by the compositor.
+#define SDF_PART_RAY_BOUNDS
+// The tile planes and appended per-view part bounds share one device-local buffer.
 [[vk::binding(3, 0)]] RWStructuredBuffer<float> tiles : register(u0);
+#include "sdf-world.hlsli"
 
 [numthreads(1, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
@@ -135,4 +136,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     tiles[worldTileFirstExitIndex(tileIndex)] = bounds.firstExit;
     tiles[worldTileSecondEntryIndex(tileIndex)] = bounds.secondEntry;
     tiles[worldTileFarBoundIndex(tileIndex)] = bounds.farBound;
+
+    // Each part is refitted once per viewport, even when it has more instances than screen tiles. This work
+    // reads only program/pose/camera data, so it needs no synchronization with other beam invocations.
+    if (sdfCanTracePartsIndependently()) {
+        uint tileCount = params.tileGrid.x * params.tileGrid.y;
+        [loop]
+        for (uint instance = id.y * params.tileGrid.x + id.x;
+            instance < sdfProgramLayout.instanceCount; instance += tileCount) {
+            sdfWritePartBound(id.z, instance, view.position.xyz, farDistance,
+                (2.0 * view.right.w) / max(regionSizePx.y, 1.0));
+        }
+    }
 }

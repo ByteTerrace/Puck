@@ -37,7 +37,12 @@ public static class CameraDeviceScanReconciler {
     /// already failed and narrated.</param>
     public static CameraDeviceScanDecision Reconcile(IReadOnlySet<InputDeviceId> knownIds, CameraDeviceScanOutcome outcome, bool wasFailing) {
         if (outcome is CameraDeviceScanOutcome.Failure) {
-            return new CameraDeviceScanDecision(IsFailing: true, Narrate: !wasFailing, ToAdd: [], ToRetire: []);
+            return new CameraDeviceScanDecision(
+                IsFailing: true,
+                Narrate: !wasFailing,
+                ToAdd: [],
+                ToRetire: []
+            );
         }
 
         var ids = ((CameraDeviceScanOutcome.Success)outcome).Ids;
@@ -57,6 +62,11 @@ public static class CameraDeviceScanReconciler {
             }
         }
 
-        return new CameraDeviceScanDecision(IsFailing: false, Narrate: false, ToAdd: toAdd, ToRetire: toRetire);
+        return new CameraDeviceScanDecision(
+            IsFailing: false,
+            Narrate: false,
+            ToAdd: toAdd,
+            ToRetire: toRetire
+        );
     }
 }

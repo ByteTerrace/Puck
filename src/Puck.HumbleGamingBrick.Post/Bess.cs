@@ -13,82 +13,53 @@ namespace Puck.HumbleGamingBrick.Post;
 /// out of scope for this evidence tool's first pass.
 /// </summary>
 internal static class Bess {
+    /// <summary>The byte offset of the size/offset buffer table within the <c>CORE</c> block.</summary>
+    public const int BufferTableOffset = 0x98;
     /// <summary>The length of the required <c>CORE</c> block's defined prefix. BESS spec (CORE block): "The length
     /// of the CORE block is 0xD0 bytes, but implementations are expected to ignore any excess bytes." — a CORE
     /// payload at least this long is legal; only the first <see cref="CoreBlockLength"/> bytes are ever read.</summary>
     public const int CoreBlockLength = 0xD0;
-    /// <summary>The only BESS major version this importer accepts. BESS spec (CORE block): "Both major and minor
-    /// versions should be 1. Implementations are expected to reject incompatible majors, but still attempt to read
-    /// newer minor versions." — so only the major is gated here; the minor is never compared.</summary>
-    public const ushort SupportedCoreMajorVersion = 1;
+    /// <summary>The footer's fixed trailing length (a 4-byte offset plus the 4-byte <c>"BESS"</c> tag).</summary>
+    public const int FooterLength = 8;
     /// <summary>The number of memory-mapped registers the <c>CORE</c> block embeds (0xFF00-0xFF7F).</summary>
     public const int RegisterPageLength = 0x80;
     /// <summary>The byte offset of the register page within the <c>CORE</c> block.</summary>
     public const int RegisterPageOffset = 0x18;
-    /// <summary>The byte offset of the size/offset buffer table within the <c>CORE</c> block.</summary>
-    public const int BufferTableOffset = 0x98;
-    /// <summary>The footer's fixed trailing length (a 4-byte offset plus the 4-byte <c>"BESS"</c> tag).</summary>
-    public const int FooterLength = 8;
+    /// <summary>The only BESS major version this importer accepts. BESS spec (CORE block): "Both major and minor
+    /// versions should be 1. Implementations are expected to reject incompatible majors, but still attempt to read
+    /// newer minor versions." — so only the major is gated here; the minor is never compared.</summary>
+    public const ushort SupportedCoreMajorVersion = 1;
 
-    /// <summary>Appends one BESS block (4-byte tag, little-endian 32-bit length, payload).</summary>
-    /// <param name="destination">The list to append to.</param>
-    /// <param name="tag">The exact 4-character ASCII tag.</param>
-    /// <param name="payload">The block payload.</param>
-    public static void WriteBlock(List<byte> destination, string tag, ReadOnlySpan<byte> payload) {
-        WriteTag(
-            destination: destination,
-            tag: tag
+    private static void WriteTag(List<byte> destination, string tag) {
+        var bytes = new byte[4];
+
+        Encoding.ASCII.GetBytes(
+            bytes: bytes,
+            chars: tag
         );
-
-        var length = new byte[4];
-
-        BinaryPrimitives.WriteUInt32LittleEndian(
-            destination: length,
-            value: ((uint)payload.Length)
-        );
-        destination.AddRange(collection: length);
-        destination.AddRange(collection: payload.ToArray());
+        destination.AddRange(collection: bytes);
     }
-    /// <summary>Appends the 8-byte trailing footer.</summary>
-    /// <param name="destination">The list to append to.</param>
-    /// <param name="firstBlockOffset">The absolute file offset of the first BESS block (<c>NAME</c> or <c>CORE</c>).</param>
-    public static void WriteFooter(List<byte> destination, uint firstBlockOffset) {
-        var offset = new byte[4];
 
-        BinaryPrimitives.WriteUInt32LittleEndian(
-            destination: offset,
-            value: firstBlockOffset
-        );
-        destination.AddRange(collection: offset);
-        WriteTag(
-            destination: destination,
-            tag: "BESS"
-        );
-    }
-    /// <summary>Locates the first BESS block via the trailing footer.</summary>
-    /// <param name="file">The whole file's bytes.</param>
-    /// <param name="firstBlockOffset">Receives the absolute offset of the first block.</param>
-    /// <returns><see langword="true"/> when the footer is present and well-formed.</returns>
-    public static bool TryReadFooter(ReadOnlySpan<byte> file, out int firstBlockOffset) {
-        firstBlockOffset = 0;
-
-        if (file.Length < FooterLength) {
-            return false;
-        }
-
-        var footer = file[^FooterLength..];
-
-        if (!footer[4..].SequenceEqual(other: "BESS"u8)) {
-            return false;
-        }
-
-        firstBlockOffset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: footer[..4]));
-
-        return (
-            (firstBlockOffset >= 0) &&
-            (firstBlockOffset < (file.Length - FooterLength))
-        );
-    }
+    /// <summary>Maps a <see cref="ConsoleModel"/> to the spec's 4-character model identifier.</summary>
+    /// <param name="model">The revision to encode.</param>
+    /// <returns>The 4 ASCII bytes (family, model, revision, padding).</returns>
+    public static byte[] ModelTag(ConsoleModel model) =>
+        Encoding.ASCII.GetBytes(s: model switch {
+            ConsoleModel.Dmg0 => "GD0 ",
+            ConsoleModel.DmgB => "GDB ",
+            ConsoleModel.DmgC => "GD  ",
+            ConsoleModel.Mgb => "GM  ",
+            ConsoleModel.Sgb => "SN  ",
+            ConsoleModel.Sgb2 => "S2  ",
+            ConsoleModel.Cgb0 => "CC0 ",
+            ConsoleModel.CgbA => "CCA ",
+            ConsoleModel.CgbB => "CCB ",
+            ConsoleModel.CgbC => "CCC ",
+            ConsoleModel.CgbD => "CCD ",
+            ConsoleModel.CgbE => "CCE ",
+            // The Advanced console's compatibility mode: family 'C' (the Color/Advanced family), model 'A'.
+            _ => "CA  ",
+        });
     /// <summary>Reads one block header at a position, bounds-checked against the file so a malformed length or a
     /// truncated file is reported rather than throwing mid-parse — the block-graph half of the "validate the complete
     /// graph before applying anything" contract <see cref="BessImporter"/> relies on.</summary>
@@ -138,34 +109,63 @@ internal static class Bess {
 
         return true;
     }
-    /// <summary>Maps a <see cref="ConsoleModel"/> to the spec's 4-character model identifier.</summary>
-    /// <param name="model">The revision to encode.</param>
-    /// <returns>The 4 ASCII bytes (family, model, revision, padding).</returns>
-    public static byte[] ModelTag(ConsoleModel model) =>
-        Encoding.ASCII.GetBytes(s: model switch {
-            ConsoleModel.Dmg0 => "GD0 ",
-            ConsoleModel.DmgB => "GDB ",
-            ConsoleModel.DmgC => "GD  ",
-            ConsoleModel.Mgb => "GM  ",
-            ConsoleModel.Sgb => "SN  ",
-            ConsoleModel.Sgb2 => "S2  ",
-            ConsoleModel.Cgb0 => "CC0 ",
-            ConsoleModel.CgbA => "CCA ",
-            ConsoleModel.CgbB => "CCB ",
-            ConsoleModel.CgbC => "CCC ",
-            ConsoleModel.CgbD => "CCD ",
-            ConsoleModel.CgbE => "CCE ",
-            // The Advanced console's compatibility mode: family 'C' (the Color/Advanced family), model 'A'.
-            _ => "CA  ",
-        });
+    /// <summary>Locates the first BESS block via the trailing footer.</summary>
+    /// <param name="file">The whole file's bytes.</param>
+    /// <param name="firstBlockOffset">Receives the absolute offset of the first block.</param>
+    /// <returns><see langword="true"/> when the footer is present and well-formed.</returns>
+    public static bool TryReadFooter(ReadOnlySpan<byte> file, out int firstBlockOffset) {
+        firstBlockOffset = 0;
 
-    private static void WriteTag(List<byte> destination, string tag) {
-        var bytes = new byte[4];
+        if (file.Length < FooterLength) {
+            return false;
+        }
 
-        Encoding.ASCII.GetBytes(
-            bytes: bytes,
-            chars: tag
+        var footer = file[^FooterLength..];
+
+        if (!footer[4..].SequenceEqual(other: "BESS"u8)) {
+            return false;
+        }
+
+        firstBlockOffset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: footer[..4]));
+
+        return (
+            (firstBlockOffset >= 0) &&
+            (firstBlockOffset < (file.Length - FooterLength))
         );
-        destination.AddRange(collection: bytes);
+    }
+    /// <summary>Appends one BESS block (4-byte tag, little-endian 32-bit length, payload).</summary>
+    /// <param name="destination">The list to append to.</param>
+    /// <param name="tag">The exact 4-character ASCII tag.</param>
+    /// <param name="payload">The block payload.</param>
+    public static void WriteBlock(List<byte> destination, string tag, ReadOnlySpan<byte> payload) {
+        WriteTag(
+            destination: destination,
+            tag: tag
+        );
+
+        var length = new byte[4];
+
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: length,
+            value: ((uint)payload.Length)
+        );
+        destination.AddRange(collection: length);
+        destination.AddRange(collection: payload.ToArray());
+    }
+    /// <summary>Appends the 8-byte trailing footer.</summary>
+    /// <param name="destination">The list to append to.</param>
+    /// <param name="firstBlockOffset">The absolute file offset of the first BESS block (<c>NAME</c> or <c>CORE</c>).</param>
+    public static void WriteFooter(List<byte> destination, uint firstBlockOffset) {
+        var offset = new byte[4];
+
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: offset,
+            value: firstBlockOffset
+        );
+        destination.AddRange(collection: offset);
+        WriteTag(
+            destination: destination,
+            tag: "BESS"
+        );
     }
 }

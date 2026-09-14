@@ -12,7 +12,6 @@ public sealed record WorldPlacementReflowEdit(
     float? Scale = null,
     IReadOnlyList<WorldPlacementSpatialVolume>? Spatial = null
 );
-
 /// <summary>Describes a bounded atomic placement edit plus neighbor reflow. A null member selection uses all dealt
 /// children of <see cref="TemplateId"/>; an explicit selection permits a bounded group of ordinary placements
 /// sharing that template's parent frame and candidate offsets. Members must be leaves; moving a child subtree

@@ -83,48 +83,13 @@ public struct FixedTetherConstraint {
             minLength: state.MinLength
         ) {
             m_lengthAccumulator = FixedRateAccumulator.FromRemainder(
-                remainder: state.Remainder,
-                ticksPerSecond: checked((long)FixedTickConversion.TicksPerSecond)
-            ),
+            remainder: state.Remainder,
+            ticksPerSecond: checked((long)FixedTickConversion.TicksPerSecond)
+        ),
         };
 
         return tether;
     }
-
-    /// <summary>Constructs a tether at an initial length.</summary>
-    /// <param name="length">The initial rope length. Must be at least <paramref name="minLength"/>.</param>
-    /// <param name="minLength">The floor <see cref="Reel"/> clamps to. Must be non-negative.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="minLength"/> is negative, or
-    /// <paramref name="length"/> is less than <paramref name="minLength"/>.</exception>
-    public FixedTetherConstraint(FixedQ4816 length, FixedQ4816 minLength) {
-        ArgumentOutOfRangeException.ThrowIfNegative(
-            value: minLength.Value,
-            paramName: nameof(minLength)
-        );
-
-        if (length.Value < minLength.Value) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(length),
-                message: "The initial rope length must be at least the minimum length."
-            );
-        }
-
-        Length = length;
-        MinLength = minLength;
-        m_lengthAccumulator = new FixedRateAccumulator(ticksPerSecond: checked((long)FixedTickConversion.TicksPerSecond));
-    }
-
-    /// <summary>Resolves a body-anchored tether's anchor point from the anchor body's CURRENT pose: the local-frame
-    /// offset rotated into world axes by the anchor's orientation and added to its position. Pure and caller-supplied
-    /// — this performs no body-identity lookup itself, so a caller resolves <paramref name="anchorPosition"/> and
-    /// <paramref name="anchorOrientation"/> off whatever it holds body state in (see the remarks on
-    /// <see cref="FixedTetherConstraint"/> for when in the tick that should happen).</summary>
-    /// <param name="anchorPosition">The anchor body's current world position.</param>
-    /// <param name="anchorOrientation">The anchor body's current world orientation.</param>
-    /// <param name="localOffset">The anchor point in the anchor body's local frame.</param>
-    /// <returns>The anchor point in world axes.</returns>
-    public static FixedVector3 ResolveAnchor(in FixedVector3 anchorPosition, in FixedQuaternion anchorOrientation, in FixedVector3 localOffset) =>
-        (anchorPosition + anchorOrientation.Rotate(vector: localOffset));
     /// <summary>Advances <see cref="Length"/> by <paramref name="ratePerSecond"/> over <paramref name="elapsedTicks"/>,
     /// clamped at <see cref="MinLength"/> — positive reels the rope out, negative reels it in. Integrated through a
     /// <see cref="FixedRateAccumulator"/> bound to the engine tick base, so a rate that is not an exact multiple of one
@@ -150,6 +115,17 @@ public struct FixedTetherConstraint {
 
         Length = next;
     }
+    /// <summary>Resolves a body-anchored tether's anchor point from the anchor body's CURRENT pose: the local-frame
+    /// offset rotated into world axes by the anchor's orientation and added to its position. Pure and caller-supplied
+    /// — this performs no body-identity lookup itself, so a caller resolves <paramref name="anchorPosition"/> and
+    /// <paramref name="anchorOrientation"/> off whatever it holds body state in (see the remarks on
+    /// <see cref="FixedTetherConstraint"/> for when in the tick that should happen).</summary>
+    /// <param name="anchorPosition">The anchor body's current world position.</param>
+    /// <param name="anchorOrientation">The anchor body's current world orientation.</param>
+    /// <param name="localOffset">The anchor point in the anchor body's local frame.</param>
+    /// <returns>The anchor point in world axes.</returns>
+    public static FixedVector3 ResolveAnchor(in FixedVector3 anchorPosition, in FixedQuaternion anchorOrientation, in FixedVector3 localOffset) =>
+        (anchorPosition + anchorOrientation.Rotate(vector: localOffset));
     /// <summary>Solves the distance cap against the CURRENT tick's resolved anchor position. A no-op — bit for bit —
     /// while <paramref name="position"/> sits at or inside <see cref="Length"/> from <paramref name="anchor"/>; once
     /// beyond it, projects <paramref name="position"/> back onto the sphere of radius <see cref="Length"/> and removes
@@ -184,6 +160,29 @@ public struct FixedTetherConstraint {
         }
 
         return new FixedTetherResolution(Taut: true);
+    }
+
+    /// <summary>Constructs a tether at an initial length.</summary>
+    /// <param name="length">The initial rope length. Must be at least <paramref name="minLength"/>.</param>
+    /// <param name="minLength">The floor <see cref="Reel"/> clamps to. Must be non-negative.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="minLength"/> is negative, or
+    /// <paramref name="length"/> is less than <paramref name="minLength"/>.</exception>
+    public FixedTetherConstraint(FixedQ4816 length, FixedQ4816 minLength) {
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            value: minLength.Value,
+            paramName: nameof(minLength)
+        );
+
+        if (length.Value < minLength.Value) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(length),
+                message: "The initial rope length must be at least the minimum length."
+            );
+        }
+
+        Length = length;
+        MinLength = minLength;
+        m_lengthAccumulator = new FixedRateAccumulator(ticksPerSecond: checked((long)FixedTickConversion.TicksPerSecond));
     }
 }
 /// <summary>The outcome of one <see cref="FixedTetherConstraint.Solve"/> call.</summary>

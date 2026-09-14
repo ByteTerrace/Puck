@@ -789,9 +789,9 @@ internal static partial class Subjects {
 
             foreach (var dimension in dimensions) {
                 alternating += ((0 == (dimension & 1))
-                ? BigInteger.One
-                : BigInteger.MinusOne
-            );
+                    ? BigInteger.One
+                    : BigInteger.MinusOne
+                );
             }
 
             if (characteristic != alternating) { return $"{name}: the Möbius mass reads {characteristic} where the alternating cell count reads {alternating}"; }

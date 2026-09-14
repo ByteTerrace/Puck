@@ -21,7 +21,58 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
     // resolution) — every physical keyboard and every physical mouse collapses onto these two fixed ids.
     private static readonly InputDeviceId CollapsedKeyboardDevice = InputDeviceId.FromKey(key: "keyboard");
     private static readonly InputDeviceId CollapsedMouseDevice = InputDeviceId.FromKey(key: "mouse");
+    private readonly WindowInputQueue m_pendingInput = new();
+    private bool m_isOpen = true;
 
+    // Standard Linux evdev keycodes (X11 keycode = evdev scancode + 8); stable on the
+    // Steam Deck and mainstream desktops, so a small fixed table covers the navigation,
+    // function, and modifier keys the terminal app binds without an xkb keysym dependency.
+    private const byte KeycodeAltLeft = 64;
+    private const byte KeycodeAltRight = 108;
+    private const byte KeycodeBackspace = 22;
+    private const byte KeycodeControlLeft = 37;
+    private const byte KeycodeControlRight = 105;
+    private const byte KeycodeDigit0 = 19;
+    private const byte KeycodeDigit1 = 10;
+    private const byte KeycodeDigit2 = 11;
+    private const byte KeycodeDigit3 = 12;
+    private const byte KeycodeDigit4 = 13;
+    private const byte KeycodeDigit5 = 14;
+    private const byte KeycodeDigit6 = 15;
+    private const byte KeycodeDigit7 = 16;
+    private const byte KeycodeDigit8 = 17;
+    private const byte KeycodeDigit9 = 18;
+    private const byte KeycodeDown = 116;
+    private const byte KeycodeEquals = 21;
+    private const byte KeycodeEscape = 9;
+    private const byte KeycodeF1 = 67;
+    // F1..F10 are contiguous from 67, so the range check below spans them with these two bounds alone; F11/F12 sit at
+    // 95/96 and are matched individually.
+    private const byte KeycodeF10 = 76;
+    private const byte KeycodeF11 = 95;
+    private const byte KeycodeF12 = 96;
+    private const byte KeycodeGrave = 49;
+    private const byte KeycodeLeft = 113;
+    private const byte KeycodeMinus = 20;
+    private const byte KeycodeNumpad0 = 90;
+    private const byte KeycodeNumpad1 = 87;
+    private const byte KeycodeNumpad2 = 88;
+    private const byte KeycodeNumpad3 = 89;
+    private const byte KeycodeNumpad4 = 83;
+    private const byte KeycodeNumpad5 = 84;
+    private const byte KeycodeNumpad6 = 85;
+    private const byte KeycodeNumpad7 = 79;
+    private const byte KeycodeNumpad8 = 80;
+    private const byte KeycodeNumpad9 = 81;
+    private const byte KeycodeNumpadAdd = 86;
+    private const byte KeycodeNumpadSubtract = 82;
+    private const byte KeycodeReturn = 36;
+    private const byte KeycodeRight = 114;
+    private const byte KeycodeShiftLeft = 50;
+    private const byte KeycodeShiftRight = 62;
+    private const byte KeycodeSuperLeft = 133;
+    private const byte KeycodeSuperRight = 134;
+    private const byte KeycodeUp = 111;
     private const uint XcbAtomAtom = 4;
     private const uint XcbAtomString = 31;
     private const uint XcbAtomWmName = 39;
@@ -55,65 +106,14 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
     private const byte XcbPropModeReplace = 0;
     private const byte XcbResponseTypeMask = 0x7F;
     private const ushort XcbWindowClassInputOutput = 1;
-    // Standard Linux evdev keycodes (X11 keycode = evdev scancode + 8); stable on the
-    // Steam Deck and mainstream desktops, so a small fixed table covers the navigation,
-    // function, and modifier keys the terminal app binds without an xkb keysym dependency.
-    private const byte KeycodeAltLeft = 64;
-    private const byte KeycodeAltRight = 108;
-    private const byte KeycodeBackspace = 22;
-    private const byte KeycodeControlLeft = 37;
-    private const byte KeycodeControlRight = 105;
-    private const byte KeycodeDigit0 = 19;
-    private const byte KeycodeDigit1 = 10;
-    private const byte KeycodeDigit2 = 11;
-    private const byte KeycodeDigit3 = 12;
-    private const byte KeycodeDigit4 = 13;
-    private const byte KeycodeDigit5 = 14;
-    private const byte KeycodeDigit6 = 15;
-    private const byte KeycodeDigit7 = 16;
-    private const byte KeycodeDigit8 = 17;
-    private const byte KeycodeDigit9 = 18;
-    private const byte KeycodeDown = 116;
-    private const byte KeycodeEquals = 21;
-    private const byte KeycodeEscape = 9;
-    private const byte KeycodeF1 = 67;
-    private const byte KeycodeMinus = 20;
-    // F1..F10 are contiguous from 67, so the range check below spans them with these two bounds alone; F11/F12 sit at
-    // 95/96 and are matched individually.
-    private const byte KeycodeF10 = 76;
-    private const byte KeycodeF11 = 95;
-    private const byte KeycodeF12 = 96;
-    private const byte KeycodeGrave = 49;
-    private const byte KeycodeLeft = 113;
-    private const byte KeycodeNumpad0 = 90;
-    private const byte KeycodeNumpad1 = 87;
-    private const byte KeycodeNumpad2 = 88;
-    private const byte KeycodeNumpad3 = 89;
-    private const byte KeycodeNumpad4 = 83;
-    private const byte KeycodeNumpad5 = 84;
-    private const byte KeycodeNumpad6 = 85;
-    private const byte KeycodeNumpad7 = 79;
-    private const byte KeycodeNumpad8 = 80;
-    private const byte KeycodeNumpad9 = 81;
-    private const byte KeycodeNumpadAdd = 86;
-    private const byte KeycodeNumpadSubtract = 82;
-    private const byte KeycodeReturn = 36;
-    private const byte KeycodeRight = 114;
-    private const byte KeycodeShiftLeft = 50;
-    private const byte KeycodeShiftRight = 62;
-    private const byte KeycodeSuperLeft = 133;
-    private const byte KeycodeSuperRight = 134;
-    private const byte KeycodeUp = 111;
 
     private readonly nint m_connection;
     private readonly uint m_deleteWindowAtom;
     private readonly NativeWindowOptions m_options;
-    private readonly Queue<WindowInputEvent> m_pendingInput = [];
     private readonly uint m_window;
 
     private bool m_disposed;
     private bool m_hasPainted;
-    private bool m_isOpen = true;
     private bool m_isVisible;
     private int? m_lastPointerX;
     private int? m_lastPointerY;
@@ -186,6 +186,432 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
     public ulong ResizeCount { get; private set; }
     public string Title => m_options.Title;
     public uint Width { get; private set; }
+
+    private void ApplyTitle() {
+        var titleBytes = Encoding.UTF8.GetBytes(s: m_options.Title);
+
+        _ = Xcb.xcb_change_property_bytes(
+            connection: m_connection,
+            data: titleBytes,
+            dataLength: ((uint)titleBytes.Length),
+            format: 8,
+            mode: XcbPropModeReplace,
+            property: XcbAtomWmName,
+            type: XcbAtomString,
+            windowId: m_window
+        );
+    }
+    private void EmitKeyRelease(byte keycode) {
+        if (TryMapKeycode(
+            key: out var key,
+            keycode: keycode
+        )) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.KeyUp(
+                deviceId: CollapsedKeyboardDevice,
+                key: key
+            ));
+        }
+    }
+    private void HandleButtonPress(nint eventPointer) {
+        var detail = Marshal.ReadByte(
+            ofs: 1,
+            ptr: eventPointer
+        );
+
+        if (TryMapWheel(
+            detail: detail,
+            notches: out var notches
+        )) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(
+                deviceId: CollapsedMouseDevice,
+                notches: notches
+            ));
+        } else if (TryMapButton(
+            button: out var button,
+            detail: detail
+        )) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(
+                button: button,
+                deviceId: CollapsedMouseDevice,
+                phase: CommandPhase.Started
+            ));
+        }
+    }
+    private void HandleButtonRelease(nint eventPointer) {
+        var detail = Marshal.ReadByte(
+            ofs: 1,
+            ptr: eventPointer
+        );
+
+        // X11 models wheel notches as button press/release pairs. The press is the impulse; its release is not a
+        // second act and carries no held state to clear.
+        if (
+            !TryMapWheel(
+            detail: detail,
+            notches: out _
+        ) &&
+            TryMapButton(
+            button: out var button,
+            detail: detail
+        )
+        ) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(
+                button: button,
+                deviceId: CollapsedMouseDevice,
+                phase: CommandPhase.Completed
+            ));
+        }
+    }
+    private void HandleClientMessage(nint eventPointer) {
+        if (m_deleteWindowAtom == 0) {
+            return;
+        }
+
+        var messageData = ((uint)Marshal.ReadInt32(
+            ofs: 12,
+            ptr: eventPointer
+        ));
+
+        if (messageData == m_deleteWindowAtom) {
+            m_isOpen = false;
+            m_isVisible = false;
+        }
+    }
+    private void HandleConfigureNotify(nint eventPointer) {
+        var width = ((uint)((ushort)Marshal.ReadInt16(
+            ofs: 20,
+            ptr: eventPointer
+        )));
+        var height = ((uint)((ushort)Marshal.ReadInt16(
+            ofs: 22,
+            ptr: eventPointer
+        )));
+
+        if (
+            (width == 0) ||
+            (height == 0)
+        ) {
+            return;
+        }
+
+        if (
+            (width != Width) ||
+            (height != Height)
+        ) {
+            Width = width;
+            Height = height;
+            ResizeCount++;
+        }
+    }
+    private void HandleEvent(nint eventPointer) {
+        var responseType = ((byte)(Marshal.ReadByte(
+            ofs: 0,
+            ptr: eventPointer
+        ) & XcbResponseTypeMask));
+
+        ReconcilePendingRelease(
+            eventPointer: eventPointer,
+            responseType: responseType
+        );
+
+        switch (responseType) {
+            case XcbExpose:
+                m_hasPainted = true;
+                return;
+            case XcbConfigureNotify:
+                HandleConfigureNotify(eventPointer: eventPointer);
+                return;
+            case XcbClientMessage:
+                HandleClientMessage(eventPointer: eventPointer);
+                return;
+            case XcbMotionNotify:
+                HandleMotionNotify(eventPointer: eventPointer);
+                return;
+            case XcbButtonPress:
+                HandleButtonPress(eventPointer: eventPointer);
+                return;
+            case XcbButtonRelease:
+                HandleButtonRelease(eventPointer: eventPointer);
+                return;
+            case XcbKeyPress:
+                HandleKeyPress(eventPointer: eventPointer);
+                return;
+            case XcbKeyRelease:
+                // Defer the release by one event so an auto-repeat KeyPress can cancel it (see ReconcilePendingRelease).
+                m_pendingReleaseKeycode = Marshal.ReadByte(
+                    ofs: 1,
+                    ptr: eventPointer
+                );
+                m_pendingReleaseTime = ((uint)Marshal.ReadInt32(
+                    ofs: 4,
+                    ptr: eventPointer
+                ));
+                return;
+            case XcbFocusOut:
+                HandleFocusOut(eventPointer: eventPointer);
+                return;
+            case XcbDestroyNotify:
+                m_isOpen = false;
+                m_isVisible = false;
+                return;
+            default:
+                return;
+        }
+    }
+    // xcb_focus_out_event_t carries 'detail' at byte offset 1 and 'mode' at byte offset 8. Many window managers
+    // grab the keyboard for their own global hotkeys, which delivers FocusOut with mode = XcbNotifyGrab (and the
+    // matching FocusIn back with XcbNotifyUngrab) even though this window never stopped being the keyboard focus —
+    // treating that as a real loss would cancel every held command on each hotkey press. detail = XcbNotifyPointer
+    // (a pointer-relative notice) and XcbNotifyVirtual (an inferior-relative notice) are likewise not losses of
+    // this top-level window's keyboard focus. The X11 twin of Win32's WM_KILLFOCUS otherwise: a modifier key's own
+    // release can go to whatever window the window manager just handed focus to and never reach this process at
+    // all. See Win32NativeWindow's WmKillFocus case for the full hazard.
+    private void HandleFocusOut(nint eventPointer) {
+        var detail = Marshal.ReadByte(
+            ofs: 1,
+            ptr: eventPointer
+        );
+        var mode = Marshal.ReadByte(
+            ofs: 8,
+            ptr: eventPointer
+        );
+
+        if (
+            (mode == XcbNotifyGrab) ||
+            (mode == XcbNotifyUngrab) ||
+            (detail == XcbNotifyPointer) ||
+            (detail == XcbNotifyVirtual)
+        ) {
+            return;
+        }
+
+        m_pendingInput.Enqueue(item: WindowInputEvent.FocusLost());
+    }
+    private void HandleKeyPress(nint eventPointer) {
+        var keycode = Marshal.ReadByte(
+            ofs: 1,
+            ptr: eventPointer
+        );
+
+        if (TryMapKeycode(
+            key: out var key,
+            keycode: keycode
+        )) {
+            m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(
+                deviceId: CollapsedKeyboardDevice,
+                key: key
+            ));
+        }
+    }
+    private void HandleMotionNotify(nint eventPointer) {
+        var pointerX = Marshal.ReadInt16(
+            ofs: 24,
+            ptr: eventPointer
+        );
+        var pointerY = Marshal.ReadInt16(
+            ofs: 26,
+            ptr: eventPointer
+        );
+
+        if (
+            (m_lastPointerX is { } lastPointerX) &&
+            (m_lastPointerY is { } lastPointerY)
+        ) {
+            var deltaX = (pointerX - lastPointerX);
+            var deltaY = (pointerY - lastPointerY);
+
+            if (
+                (deltaX != 0) ||
+                (deltaY != 0)
+            ) {
+                m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(
+                    deviceId: CollapsedMouseDevice,
+                    delta: new Vector2(
+                        x: deltaX,
+                        y: deltaY
+                    )
+                ));
+            }
+        }
+
+        m_lastPointerX = pointerX;
+        m_lastPointerY = pointerY;
+    }
+    private uint InternAtom(string name) {
+        var nameBytes = Encoding.ASCII.GetBytes(s: name);
+        var cookie = Xcb.xcb_intern_atom(
+            connection: m_connection,
+            name: nameBytes,
+            nameLength: ((ushort)nameBytes.Length),
+            onlyIfExists: 0
+        );
+        var reply = Xcb.xcb_intern_atom_reply(
+            connection: m_connection,
+            cookie: cookie,
+            error: 0
+        );
+
+        if (reply == 0) {
+            return 0;
+        }
+
+        try {
+            return ((uint)Marshal.ReadInt32(
+                ofs: 8,
+                ptr: reply
+            ));
+        } finally {
+            Libc.free(pointer: reply);
+        }
+    }
+    private void ReconcilePendingRelease(nint eventPointer, byte responseType) {
+        if (m_pendingReleaseKeycode is not { } pendingKeycode) {
+            return;
+        }
+
+        var keycode = Marshal.ReadByte(
+            ofs: 1,
+            ptr: eventPointer
+        );
+        var time = ((uint)Marshal.ReadInt32(
+            ofs: 4,
+            ptr: eventPointer
+        ));
+
+        m_pendingReleaseKeycode = null;
+
+        // X11 auto-repeat: a held key arrives as KeyRelease immediately followed by a KeyPress with the same
+        // keycode and timestamp. Such a press cancels the deferred release (no up/down churn); the repeat
+        // KeyPress is then handled normally and emits another KeyDown, matching the Win32 repeat behavior.
+        if (
+            (responseType == XcbKeyPress) &&
+            (keycode == pendingKeycode) &&
+            (time == m_pendingReleaseTime)
+        ) {
+            return;
+        }
+
+        EmitKeyRelease(keycode: pendingKeycode);
+    }
+    private uint RegisterDeleteWindowProtocol() {
+        var protocolsAtom = InternAtom(name: "WM_PROTOCOLS");
+        var deleteWindowAtom = InternAtom(name: "WM_DELETE_WINDOW");
+
+        if (
+            (protocolsAtom == 0) ||
+            (deleteWindowAtom == 0)
+        ) {
+            return 0;
+        }
+
+        _ = Xcb.xcb_change_property_atom(
+            connection: m_connection,
+            data: [deleteWindowAtom],
+            dataLength: 1,
+            format: 32,
+            mode: XcbPropModeReplace,
+            property: protocolsAtom,
+            type: XcbAtomAtom,
+            windowId: m_window
+        );
+        return deleteWindowAtom;
+    }
+    // X11 button numbering (1=left, 2=middle, 3=right; 4..7 are wheel directions; 8+ are extra buttons) mapped to
+    // the engine's neutral 0=left/1=right/2=middle/3+=extras convention without capping the extra-button range.
+    private static bool TryMapButton(byte detail, out int button) {
+        button = detail switch {
+            1 => 0,
+            2 => 2,
+            3 => 1,
+            >= 8 => (detail - 5),
+            _ => -1,
+        };
+
+        return (button >= 0);
+    }
+    // F1-F10 are contiguous on the standard evdev keymap (67-76), so one range check covers them; F11/F12
+    // (95/96) break the sequence and are mapped individually below rather than widening the range check over
+    // a gap it would then have to exclude.
+    private static bool TryMapKeycode(byte keycode, out KeyCode key) {
+        if (
+            (keycode >= KeycodeF1) &&
+            (keycode <= KeycodeF10)
+        ) {
+            key = ((KeyCode)(((int)KeyCode.F1) + (keycode - KeycodeF1)));
+            return true;
+        }
+
+        key = keycode switch {
+            KeycodeDigit0 => KeyCode.Digit0,
+            KeycodeDigit1 => KeyCode.Digit1,
+            KeycodeDigit2 => KeyCode.Digit2,
+            KeycodeDigit3 => KeyCode.Digit3,
+            KeycodeDigit4 => KeyCode.Digit4,
+            KeycodeDigit5 => KeyCode.Digit5,
+            KeycodeDigit6 => KeyCode.Digit6,
+            KeycodeDigit7 => KeyCode.Digit7,
+            KeycodeDigit8 => KeyCode.Digit8,
+            KeycodeDigit9 => KeyCode.Digit9,
+            KeycodeMinus => KeyCode.Minus,
+            KeycodeEquals => KeyCode.Equals,
+            KeycodeNumpad0 => KeyCode.Numpad0,
+            KeycodeNumpad1 => KeyCode.Numpad1,
+            KeycodeNumpad2 => KeyCode.Numpad2,
+            KeycodeNumpad3 => KeyCode.Numpad3,
+            KeycodeNumpad4 => KeyCode.Numpad4,
+            KeycodeNumpad5 => KeyCode.Numpad5,
+            KeycodeNumpad6 => KeyCode.Numpad6,
+            KeycodeNumpad7 => KeyCode.Numpad7,
+            KeycodeNumpad8 => KeyCode.Numpad8,
+            KeycodeNumpad9 => KeyCode.Numpad9,
+            KeycodeNumpadSubtract => KeyCode.NumpadSubtract,
+            KeycodeNumpadAdd => KeyCode.NumpadAdd,
+            KeycodeF11 => KeyCode.F11,
+            KeycodeF12 => KeyCode.F12,
+            KeycodeEscape => KeyCode.Escape,
+            KeycodeBackspace => KeyCode.Backspace,
+            KeycodeReturn => KeyCode.Enter,
+            KeycodeGrave => KeyCode.Backtick,
+            KeycodeUp => KeyCode.ArrowUp,
+            KeycodeDown => KeyCode.ArrowDown,
+            KeycodeLeft => KeyCode.ArrowLeft,
+            KeycodeRight => KeyCode.ArrowRight,
+            KeycodeControlLeft => KeyCode.ControlLeft,
+            KeycodeControlRight => KeyCode.ControlRight,
+            KeycodeShiftLeft => KeyCode.ShiftLeft,
+            KeycodeShiftRight => KeyCode.ShiftRight,
+            KeycodeAltLeft => KeyCode.AltLeft,
+            KeycodeAltRight => KeyCode.AltRight,
+            KeycodeSuperLeft => KeyCode.SuperLeft,
+            KeycodeSuperRight => KeyCode.SuperRight,
+            _ => KeyCode.None,
+        };
+
+        return (key != KeyCode.None);
+    }
+    private static bool TryMapWheel(byte detail, out Vector2 notches) {
+        notches = detail switch {
+            4 => new Vector2(
+            x: 0f,
+            y: 1f
+        ),
+            5 => new Vector2(
+            x: 0f,
+            y: -1f
+        ),
+            6 => new Vector2(
+            x: -1f,
+            y: 0f
+        ),
+            7 => new Vector2(
+            x: 1f,
+            y: 0f
+        ),
+            _ => Vector2.Zero,
+        };
+
+        return (notches != Vector2.Zero);
+    }
 
     public void Close() {
         ObjectDisposedException.ThrowIf(
@@ -286,361 +712,6 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
             instance: this
         );
 
-        if (m_pendingInput.Count == 0) {
-            inputEvent = default;
-            return false;
-        }
-
-        inputEvent = m_pendingInput.Dequeue();
-        return true;
-    }
-
-    private void ApplyTitle() {
-        var titleBytes = Encoding.UTF8.GetBytes(s: m_options.Title);
-
-        _ = Xcb.xcb_change_property_bytes(
-            connection: m_connection,
-            data: titleBytes,
-            dataLength: ((uint)titleBytes.Length),
-            format: 8,
-            mode: XcbPropModeReplace,
-            property: XcbAtomWmName,
-            type: XcbAtomString,
-            windowId: m_window
-        );
-    }
-    private uint RegisterDeleteWindowProtocol() {
-        var protocolsAtom = InternAtom(name: "WM_PROTOCOLS");
-        var deleteWindowAtom = InternAtom(name: "WM_DELETE_WINDOW");
-
-        if (
-            (protocolsAtom == 0) ||
-            (deleteWindowAtom == 0)
-        ) {
-            return 0;
-        }
-
-        _ = Xcb.xcb_change_property_atom(
-            connection: m_connection,
-            data: [deleteWindowAtom],
-            dataLength: 1,
-            format: 32,
-            mode: XcbPropModeReplace,
-            property: protocolsAtom,
-            type: XcbAtomAtom,
-            windowId: m_window
-        );
-        return deleteWindowAtom;
-    }
-    private uint InternAtom(string name) {
-        var nameBytes = Encoding.ASCII.GetBytes(s: name);
-        var cookie = Xcb.xcb_intern_atom(
-            connection: m_connection,
-            name: nameBytes,
-            nameLength: ((ushort)nameBytes.Length),
-            onlyIfExists: 0
-        );
-        var reply = Xcb.xcb_intern_atom_reply(
-            connection: m_connection,
-            cookie: cookie,
-            error: 0
-        );
-
-        if (reply == 0) {
-            return 0;
-        }
-
-        try {
-            return ((uint)Marshal.ReadInt32(
-                ofs: 8,
-                ptr: reply
-            ));
-        } finally {
-            Libc.free(pointer: reply);
-        }
-    }
-    private void HandleEvent(nint eventPointer) {
-        var responseType = ((byte)(Marshal.ReadByte(
-            ofs: 0,
-            ptr: eventPointer
-        ) & XcbResponseTypeMask));
-
-        ReconcilePendingRelease(eventPointer: eventPointer, responseType: responseType);
-
-        switch (responseType) {
-            case XcbExpose:
-                m_hasPainted = true;
-                return;
-            case XcbConfigureNotify:
-                HandleConfigureNotify(eventPointer: eventPointer);
-                return;
-            case XcbClientMessage:
-                HandleClientMessage(eventPointer: eventPointer);
-                return;
-            case XcbMotionNotify:
-                HandleMotionNotify(eventPointer: eventPointer);
-                return;
-            case XcbButtonPress:
-                HandleButtonPress(eventPointer: eventPointer);
-                return;
-            case XcbButtonRelease:
-                HandleButtonRelease(eventPointer: eventPointer);
-                return;
-            case XcbKeyPress:
-                HandleKeyPress(eventPointer: eventPointer);
-                return;
-            case XcbKeyRelease:
-                // Defer the release by one event so an auto-repeat KeyPress can cancel it (see ReconcilePendingRelease).
-                m_pendingReleaseKeycode = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
-                m_pendingReleaseTime = ((uint)Marshal.ReadInt32(ofs: 4, ptr: eventPointer));
-                return;
-            case XcbFocusOut:
-                HandleFocusOut(eventPointer: eventPointer);
-                return;
-            case XcbDestroyNotify:
-                m_isOpen = false;
-                m_isVisible = false;
-                return;
-            default:
-                return;
-        }
-    }
-    // xcb_focus_out_event_t carries 'detail' at byte offset 1 and 'mode' at byte offset 8. Many window managers
-    // grab the keyboard for their own global hotkeys, which delivers FocusOut with mode = XcbNotifyGrab (and the
-    // matching FocusIn back with XcbNotifyUngrab) even though this window never stopped being the keyboard focus —
-    // treating that as a real loss would cancel every held command on each hotkey press. detail = XcbNotifyPointer
-    // (a pointer-relative notice) and XcbNotifyVirtual (an inferior-relative notice) are likewise not losses of
-    // this top-level window's keyboard focus. The X11 twin of Win32's WM_KILLFOCUS otherwise: a modifier key's own
-    // release can go to whatever window the window manager just handed focus to and never reach this process at
-    // all. See Win32NativeWindow's WmKillFocus case for the full hazard.
-    private void HandleFocusOut(nint eventPointer) {
-        var detail = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
-        var mode = Marshal.ReadByte(ofs: 8, ptr: eventPointer);
-
-        if (
-            (mode == XcbNotifyGrab) ||
-            (mode == XcbNotifyUngrab) ||
-            (detail == XcbNotifyPointer) ||
-            (detail == XcbNotifyVirtual)
-        ) {
-            return;
-        }
-
-        m_pendingInput.Enqueue(item: WindowInputEvent.FocusLost());
-    }
-    private void HandleConfigureNotify(nint eventPointer) {
-        var width = ((uint)((ushort)Marshal.ReadInt16(
-            ofs: 20,
-            ptr: eventPointer
-        )));
-        var height = ((uint)((ushort)Marshal.ReadInt16(
-            ofs: 22,
-            ptr: eventPointer
-        )));
-
-        if (
-            (width == 0) ||
-            (height == 0)
-        ) {
-            return;
-        }
-
-        if (
-            (width != Width) ||
-            (height != Height)
-        ) {
-            Width = width;
-            Height = height;
-            ResizeCount++;
-        }
-    }
-    private void HandleClientMessage(nint eventPointer) {
-        if (m_deleteWindowAtom == 0) {
-            return;
-        }
-
-        var messageData = ((uint)Marshal.ReadInt32(
-            ofs: 12,
-            ptr: eventPointer
-        ));
-
-        if (messageData == m_deleteWindowAtom) {
-            m_isOpen = false;
-            m_isVisible = false;
-        }
-    }
-    private void HandleMotionNotify(nint eventPointer) {
-        var pointerX = Marshal.ReadInt16(
-            ofs: 24,
-            ptr: eventPointer
-        );
-        var pointerY = Marshal.ReadInt16(
-            ofs: 26,
-            ptr: eventPointer
-        );
-
-        if (
-            (m_lastPointerX is { } lastPointerX) &&
-            (m_lastPointerY is { } lastPointerY)
-        ) {
-            var deltaX = (pointerX - lastPointerX);
-            var deltaY = (pointerY - lastPointerY);
-
-            if (
-                (deltaX != 0) ||
-                (deltaY != 0)
-            ) {
-                m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(
-                    deviceId: CollapsedMouseDevice,
-                    delta: new Vector2(
-                    x: deltaX,
-                    y: deltaY
-                )
-                ));
-            }
-        }
-
-        m_lastPointerX = pointerX;
-        m_lastPointerY = pointerY;
-    }
-    private void HandleButtonPress(nint eventPointer) {
-        var detail = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
-
-        if (TryMapWheel(detail: detail, notches: out var notches)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(deviceId: CollapsedMouseDevice, notches: notches));
-        } else if (TryMapButton(button: out var button, detail: detail)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, deviceId: CollapsedMouseDevice, phase: CommandPhase.Started));
-        }
-    }
-    private void HandleButtonRelease(nint eventPointer) {
-        var detail = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
-
-        // X11 models wheel notches as button press/release pairs. The press is the impulse; its release is not a
-        // second act and carries no held state to clear.
-        if (!TryMapWheel(detail: detail, notches: out _) && TryMapButton(button: out var button, detail: detail)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, deviceId: CollapsedMouseDevice, phase: CommandPhase.Completed));
-        }
-    }
-    // X11 button numbering (1=left, 2=middle, 3=right; 4..7 are wheel directions; 8+ are extra buttons) mapped to
-    // the engine's neutral 0=left/1=right/2=middle/3+=extras convention without capping the extra-button range.
-    private static bool TryMapButton(byte detail, out int button) {
-        button = detail switch {
-            1 => 0,
-            2 => 2,
-            3 => 1,
-            >= 8 => (detail - 5),
-            _ => -1,
-        };
-
-        return (button >= 0);
-    }
-    private static bool TryMapWheel(byte detail, out Vector2 notches) {
-        notches = detail switch {
-            4 => new Vector2(x: 0f, y: 1f),
-            5 => new Vector2(x: 0f, y: -1f),
-            6 => new Vector2(x: -1f, y: 0f),
-            7 => new Vector2(x: 1f, y: 0f),
-            _ => Vector2.Zero,
-        };
-
-        return (notches != Vector2.Zero);
-    }
-    private void ReconcilePendingRelease(nint eventPointer, byte responseType) {
-        if (m_pendingReleaseKeycode is not { } pendingKeycode) {
-            return;
-        }
-
-        var keycode = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
-        var time = ((uint)Marshal.ReadInt32(ofs: 4, ptr: eventPointer));
-
-        m_pendingReleaseKeycode = null;
-
-        // X11 auto-repeat: a held key arrives as KeyRelease immediately followed by a KeyPress with the same
-        // keycode and timestamp. Such a press cancels the deferred release (no up/down churn); the repeat
-        // KeyPress is then handled normally and emits another KeyDown, matching the Win32 repeat behavior.
-        if (
-            (responseType == XcbKeyPress) &&
-            (keycode == pendingKeycode) &&
-            (time == m_pendingReleaseTime)
-        ) {
-            return;
-        }
-
-        EmitKeyRelease(keycode: pendingKeycode);
-    }
-    private void HandleKeyPress(nint eventPointer) {
-        var keycode = Marshal.ReadByte(
-            ofs: 1,
-            ptr: eventPointer
-        );
-
-        if (TryMapKeycode(key: out var key, keycode: keycode)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(deviceId: CollapsedKeyboardDevice, key: key));
-        }
-    }
-    private void EmitKeyRelease(byte keycode) {
-        if (TryMapKeycode(key: out var key, keycode: keycode)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.KeyUp(deviceId: CollapsedKeyboardDevice, key: key));
-        }
-    }
-    // F1-F10 are contiguous on the standard evdev keymap (67-76), so one range check covers them; F11/F12
-    // (95/96) break the sequence and are mapped individually below rather than widening the range check over
-    // a gap it would then have to exclude.
-    private static bool TryMapKeycode(byte keycode, out KeyCode key) {
-        if (
-            (keycode >= KeycodeF1) &&
-            (keycode <= KeycodeF10)
-        ) {
-            key = ((KeyCode)(((int)KeyCode.F1) + (keycode - KeycodeF1)));
-            return true;
-        }
-
-        key = keycode switch {
-            KeycodeDigit0 => KeyCode.Digit0,
-            KeycodeDigit1 => KeyCode.Digit1,
-            KeycodeDigit2 => KeyCode.Digit2,
-            KeycodeDigit3 => KeyCode.Digit3,
-            KeycodeDigit4 => KeyCode.Digit4,
-            KeycodeDigit5 => KeyCode.Digit5,
-            KeycodeDigit6 => KeyCode.Digit6,
-            KeycodeDigit7 => KeyCode.Digit7,
-            KeycodeDigit8 => KeyCode.Digit8,
-            KeycodeDigit9 => KeyCode.Digit9,
-            KeycodeMinus => KeyCode.Minus,
-            KeycodeEquals => KeyCode.Equals,
-            KeycodeNumpad0 => KeyCode.Numpad0,
-            KeycodeNumpad1 => KeyCode.Numpad1,
-            KeycodeNumpad2 => KeyCode.Numpad2,
-            KeycodeNumpad3 => KeyCode.Numpad3,
-            KeycodeNumpad4 => KeyCode.Numpad4,
-            KeycodeNumpad5 => KeyCode.Numpad5,
-            KeycodeNumpad6 => KeyCode.Numpad6,
-            KeycodeNumpad7 => KeyCode.Numpad7,
-            KeycodeNumpad8 => KeyCode.Numpad8,
-            KeycodeNumpad9 => KeyCode.Numpad9,
-            KeycodeNumpadSubtract => KeyCode.NumpadSubtract,
-            KeycodeNumpadAdd => KeyCode.NumpadAdd,
-            KeycodeF11 => KeyCode.F11,
-            KeycodeF12 => KeyCode.F12,
-            KeycodeEscape => KeyCode.Escape,
-            KeycodeBackspace => KeyCode.Backspace,
-            KeycodeReturn => KeyCode.Enter,
-            KeycodeGrave => KeyCode.Backtick,
-            KeycodeUp => KeyCode.ArrowUp,
-            KeycodeDown => KeyCode.ArrowDown,
-            KeycodeLeft => KeyCode.ArrowLeft,
-            KeycodeRight => KeyCode.ArrowRight,
-            KeycodeControlLeft => KeyCode.ControlLeft,
-            KeycodeControlRight => KeyCode.ControlRight,
-            KeycodeShiftLeft => KeyCode.ShiftLeft,
-            KeycodeShiftRight => KeyCode.ShiftRight,
-            KeycodeAltLeft => KeyCode.AltLeft,
-            KeycodeAltRight => KeyCode.AltRight,
-            KeycodeSuperLeft => KeyCode.SuperLeft,
-            KeycodeSuperRight => KeyCode.SuperRight,
-            _ => KeyCode.None,
-        };
-
-        return (key != KeyCode.None);
+        return m_pendingInput.TryDequeue(inputEvent: out inputEvent);
     }
 }

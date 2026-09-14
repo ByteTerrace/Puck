@@ -1,8 +1,25 @@
-# Object storage
+# Puck.Storage
 
 Puck addresses a blob by an object ID and a relative key. The host chooses the
 storage target; the same routed store supports local directories and Azure Blob
 Storage. Callers do not need to know where a blob lives.
+
+## Route an oid to its storage account
+
+`IPartitionResolver` answers which storage account owns a user's container.
+`DefaultPartitionResolver` runs `Puck.Maths`' `MonotonicPartitioner` over
+`PartitioningOptions`, so the silo, the edge, and the browser's WASM build all
+land on the same account without coordinating; the monotonic invariant means
+raising `Count` only migrates the users who fall into a new bucket.
+
+`PartitioningOptions.AnchorPartition` is the exception to routing: a user's
+published `public/` content lives in their oid-named container on that partition
+whatever their home partition is, so published URLs survive a migration.
+
+The resolver reports where a user *should* live for the current partition count.
+During a migration the recorded home and the computed partition differ and the
+data is still in the home, so a caller that must reach real bytes resolves
+through the owning grain rather than through this.
 
 ## Give callers a namespace
 
@@ -33,6 +50,8 @@ streams, invalid filename characters, surrounding whitespace, and the reserved
 `.puck-` prefix. A key has at most 64 segments and 4096 characters. Separators
 normalize to `/`; a key's case sensitivity still follows its backend. Namespace
 names are separate from keys and have a 1024-byte UTF-8 ceiling.
+`ObjectBlobAddressPath.GetNormalizedKey` exposes the same portable key validation
+to hosts that prepare retained content before it reaches a backend.
 
 ## Local filesystem boundary
 
@@ -43,7 +62,9 @@ and denies write/delete sharing on those handles, preventing directory
 substitution while paths are in use. Linux x64 resolves child entries relative
 to directory descriptors with `openat` and `O_NOFOLLOW`. File handles must name
 regular files with one hard link. Unsupported platforms and Windows network
-roots refuse access.
+roots refuse access. Native Windows opens and atomic replacements use extended
+local paths, so a valid nested blob key and its temporary file can exceed the
+legacy 260-character path limit without depending on process manifest settings.
 
 Conditional writes lock the containing directory across cooperating processes,
 check the existing content token, write and flush a new temporary file, and
@@ -70,3 +91,9 @@ and Linux's [openat](https://man7.org/linux/man-pages/man2/openat.2.html) and
 [rename](https://man7.org/linux/man-pages/man2/rename.2.html) references.
 `ConfinedStorageLawTests` exercises real directories, links, concurrent
 replacement, conditional writes, and namespace revocation in `Puck.World.Tests`.
+
+## Documentation
+
+- [API reference](../../docs/api)
+
+📚 [Engine overview](https://github.com/ByteTerrace/Puck/blob/main/docs/overview.md) · 🛠️ [Contributing to Puck](https://github.com/ByteTerrace/Puck/blob/main/docs/development/contributing.md)

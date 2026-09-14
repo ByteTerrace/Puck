@@ -11,6 +11,7 @@ public static class CoreEmbeddingProbe {
     /// <returns>The self-checking outcome.</returns>
     public static PostStageOutcome Verify(IQueuedMachineCore core, long cycleBudget, int framebufferLength) {
         var initialCycles = core.CycleCount;
+
         core.RunCycles(cycles: -1);
         core.RunCycles(cycles: 0);
         if (core.CycleCount != initialCycles) {
@@ -19,25 +20,47 @@ public static class CoreEmbeddingProbe {
         core.ApplyInput(input: new MachinePadState());
         core.ConfigureAudio(sampleRate: 48_000);
         core.RunCycles(cycles: cycleBudget);
-        if (core.CycleCount <= initialCycles || core.Framebuffer.Length != framebufferLength) {
+        if (
+            (core.CycleCount <= initialCycles) ||
+            (core.Framebuffer.Length != framebufferLength)
+        ) {
             return PostStageOutcome.Fail(detail: "direct host did not advance or expose the native framebuffer");
         }
         var samples = new short[8192];
         var count = core.DrainAudioSamples(destination: samples);
-        if (count <= 0 || (count & 1) != 0) {
+
+        if (
+            (count <= 0) ||
+            ((count & 1) != 0)
+        ) {
             return PostStageOutcome.Fail(detail: "direct host did not receive interleaved stereo audio");
         }
         core.ConfigureAudio(sampleRate: 0);
         byte[] state = [], replay = [], expected = [];
         var length = core.CaptureState(buffer: ref state);
         using var lookahead = core.CreateLookahead();
+
         lookahead.RunFrame();
         core.RunCycles(cycles: cycleBudget);
         var expectedLength = core.CaptureState(buffer: ref expected);
-        core.RestoreState(buffer: state, length: length);
+
+        core.RestoreState(
+            buffer: state,
+            length: length
+        );
         core.RunCycles(cycles: cycleBudget);
         var replayLength = core.CaptureState(buffer: ref replay);
-        if (replayLength != expectedLength || !expected.AsSpan(start: 0, length: expectedLength).SequenceEqual(other: replay.AsSpan(start: 0, length: replayLength))) {
+
+        if (
+            (replayLength != expectedLength) ||
+            !expected.AsSpan(
+            length: expectedLength,
+            start: 0
+        ).SequenceEqual(other: replay.AsSpan(
+            length: replayLength,
+            start: 0
+        ))
+        ) {
             return PostStageOutcome.Fail(detail: "direct host capture/restore did not replay byte-identically");
         }
         if (core.DrainAudioSamples(destination: samples) != 0) {

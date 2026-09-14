@@ -66,6 +66,8 @@ dotnet_diagnostic.VER002.severity = error
 dotnet_diagnostic.VER003.severity = error
 dotnet_diagnostic.VER004.severity = error
 dotnet_diagnostic.VER005.severity = error
+# IDE1006: Naming rule violations (static fields PascalCase, instance fields m_ prefix, constants PascalCase, etc.)
+dotnet_diagnostic.IDE1006.severity = error
 # Rule: const fields must be PascalCase.
 dotnet_naming_rule.constant_fields_pascal_case.severity = error
 dotnet_naming_rule.constant_fields_pascal_case.style = pascal_case_style
@@ -182,6 +184,14 @@ indent_size = 4
 [*.{comp,frag,glsl,vert}]
 indent_style = space
 indent_size = 4
+
+# Puck authoring DSL sources: 4-space, matching the C# tree.
+[*.{puck,world.puck}]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
 
 [*.{yml,yaml,md}]
 indent_style = space

@@ -7,13 +7,13 @@ namespace Puck.World.Server;
 /// <see cref="WireWriter"/>/<see cref="WireReader"/> discipline every peer decoder in this engine follows: a
 /// <c>"PCKP"</c> magic, a fail-closed <c>u16</c> version (refuses any value other than the current one by name — a checkpoint
 /// carries no compat path), a <c>sha256-64</c> content pin of the whole framed body, then that body — itself a
-/// <c>sha256-64</c> pin of the captured definition JSON followed by the checkpoint's ten sections in the record's
+/// <c>sha256-64</c> pin of the captured definition JSON followed by the checkpoint sections in the record's
 /// own declared order, each its own length-prefixed block. Journal entries and a buffered
 /// <see cref="WorldPendingOpCheckpoint.Mutate"/> op reuse <see cref="WorldSubmissionCodec"/>'s own mutation leaf.
 /// Committed journal entries permit the canonical world actor through the trusted-storage entry point; pending
 /// external submissions retain the live actor restriction. Every embedded document (the definition, the base definition, an escrow lease's destination definition)
 /// reuses <see cref="WorldDefinitionSerialization.Serialize"/> bytes verbatim — this codec never re-serializes a
-/// document itself. Every read is bounded; every decoder — the outer envelope, the body, and each of the nine
+/// document itself. Every read is bounded; every decoder — the outer envelope, the body, and each of the
 /// sections — asks its own <see cref="WireReader.TryFinish"/> exactly once, so a truncated or trailing-byte payload
 /// refuses by name at the scope that actually owns the leftover bytes.</summary>
 public static partial class WorldAuthorityCheckpointCodec {
@@ -23,9 +23,9 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const int MaxHashChars = 128;
     private const int MaxSectionBytes = ((64 * 1024) * 1024);
     private const int MaxStringBytes = WireLimits.MaxStringBytes;
-    // The first format is still under development. Change its shape directly; no compatibility reader or
-    // development-only version sequence is maintained.
-    private const ushort SupportedVersion = 3;
+    // Version 4 adds each journal entry's engine-tick timestamp. Earlier envelopes refuse before their
+    // journal payload is read; there is no compatibility reader.
+    private const ushort SupportedVersion = 4;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;
@@ -52,6 +52,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         body.WriteBlock(value: EncodeFields(section: checkpoint.Fields));
         body.WriteBlock(value: EncodeSearch(section: (checkpoint.Search ?? SearchCheckpoint.Empty)));
         body.WriteBlock(value: EncodeBoardEnforcement(section: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty)));
+        body.WriteBlock(value: EncodeMachines(section: (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty)));
 
         var bodyBytes = body.ToArray();
         var writer = new WireWriter();
@@ -178,6 +179,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "board enforcement section",
             maxBytes: MaxSectionBytes
         );
+        var machineBytes = body.ReadBlock(
+            field: "machine section",
+            maxBytes: MaxSectionBytes
+        );
 
         if (!body.TryFinish(failure: out var bodyFailure)) {
             reason = $"checkpoint body: {bodyFailure}";
@@ -280,18 +285,25 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
+        if (!TryDecodeMachines(
+            bytes: machineBytes,
+            reason: out reason,
+            section: out var machines
+        )) { return false; }
+
         checkpoint = new WorldAuthorityCheckpoint(
+            BoardEnforcement: boardEnforcement,
             Escrow: escrow,
             EventFeed: eventFeed,
             Fields: fields,
             Grants: grants,
             HostRow: hostRow,
             InputHold: inputHold,
+            Machines: machines,
             OwnedWorlds: ownedWorlds,
             Population: population,
-            Server: server,
             Search: search,
-            BoardEnforcement: boardEnforcement
+            Server: server
         );
         reason = string.Empty;
 
@@ -302,7 +314,11 @@ public static partial class WorldAuthorityCheckpointCodec {
 
 
     private static byte[] EncodeLeafBlock<T>(T value, string what, TryEncodeLeaf<T> tryEncode) {
-        if (!tryEncode(value, out var bytes, out var failure)) {
+        if (!tryEncode(
+            value,
+            out var bytes,
+            out var failure
+        )) {
             throw new InvalidOperationException(message: $"{what} failed to encode — {failure}");
         }
 

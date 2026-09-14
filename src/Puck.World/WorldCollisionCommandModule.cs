@@ -29,7 +29,10 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         var census = server.Population.ContactCensus;
         var field = WorldContactSelection.RequiresField(collision: server.Definition.Collision);
         var provider = (field
-            ? $"field contact (requirements: {string.Join(separator: ", ", values: server.Definition.Collision.Requirements)}); analytic census NOT SOLVED AGAINST"
+            ? $"field contact (requirements: {string.Join(
+                separator: ", ",
+                values: server.Definition.Collision.Requirements
+            )}); analytic census NOT SOLVED AGAINST"
             : "analytic contact; census"
         );
 
@@ -129,16 +132,23 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
 
             rows.Add(item: string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"body:{index} mass={((double)body.RigidMass):0.###} v=({((double)body.RigidVelocity.X):0.###},{((double)body.RigidVelocity.Y):0.###},{((double)body.RigidVelocity.Z):0.###}) w=({((double)body.RigidAngularVelocity.X):0.###},{((double)body.RigidAngularVelocity.Y):0.###},{((double)body.RigidAngularVelocity.Z):0.###}) resting={(body.Resting ? 1 : 0)}"
+                handler: $"body:{index} mass={((double)body.RigidMass):0.###} v=({((double)body.RigidVelocity.X):0.###},{((double)body.RigidVelocity.Y):0.###},{((double)body.RigidVelocity.Z):0.###}) w=({((double)body.RigidAngularVelocity.X):0.###},{((double)body.RigidAngularVelocity.Y):0.###},{((double)body.RigidAngularVelocity.Z):0.###}) resting={(body.Resting
+                ? 1
+                : 0)}"
             ));
         }
 
-        var quiescent = (server.Population.RigidBodiesQuiescent() ? 1 : 0);
+        var quiescent = (server.Population.RigidBodiesQuiescent()
+            ? 1
+            : 0
+        );
 
         return new CommandResult(Output: ((rows.Count == 0)
             ? $"[world.rigid: no active rigid body; quiescent={quiescent}]"
-            : $"[world.rigid: quiescent={quiescent} | {string.Join(separator: " | ", values: rows)}]"
-        ));
+            : $"[world.rigid: quiescent={quiescent} | {string.Join(
+                separator: " | ",
+                values: rows
+            )}]"));
     }
     // The contact-solver status readout (world.collision.status): the tuning, the field size/revision, and the per-kit
     // collider table so the whole grounded-contact configuration is one Immediate read.
@@ -248,7 +258,10 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             bindability: CommandBindability.Unbindable,
             name: "world.rigid",
             description: "Reports the rigid solver's live census (Immediate): every active rigid-kit body's mass, linear/angular velocity, and resting latch, plus quiescent=1|0 — the same value $physics:quiescent reads. 'no active rigid body' with quiescent=1 when the world authors none.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.rigid") is { } refusal)
+            handler: (_, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.rigid"
+            ) is { } refusal)
             ? refusal
             : Rigid()),
             routing: CommandRouting.Immediate
@@ -257,7 +270,10 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             bindability: CommandBindability.Unbindable,
             name: "world.collision.status",
             description: "Reports the selected contact provider, the requirements that forced it, solid instruction count, field revision, contact skin, and the per-kit collider table.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.collision.status") is { } refusal)
+            handler: (_, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.collision.status"
+            ) is { } refusal)
             ? refusal
             : Status())
         );

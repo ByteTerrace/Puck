@@ -38,7 +38,7 @@ public sealed record BindingProfileDocument(
 ) {
     /// <summary>The schema version this engine build authors and accepts. A stored profile whose version differs is
     /// rejected by <see cref="BindingProfile.Compile"/> and reseeded from defaults.</summary>
-    public const string CurrentVersion = "puck.bindings.v1";
+    public const string CurrentVersion = "puck.input.bindings.v1";
 }
 /// <summary>A player's on-screen binding-bar LOOK preferences — presentation only, never a binding. Each field
 /// overrides the world-authored policy when set; <see langword="null"/> defers to it.</summary>

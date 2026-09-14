@@ -19,7 +19,7 @@ public enum SynthOscillator {
     Noise,
 }
 /// <summary>
-/// The <c>puck.synth.v1</c> document — one deterministic synth PATCH as data: the parameter set a world voice synth
+/// The <c>puck.synthesizer-patch.v1</c> document — one deterministic synth PATCH as data: the parameter set a world voice synth
 /// renders a creature/phenomenon sound from, integer end to end (no wall-clock, RNG seeds arrive per-trigger, no
 /// float anywhere in the schema). Every field is a RUNTIME unit — frames are mixer-rate audio frames (48000 per
 /// second) and pitch rides integer millihertz — so a renderer consumes the document
@@ -28,7 +28,7 @@ public enum SynthOscillator {
 /// Document doctrine applies throughout: every OPTIONAL member is nullable, validated only when present, and
 /// normalized through <see cref="SynthPatchCanonicalizer"/>.
 /// </summary>
-/// <param name="Schema">The document version tag (<c>puck.synth.v1</c>).</param>
+/// <param name="Schema">The document version tag (<c>puck.synthesizer-patch.v1</c>).</param>
 /// <param name="Name">The patch's display name (null = "patch").</param>
 /// <param name="Oscillator">The oscillator kind (null = <see cref="SynthOscillator.Pulse"/>).</param>
 /// <param name="DutyThousandths">The pulse duty cycle in thousandths of a period, 1..999 (null = 500 — a square
@@ -72,15 +72,15 @@ public sealed record SynthPatchDocument(
     int? DurationFrames = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
-    public const string CurrentSchema = "puck.synth.v1";
-    /// <summary>The largest pitch-shaped value the schema admits, in millihertz: the Nyquist frequency of the
-    /// 48000 Hz mixer — a contract invariant of the runtime unit, not a tunable (a pitch beyond it cannot be
-    /// rendered at the mixer rate).</summary>
-    public const int MaxPitchMillihertz = 24_000_000;
+    public const string CurrentSchema = "puck.synthesizer-patch.v1";
     /// <summary>The largest frame-count value the schema admits (60 seconds at the 48000 Hz mixer rate) — the
     /// sanity ceiling that separates a VOICE from a STREAM: content longer than this is a tune (machine-backed
     /// music is the tracker's job), not a synth patch.</summary>
     public const int MaxFrames = (48_000 * 60);
+    /// <summary>The largest pitch-shaped value the schema admits, in millihertz: the Nyquist frequency of the
+    /// 48000 Hz mixer — a contract invariant of the runtime unit, not a tunable (a pitch beyond it cannot be
+    /// rendered at the mixer rate).</summary>
+    public const int MaxPitchMillihertz = 24_000_000;
 
     /// <summary>Unknown members preserved across a round-trip — the data-side plugin extensibility posture. Null
     /// when the document carries no unknown members. A settable (not <c>init</c>)
@@ -101,60 +101,36 @@ public static class SynthPatchCanonicalizer {
         "vibratoDepthMillihertz", "vibratoRateMillihertz", "durationFrames",
     };
 
-    /// <summary>Validates a document's schema and structural invariants in one pass — every violation is collected
-    /// rather than throwing on the first. An absent or foreign <see cref="SynthPatchDocument.Schema"/>
-    /// short-circuits to that one violation, since no other check has a defined meaning against an unrecognized
-    /// document shape. Every bound is loud: an out-of-range value is an authoring error a clamp would silently
-    /// rewrite, so nothing here self-heals except the cross-oscillator field clears
-    /// <see cref="Normalize"/> owns.</summary>
-    /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
-    /// <returns>Every violation found; empty when the document is a valid <c>puck.synth.v1</c> value.</returns>
-    public static IReadOnlyList<DocumentValidationError> Validate(SynthPatchDocument document) {
-        ArgumentNullException.ThrowIfNull(document);
-
-        if (DocumentCanonicalizer.SchemaViolationMessage(declared: document.Schema, recognized: SynthPatchDocument.CurrentSchema) is { } schemaViolation) {
-            return [new DocumentValidationError(Message: schemaViolation, Path: "schema")];
+    private static void ValidateRange(List<DocumentValidationError> errors, int max, int min, string path, int? value) {
+        if (
+            (value is { } present) &&
+            ((present < min) || (present > max))
+        ) {
+            errors.Add(item: new(
+                Message: $"{present} is outside [{min}, {max}].",
+                Path: path
+            ));
         }
-
-        var errors = new List<DocumentValidationError>();
-
-        if ((document.Oscillator is { } oscillator) && !Enum.IsDefined(value: oscillator)) {
-            errors.Add(item: new(Message: $"'{((int)oscillator)}' is not a defined oscillator kind.", Path: "oscillator"));
-        }
-
-        ValidateRange(errors: errors, max: 999, min: 1, path: "dutyThousandths", value: document.DutyThousandths);
-        ValidateRange(errors: errors, max: 255, min: 0, path: "polynomial", value: document.Polynomial);
-        ValidateRange(errors: errors, max: SynthPatchDocument.MaxFrames, min: 0, path: "attackFrames", value: document.AttackFrames);
-        ValidateRange(errors: errors, max: SynthPatchDocument.MaxFrames, min: 0, path: "decayFrames", value: document.DecayFrames);
-        ValidateRange(errors: errors, max: 1000, min: 0, path: "sustainThousandths", value: document.SustainThousandths);
-        ValidateRange(errors: errors, max: SynthPatchDocument.MaxFrames, min: 0, path: "releaseFrames", value: document.ReleaseFrames);
-        ValidateRange(errors: errors, max: SynthPatchDocument.MaxPitchMillihertz, min: 1, path: "pitchMillihertz", value: document.PitchMillihertz);
-        ValidateRange(errors: errors, max: SynthPatchDocument.MaxPitchMillihertz, min: -SynthPatchDocument.MaxPitchMillihertz, path: "sweepMillihertzPerFrame", value: document.SweepMillihertzPerFrame);
-        ValidateRange(errors: errors, max: SynthPatchDocument.MaxPitchMillihertz, min: 0, path: "vibratoDepthMillihertz", value: document.VibratoDepthMillihertz);
-        ValidateRange(errors: errors, max: SynthPatchDocument.MaxPitchMillihertz, min: 1, path: "vibratoRateMillihertz", value: document.VibratoRateMillihertz);
-        ValidateRange(errors: errors, max: SynthPatchDocument.MaxFrames, min: 1, path: "durationFrames", value: document.DurationFrames);
-
-        // The vibrato pair travels together: a depth with no rate (or a rate with no depth) has no renderable
-        // meaning, and inventing the missing half would be a silent rewrite.
-        if ((document.VibratoDepthMillihertz is not null) != (document.VibratoRateMillihertz is not null)) {
-            errors.Add(item: new(Message: "vibrato depth and rate travel together — declare both or neither.", Path: "vibratoDepthMillihertz"));
-        }
-
-        DocumentCanonicalizer.ValidateExtensions(
-            addError: (path, message) => errors.Add(item: new(Message: message, Path: path)),
-            extensions: document.Extensions,
-            knownMemberNames: KnownMemberNames
-        );
-
-        return errors;
     }
-    /// <summary>Runs <see cref="Validate"/> and throws when it finds anything.</summary>
-    /// <param name="document">The document to validate.</param>
-    /// <param name="source">An optional source label (a file path or asset id) for the exception message.</param>
+
+    /// <summary>THE full pipeline: validates schema + structural invariants (throwing on either), normalizes the
+    /// defaults, then serializes to canonical UTF-8 bytes and hashes them through
+    /// <see cref="DocumentCanonicalizer.Canonicalize"/>. Two calls against value-equal input documents always
+    /// produce byte-identical bytes and therefore the same hash — the identity contract an inline-canonical world
+    /// patch row pins.</summary>
+    /// <param name="document">The document to canonicalize.</param>
+    /// <param name="source">An optional source label (a file path or asset id) for a validation-failure message.</param>
+    /// <returns>The validated, normalized document plus its canonical bytes and hash.</returns>
     /// <exception cref="DocumentValidationException">The document declares an absent/foreign schema, or fails a
     /// structural invariant.</exception>
-    public static void ValidateOrThrow(SynthPatchDocument document, string? source = null) =>
-        DocumentCanonicalizer.ThrowIfInvalid(errors: Validate(document: document), source: source);
+    public static CanonicalDocument<SynthPatchDocument> Canonicalize(SynthPatchDocument document, string? source = null) {
+        ValidateOrThrow(
+            document: document,
+            source: source
+        );
+
+        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
+    }
     /// <summary>Normalizes an already-schema-valid document: defaults every optional member so a renderer never sees
     /// a null it has to reason about, and clears the cross-oscillator fields that carry no meaning for the declared
     /// kind (a duty on a noise patch, a polynomial on a sine — the self-heal twin of the creation family's stale-
@@ -170,34 +146,160 @@ public static class SynthPatchCanonicalizer {
         return (document with {
             AttackFrames = (document.AttackFrames ?? 0),
             DecayFrames = (document.DecayFrames ?? 0),
-            DutyThousandths = ((oscillator == SynthOscillator.Pulse) ? (document.DutyThousandths ?? 500) : null),
-            Name = (string.IsNullOrWhiteSpace(value: document.Name) ? "patch" : document.Name.Trim()),
+            DutyThousandths = ((oscillator == SynthOscillator.Pulse)
+            ? (document.DutyThousandths ?? 500)
+            : null),
+            Name = (string.IsNullOrWhiteSpace(value: document.Name)
+            ? "patch"
+            : document.Name.Trim()),
             Oscillator = oscillator,
-            Polynomial = ((oscillator == SynthOscillator.Noise) ? (document.Polynomial ?? 0) : null),
+            Polynomial = ((oscillator == SynthOscillator.Noise)
+            ? (document.Polynomial ?? 0)
+            : null),
             ReleaseFrames = (document.ReleaseFrames ?? 0),
             Schema = SynthPatchDocument.CurrentSchema,
             SustainThousandths = (document.SustainThousandths ?? 1000),
         });
     }
-    /// <summary>THE full pipeline: validates schema + structural invariants (throwing on either), normalizes the
-    /// defaults, then serializes to canonical UTF-8 bytes and hashes them through
-    /// <see cref="DocumentCanonicalizer.Canonicalize"/>. Two calls against value-equal input documents always
-    /// produce byte-identical bytes and therefore the same hash — the identity contract an inline-canonical world
-    /// patch row pins.</summary>
-    /// <param name="document">The document to canonicalize.</param>
-    /// <param name="source">An optional source label (a file path or asset id) for a validation-failure message.</param>
-    /// <returns>The validated, normalized document plus its canonical bytes and hash.</returns>
+    /// <summary>Validates a document's schema and structural invariants in one pass — every violation is collected
+    /// rather than throwing on the first. An absent or foreign <see cref="SynthPatchDocument.Schema"/>
+    /// short-circuits to that one violation, since no other check has a defined meaning against an unrecognized
+    /// document shape. Every bound is loud: an out-of-range value is an authoring error a clamp would silently
+    /// rewrite, so nothing here self-heals except the cross-oscillator field clears
+    /// <see cref="Normalize"/> owns.</summary>
+    /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
+    /// <returns>Every violation found; empty when the document is a valid <c>puck.synthesizer-patch.v1</c> value.</returns>
+    public static IReadOnlyList<DocumentValidationError> Validate(SynthPatchDocument document) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        if (DocumentCanonicalizer.SchemaViolationMessage(
+            declared: document.Schema,
+            recognized: SynthPatchDocument.CurrentSchema
+        ) is { } schemaViolation) {
+            return [new DocumentValidationError(
+                    Message: schemaViolation,
+                    Path: "schema"
+                )];
+        }
+
+        var errors = new List<DocumentValidationError>();
+
+        if (
+            (document.Oscillator is { } oscillator) &&
+            !Enum.IsDefined(value: oscillator)
+        ) {
+            errors.Add(item: new(
+                Message: $"'{((int)oscillator)}' is not a defined oscillator kind.",
+                Path: "oscillator"
+            ));
+        }
+
+        ValidateRange(
+            errors: errors,
+            max: 999,
+            min: 1,
+            path: "dutyThousandths",
+            value: document.DutyThousandths
+        );
+        ValidateRange(
+            errors: errors,
+            max: 255,
+            min: 0,
+            path: "polynomial",
+            value: document.Polynomial
+        );
+        ValidateRange(
+            errors: errors,
+            max: SynthPatchDocument.MaxFrames,
+            min: 0,
+            path: "attackFrames",
+            value: document.AttackFrames
+        );
+        ValidateRange(
+            errors: errors,
+            max: SynthPatchDocument.MaxFrames,
+            min: 0,
+            path: "decayFrames",
+            value: document.DecayFrames
+        );
+        ValidateRange(
+            errors: errors,
+            max: 1000,
+            min: 0,
+            path: "sustainThousandths",
+            value: document.SustainThousandths
+        );
+        ValidateRange(
+            errors: errors,
+            max: SynthPatchDocument.MaxFrames,
+            min: 0,
+            path: "releaseFrames",
+            value: document.ReleaseFrames
+        );
+        ValidateRange(
+            errors: errors,
+            max: SynthPatchDocument.MaxPitchMillihertz,
+            min: 1,
+            path: "pitchMillihertz",
+            value: document.PitchMillihertz
+        );
+        ValidateRange(
+            errors: errors,
+            max: SynthPatchDocument.MaxPitchMillihertz,
+            min: -SynthPatchDocument.MaxPitchMillihertz,
+            path: "sweepMillihertzPerFrame",
+            value: document.SweepMillihertzPerFrame
+        );
+        ValidateRange(
+            errors: errors,
+            max: SynthPatchDocument.MaxPitchMillihertz,
+            min: 0,
+            path: "vibratoDepthMillihertz",
+            value: document.VibratoDepthMillihertz
+        );
+        ValidateRange(
+            errors: errors,
+            max: SynthPatchDocument.MaxPitchMillihertz,
+            min: 1,
+            path: "vibratoRateMillihertz",
+            value: document.VibratoRateMillihertz
+        );
+        ValidateRange(
+            errors: errors,
+            max: SynthPatchDocument.MaxFrames,
+            min: 1,
+            path: "durationFrames",
+            value: document.DurationFrames
+        );
+
+        // The vibrato pair travels together: a depth with no rate (or a rate with no depth) has no renderable
+        // meaning, and inventing the missing half would be a silent rewrite.
+        if ((document.VibratoDepthMillihertz is not null) != (document.VibratoRateMillihertz is not null)) {
+            errors.Add(item: new(
+                Message: "vibrato depth and rate travel together — declare both or neither.",
+                Path: "vibratoDepthMillihertz"
+            ));
+        }
+
+        DocumentCanonicalizer.ValidateExtensions(
+            addError: (path, message) => errors.Add(item: new(
+                Message: message,
+                Path: path
+            )),
+            extensions: document.Extensions,
+            knownMemberNames: KnownMemberNames
+        );
+
+        return errors;
+    }
+    /// <summary>Runs <see cref="Validate"/> and throws when it finds anything.</summary>
+    /// <param name="document">The document to validate.</param>
+    /// <param name="source">An optional source label (a file path or asset id) for the exception message.</param>
     /// <exception cref="DocumentValidationException">The document declares an absent/foreign schema, or fails a
     /// structural invariant.</exception>
-    public static CanonicalDocument<SynthPatchDocument> Canonicalize(SynthPatchDocument document, string? source = null) {
-        ValidateOrThrow(document: document, source: source);
-
-        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
-    }
-
-    private static void ValidateRange(List<DocumentValidationError> errors, int max, int min, string path, int? value) {
-        if ((value is { } present) && ((present < min) || (present > max))) {
-            errors.Add(item: new(Message: $"{present} is outside [{min}, {max}].", Path: path));
-        }
-    }
+    public static void ValidateOrThrow(SynthPatchDocument document, string? source = null) =>
+        DocumentCanonicalizer.ThrowIfInvalid(
+            errors: Validate(document: document),
+            source: source
+        );
 }

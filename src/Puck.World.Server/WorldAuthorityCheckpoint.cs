@@ -166,9 +166,20 @@ public sealed record WorldAuthorityHostRowCheckpoint(
     /// <summary>Gets a detached row with no scheduling residue, transfers, or portal history. Used by a replay
     /// shadow that owns no host-side activity.</summary>
     public static WorldAuthorityHostRowCheckpoint Empty { get; } = new(
-        ScheduleAccumulatorTicks: 0, ElapsedEngineTicks: 0, IsPaused: false, PortalOccupancy: [], NextTransferId: 0,
-        InDoubtTransfers: [], ForwardedBodies: [], AppliedTransferIds: [], AppliedTransferHighWater: null,
-        FreshCounter: 0, Retained: false, AnnouncedCrossingHolds: [], SeededArrivals: []);
+        AnnouncedCrossingHolds: [],
+        AppliedTransferHighWater: null,
+        AppliedTransferIds: [],
+        ElapsedEngineTicks: 0,
+        ForwardedBodies: [],
+        FreshCounter: 0,
+        InDoubtTransfers: [],
+        IsPaused: false,
+        NextTransferId: 0,
+        PortalOccupancy: [],
+        Retained: false,
+        ScheduleAccumulatorTicks: 0,
+        SeededArrivals: []
+    );
 }
 /// <summary>
 /// A full simulation-state image of one <see cref="WorldServer"/> and the subsystems it owns, plus this row's slice
@@ -187,5 +198,6 @@ public sealed record WorldAuthorityCheckpoint(
     WorldAuthorityHostRowCheckpoint HostRow,
     FieldLattice.Checkpoint? Fields = null,
     SearchCheckpoint? Search = null,
-    WorldBoardEnforcementCheckpoint? BoardEnforcement = null
+    WorldBoardEnforcementCheckpoint? BoardEnforcement = null,
+    WorldMachineHostCheckpoint? Machines = null
 );

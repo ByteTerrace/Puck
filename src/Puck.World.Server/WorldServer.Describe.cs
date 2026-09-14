@@ -42,7 +42,8 @@ public sealed partial class WorldServer {
                 row: out _,
                 rowName: name,
                 text: out _,
-                tick: tick
+                tick: tick,
+                engineTick: CompletedEngineTicks
             ) &&
                 (raw is { } value) &&
                 (value != 0)
@@ -124,6 +125,8 @@ public sealed partial class WorldServer {
         WorldMutation.SetKitAssignment m => $"SetKitAssignment '{m.Assignment.Sequence.Name}'",
         WorldMutation.UpsertScreen m => $"UpsertScreen {m.Screen.Index}",
         WorldMutation.RemoveScreen m => $"RemoveScreen {m.Index}",
+        WorldMutation.UpsertMachine m => $"UpsertMachine '{m.Machine.Name}'",
+        WorldMutation.RemoveMachine m => $"RemoveMachine '{m.Name}'",
         WorldMutation.UpsertCamera m => $"UpsertCamera '{m.Camera.Name}'",
         WorldMutation.RemoveCamera m => $"RemoveCamera '{m.Name}'",
         WorldMutation.SetSpawns => "SetSpawns",
@@ -157,6 +160,8 @@ public sealed partial class WorldServer {
         WorldMutation.SetPlayerSeatLook => "SetPlayerSeatLook",
         WorldMutation.UpsertViewLayout m => $"UpsertViewLayout '{m.Layout.Name}'",
         WorldMutation.RemoveViewLayout m => $"RemoveViewLayout '{m.Name}'",
+        WorldMutation.UpsertViewPipeline m => $"UpsertViewPipeline '{m.Pipeline.Name}'",
+        WorldMutation.RemoveViewPipeline m => $"RemoveViewPipeline '{m.Name}'",
         WorldMutation.UpsertLook m => $"UpsertLook '{m.Look.Name}'",
         WorldMutation.RemoveLook m => $"RemoveLook '{m.Name}'",
         WorldMutation.UpsertDynamics m => $"UpsertDynamics '{m.Row.Name}'",
@@ -172,7 +177,10 @@ public sealed partial class WorldServer {
         WorldMutation.RemoveHudElement m => $"RemoveHudElement '{m.PanelId}'.'{m.ElementId}'",
         WorldMutation.SetHudDefaults => "SetHudDefaults",
         WorldMutation.TransformState => "TransformState",
-        WorldMutation.Batch m => $"Batch[{string.Join(separator: ", ", values: m.Mutations.Select(Describe))}]",
+        WorldMutation.Batch m => $"Batch[{string.Join(
+        separator: ", ",
+        values: m.Mutations.Select(selector: Describe)
+    )}]",
         WorldMutation.UpsertStateRow m => $"UpsertStateRow '{m.Row.Name}'",
         WorldMutation.RemoveStateRow m => $"RemoveStateRow '{m.Name}'",
         WorldMutation.UpsertStateCell m => $"UpsertStateCell '{m.Row}'.'{m.Key}'",
@@ -306,22 +314,26 @@ public sealed partial class WorldServer {
             );
 
             if (rule.Decision is { } decision) {
-                lines.Add($"{rule.Name} decision={decision.Mode} options={decision.Options.Length} when {gate} -> common [{effects}]; choices/timers: world.decisions");
+                lines.Add(item: $"{rule.Name} decision={decision.Mode} options={decision.Options.Length} when {gate} -> common [{effects}]; choices/timers: world.decisions");
                 continue;
             }
 
             var held = latch.Held(name: rule.Name);
             var boundValues = ((rule.Bindings is { Length: > 0 } declared)
-                ? $" bind [{string.Join(separator: ", ", values: declared.Select(selector: static b => $"{b.Name}:{b.Kind.ToString().ToLowerInvariant()}"))}]"
-                : string.Empty);
+                ? $" bind [{string.Join(
+                    separator: ", ",
+                    values: declared.Select(selector: static b => $"{b.Name}:{b.Kind.ToString().ToLowerInvariant()}")
+                )}]"
+                : string.Empty
+            );
             var scope = ((rule.Interaction is { } interaction)
                 ? $" {interaction.CoOccurrence.ToString().ToLowerInvariant()} {interaction.Left} x {interaction.Right}{((interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance)
                     ? $" <= {((double)interaction.Range)}"
                     : string.Empty)}"
                 : ((rule.ForEach is { } forEach)
                     ? $" forEach {forEach}"
-                    : string.Empty)
-            );
+                    : string.Empty
+            ));
 
             lines.Add(item: $"{rule.Name} mode={rule.Mode.ToString().ToLowerInvariant()}{scope}{boundValues} latch={(held
                 ? "held"

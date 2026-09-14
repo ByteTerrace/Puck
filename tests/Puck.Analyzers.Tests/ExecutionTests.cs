@@ -30,96 +30,15 @@ public sealed class ExecutionTests {
 
             builder.Append(value: "}\r\n");
 
-            files[file] = new SourceFile(Name: (("Subject" + file.ToString(provider: CultureInfo.InvariantCulture)) + ".cs"), Text: builder.ToString());
+            files[file] = new SourceFile(
+                Name: (("Subject" + file.ToString(provider: CultureInfo.InvariantCulture)) + ".cs"),
+                Text: builder.ToString()
+            );
         }
 
         return files;
     }
 
-    [Fact]
-    public void EveryBrandIsReportedWhenTheAnalyzerRunsConcurrently() {
-        var result = Harness.AnalyzeCore(
-            compilation: Harness.Compile(assemblyName: Harness.DefaultAssemblyName, sources: ManyBrandedFiles()),
-            additionalFiles: [new HarnessAdditionalText(path: Harness.ManifestPath, text: Manifest.Empty)],
-            concurrent: true,
-            cancellationToken: CancellationToken.None);
-
-        Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
-        Assert.Equal(expected: BrandCount, actual: result.WithId(id: "VER001").Length);
-    }
-    [Fact]
-    public void ConcurrentAndSequentialExecutionReportTheSameThing() {
-        var files = ManyBrandedFiles();
-
-        var manifest = Manifest.Of(
-            Enumerable
-                .Range(count: BrandCount, start: 0)
-                .Select(selector: index => new ManifestEntry {
-                    Id = ("brand-" + index.ToString(provider: CultureInfo.InvariantCulture)),
-                    Sha256 = new string(c: '0', count: 64),
-                    Symbol = ("M:Subject.Assembly.Subject.Target" + index.ToString(provider: CultureInfo.InvariantCulture)),
-                })
-                .ToArray());
-
-        var concurrent = Harness.AnalyzeCore(
-            compilation: Harness.Compile(assemblyName: Harness.DefaultAssemblyName, sources: files),
-            additionalFiles: [new HarnessAdditionalText(path: Harness.ManifestPath, text: manifest)],
-            concurrent: true,
-            cancellationToken: CancellationToken.None);
-
-        var sequential = Harness.AnalyzeCore(
-            compilation: Harness.Compile(assemblyName: Harness.DefaultAssemblyName, sources: files),
-            additionalFiles: [new HarnessAdditionalText(path: Harness.ManifestPath, text: manifest)],
-            concurrent: false,
-            cancellationToken: CancellationToken.None);
-
-        Assert.Equal(expected: sequential.Ids, actual: concurrent.Ids);
-    }
-    [Fact]
-    public void ConcurrentExecutionLosesNoClaimSoNoEntryIsSweptAsUnclaimed() {
-        var files = ManyBrandedFiles();
-
-        var manifest = Manifest.Of(
-            Enumerable
-                .Range(count: BrandCount, start: 0)
-                .Select(selector: index => new ManifestEntry {
-                    Id = ("brand-" + index.ToString(provider: CultureInfo.InvariantCulture)),
-                    Sha256 = new string(c: '0', count: 64),
-                    Symbol = ("M:Subject.Assembly.Subject.Target" + index.ToString(provider: CultureInfo.InvariantCulture)),
-                })
-                .ToArray());
-
-        var result = Harness.AnalyzeCore(
-            compilation: Harness.Compile(assemblyName: Harness.DefaultAssemblyName, sources: files),
-            additionalFiles: [new HarnessAdditionalText(path: Harness.ManifestPath, text: manifest)],
-            concurrent: true,
-            cancellationToken: CancellationToken.None);
-
-        Assert.Empty(collection: result.WithId(id: "VER002"));
-    }
-    [Fact]
-    public void RepeatedRunsOfOneCompilationAgreeWithEachOther() {
-        var compilation = Harness.Compile(assemblyName: Harness.DefaultAssemblyName, sources: ManyBrandedFiles());
-
-        var runs = Enumerable
-            .Range(count: 8, start: 0)
-            .AsParallel()
-            .Select(selector: _ => string.Join(
-                separator: ",",
-                values: Harness
-                    .AnalyzeCore(
-                        compilation: compilation,
-                        additionalFiles: [new HarnessAdditionalText(path: Harness.ManifestPath, text: Manifest.Empty)],
-                        concurrent: true,
-                        cancellationToken: CancellationToken.None)
-                    .Analyzer
-                    .Select(selector: diagnostic => diagnostic.GetMessage())
-                    .OrderBy(keySelector: message => message, comparer: StringComparer.Ordinal)))
-            .Distinct(comparer: StringComparer.Ordinal)
-            .ToArray();
-
-        Assert.Single(collection: runs);
-    }
     [Fact]
     public void AnalysisRefusesToRunOnAnAlreadyCancelledToken() {
         using var cancellation = new CancellationTokenSource();
@@ -127,9 +46,161 @@ public sealed class ExecutionTests {
         cancellation.Cancel();
 
         Assert.ThrowsAny<OperationCanceledException>(testCode: () => Harness.AnalyzeCore(
-            compilation: Harness.Compile(assemblyName: Harness.DefaultAssemblyName, sources: ManyBrandedFiles()),
-            additionalFiles: [new HarnessAdditionalText(path: Harness.ManifestPath, text: Manifest.Empty)],
+            compilation: Harness.Compile(
+                assemblyName: Harness.DefaultAssemblyName,
+                sources: ManyBrandedFiles()
+            ),
+            additionalFiles: [new HarnessAdditionalText(
+                    path: Harness.ManifestPath,
+                    text: Manifest.Empty
+                )],
             concurrent: true,
-            cancellationToken: cancellation.Token));
+            cancellationToken: cancellation.Token
+        ));
+    }
+    [Fact]
+    public void ConcurrentAndSequentialExecutionReportTheSameThing() {
+        var files = ManyBrandedFiles();
+
+        var manifest = Manifest.Of(Enumerable
+                .Range(
+            count: BrandCount,
+            start: 0
+        )
+                .Select(selector: index => new ManifestEntry {
+                    Id = ("brand-" + index.ToString(provider: CultureInfo.InvariantCulture)),
+                    Sha256 = new string(
+            c: '0',
+            count: 64
+        ),
+                    Symbol = ("M:Subject.Assembly.Subject.Target" + index.ToString(provider: CultureInfo.InvariantCulture)),
+                })
+                .ToArray());
+
+        var concurrent = Harness.AnalyzeCore(
+            compilation: Harness.Compile(
+                assemblyName: Harness.DefaultAssemblyName,
+                sources: files
+            ),
+            additionalFiles: [new HarnessAdditionalText(
+                    path: Harness.ManifestPath,
+                    text: manifest
+                )],
+            concurrent: true,
+            cancellationToken: CancellationToken.None
+        );
+
+        var sequential = Harness.AnalyzeCore(
+            compilation: Harness.Compile(
+                assemblyName: Harness.DefaultAssemblyName,
+                sources: files
+            ),
+            additionalFiles: [new HarnessAdditionalText(
+                    path: Harness.ManifestPath,
+                    text: manifest
+                )],
+            concurrent: false,
+            cancellationToken: CancellationToken.None
+        );
+
+        Assert.Equal(
+            expected: sequential.Ids,
+            actual: concurrent.Ids
+        );
+    }
+    [Fact]
+    public void ConcurrentExecutionLosesNoClaimSoNoEntryIsSweptAsUnclaimed() {
+        var files = ManyBrandedFiles();
+
+        var manifest = Manifest.Of(Enumerable
+                .Range(
+            count: BrandCount,
+            start: 0
+        )
+                .Select(selector: index => new ManifestEntry {
+                    Id = ("brand-" + index.ToString(provider: CultureInfo.InvariantCulture)),
+                    Sha256 = new string(
+            c: '0',
+            count: 64
+        ),
+                    Symbol = ("M:Subject.Assembly.Subject.Target" + index.ToString(provider: CultureInfo.InvariantCulture)),
+                })
+                .ToArray());
+
+        var result = Harness.AnalyzeCore(
+            compilation: Harness.Compile(
+                assemblyName: Harness.DefaultAssemblyName,
+                sources: files
+            ),
+            additionalFiles: [new HarnessAdditionalText(
+                    path: Harness.ManifestPath,
+                    text: manifest
+                )],
+            concurrent: true,
+            cancellationToken: CancellationToken.None
+        );
+
+        Assert.Empty(collection: result.WithId(id: "VER002"));
+    }
+    [Fact]
+    public void EveryBrandIsReportedWhenTheAnalyzerRunsConcurrently() {
+        var result = Harness.AnalyzeCore(
+            compilation: Harness.Compile(
+                assemblyName: Harness.DefaultAssemblyName,
+                sources: ManyBrandedFiles()
+            ),
+            additionalFiles: [new HarnessAdditionalText(
+                    path: Harness.ManifestPath,
+                    text: Manifest.Empty
+                )],
+            concurrent: true,
+            cancellationToken: CancellationToken.None
+        );
+
+        Assert.True(
+            condition: result.CompilesCleanly,
+            userMessage: result.CompilerErrorText
+        );
+        Assert.Equal(
+            expected: BrandCount,
+            actual: result.WithId(id: "VER001").Length
+        );
+    }
+    [Fact]
+    public void RepeatedRunsOfOneCompilationAgreeWithEachOther() {
+        var compilation = Harness.Compile(
+            assemblyName: Harness.DefaultAssemblyName,
+            sources: ManyBrandedFiles()
+        );
+
+        var runs = Enumerable
+            .Range(
+            count: 8,
+            start: 0
+        )
+            .AsParallel()
+            .Select(selector: _ => string.Join(
+            separator: ",",
+            values: Harness
+                    .AnalyzeCore(
+                compilation: compilation,
+                additionalFiles: [new HarnessAdditionalText(
+                        path: Harness.ManifestPath,
+                        text: Manifest.Empty
+                    )],
+                concurrent: true,
+                cancellationToken: CancellationToken.None
+            )
+                    .Analyzer
+                    .Select(selector: diagnostic => diagnostic.GetMessage())
+                    .OrderBy(
+                keySelector: message => message,
+                comparer: StringComparer.Ordinal
+            )
+        ))
+            .Distinct(comparer: StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Single(collection: runs);
     }
 }

@@ -85,7 +85,10 @@ public static class WorldFacePortalPolicy {
 
             // An anisotropic shaping row's along facet travels backwards at its own rate, which no forward bound covers.
             foreach (var row in (motion.Shaping ?? [])) {
-                if ((row?.Across is not null) && (row.Along?.BackwardSpeed is { } reverse)) {
+                if (
+                    (row?.Across is not null) &&
+                    (row.Along?.BackwardSpeed is { } reverse)
+                ) {
                     ceiling = FixedQ4816.Max(
                         x: ceiling,
                         y: Magnitude(value: reverse)

@@ -33,19 +33,6 @@ internal sealed class AudioSampleRing {
     /// <summary>The absolute index (in interleaved samples) of the next sample the consumer will read.</summary>
     public long ReadIndex => Volatile.Read(location: ref m_readIndex);
 
-    /// <summary>Writes interleaved samples from a device thread; overwrites the oldest unread on overflow.</summary>
-    /// <param name="samples">The interleaved float samples the device produced.</param>
-    public void Write(ReadOnlySpan<float> samples) {
-        var write = m_writeIndex; // producer-owned; plain read is safe.
-
-        for (var i = 0; (i < samples.Length); i++) {
-            m_buffer[((int)(write & m_mask))] = samples[i];
-            write++;
-        }
-
-        // Publish the new write position; the consumer reads it with acquire semantics.
-        Volatile.Write(location: ref m_writeIndex, value: write);
-    }
     /// <summary>Reads up to <paramref name="destination"/>.Length interleaved samples, resyncing past any overflow.</summary>
     /// <param name="destination">The consumer's buffer for interleaved samples.</param>
     /// <returns>The number of samples copied and the absolute index of the first copied sample.</returns>
@@ -60,11 +47,17 @@ internal sealed class AudioSampleRing {
             var skipped = (available - m_capacity);
 
             read += skipped;
-            Volatile.Write(location: ref m_dropped, value: (Volatile.Read(location: ref m_dropped) + skipped));
+            Volatile.Write(
+                location: ref m_dropped,
+                value: (Volatile.Read(location: ref m_dropped) + skipped)
+            );
             available = m_capacity;
         }
 
-        var toCopy = ((int)Math.Min(val1: available, val2: ((long)destination.Length)));
+        var toCopy = ((int)Math.Min(
+            val1: available,
+            val2: ((long)destination.Length)
+        ));
         var firstSampleIndex = read;
 
         for (var i = 0; (i < toCopy); i++) {
@@ -72,8 +65,27 @@ internal sealed class AudioSampleRing {
             read++;
         }
 
-        Volatile.Write(location: ref m_readIndex, value: read);
+        Volatile.Write(
+            location: ref m_readIndex,
+            value: read
+        );
 
         return (toCopy, firstSampleIndex);
+    }
+    /// <summary>Writes interleaved samples from a device thread; overwrites the oldest unread on overflow.</summary>
+    /// <param name="samples">The interleaved float samples the device produced.</param>
+    public void Write(ReadOnlySpan<float> samples) {
+        var write = m_writeIndex; // producer-owned; plain read is safe.
+
+        for (var i = 0; (i < samples.Length); i++) {
+            m_buffer[((int)(write & m_mask))] = samples[i];
+            write++;
+        }
+
+        // Publish the new write position; the consumer reads it with acquire semantics.
+        Volatile.Write(
+            location: ref m_writeIndex,
+            value: write
+        );
     }
 }

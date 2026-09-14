@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -44,43 +45,22 @@ namespace Puck.Cli.Citations;
 // or the enumeration boot/build refused, 3 the enumeration is provably incomplete and nothing was reported
 // against it.
 internal static class CitationsCommand {
-    private const string HelpText =
-        """
-        puck citations — check cited verb tokens against vocabularies swept from the code
-
-        Usage: puck citations [options]
-
-        Options:
-          --enumeration <path>  The console verb list, one name per line, as the runtime `help`
-                                enumerates them. Absent, this verb builds Puck.World (Release) and
-                                boots it headless and windowed, piping `help` over stdin to each and
-                                unioning the two vocabularies — there is no default file.
-          -h, --help            This text.
-
-        Scans .claude/skills/**/*.md for `backticked` tokens and src/**/*.cs for <c>…</c> tokens,
-        keeps those shaped like a console verb, and resolves each against: the enumeration, verb
-        names spelled literally in registrations, every other verb-shaped string literal in src/ (a
-        refusal door, a HUD binding token — names the code really knows), and every world-document
-        field path the generated section schemas declare (`storage.userId`).
-
-        Exits 3 without reporting if a literally-registered verb is missing from the enumeration:
-        that proves the enumeration under-reports the live surface, and reporting citations against
-        an incomplete vocabulary produces confident accusations of correct documentation.
-        """;
-
     // The families the console actually uses. A dotted token outside them is some other kind of name and
     // is not this verb's business.
     private static readonly Regex Family = new(
         options: RegexOptions.Compiled,
-        pattern: @"^(world|player|screen|editor|identity|chat|replay|storage|capture|audio|view|speaker|channel|wire)\.");
+        pattern: @"^(world|player|screen|editor|identity|chat|replay|storage|capture|audio|view|speaker|channel|wire)\."
+    );
     // A verb-shaped token: lowercase head, at least one dotted segment. Trailing argument text inside the
     // same span is ignored — `world.row.set views.seatRig` cites `world.row.set`.
     private static readonly Regex MarkdownToken = new(
         options: RegexOptions.Compiled,
-        pattern: @"`([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)[^`]*`");
+        pattern: @"`([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)[^`]*`"
+    );
     private static readonly Regex XmlDocToken = new(
         options: RegexOptions.Compiled,
-        pattern: @"<c>([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)[^<]*</c>");
+        pattern: @"<c>([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)[^<]*</c>"
+    );
     // A verb registration's own name argument — the lower bound the staleness gate rests on.
     //
     // ANCHORED TO LINE START, which is the whole discriminator: a command registration spells `name:` on its
@@ -91,35 +71,108 @@ internal static class CitationsCommand {
     // instrument it exists to replace.
     private static readonly Regex Registration = new(
         options: RegexOptions.Compiled,
-        pattern: @"^\s*name:\s*""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)""");
+        pattern: @"^\s*name:\s*""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)"""
+    );
     // Any verb-shaped string literal in source: a refusal door, a HUD binding token, a session lever, a
     // document member path. Not a console verb, but a name the code genuinely carries — a document citing
     // one is describing a real mechanism, not a dead verb.
     private static readonly Regex SourceLiteral = new(
         options: RegexOptions.Compiled,
-        pattern: @"""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)""");
+        pattern: @"""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)"""
+    );
+    // A `help` listing line, built by CommandRegistry.BuildHelpText as `{name} - {description}` — the name is
+    // group 1.
+    private static readonly Regex HelpLine = new(
+        options: RegexOptions.Compiled,
+        pattern: @"^([a-z][A-Za-z0-9._-]*) - "
+    );
 
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner().Flag(name: "h").Flag(name: "help").Value(name: "enumeration");
-
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"citations: {scanner.Error}");
-            Console.Error.WriteLine(value: HelpText);
-
-            return 2;
+    private static void AddProperties(JsonElement element, string prefix, HashSet<string> names) {
+        if (element.ValueKind != JsonValueKind.Object) {
+            return;
         }
 
-        if (scanner.Has(name: "h") || scanner.Has(name: "help")) {
-            Console.WriteLine(value: HelpText);
+        if (
+            element.TryGetProperty(
+            propertyName: "properties",
+            value: out var properties
+        ) &&
+            (properties.ValueKind == JsonValueKind.Object)
+        ) {
+            foreach (var property in properties.EnumerateObject()) {
+                var path = $"{prefix}.{property.Name}";
 
-            return 0;
+                _ = names.Add(item: path);
+                AddProperties(
+                    element: property.Value,
+                    names: names,
+                    prefix: path
+                );
+            }
         }
 
+        if (element.TryGetProperty(
+            propertyName: "items",
+            value: out var items
+        )) {
+            AddProperties(
+                element: items,
+                names: names,
+                prefix: prefix
+            );
+        }
+    }
+    // One file's citations. A token repeated in a file reports once — the reader fixes the name, not each
+    // occurrence.
+    private static void Collect(string root, string file, Regex pattern, HashSet<string> enumerated, HashSet<string> literals, List<Citation> unresolved) {
+        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var number = 0;
+
+        foreach (var line in File.ReadLines(path: file)) {
+            number++;
+
+            foreach (Match match in pattern.Matches(input: line)) {
+                var token = match.Groups[1].Value;
+
+                if (
+                    !Family.IsMatch(input: token) ||
+                    enumerated.Contains(item: token) ||
+                    literals.Contains(item: token)
+                ) {
+                    continue;
+                }
+
+                if (seen.Add(item: token)) {
+                    unresolved.Add(item: new Citation(
+                        File: CliPaths.ToDisplay(
+                            fullPath: file,
+                            relativeTo: root
+                        ),
+                        Line: number,
+                        Token: token
+                    ));
+                }
+            }
+        }
+    }
+    private static HashSet<string> ReadEnumeration(string path) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var line in File.ReadLines(path: path)) {
+            var name = line.Trim();
+
+            if (name.Length > 0) {
+                _ = names.Add(item: name);
+            }
+        }
+
+        return names;
+    }
+    private static int Run(string? enumerationPath) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root)) {
             return 2;
         }
 
-        var enumerationPath = scanner.Get(name: "enumeration");
         HashSet<string> enumerated;
         string enumerationSource;
 
@@ -133,7 +186,11 @@ internal static class CitationsCommand {
             enumerated = ReadEnumeration(path: enumerationPath);
             enumerationSource = CliPaths.ToDisplay(fullPath: enumerationPath);
         } else {
-            if (!TryEnumerateLive(enumerated: out enumerated, error: out var liveError, root: root)) {
+            if (!TryEnumerateLive(
+                enumerated: out enumerated,
+                error: out var liveError,
+                root: root
+            )) {
                 Console.Error.WriteLine(value: $"citations: {liveError}");
 
                 return 2;
@@ -142,7 +199,16 @@ internal static class CitationsCommand {
             enumerationSource = "the live `help` enumeration (booted headless + windowed)";
         }
 
-        var sourceFiles = FileWalk.Enumerate(verb: "citations", roots: [Path.Combine(path1: root, path2: "src")], include: [], exclude: [], extension: ".cs");
+        var sourceFiles = FileWalk.Enumerate(
+            verb: "citations",
+            roots: [Path.Combine(
+                    path1: root,
+                    path2: "src"
+                )],
+            include: [],
+            exclude: [],
+            extension: ".cs"
+        );
 
         if (sourceFiles is null) {
             return 2;
@@ -158,16 +224,28 @@ internal static class CitationsCommand {
         // file happens to be wrapped is not a gate. Excluding the projects that cannot contain a registration
         // closes the class outright rather than betting on layout.
         var commandRoot = $"{Path.DirectorySeparatorChar}Puck.World{Path.DirectorySeparatorChar}";
-        var commandFiles = sourceFiles.Where(predicate: path => path.Contains(comparisonType: StringComparison.Ordinal, value: commandRoot)).ToArray();
-        var registered = SweepLiterals(files: commandFiles, pattern: Registration);
-        var literals = SweepLiterals(files: sourceFiles, pattern: SourceLiteral);
+        var commandFiles = sourceFiles.Where(predicate: path => path.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: commandRoot
+        )).ToArray();
+        var registered = SweepLiterals(
+            files: commandFiles,
+            pattern: Registration
+        );
+        var literals = SweepLiterals(
+            files: sourceFiles,
+            pattern: SourceLiteral
+        );
 
         literals.UnionWith(other: SweepDocumentFields(root: root));
 
         // THE COMPLETENESS GATE. A literally-registered verb the enumeration lacks proves the enumeration is
         // behind the tree. Refuse rather than report — see this file's header.
         var missing = registered.Where(predicate: name => !enumerated.Contains(item: name))
-            .OrderBy(keySelector: static name => name, comparer: StringComparer.Ordinal)
+            .OrderBy(
+            keySelector: static name => name,
+            comparer: StringComparer.Ordinal
+        )
             .ToArray();
 
         if (missing.Length > 0) {
@@ -185,7 +263,12 @@ internal static class CitationsCommand {
             return 3;
         }
 
-        var unresolved = Scan(enumerated: enumerated, literals: literals, root: root, sourceFiles: sourceFiles);
+        var unresolved = Scan(
+            enumerated: enumerated,
+            literals: literals,
+            root: root,
+            sourceFiles: sourceFiles
+        );
 
         Console.WriteLine(value: $"citations: {enumerated.Count} enumerated verb(s), {registered.Count} registered in source, {literals.Count} verb-shaped literal(s); {unresolved.Count} unresolved citation(s).");
 
@@ -202,119 +285,111 @@ internal static class CitationsCommand {
 
         return 1;
     }
-
     // Every citation whose token resolves in no vocabulary, in file then line order.
     private static List<Citation> Scan(string root, IReadOnlyList<string> sourceFiles, HashSet<string> enumerated, HashSet<string> literals) {
         var unresolved = new List<Citation>();
-        var skills = Path.Combine(path1: root, path2: ".claude", path3: "skills");
+        var skills = Path.Combine(
+            path1: root,
+            path2: ".claude",
+            path3: "skills"
+        );
 
         if (Directory.Exists(path: skills)) {
-            var markdown = Directory.EnumerateFiles(path: skills, searchOption: SearchOption.AllDirectories, searchPattern: "*.md")
-                .OrderBy(keySelector: static path => path, comparer: StringComparer.Ordinal);
+            var markdown = Directory.EnumerateFiles(
+                path: skills,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*.md"
+            )
+                .OrderBy(
+                keySelector: static path => path,
+                comparer: StringComparer.Ordinal
+            );
 
             foreach (var file in markdown) {
-                Collect(enumerated: enumerated, file: file, literals: literals, pattern: MarkdownToken, root: root, unresolved: unresolved);
+                Collect(
+                    enumerated: enumerated,
+                    file: file,
+                    literals: literals,
+                    pattern: MarkdownToken,
+                    root: root,
+                    unresolved: unresolved
+                );
             }
         }
 
         foreach (var file in sourceFiles) {
-            Collect(enumerated: enumerated, file: file, literals: literals, pattern: XmlDocToken, root: root, unresolved: unresolved);
+            Collect(
+                enumerated: enumerated,
+                file: file,
+                literals: literals,
+                pattern: XmlDocToken,
+                root: root,
+                unresolved: unresolved
+            );
         }
 
         return unresolved;
     }
-    // One file's citations. A token repeated in a file reports once — the reader fixes the name, not each
-    // occurrence.
-    private static void Collect(string root, string file, Regex pattern, HashSet<string> enumerated, HashSet<string> literals, List<Citation> unresolved) {
-        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var number = 0;
+    // Every world-document field path the generated section schemas declare, spelled `section.member[.member…]`
+    // — `storage.userId`, `audio.masterGain`. A document field is family-shaped, cited in XML docs and skills
+    // exactly like a verb, and is a name the document really carries; the generated schema (puck schema) is the
+    // one vocabulary that cannot drift from the shape.
+    private static HashSet<string> SweepDocumentFields(string root) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var directory = Path.Combine(paths: [root, "src", "Puck.World", "Assets", "worlds", "schema"]);
 
-        foreach (var line in File.ReadLines(path: file)) {
-            number++;
-
-            foreach (Match match in pattern.Matches(input: line)) {
-                var token = match.Groups[1].Value;
-
-                if (!Family.IsMatch(input: token) || enumerated.Contains(item: token) || literals.Contains(item: token)) {
-                    continue;
-                }
-
-                if (seen.Add(item: token)) {
-                    unresolved.Add(item: new Citation(File: CliPaths.ToDisplay(fullPath: file, relativeTo: root), Line: number, Token: token));
-                }
-            }
+        if (!Directory.Exists(path: directory)) {
+            return names;
         }
-    }
 
-    // A `help` listing line, built by CommandRegistry.BuildHelpText as `{name} - {description}` — the name is
-    // group 1.
-    private static readonly Regex HelpLine = new(
-        options: RegexOptions.Compiled,
-        pattern: @"^([a-z][A-Za-z0-9._-]*) - ");
+        foreach (var file in Directory.EnumerateFiles(
+            path: directory,
+            searchPattern: "*.schema.json"
+        ).OrderBy(
+            keySelector: static path => path,
+            comparer: StringComparer.Ordinal
+        )) {
+            var section = Path.GetFileName(path: file);
 
-    // Builds Puck.World once (Release) and boots it headless then windowed, piping `help` over stdin to each
-    // and unioning the reported verb names. Reuses CliProcess — the same build-then-run shape Canary and
-    // Parity already boot the real executable through — rather than a second process launcher.
-    private static bool TryEnumerateLive(string root, out HashSet<string> enumerated, out string error) {
-        enumerated = new HashSet<string>(comparer: StringComparer.Ordinal);
-        error = string.Empty;
+            section = section[..(section.Length - ".schema.json".Length)];
 
-        var worldProject = Path.Combine(path1: root, path2: "src", path3: "Puck.World", path4: "Puck.World.csproj");
-        var artifact = Path.Combine(paths: [root, "src", "Puck.World", "bin", "Release", "net10.0", "Puck.World.dll"]);
+            using var document = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: file));
 
-        Console.WriteLine(value: "citations: building Puck.World once (Release) to boot its live console vocabulary.");
-
-        CliProcessResult build;
-
-        try {
-            build = CliProcess.RunCaptured(
-                fileName: "dotnet",
-                arguments: ["build", worldProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
-                input: string.Empty,
-                timeout: TimeSpan.FromSeconds(value: 300)
+            AddProperties(
+                element: document.RootElement,
+                names: names,
+                prefix: section
             );
-        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
-            error = $"could not start the Puck.World build: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
         }
 
-        if (build.TimedOut || (build.ExitCode != 0)) {
-            error = (build.TimedOut ? "the Puck.World build timed out." : $"the Puck.World build exited {build.ExitCode}.");
+        return names;
+    }
+    private static HashSet<string> SweepLiterals(IReadOnlyList<string> files, Regex pattern) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-            return false;
-        }
-        if (!File.Exists(path: artifact)) {
-            error = $"the Puck.World build exited 0 but did not produce the exact artifact {artifact}.";
-
-            return false;
-        }
-
-        var runDirectory = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-citations-{Guid.NewGuid():N}");
-
-        Directory.CreateDirectory(path: runDirectory);
-
-        foreach (var headless in ((bool[])[true, false])) {
-            if (!TryBootLeg(artifact: artifact, enumerated: enumerated, error: out error, headless: headless, runDirectory: runDirectory)) {
-                return false;
+        foreach (var file in files) {
+            foreach (var line in File.ReadLines(path: file)) {
+                foreach (Match match in pattern.Matches(input: line)) {
+                    _ = names.Add(item: match.Groups[1].Value);
+                }
             }
         }
 
-        if (enumerated.Count == 0) {
-            error = $"both boots exited 0 but produced no `name - description` help line on stdout; transcripts are at {runDirectory}.";
-
-            return false;
-        }
-
-        return true;
+        return names;
     }
     // One boot leg: `--headless true` or `--headless false`, piping `help` then the runner-owned `wire.errors`
     // terminal observation over stdin, and folding every reported verb name into the shared set.
     private static bool TryBootLeg(string artifact, bool headless, string runDirectory, HashSet<string> enumerated, out string error) {
         error = string.Empty;
 
-        var shape = (headless ? "headless" : "windowed");
-        var stateDirectory = Path.Combine(path1: runDirectory, path2: $"state-{shape}");
+        var shape = (headless
+            ? "headless"
+            : "windowed"
+        );
+        var stateDirectory = Path.Combine(
+            path1: runDirectory,
+            path2: $"state-{shape}"
+        );
         var input = $"help{Environment.NewLine}wire.errors{Environment.NewLine}";
 
         Console.WriteLine(value: $"citations: booting Puck.World {shape} to read its `help` vocabulary.");
@@ -328,7 +403,9 @@ internal static class CitationsCommand {
                     artifact,
                     "--exit-after-seconds", "20",
                     "--state-dir", stateDirectory,
-                    "--headless", (headless ? "true" : "false"),
+                    "--headless", (headless
+                ? "true"
+                : "false"),
                 ],
                 input: input,
                 timeout: TimeSpan.FromSeconds(value: 60)
@@ -339,11 +416,30 @@ internal static class CitationsCommand {
             return false;
         }
 
-        File.WriteAllText(path: Path.Combine(path1: runDirectory, path2: $"{shape}-stdout.log"), contents: process.Stdout, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        File.WriteAllText(path: Path.Combine(path1: runDirectory, path2: $"{shape}-stderr.log"), contents: process.Stderr, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        File.WriteAllText(
+            path: Path.Combine(
+                path1: runDirectory,
+                path2: $"{shape}-stdout.log"
+            ),
+            contents: process.Stdout,
+            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+        );
+        File.WriteAllText(
+            path: Path.Combine(
+                path1: runDirectory,
+                path2: $"{shape}-stderr.log"
+            ),
+            contents: process.Stderr,
+            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+        );
 
-        if (process.TimedOut || (process.ExitCode != 0)) {
-            error = $"the {shape} Puck.World boot {(process.TimedOut ? "timed out" : $"exited {process.ExitCode}")}; transcripts are at {runDirectory}.";
+        if (
+            process.TimedOut ||
+            (process.ExitCode != 0)
+        ) {
+            error = $"the {shape} Puck.World boot {(process.TimedOut
+                ? "timed out"
+                : $"exited {process.ExitCode}")}; transcripts are at {runDirectory}.";
 
             return false;
         }
@@ -367,73 +463,107 @@ internal static class CitationsCommand {
 
         return true;
     }
-    private static HashSet<string> ReadEnumeration(string path) {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+    // Builds Puck.World once (Release) and boots it headless then windowed, piping `help` over stdin to each
+    // and unioning the reported verb names. Reuses CliProcess — the same build-then-run shape Canary and
+    // Parity already boot the real executable through — rather than a second process launcher.
+    private static bool TryEnumerateLive(string root, out HashSet<string> enumerated, out string error) {
+        enumerated = new HashSet<string>(comparer: StringComparer.Ordinal);
+        error = string.Empty;
 
-        foreach (var line in File.ReadLines(path: path)) {
-            var name = line.Trim();
+        var worldProject = Path.Combine(
+            path1: root,
+            path2: "src",
+            path3: "Puck.World",
+            path4: "Puck.World.csproj"
+        );
+        var artifact = Path.Combine(paths: [root, "src", "Puck.World", "bin", "Release", "net10.0", "Puck.World.dll"]);
 
-            if (name.Length > 0) {
-                _ = names.Add(item: name);
+        Console.WriteLine(value: "citations: building Puck.World once (Release) to boot its live console vocabulary.");
+
+        CliProcessResult build;
+
+        try {
+            build = CliProcess.RunCaptured(
+                fileName: "dotnet",
+                arguments: ["build", worldProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
+                input: string.Empty,
+                timeout: TimeSpan.FromSeconds(value: 300)
+            );
+        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
+            error = $"could not start the Puck.World build: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        if (
+            build.TimedOut ||
+            (build.ExitCode != 0)
+        ) {
+            error = (build.TimedOut
+                ? "the Puck.World build timed out."
+                : $"the Puck.World build exited {build.ExitCode}."
+            );
+
+            return false;
+        }
+        if (!File.Exists(path: artifact)) {
+            error = $"the Puck.World build exited 0 but did not produce the exact artifact {artifact}.";
+
+            return false;
+        }
+
+        var runDirectory = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"puck-citations-{Guid.NewGuid():N}"
+        );
+
+        Directory.CreateDirectory(path: runDirectory);
+
+        foreach (var headless in ((bool[])[true, false])) {
+            if (!TryBootLeg(
+                artifact: artifact,
+                enumerated: enumerated,
+                error: out error,
+                headless: headless,
+                runDirectory: runDirectory
+            )) {
+                return false;
             }
         }
 
-        return names;
+        if (enumerated.Count == 0) {
+            error = $"both boots exited 0 but produced no `name - description` help line on stdout; transcripts are at {runDirectory}.";
+
+            return false;
+        }
+
+        return true;
     }
-    private static HashSet<string> SweepLiterals(IReadOnlyList<string> files, Regex pattern) {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        foreach (var file in files) {
-            foreach (var line in File.ReadLines(path: file)) {
-                foreach (Match match in pattern.Matches(input: line)) {
-                    _ = names.Add(item: match.Groups[1].Value);
-                }
-            }
-        }
+    public static Command Create() {
+        var enumerationOption = new Option<string?>(name: "--enumeration") {
+            Description = "The console verb list, one name per line, as the runtime `help` enumerates them. Absent, this verb builds Puck.World (Release) and boots it headless and windowed, piping `help` over stdin to each and unioning the two vocabularies — there is no default file.",
+        };
+        var command = new Command(
+            description: """
+            Check cited verb tokens against vocabularies swept from the code.
 
-        return names;
-    }
-    // Every world-document field path the generated section schemas declare, spelled `section.member[.member…]`
-    // — `storage.userId`, `audio.masterGain`. A document field is family-shaped, cited in XML docs and skills
-    // exactly like a verb, and is a name the document really carries; the generated schema (puck schema) is the
-    // one vocabulary that cannot drift from the shape.
-    private static HashSet<string> SweepDocumentFields(string root) {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var directory = Path.Combine(paths: [root, "src", "Puck.World", "Assets", "worlds", "schema"]);
+            Scans .claude/skills/**/*.md for `backticked` tokens and src/**/*.cs for <c>…</c> tokens,
+            keeps those shaped like a console verb, and resolves each against: the enumeration, verb
+            names spelled literally in registrations, every other verb-shaped string literal in src/ (a
+            refusal door, a HUD binding token — names the code really knows), and every world-document
+            field path the generated section schemas declare (`storage.userId`).
 
-        if (!Directory.Exists(path: directory)) {
-            return names;
-        }
+            Exits 3 without reporting if a literally-registered verb is missing from the enumeration:
+            that proves the enumeration under-reports the live surface, and reporting citations against
+            an incomplete vocabulary produces confident accusations of correct documentation.
+            """,
+            name: "citations"
+        ) { enumerationOption };
 
-        foreach (var file in Directory.EnumerateFiles(path: directory, searchPattern: "*.schema.json").OrderBy(keySelector: static path => path, comparer: StringComparer.Ordinal)) {
-            var section = Path.GetFileName(path: file);
+        command.SetAction(action: parseResult => Run(enumerationPath: parseResult.GetValue(option: enumerationOption)));
 
-            section = section[..(section.Length - ".schema.json".Length)];
-
-            using var document = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: file));
-
-            AddProperties(element: document.RootElement, names: names, prefix: section);
-        }
-
-        return names;
-    }
-    private static void AddProperties(JsonElement element, string prefix, HashSet<string> names) {
-        if (element.ValueKind != JsonValueKind.Object) {
-            return;
-        }
-
-        if (element.TryGetProperty(propertyName: "properties", value: out var properties) && (properties.ValueKind == JsonValueKind.Object)) {
-            foreach (var property in properties.EnumerateObject()) {
-                var path = $"{prefix}.{property.Name}";
-
-                _ = names.Add(item: path);
-                AddProperties(element: property.Value, names: names, prefix: path);
-            }
-        }
-
-        if (element.TryGetProperty(propertyName: "items", value: out var items)) {
-            AddProperties(element: items, names: names, prefix: prefix);
-        }
+        return command;
     }
 
     private readonly record struct Citation(string File, int Line, string Token);

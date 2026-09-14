@@ -21,13 +21,17 @@ public sealed record AudioRowDocument(string Note, int? Duty, int? Envelope) {
 /// <param name="Voice">The hardware voice name (null = <c>"pulse1"</c>).</param>
 /// <param name="Rows">The row sequence.</param>
 public sealed record AudioEffectDocument(string? Voice, IReadOnlyList<AudioRowDocument> Rows) {
-    /// <summary>The pulse-1 voice name.</summary>
-    public const string VoicePulse1 = "pulse1";
     /// <summary>The noise voice name.</summary>
     public const string VoiceNoise = "noise";
+    /// <summary>The pulse-1 voice name.</summary>
+    public const string VoicePulse1 = "pulse1";
+    /// <summary>The pulse-2 voice name. An effect never names it; a cartridge's music part may.</summary>
+    public const string VoicePulse2 = "pulse2";
+    /// <summary>The wave voice name; its cartridge sound also carries the waveform it plays through.</summary>
+    public const string VoiceWave = "wave";
 }
 /// <summary>
-/// The <c>puck.audio.v1</c> document — authored music as DATA: a short song describing the exact ROM sound-table
+/// The <c>puck.tune.v1</c> document — authored music as DATA: a short song describing the exact ROM sound-table
 /// streams the SM83 game framework's sound driver plays (the pulse-2 music loop, plus named pulse-1/noise effect
 /// streams), compiled by <c>Puck.HumbleGamingBrick.Forge</c>'s <c>AudioDocumentCompiler</c>. Document doctrine applies throughout:
 /// every OPTIONAL member is nullable, validated only when present, and normalized through
@@ -35,7 +39,7 @@ public sealed record AudioEffectDocument(string? Voice, IReadOnlyList<AudioRowDo
 /// wall-clock, RNG, or float anywhere in the schema or the compile path: <see cref="Tempo"/> is an integer frame
 /// count, and every row resolves through integer millihertz note-period math.
 /// </summary>
-/// <param name="Schema">The document version tag (<c>puck.audio.v1</c>).</param>
+/// <param name="Schema">The document version tag (<c>puck.tune.v1</c>).</param>
 /// <param name="Name">The song's display name (shown on the jukebox title screen; null = "UNTITLED").</param>
 /// <param name="Tempo">Frames per pattern row (null = 8 — the framework's stock eighth-note rate at 60 fps).</param>
 /// <param name="Patterns">The song's patterns, each a list of rows (null/empty = one silent 16-row pattern).</param>
@@ -50,11 +54,11 @@ public sealed record AudioDocument(
     IReadOnlyDictionary<string, AudioEffectDocument>? Effects
 ) {
     /// <summary>The version tag every saved document carries.</summary>
-    public const string CurrentSchema = "puck.audio.v1";
-    /// <summary>The default tempo (frames per row) when the document omits one.</summary>
-    public const int DefaultTempo = 8;
+    public const string CurrentSchema = "puck.tune.v1";
     /// <summary>The default row count of the fallback silent pattern.</summary>
     public const int DefaultPatternRowCount = 16;
+    /// <summary>The default tempo (frames per row) when the document omits one.</summary>
+    public const int DefaultTempo = 8;
 
     /// <summary>Gets or sets the unknown members preserved across a round-trip — the data-side plugin extensibility
     /// posture. Null when the document carries no unknown members. A settable (not <c>init</c>) accessor is required:
@@ -73,58 +77,63 @@ public static class AudioCanonicalizer {
         "schema", "name", "tempo", "patterns", "order", "effects",
     };
 
-    /// <summary>Validates a document's schema and structural invariants in one pass — every violation is collected
-    /// rather than throwing on the first. An absent or foreign <see cref="AudioDocument.Schema"/> short-circuits to
-    /// that one violation, since no other check has a defined meaning against an unrecognized document shape. Only
-    /// invariants normalization cannot repair without silently discarding meaning (an empty note text, a play-order
-    /// entry naming a pattern that is not there) are failures; clampable values (duty, tempo) are normalization's
-    /// job.</summary>
-    /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
-    /// <returns>Every violation found; empty when the document is a valid <c>puck.audio.v1</c> value.</returns>
-    public static IReadOnlyList<DocumentValidationError> Validate(AudioDocument document) {
-        ArgumentNullException.ThrowIfNull(document);
+    // Rows normalize to a canonical note text (trimmed, upper-invariant) and a clamped duty; an absent/empty row
+    // list becomes the 16-row silent pattern so a blank document is playable without special cases downstream.
+    private static List<AudioRowDocument> NormalizeRows(IReadOnlyList<AudioRowDocument>? rows) {
+        var normalized = new List<AudioRowDocument>(capacity: (rows?.Count ?? AudioDocument.DefaultPatternRowCount));
 
-        if (DocumentCanonicalizer.SchemaViolationMessage(declared: document.Schema, recognized: AudioDocument.CurrentSchema) is { } schemaViolation) {
-            return [new DocumentValidationError(Message: schemaViolation, Path: "schema")];
+        foreach (var row in (rows ?? [])) {
+            normalized.Add(item: row with {
+                Duty = Math.Clamp(
+                value: (row.Duty ?? 2),
+                max: 3,
+                min: 0
+            ),
+                Note = row.Note.Trim().ToUpperInvariant(),
+            });
         }
 
-        var errors = new List<DocumentValidationError>();
-
-        for (var i = 0; (i < (document.Patterns?.Count ?? 0)); i++) {
-            ValidateRows(errors: errors, path: $"patterns[{i}]", rows: document.Patterns![i]);
-        }
-
-        // The play order resolves against the pattern list normalization will materialize: the declared patterns, or
-        // the one fallback silent pattern when none are declared.
-        var effectivePatternCount = Math.Max(val1: (document.Patterns?.Count ?? 0), val2: 1);
-
-        for (var i = 0; (i < (document.Order?.Count ?? 0)); i++) {
-            var index = document.Order![i];
-
-            if ((index < 0) || (index >= effectivePatternCount)) {
-                errors.Add(item: new(Message: $"references pattern {index}, but only {effectivePatternCount} pattern(s) are declared.", Path: $"order[{i}]"));
+        if (normalized.Count == 0) {
+            for (var index = 0; (index < AudioDocument.DefaultPatternRowCount); index++) {
+                normalized.Add(item: new AudioRowDocument(
+                    Duty: 2,
+                    Envelope: null,
+                    Note: AudioRowDocument.Hold
+                ));
             }
         }
 
-        foreach (var (name, effect) in (document.Effects ?? new Dictionary<string, AudioEffectDocument>())) {
-            ValidateRows(errors: errors, path: $"effects.{name}.rows", rows: effect.Rows);
-        }
-
-        DocumentCanonicalizer.ValidateExtensions(
-            addError: (path, message) => errors.Add(item: new(Message: message, Path: path)),
-            extensions: document.Extensions,
-            knownMemberNames: KnownMemberNames
-        );
-
-        return errors;
+        return normalized;
     }
-    /// <summary>Runs <see cref="Validate"/> and throws when it finds anything.</summary>
-    /// <param name="document">The document to validate.</param>
-    /// <param name="source">An optional source label (a file path or save handle) for the exception message.</param>
+    private static void ValidateRows(List<DocumentValidationError> errors, string path, IReadOnlyList<AudioRowDocument>? rows) {
+        for (var i = 0; (i < (rows?.Count ?? 0)); i++) {
+            if (string.IsNullOrWhiteSpace(value: rows![i].Note)) {
+                errors.Add(item: new(
+                    Message: "a row's note may not be empty (use \"---\" to hold/rest).",
+                    Path: $"{path}[{i}].note"
+                ));
+            }
+        }
+    }
+
+    /// <summary>THE full pipeline: validates schema + structural invariants (throwing on either), normalizes the
+    /// self-heal, then serializes to canonical UTF-8 bytes and hashes them through
+    /// <see cref="DocumentCanonicalizer.Canonicalize"/>. Two calls against value-equal input documents always
+    /// produce byte-identical bytes and therefore the same hash — the identity contract an inline-canonical world
+    /// row pins.</summary>
+    /// <param name="document">The document to canonicalize.</param>
+    /// <param name="source">An optional source label (a file path or save handle) for a validation-failure message.</param>
+    /// <returns>The validated, normalized document plus its canonical bytes and hash.</returns>
     /// <exception cref="DocumentValidationException">The document declares an absent/foreign schema, or fails a
     /// structural invariant.</exception>
-    public static void ValidateOrThrow(AudioDocument document, string? source = null) =>
-        DocumentCanonicalizer.ThrowIfInvalid(errors: Validate(document: document), source: source);
+    public static CanonicalDocument<AudioDocument> Canonicalize(AudioDocument document, string? source = null) {
+        ValidateOrThrow(
+            document: document,
+            source: source
+        );
+
+        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
+    }
     /// <summary>Normalizes an already-schema-valid document: clamps/defaults every optional member so a consumer
     /// never sees a null or an out-of-range value it has to reason about (the load-time half of the document
     /// doctrine). Idempotent — <c>Normalize(Normalize(x))</c> equals <c>Normalize(x)</c> — which is what makes a
@@ -149,7 +158,10 @@ public static class AudioCanonicalizer {
 
         var order = new List<int>(capacity: (document.Order?.Count ?? patterns.Count));
 
-        foreach (var index in (document.Order ?? Enumerable.Range(start: 0, count: patterns.Count))) {
+        foreach (var index in (document.Order ?? Enumerable.Range(
+            start: 0,
+            count: patterns.Count
+        ))) {
             order.Add(item: index);
         }
 
@@ -164,62 +176,109 @@ public static class AudioCanonicalizer {
 
             effects[name] = (effect with {
                 Rows = NormalizeRows(rows: effect.Rows),
-                Voice = (string.Equals(a: effect.Voice, b: AudioEffectDocument.VoiceNoise, comparisonType: StringComparison.OrdinalIgnoreCase)
-                    ? AudioEffectDocument.VoiceNoise
-                    : AudioEffectDocument.VoicePulse1),
+                Voice = (string.Equals(
+                a: effect.Voice,
+                b: AudioEffectDocument.VoiceNoise,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )
+                ? AudioEffectDocument.VoiceNoise
+                : AudioEffectDocument.VoicePulse1),
             });
         }
 
         return (document with {
             Effects = effects,
-            Name = (string.IsNullOrWhiteSpace(value: document.Name) ? "UNTITLED" : document.Name.Trim()),
+            Name = (string.IsNullOrWhiteSpace(value: document.Name)
+            ? "UNTITLED"
+            : document.Name.Trim()),
             Order = order,
             Patterns = patterns,
             Schema = AudioDocument.CurrentSchema,
-            Tempo = Math.Max(val1: (document.Tempo ?? AudioDocument.DefaultTempo), val2: 1),
+            Tempo = Math.Max(
+            val1: (document.Tempo ?? AudioDocument.DefaultTempo),
+            val2: 1
+        ),
         });
     }
-    /// <summary>THE full pipeline: validates schema + structural invariants (throwing on either), normalizes the
-    /// self-heal, then serializes to canonical UTF-8 bytes and hashes them through
-    /// <see cref="DocumentCanonicalizer.Canonicalize"/>. Two calls against value-equal input documents always
-    /// produce byte-identical bytes and therefore the same hash — the identity contract an inline-canonical world
-    /// row pins.</summary>
-    /// <param name="document">The document to canonicalize.</param>
-    /// <param name="source">An optional source label (a file path or save handle) for a validation-failure message.</param>
-    /// <returns>The validated, normalized document plus its canonical bytes and hash.</returns>
+    /// <summary>Validates a document's schema and structural invariants in one pass — every violation is collected
+    /// rather than throwing on the first. An absent or foreign <see cref="AudioDocument.Schema"/> short-circuits to
+    /// that one violation, since no other check has a defined meaning against an unrecognized document shape. Only
+    /// invariants normalization cannot repair without silently discarding meaning (an empty note text, a play-order
+    /// entry naming a pattern that is not there) are failures; clampable values (duty, tempo) are normalization's
+    /// job.</summary>
+    /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
+    /// <returns>Every violation found; empty when the document is a valid <c>puck.tune.v1</c> value.</returns>
+    public static IReadOnlyList<DocumentValidationError> Validate(AudioDocument document) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        if (DocumentCanonicalizer.SchemaViolationMessage(
+            declared: document.Schema,
+            recognized: AudioDocument.CurrentSchema
+        ) is { } schemaViolation) {
+            return [new DocumentValidationError(
+                    Message: schemaViolation,
+                    Path: "schema"
+                )];
+        }
+
+        var errors = new List<DocumentValidationError>();
+
+        for (var i = 0; (i < (document.Patterns?.Count ?? 0)); i++) {
+            ValidateRows(
+                errors: errors,
+                path: $"patterns[{i}]",
+                rows: document.Patterns![i]
+            );
+        }
+
+        // The play order resolves against the pattern list normalization will materialize: the declared patterns, or
+        // the one fallback silent pattern when none are declared.
+        var effectivePatternCount = Math.Max(
+            val1: (document.Patterns?.Count ?? 0),
+            val2: 1
+        );
+
+        for (var i = 0; (i < (document.Order?.Count ?? 0)); i++) {
+            var index = document.Order![i];
+
+            if (
+                (index < 0) ||
+                (index >= effectivePatternCount)
+            ) {
+                errors.Add(item: new(
+                    Message: $"references pattern {index}, but only {effectivePatternCount} pattern(s) are declared.",
+                    Path: $"order[{i}]"
+                ));
+            }
+        }
+
+        foreach (var (name, effect) in (document.Effects ?? new Dictionary<string, AudioEffectDocument>())) {
+            ValidateRows(
+                errors: errors,
+                path: $"effects.{name}.rows",
+                rows: effect.Rows
+            );
+        }
+
+        DocumentCanonicalizer.ValidateExtensions(
+            addError: (path, message) => errors.Add(item: new(
+                Message: message,
+                Path: path
+            )),
+            extensions: document.Extensions,
+            knownMemberNames: KnownMemberNames
+        );
+
+        return errors;
+    }
+    /// <summary>Runs <see cref="Validate"/> and throws when it finds anything.</summary>
+    /// <param name="document">The document to validate.</param>
+    /// <param name="source">An optional source label (a file path or save handle) for the exception message.</param>
     /// <exception cref="DocumentValidationException">The document declares an absent/foreign schema, or fails a
     /// structural invariant.</exception>
-    public static CanonicalDocument<AudioDocument> Canonicalize(AudioDocument document, string? source = null) {
-        ValidateOrThrow(document: document, source: source);
-
-        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
-    }
-
-    private static void ValidateRows(List<DocumentValidationError> errors, string path, IReadOnlyList<AudioRowDocument>? rows) {
-        for (var i = 0; (i < (rows?.Count ?? 0)); i++) {
-            if (string.IsNullOrWhiteSpace(value: rows![i].Note)) {
-                errors.Add(item: new(Message: "a row's note may not be empty (use \"---\" to hold/rest).", Path: $"{path}[{i}].note"));
-            }
-        }
-    }
-    // Rows normalize to a canonical note text (trimmed, upper-invariant) and a clamped duty; an absent/empty row
-    // list becomes the 16-row silent pattern so a blank document is playable without special cases downstream.
-    private static List<AudioRowDocument> NormalizeRows(IReadOnlyList<AudioRowDocument>? rows) {
-        var normalized = new List<AudioRowDocument>(capacity: (rows?.Count ?? AudioDocument.DefaultPatternRowCount));
-
-        foreach (var row in (rows ?? [])) {
-            normalized.Add(item: row with {
-                Duty = Math.Clamp(value: (row.Duty ?? 2), max: 3, min: 0),
-                Note = row.Note.Trim().ToUpperInvariant(),
-            });
-        }
-
-        if (normalized.Count == 0) {
-            for (var index = 0; (index < AudioDocument.DefaultPatternRowCount); index++) {
-                normalized.Add(item: new AudioRowDocument(Duty: 2, Envelope: null, Note: AudioRowDocument.Hold));
-            }
-        }
-
-        return normalized;
-    }
+    public static void ValidateOrThrow(AudioDocument document, string? source = null) =>
+        DocumentCanonicalizer.ThrowIfInvalid(
+            errors: Validate(document: document),
+            source: source
+        );
 }

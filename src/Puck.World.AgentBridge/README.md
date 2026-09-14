@@ -1,4 +1,4 @@
-# Puck world agent bridge
+# Puck.World.AgentBridge
 
 This project gives an autonomous participant a small, typed way to perceive and
 act in a Puck world. A **principal** is the identity attached to an action, and
@@ -109,3 +109,7 @@ dotnet src/Puck.Cli/publish/Puck.Cli.dll architecture
 The focused suite checks principal stamping, coordinate translation, live
 channel refresh, typed action construction, honest receipts, bounded mailbox
 dispatch/cancellation/shutdown, and the Harness tool policy.
+
+## Documentation
+
+📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

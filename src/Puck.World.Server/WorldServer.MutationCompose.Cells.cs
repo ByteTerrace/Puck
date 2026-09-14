@@ -9,7 +9,7 @@ public sealed partial class WorldServer {
     // write is what the write sees. `rows` is read directly rather than through a WorldDefinition so a batch's
     // shared workspace list can be handed in live, mid-placement, without wrapping it into a section first. Hands
     // back the written row; the caller places it, whether into a fresh row list or a batch's workspace.
-    private static bool TryComposeCellUpsert(IReadOnlyList<WorldStateRow> rows, WorldMutation.UpsertStateCell mutation, ulong tick, [NotNullWhen(true)] out WorldStateRow? composed, out string reason, out CellName? evictedKey) {
+    private static bool TryComposeCellUpsert(IReadOnlyList<WorldStateRow> rows, WorldMutation.UpsertStateCell mutation, ulong tick, ulong engineTick, [NotNullWhen(true)] out WorldStateRow? composed, out string reason, out CellName? evictedKey) {
         composed = null;
         reason = string.Empty;
         evictedKey = null;
@@ -61,13 +61,19 @@ public sealed partial class WorldServer {
         // is then an ordinary text set of that token.
         var isTextCycle = ((row.Kind == CellKind.Text) && (mutation.CycleTokens is { Count: >= 2 }));
 
-        if (isTextCycle && (mutation.Kind != WorldDocumentWriteKind.Set)) {
+        if (
+            isTextCycle &&
+            (mutation.Kind != WorldDocumentWriteKind.Set)
+        ) {
             reason = $"state row '{mutation.Row}' cell '{mutation.Key}' cycle needs a set write";
 
             return false;
         }
 
-        if (isTextWrite || isTextCycle) {
+        if (
+            isTextWrite ||
+            isTextCycle
+        ) {
             var textToWrite = mutation.Text!;
 
             if (isTextCycle) {
@@ -76,13 +82,19 @@ public sealed partial class WorldServer {
                     rowName: mutation.Row,
                     key: mutation.Key,
                     tick: tick,
+                    // A text row never carries a StateAdvance trait, so this coordinate is unreachable here.
+                    engineTick: engineTick,
                     row: out _,
                     rawValue: out _,
                     text: out var currentText
                 );
                 textToWrite = NextInCycle(
                     tokens: mutation.CycleTokens!,
-                    matches: token => string.Equals(a: token, b: currentText, comparisonType: StringComparison.Ordinal)
+                    matches: token => string.Equals(
+                        a: token,
+                        b: currentText,
+                        comparisonType: StringComparison.Ordinal
+                    )
                 );
             }
 
@@ -94,7 +106,7 @@ public sealed partial class WorldServer {
                 row: row,
                 text: textToWrite
             )) {
-                    reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {composeTextReason}";
+                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {composeTextReason}";
 
                 return false;
             }
@@ -152,7 +164,7 @@ public sealed partial class WorldServer {
                     value: out parsed[index],
                     reason: out var cycleReason
                 )) {
-                            reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {cycleReason}";
+                    reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {cycleReason}";
 
                     return false;
                 }
@@ -163,6 +175,7 @@ public sealed partial class WorldServer {
                 rowName: mutation.Row,
                 key: mutation.Key,
                 tick: tick,
+                engineTick: engineTick,
                 row: out _,
                 rawValue: out var live,
                 text: out _
@@ -182,7 +195,7 @@ public sealed partial class WorldServer {
                 value: out operand,
                 reason: out var tokenReason
             )) {
-                    reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {tokenReason}";
+                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {tokenReason}";
 
                 return false;
             }
@@ -203,6 +216,7 @@ public sealed partial class WorldServer {
             rowName: mutation.Row,
             key: mutation.Key,
             tick: tick,
+            engineTick: engineTick,
             row: out var addendRow,
             rawValue: out var addend,
             text: out _
@@ -213,22 +227,33 @@ public sealed partial class WorldServer {
         // tick's rotation into it (which would double the turn on the next read).
         if (
             (addendRow is not null) &&
-            CellName.TryParse(candidate: mutation.Key, name: out var addendKey, reason: out _) &&
-            (StateRows.FindCell(cells: addendRow.Cells, key: addendKey) is { } phaseCell) &&
-            ((phaseCell.Cycle is not null) || ((phaseCell.Key == WorldStateRow.SlotKey) && (addendRow.Cycle is not null)))
+            CellName.TryParse(
+            candidate: mutation.Key,
+            name: out var addendKey,
+            reason: out _
+        ) &&
+            (StateRows.FindCell(
+            cells: addendRow.Cells,
+            key: addendKey
+        ) is { } phaseCell) &&
+            (EffectiveBehavior.Resolve(
+            cell: phaseCell,
+            row: addendRow
+        ).Cycle is not null)
         ) {
             addend = phaseCell.Value;
         }
 
-        long value;
-
-        try {
-            value = ((mutation.Kind == WorldDocumentWriteKind.Add)
-                ? checked(((addend ?? 0L) + operand))
-                : operand
-            );
-        } catch (OverflowException) {
-            reason = $"state row '{mutation.Row}' cell '{mutation.Key}' overflowed";
+        if (!row.TryAdmitWrite(
+            current: (addend ?? 0L),
+            operand: operand,
+            write: ((mutation.Kind == WorldDocumentWriteKind.Add)
+            ? StateWriteKind.Add
+            : StateWriteKind.Set),
+            stored: out var value,
+            reason: out var admitReason
+        )) {
+            reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {admitReason}";
 
             return false;
         }
@@ -272,6 +297,8 @@ public sealed partial class WorldServer {
                 Advance: existingAdvance,
                 Dynamics: existingDynamics,
                 Cycle: existingCycle,
+                Behavior: (existingCell?.Behavior ?? StateCellBehavior.Inherit),
+                Clock: existingCell?.Clock,
                 Visibility: existingCell?.Visibility,
                 Observation: existingCell?.Observation
             ),

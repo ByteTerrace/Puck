@@ -5,17 +5,9 @@ using Xunit;
 namespace Puck.Platform.Windows.Tests;
 
 public sealed class ProbeKernelCompilationTests {
-    [InlineData("ir-blob")]
-    [InlineData("faerie")]
-    [InlineData("ir-marker")]
-    [SupportedOSPlatform("windows10.0.10240")]
-    [Theory]
-    public void Shipped_kernel_compiles_both_entry_points(string name) {
-        var source = File.ReadAllText(path: KernelPath(name: name));
+    private static string KernelPath(string name) =>
+        RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders/Assets/Probes/{name}.hlsl");
 
-        Win32D3D11ProbeKernel.Compile(entry: "accumulate", source: source);
-        Win32D3D11ProbeKernel.Compile(entry: "finalize", source: source);
-    }
     [Fact]
     [SupportedOSPlatform("windows10.0.10240")]
     public void Broken_source_is_refused_with_the_compiler_message() {
@@ -26,11 +18,28 @@ public sealed class ProbeKernelCompilationTests {
             }
             """;
 
-        var exception = Assert.Throws<COMException>(testCode: () => Win32D3D11ProbeKernel.Compile(entry: "accumulate", source: BrokenSource));
+        var exception = Assert.Throws<COMException>(testCode: () => Win32D3D11ProbeKernel.Compile(
+            entry: "accumulate",
+            source: BrokenSource
+        ));
 
         Assert.False(condition: string.IsNullOrWhiteSpace(value: exception.Message));
     }
+    [InlineData("ir-blob")]
+    [InlineData("faerie")]
+    [InlineData("ir-marker")]
+    [SupportedOSPlatform("windows10.0.10240")]
+    [Theory]
+    public void Shipped_kernel_compiles_both_entry_points(string name) {
+        var source = File.ReadAllText(path: KernelPath(name: name));
 
-    private static string KernelPath(string name) =>
-        RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders/Assets/Probes/{name}.hlsl");
+        Win32D3D11ProbeKernel.Compile(
+            entry: "accumulate",
+            source: source
+        );
+        Win32D3D11ProbeKernel.Compile(
+            entry: "finalize",
+            source: source
+        );
+    }
 }

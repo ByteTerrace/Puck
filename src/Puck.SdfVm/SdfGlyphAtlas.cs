@@ -9,10 +9,10 @@ namespace Puck.SdfVm;
 /// </summary>
 /// <remarks>
 /// The pixels are tightly packed, row-major, top-down RGBA (<c><see cref="Width"/> × <see cref="Height"/> × 4</c>
-/// bytes). The true single-channel signed distance the glyph shape marches must live in the alpha channel: the
-/// managed MTSDF generator computes it exactly, the coverage-conversion fallback
-/// (<c>Puck.Text.SdfCoverageAtlas</c>) replicates its single channel into every channel, and the imported fixed-UI
-/// MTSDF atlas carries it by construction, so a consumer of every source samples alpha uniformly.
+/// bytes). The single-channel signed-distance samples consumed by the glyph shape must live in alpha,
+/// as they do in generated and imported MTSDF atlases. RGB carries corner-reconstruction channels for coverage.
+/// Upload the same pixels and dimensions used by SdfProgramBuilder.Glyph: its packed sampling correction bounds
+/// the reconstructed alpha field's slope. This does not recover the exact source outline from quantized samples.
 /// </remarks>
 /// <param name="Rgba">The tightly packed, row-major, top-down RGBA atlas pixels.</param>
 /// <param name="Width">The atlas width in texels.</param>

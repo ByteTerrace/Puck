@@ -16,13 +16,61 @@ namespace Puck.World.Tests;
 /// query the instant the transfer settles.
 /// </summary>
 public sealed class SeamCrossingOrchestrationLawTests {
+    // HostRowFixture.HostRow hardcodes its origin to the bare row name (fine for the admin-driven EnqueueTransfer
+    // path every other two-row law drives), so this suite builds its own rows over a REAL file path — the exact
+    // shape HostRow.Build uses, with the one field (WorldInstance.SourcePath, read from `origin`, not
+    // `documentOrigin`) that a file-canonicalized origin match needs.
+    private static (WorldInstance Instance, WorldServer Server) BuildFileBackedRow(string name, string path, WorldDefinition definition) {
+        var population = new WorldPopulation(definition: definition);
+        var machines = new WorldMachineHost(
+            screens: definition.Screens,
+            engines: []
+        );
+        var stateDirectory = Directory.CreateTempSubdirectory(prefix: $"puck-seam-crossing-tests-{name}-").FullName;
+        var profiles = new WorldOwnedWorlds(
+            template: definition,
+            directory: stateDirectory,
+            machineId: Guid.NewGuid()
+        );
+        var server = new WorldServer(
+            definition: definition,
+            population: population,
+            profiles: profiles,
+            envelope: new WorldRenderEnvelope(),
+            machines: machines,
+            instanceIdentity: name,
+            narrationSink: new WorldConsoleNarrationSink()
+        );
+        var link = new LoopbackTransport(server: server);
+        var instance = new WorldInstance(
+            name: name,
+            origin: () => path,
+            server: server,
+            ownedMachines: machines,
+            link: link,
+            federation: new WorldFederationIdentity(
+                Authenticator: new InertAuthenticator(),
+                Subject: server.AuthorityIdentity
+            ),
+            documentOrigin: new WorldFileOrigin(resolvedPath: path)
+        );
+
+        return (instance, server);
+    }
+    private static Puck.Maths.FixedQ4816 FixedQ4816(float value) => Puck.Maths.FixedQ4816.FromDouble(value: value);
     // References resolve relative to the authoring document's own file, and adjacency adoption matches a running
     // row by canonical file path (WorldInstanceHost.TryFindRunningInstanceByOrigin, WorldInstance.SourcePath) —
     // a bare in-memory name never canonicalizes, so this pair needs real, individually valid documents on disk even
     // though an adopted row's in-memory server is what actually answers the transfer, never a fresh reload.
     private static void SeamFiles(string rowAPath, WorldDefinition rowA, string rowBPath, WorldDefinition rowB) {
-        File.WriteAllBytes(path: rowAPath, bytes: WorldDefinitionSerialization.Serialize(definition: rowA));
-        File.WriteAllBytes(path: rowBPath, bytes: WorldDefinitionSerialization.Serialize(definition: rowB));
+        File.WriteAllBytes(
+            path: rowAPath,
+            bytes: WorldDefinitionSerialization.Serialize(definition: rowA)
+        );
+        File.WriteAllBytes(
+            path: rowBPath,
+            bytes: WorldDefinitionSerialization.Serialize(definition: rowB)
+        );
     }
     // A minimal vertical-wall pair, mirroring the shipped quilt shards' own east/west seam (WorldFaceFrame.IsYawOnly)
     // without any of the island's own geometry — the ownership threshold this pair carries is the reciprocal contact
@@ -32,51 +80,61 @@ public sealed class SeamCrossingOrchestrationLawTests {
         var document = Fixtures.BuildDocument();
 
         return document with {
-            References = [new WorldReference(Name: SafeName.Parse(candidate: "neighbour"), Document: neighbourFileName)],
+            References = [new WorldReference(
+                Name: SafeName.Parse(candidate: "neighbour"),
+                Document: neighbourFileName
+            )],
             Destinations = [new WorldDestination(
                 Name: SafeName.Parse(candidate: "neighbour"),
                 Reference: SafeName.Parse(candidate: "neighbour"),
                 Scope: WorldDestinationScope.Global,
-                Durability: WorldDestinationDurability.Persisted)],
+                Durability: WorldDestinationDurability.Persisted
+            )],
             Adjacencies = [new WorldAdjacency(
                 Name: SafeName.Parse(candidate: name),
                 Destination: "neighbour",
                 Counterpart: counterpart,
-                Boundary: new WorldAdjacencyBoundary(Center: Vector3.Zero, Height: 8f, OutwardPitchDegrees: 0f, OutwardYawDegrees: outwardYaw, Width: 8f))],
+                Boundary: new WorldAdjacencyBoundary(
+                    Center: Vector3.Zero,
+                    Height: 8f,
+                    OutwardPitchDegrees: 0f,
+                    OutwardYawDegrees: outwardYaw,
+                    Width: 8f
+                )
+            )],
         };
-    }
-    // HostRowFixture.HostRow hardcodes its origin to the bare row name (fine for the admin-driven EnqueueTransfer
-    // path every other two-row law drives), so this suite builds its own rows over a REAL file path — the exact
-    // shape HostRow.Build uses, with the one field (WorldInstance.SourcePath, read from `origin`, not
-    // `documentOrigin`) that a file-canonicalized origin match needs.
-    private static (WorldInstance Instance, WorldServer Server) BuildFileBackedRow(string name, string path, WorldDefinition definition) {
-        var population = new WorldPopulation(definition: definition);
-        var machines = new WorldMachineHost(screens: definition.Screens, engines: []);
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: $"puck-seam-crossing-tests-{name}-").FullName;
-        var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
-        var server = new WorldServer(definition: definition, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines, instanceIdentity: name, narrationSink: new WorldConsoleNarrationSink());
-        var link = new LoopbackTransport(server: server);
-        var instance = new WorldInstance(
-            name: name,
-            origin: () => path,
-            server: server,
-            ownedMachines: machines,
-            link: link,
-            federation: new WorldFederationIdentity(Authenticator: new InertAuthenticator(), Subject: server.AuthorityIdentity),
-            documentOrigin: new WorldFileOrigin(resolvedPath: path));
-
-        return (instance, server);
     }
 
     [Fact]
     public void ScanTriggeredCrossing_MintsWithinAFewTicks_NeverAfterAnArbitraryWait() {
         var directory = Directory.CreateTempSubdirectory(prefix: "puck-seam-crossing-tests-files-").FullName;
-        var rowAPath = Path.Combine(directory, "row-a.world.json");
-        var rowBPath = Path.Combine(directory, "row-b.world.json");
-        var rowADefinition = SeamRow(neighbourFileName: rowBPath, outwardYaw: 90f, name: "east", counterpart: "west");
-        var rowBDefinition = SeamRow(neighbourFileName: rowAPath, outwardYaw: -90f, name: "west", counterpart: "east");
+        var rowAPath = Path.Combine(
+            path1: directory,
+            path2: "row-a.world.json"
+        );
+        var rowBPath = Path.Combine(
+            path1: directory,
+            path2: "row-b.world.json"
+        );
+        var rowADefinition = SeamRow(
+            counterpart: "west",
+            name: "east",
+            neighbourFileName: rowBPath,
+            outwardYaw: 90f
+        );
+        var rowBDefinition = SeamRow(
+            counterpart: "east",
+            name: "west",
+            neighbourFileName: rowAPath,
+            outwardYaw: -90f
+        );
 
-        SeamFiles(rowAPath: rowAPath, rowA: rowADefinition, rowBPath: rowBPath, rowB: rowBDefinition);
+        SeamFiles(
+            rowA: rowADefinition,
+            rowAPath: rowAPath,
+            rowB: rowBDefinition,
+            rowBPath: rowBPath
+        );
 
         var machineId = Guid.NewGuid();
         using var host = new WorldInstanceHost(
@@ -86,9 +144,19 @@ public sealed class SeamCrossingOrchestrationLawTests {
             machineId: machineId,
             resolver: new WorldSessionResolver(),
             seats: WorldEmbodiedSeats.None,
-            stateRoot: Directory.CreateTempSubdirectory(prefix: "puck-seam-crossing-tests-host-").FullName);
-        var (rowAInstance, rowAServer) = BuildFileBackedRow(name: "row-a", path: rowAPath, definition: rowADefinition);
-        var (rowBInstance, rowBServer) = BuildFileBackedRow(name: "row-b", path: rowBPath, definition: rowBDefinition);
+            stateRoot: Directory.CreateTempSubdirectory(prefix: "puck-seam-crossing-tests-host-").FullName
+        );
+
+        var (rowAInstance, rowAServer) = BuildFileBackedRow(
+            definition: rowADefinition,
+            name: "row-a",
+            path: rowAPath
+        );
+        var (rowBInstance, rowBServer) = BuildFileBackedRow(
+            definition: rowBDefinition,
+            name: "row-b",
+            path: rowBPath
+        );
 
         try {
             host.Admit(row: rowAInstance);
@@ -122,7 +190,8 @@ public sealed class SeamCrossingOrchestrationLawTests {
                 x: 1.1f,
                 y: ((float)((double)settled.Y)),
                 yawRadians: 0f,
-                z: ((float)((double)settled.Z)));
+                z: ((float)((double)settled.Z))
+            );
 
             const int Bound = 3;
             var mintedOnTick = -1;
@@ -140,8 +209,12 @@ public sealed class SeamCrossingOrchestrationLawTests {
 
             Assert.True(
                 condition: (mintedOnTick >= 0),
-                userMessage: $"a body 1.1 raw units past a yaw-only seam's ownership threshold never crossed within {Bound} host ticks — the mint is policy-gated, not a pure function of position");
-            Assert.False(condition: rowAServer.Population.IsActive(index: actor.Index), userMessage: "the source seat stayed active after a settled crossing");
+                userMessage: $"a body 1.1 raw units past a yaw-only seam's ownership threshold never crossed within {Bound} host ticks — the mint is policy-gated, not a pure function of position"
+            );
+            Assert.False(
+                condition: rowAServer.Population.IsActive(index: actor.Index),
+                userMessage: "the source seat stayed active after a settled crossing"
+            );
 
             // The destination answers an ordinary query the instant the transfer settles — proving a "verb after the
             // crossing" always has something to read on the server side (the seat's own console drain barrier is a
@@ -149,12 +222,13 @@ public sealed class SeamCrossingOrchestrationLawTests {
             var arrived = rowBServer.Body(index: actor.Index);
 
             Assert.NotNull(@object: arrived);
-            Assert.Equal(expected: FixedQ4816(value: 1.1f), actual: arrived!.FixedPosition.X);
+            Assert.Equal(
+                expected: FixedQ4816(value: 1.1f),
+                actual: arrived!.FixedPosition.X
+            );
         } finally {
             rowAInstance.Dispose();
             rowBInstance.Dispose();
         }
     }
-
-    private static Puck.Maths.FixedQ4816 FixedQ4816(float value) => Puck.Maths.FixedQ4816.FromDouble(value: value);
 }

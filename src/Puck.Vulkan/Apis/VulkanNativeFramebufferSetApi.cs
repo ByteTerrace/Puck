@@ -11,7 +11,14 @@ namespace Puck.Vulkan;
 /// framebuffer, and swapchain-image entry points resolved from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSetApi {
+    private const uint AspectColorBit = 0x00000001;
+    private const uint ComponentSwizzleIdentity = 0;
+    private const uint StructureTypeFramebufferCreateInfo = 37;
+    private const uint StructureTypeImageViewCreateInfo = 15;
+    private const uint TwoDimensionalImageViewType = 1;
+
     private readonly IAllocator m_allocator;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
 
     /// <summary>Initializes a new instance of the <see cref="VulkanNativeFramebufferSetApi"/> class.</summary>
     /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
@@ -22,67 +29,34 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
         m_allocator = allocator;
     }
 
-    private const uint AspectColorBit = 0x00000001;
-    private const uint ComponentSwizzleIdentity = 0;
-    private const uint StructureTypeFramebufferCreateInfo = 37;
-    private const uint StructureTypeImageViewCreateInfo = 15;
-    private const uint TwoDimensionalImageViewType = 1;
-
-    /// <inheritdoc/>
-    public IReadOnlyList<nint> GetSwapchainImages(nint deviceHandle, nint swapchainHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: swapchainHandle,
-            handleDescription: "swapchain",
-            paramName: nameof(swapchainHandle)
-        );
-
-        var getSwapchainImages = GetPointers(deviceHandle: deviceHandle).GetSwapchainImagesKhr;
-
-        var imageCount = 0U;
-        var result = getSwapchainImages(
-            deviceHandle,
-            swapchainHandle,
-            ref imageCount,
-            0
-        );
-
-        result.ThrowIfFailed(operation: "vkGetSwapchainImagesKHR");
-
-        if (0 == imageCount) {
-            return [];
-        }
-
-        var imageBuffer = m_allocator.Alloc(size: (IntPtr.Size * checked((int)imageCount)));
-
-        try {
-            result = getSwapchainImages(
-                deviceHandle,
-                swapchainHandle,
-                ref imageCount,
-                imageBuffer
-            );
-            result.ThrowIfFailed(operation: "vkGetSwapchainImagesKHR");
-
-            var imageHandles = new nint[imageCount];
-
-            for (var index = 0; (index < imageHandles.Length); index++) {
-                imageHandles[index] = Marshal.ReadIntPtr(
-                    ofs: (index * IntPtr.Size),
-                    ptr: imageBuffer
-                );
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                CreateFramebuffer = ((delegate* unmanaged[Cdecl]<nint, in VkFramebufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateFramebuffer"u8
+            )),
+                CreateImageView = ((delegate* unmanaged[Cdecl]<nint, in VkImageViewCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateImageView"u8
+            )),
+                DestroyFramebuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyFramebuffer"u8
+            )),
+                DestroyImageView = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyImageView"u8
+            )),
+                GetSwapchainImagesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkGetSwapchainImagesKHR"u8
+            )),
             }
-
-            return imageHandles;
-        } finally {
-            m_allocator.Free(ptr: imageBuffer);
-        }
+        );
     }
+
     /// <inheritdoc/>
     public VkResult CreateFramebuffer(VulkanFramebufferCreateRequest request, out nint framebufferHandle) {
         VulkanArgument.RequireHandle(
@@ -193,6 +167,61 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
             0
         );
     }
+    /// <inheritdoc/>
+    public IReadOnlyList<nint> GetSwapchainImages(nint deviceHandle, nint swapchainHandle) {
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: swapchainHandle,
+            handleDescription: "swapchain",
+            paramName: nameof(swapchainHandle)
+        );
+
+        var getSwapchainImages = GetPointers(deviceHandle: deviceHandle).GetSwapchainImagesKhr;
+
+        var imageCount = 0U;
+        var result = getSwapchainImages(
+            deviceHandle,
+            swapchainHandle,
+            ref imageCount,
+            0
+        );
+
+        result.ThrowIfFailed(operation: "vkGetSwapchainImagesKHR");
+
+        if (0 == imageCount) {
+            return [];
+        }
+
+        var imageBuffer = m_allocator.Alloc(size: (IntPtr.Size * checked((int)imageCount)));
+
+        try {
+            result = getSwapchainImages(
+                deviceHandle,
+                swapchainHandle,
+                ref imageCount,
+                imageBuffer
+            );
+            result.ThrowIfFailed(operation: "vkGetSwapchainImagesKHR");
+
+            var imageHandles = new nint[imageCount];
+
+            for (var index = 0; (index < imageHandles.Length); index++) {
+                imageHandles[index] = Marshal.ReadIntPtr(
+                    ofs: (index * IntPtr.Size),
+                    ptr: imageBuffer
+                );
+            }
+
+            return imageHandles;
+        } finally {
+            m_allocator.Free(ptr: imageBuffer);
+        }
+    }
 
     private unsafe struct DevicePointers {
         public delegate* unmanaged[Cdecl]<nint, in VkFramebufferCreateInfo, nint, out nint, VkResult> CreateFramebuffer;
@@ -200,20 +229,5 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyFramebuffer;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyImageView;
         public delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult> GetSwapchainImagesKhr;
-    }
-
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateFramebuffer = ((delegate* unmanaged[Cdecl]<nint, in VkFramebufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateFramebuffer"u8)),
-                CreateImageView = ((delegate* unmanaged[Cdecl]<nint, in VkImageViewCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateImageView"u8)),
-                DestroyFramebuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyFramebuffer"u8)),
-                DestroyImageView = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyImageView"u8)),
-                GetSwapchainImagesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetSwapchainImagesKHR"u8)),
-            }
-        );
     }
 }

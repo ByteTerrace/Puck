@@ -35,13 +35,6 @@ public sealed class VulkanRenderer(
     IVulkanCommandBufferRecorder commandBufferRecorder,
     IVulkanPhysicalDeviceApi physicalDeviceApi
 ) : IDisposable, IVulkanDeviceContext, IGpuDeviceContext {
-    // Vulkan validation is a developer diagnostic, opt-in via PUCK_VULKAN_DEBUG (the peer of PUCK_D3D12_DEBUG on the
-    // Direct3D 12 backend). Default OFF: the validation layer and its debug-utils messenger add per-call CPU overhead
-    // and never fire in a normal run. Set PUCK_VULKAN_DEBUG=1 to load the layer and surface validation messages to the
-    // console. The debug-utils EXTENSION (and the command-buffer labels it carries) is enabled independently of this —
-    // see VulkanInstanceFactory — so GPU-capture debug groups survive a validation-off run.
-    private static readonly bool ValidationEnabled = (Environment.GetEnvironmentVariable(variable: "PUCK_VULKAN_DEBUG") is not null);
-
     /// <summary>The presentation frame-ring depth: how many presented frames may be in flight before
     /// <see cref="WaitForFrameSlot"/> blocks. Each slot owns a full <see cref="VulkanFrameSynchronization"/>
     /// (its own image-available semaphore and in-flight fence; the per-image render-finished semaphores ride
@@ -50,316 +43,38 @@ public sealed class VulkanRenderer(
     /// bounds host latency.</summary>
     private const int PresentFrameRingSize = 2;
 
-    // Per RING SLOT (like m_synchronizations): a slot's per-image command buffers are only re-recorded after
-    // WaitForFrameSlot proved that slot's previous present retired — sharing one set across slots let an acquired
-    // image's buffer be re-recorded while its prior blit (the OTHER slot's present) was still executing
-    // (VUID-vkBeginCommandBuffer-commandBuffer-00049, caught by the validation layer under VRR present churn).
-    private readonly VulkanCommandResources?[] m_commandResources = new VulkanCommandResources?[PresentFrameRingSize];
+    // Vulkan validation is a developer diagnostic, opt-in via PUCK_VULKAN_DEBUG (the peer of PUCK_D3D12_DEBUG on the
+    // Direct3D 12 backend). Default OFF: the validation layer and its debug-utils messenger add per-call CPU overhead
+    // and never fire in a normal run. Set PUCK_VULKAN_DEBUG=1 to load the layer and surface validation messages to the
+    // console. The debug-utils EXTENSION (and the command-buffer labels it carries) is enabled independently of this —
+    // see VulkanInstanceFactory — so GPU-capture debug groups survive a validation-off run.
+    private static readonly bool ValidationEnabled = (Environment.GetEnvironmentVariable(variable: "PUCK_VULKAN_DEBUG") is not null);
 
     private long? m_adapterLuid;
     private VulkanLogicalDevice? m_device;
-    private VulkanFramebufferSet? m_framebufferSet;
     private int m_frameSlot;
+    private VulkanFramebufferSet? m_framebufferSet;
     private uint m_height;
     private VulkanInstance? m_instance;
     private bool m_needsRecreate;
     private VkPhysicalDevice m_physicalDevice;
     private VulkanRenderPass? m_renderPass;
+    private ulong m_skippedPresentCount;
     private VulkanSurface? m_surface;
     private VulkanSwapchain? m_swapchain;
-
-    private readonly VulkanFrameSynchronization?[] m_synchronizations = new VulkanFrameSynchronization?[PresentFrameRingSize];
-
     private uint m_width;
-    private ulong m_skippedPresentCount;
+
+    // Per RING SLOT (like m_synchronizations): a slot's per-image command buffers are only re-recorded after
+    // WaitForFrameSlot proved that slot's previous present retired — sharing one set across slots let an acquired
+    // image's buffer be re-recorded while its prior blit (the OTHER slot's present) was still executing
+    // (VUID-vkBeginCommandBuffer-commandBuffer-00049, caught by the validation layer under VRR present churn).
+    private readonly VulkanCommandResources?[] m_commandResources = new VulkanCommandResources?[PresentFrameRingSize];
+    private readonly VulkanFrameSynchronization?[] m_synchronizations = new VulkanFrameSynchronization?[PresentFrameRingSize];
 
     /// <summary>Raised after the swapchain-dependent resources are (re)created — on the first frame and
     /// after every resize. Callers rebuild any pipelines or descriptor sets bound to
     /// <see cref="RenderPass"/>/<see cref="Swapchain"/> here.</summary>
     public event Action? PresentationResourcesRecreated;
-
-    /// <summary>The Vulkan instance, valid after <see cref="Initialize"/>.</summary>
-    public VulkanInstance Instance => (m_instance ?? throw new InvalidOperationException(message: "The renderer must be initialized before its instance is used."));
-    /// <summary>The logical device, valid after <see cref="Initialize"/>.</summary>
-    public VulkanLogicalDevice Device => (m_device ?? throw new InvalidOperationException(message: "The renderer must be initialized before its device is used."));
-    /// <summary>The logical device as the shared device-context view (alias of <see cref="Device"/>).</summary>
-    public VulkanLogicalDevice LogicalDevice => Device;
-    /// <summary>The selected physical device; valid after <see cref="Initialize"/>.</summary>
-    public VkPhysicalDevice PhysicalDevice => m_physicalDevice;
-    /// <summary>The window surface; valid after <see cref="Initialize"/>.</summary>
-    public VulkanSurface Surface => (m_surface ?? throw new InvalidOperationException(message: "The renderer must be initialized before its surface is used."));
-    /// <summary>The current render pass; valid after the first <see cref="BeginFrame"/> and replaced on
-    /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
-    public VulkanRenderPass RenderPass => (m_renderPass ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
-    /// <summary>The current swapchain; valid after the first <see cref="BeginFrame"/> and replaced on
-    /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
-    public VulkanSwapchain Swapchain => (m_swapchain ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
-
-    /// <summary>Boots the Vulkan instance, surface, and device for a native surface binding at the given
-    /// initial size. Presentation resources are created lazily on the first <see cref="BeginFrame"/>.</summary>
-    /// <param name="binding">The native surface binding to present into.</param>
-    /// <param name="width">The initial render-target width in pixels.</param>
-    /// <param name="height">The initial render-target height in pixels.</param>
-    public void Initialize(NativeSurfaceBinding binding, uint width, uint height) {
-        if (!binding.HasSurfacePayload) {
-            throw new InvalidOperationException(message: $"The native surface binding carries no payload for display kind '{binding.DisplayKind}'.");
-        }
-
-        m_height = height;
-        m_width = width;
-
-        // A REACTIVATION (e.g. the backend switch returning to Vulkan): the instance + device deliberately survive
-        // ReleasePresentation — the renderer IS the published device-context capability and the parent of every node
-        // resource — so only the window surface is recreated; the swapchain chain follows lazily on the next
-        // BeginFrame. The same window backs the new surface, so the original present-support selection still holds.
-        if ((m_instance is not null) && (m_device is not null)) {
-            m_surface?.Dispose();
-            m_surface = surfaceFactory.Create(
-                binding: binding,
-                instanceHandle: m_instance.Handle
-            );
-            m_needsRecreate = true;
-
-            return;
-        }
-
-        try {
-            m_instance = instanceFactory.Create(
-                applicationName: options.ApplicationName,
-                displayKind: binding.DisplayKind,
-                enableValidation: ValidationEnabled
-            );
-            m_surface = surfaceFactory.Create(
-                binding: binding,
-                instanceHandle: m_instance.Handle
-            );
-            m_physicalDevice = physicalDeviceSelector.Select(
-                instance: m_instance,
-                surface: m_surface
-            );
-            m_device = logicalDeviceFactory.Create(
-                instance: m_instance,
-                physicalDevice: m_physicalDevice
-            );
-        } catch {
-            m_device?.Dispose();
-            m_device = null;
-            m_surface?.Dispose();
-            m_surface = null;
-            m_instance?.Dispose();
-            m_instance = null;
-            throw;
-        }
-    }
-    /// <summary>Prepares the next frame: (re)creates presentation resources when this is the first frame, the
-    /// target size changed, or the last present reported the swapchain out of date.</summary>
-    /// <param name="width">The current render-target width in pixels.</param>
-    /// <param name="height">The current render-target height in pixels.</param>
-    public void BeginFrame(uint width, uint height) {
-        if (
-            (m_device is null) ||
-            (width == 0) ||
-            (height == 0)
-        ) {
-            return;
-        }
-
-        if (
-            (m_swapchain is null) ||
-            m_needsRecreate ||
-            (width != m_width) ||
-            (height != m_height)
-        ) {
-            m_height = height;
-            m_width = width;
-
-            DisposePresentationResources();
-            EnsurePresentationResources(
-                height: height,
-                width: width
-            );
-            m_needsRecreate = false;
-        }
-    }
-    /// <summary>Records and presents one frame from caller-supplied draw commands and the pipelines they
-    /// reference. A no-op until the first successful <see cref="BeginFrame"/>.</summary>
-    public void Present(
-        IReadOnlyList<VulkanDrawCommand> drawCommands,
-        IReadOnlyDictionary<AssetContentHash, VulkanGraphicsPipeline> graphicsPipelines
-    ) {
-        ArgumentNullException.ThrowIfNull(drawCommands);
-        ArgumentNullException.ThrowIfNull(graphicsPipelines);
-
-        if (
-            (m_device is null) ||
-            (m_swapchain is null)
-        ) {
-            return;
-        }
-
-        var outcome = framePresenter.Present(
-            commandResources: m_commandResources[m_frameSlot]!,
-            frameSynchronization: m_synchronizations[m_frameSlot]!,
-            logicalDevice: m_device,
-            recordAcquiredImage: imageIndex => commandBufferRecorder.RecordImage(
-                commandResources: m_commandResources[m_frameSlot]!,
-                drawCommands: drawCommands,
-                framebufferSet: m_framebufferSet!,
-                graphicsPipelines: graphicsPipelines,
-                imageIndex: ((int)imageIndex),
-                renderPass: m_renderPass!,
-                swapchain: m_swapchain
-            ),
-            swapchain: m_swapchain
-        );
-
-        if (outcome.Result == VulkanFramePresentationResult.Presented) {
-            // The frame's blit submitted and armed this slot's in-flight fence — advance the presentation ring. A
-            // skipped/recreate outcome leaves the slot in place (its fence state is unchanged or the whole chain is
-            // about to be rebuilt), so the ring can never run ahead of what was actually submitted.
-            m_frameSlot = ((m_frameSlot + 1) % PresentFrameRingSize);
-        } else if (outcome.Result == VulkanFramePresentationResult.RecreatePresentationResources) {
-            m_needsRecreate = true;
-        } else if (outcome.Result == VulkanFramePresentationResult.ResetVulkanResources) {
-            // Device/surface lost — surface it as the neutral recoverable signal for the host pump (this outcome was
-            // produced but consumed nowhere before; it is now the device-loss recovery trigger).
-            throw new DeviceLostException(message: "Vulkan present reported a lost device or surface.");
-        } else if (outcome.Result == VulkanFramePresentationResult.Skipped) {
-            // The fence/acquire was not ready this tick — no GPU work submitted. Tallied for the host's [frame-timing]
-            // digest (IPresentationSkipFeedback); not itself an error, so nothing else reacts to it. Under the frame
-            // ring this path is LIVE whenever the swapchain is backpressured (no image acquirable at timeout 0) — the
-            // produced frame's compute still ran; only its blit is dropped.
-            unchecked {
-                m_skippedPresentCount++;
-            }
-        }
-    }
-
-    /// <summary>The running total of <see cref="VulkanFramePresentationResult.Skipped"/> outcomes since this renderer
-    /// was created — the backing read for <see cref="IPresentationSkipFeedback.SkippedPresentCount"/>.</summary>
-    public ulong SkippedPresentCount => m_skippedPresentCount;
-
-    public void WaitForGpuIdle() {
-        if (m_device is null) {
-            return;
-        }
-
-        m_device.WaitIdle();
-    }
-    /// <summary>The frame-ring gate: blocks until the CURRENT presentation slot's in-flight fence signals — the fence
-    /// armed by the present <see cref="PresentFrameRingSize"/> frames ago, whose blit was queued AFTER that whole
-    /// frame's compute submits, so its signal proves that frame's GPU work fully retired. This is the pipelined
-    /// replacement for the per-frame <see cref="WaitForGpuIdle"/> drain (which remains the recovery/teardown path):
-    /// with a ring of 2 the host produces frame N while the GPU still executes frame N−1. A no-op before the first
-    /// frame (fences are created signaled) or when presentation resources are not built.</summary>
-    public void WaitForFrameSlot() {
-        if (
-            (m_device is null) ||
-            (m_synchronizations[m_frameSlot] is not { } synchronization)
-        ) {
-            return;
-        }
-
-        // Unbounded like vkDeviceWaitIdle; a device loss surfaces as the neutral DeviceLostException for recovery.
-        synchronization.WaitForInFlightFence(timeout: ulong.MaxValue).ThrowIfFailed(operation: "vkWaitForFences");
-    }
-    /// <summary>Recreates the lost chain IN PLACE — keeping this renderer's object identity so the published
-    /// device-context capability and every node that resolved it stay valid (they release + rebuild their own resources).
-    /// Recreates the whole boot chain — INSTANCE, surface, physical-device selection, logical device — and (lazily, via
-    /// <see cref="m_needsRecreate"/>) the presentation resources. The instance is deliberately rebuilt, NOT kept: a real
-    /// adapter removal leaves the startup instance enumerating a device that no longer exists, and vkCreateDevice against
-    /// that stale physical device native-crashes in some ICDs. A fresh instance created after the removal enumerates only
-    /// the adapters actually present, so while the GPU is absent NO physical device is selectable and vkCreateDevice is
-    /// never reached — the selection failure is surfaced as a neutral <see cref="DeviceLostException"/> for the host pump
-    /// to wait on and retry (each retry rebuilds a fresh instance). Called on the pump thread during device-loss recovery.</summary>
-    public void RecreateDevice(NativeSurfaceBinding binding, uint width, uint height) {
-        m_height = height;
-        m_width = width;
-
-        // Tear the lost chain down completely — presentation resources, device, surface, AND the instance — so the
-        // rebuild below re-enumerates adapters from scratch (TryWaitIdle inside DisposePresentationResources swallows the
-        // device-lost a drain would raise).
-        DisposePresentationResources();
-        m_device?.Dispose();
-        m_device = null;
-        m_surface?.Dispose();
-        m_surface = null;
-        m_instance?.Dispose();
-        m_instance = null;
-        // The re-enumerated adapter may differ (e.g. a driver reset moved the default), so the cached LUID re-reads.
-        m_adapterLuid = null;
-
-        // Rebuild the instance, surface, physical-device selection, and logical device. While the adapter is still absent
-        // the fresh instance enumerates no suitable physical device, so Select fails BEFORE vkCreateDevice is reached
-        // (avoiding the ICD crash). Surface any failure here as the neutral DeviceLostException so the host pump treats it
-        // as "device not back yet" and waits/retries; tear the partial chain back down so the next retry starts clean.
-        try {
-            m_instance = instanceFactory.Create(
-                applicationName: options.ApplicationName,
-                displayKind: binding.DisplayKind,
-                enableValidation: ValidationEnabled
-            );
-            m_surface = surfaceFactory.Create(
-                binding: binding,
-                instanceHandle: m_instance.Handle
-            );
-            m_physicalDevice = physicalDeviceSelector.Select(
-                instance: m_instance,
-                surface: m_surface
-            );
-            m_device = logicalDeviceFactory.Create(
-                instance: m_instance,
-                physicalDevice: m_physicalDevice
-            );
-        } catch (DeviceLostException) {
-            throw;
-        } catch (Exception exception) {
-            m_device?.Dispose();
-            m_device = null;
-            m_surface?.Dispose();
-            m_surface = null;
-            m_instance?.Dispose();
-            m_instance = null;
-
-            throw new DeviceLostException(message: "The Vulkan device could not be recreated yet (the adapter is unavailable).", innerException: exception);
-        }
-
-        // The swapchain-dependent resources rebuild on the next BeginFrame, which also fires
-        // PresentationResourcesRecreated so the compositor rebuilds its (now device-changed) blit resources.
-        m_needsRecreate = true;
-    }
-    /// <summary>Releases the window-bound presentation stack — the swapchain-dependent resources plus the surface —
-    /// while KEEPING the instance and logical device alive (the deactivation half of <see cref="Initialize"/>'s reuse
-    /// contract). The renderer is the published device-context capability and every node resource is a child of its
-    /// device, so a presenter deactivation (a backend switch away from Vulkan) must not destroy the device under
-    /// them — that is a use-after-free at their eventual release. Full device teardown belongs to <see cref="Dispose"/>
-    /// alone (the renderer is a container-owned singleton, disposed at host shutdown after the node tree).</summary>
-    public void ReleasePresentation() {
-        DisposePresentationResources();
-        m_surface?.Dispose();
-        m_surface = null;
-    }
-
-    // A wait-for-idle that tolerates an already-lost device: vkDeviceWaitIdle returns VK_ERROR_DEVICE_LOST on a lost
-    // device (surfaced as DeviceLostException), which during teardown means "nothing left to drain" — swallow it.
-    private void TryWaitIdle() {
-        if (m_device is null) {
-            return;
-        }
-
-        try {
-            m_device.WaitIdle();
-        } catch (DeviceLostException) {
-            // Device already lost; there is no in-flight work to wait on.
-        }
-    }
-
-    /// <summary>Forwards the closed-loop present-timing sample (from VK_KHR_present_wait) for the host pacer to phase-lock to.</summary>
-    /// <param name="presentCount">When this returns <see langword="true"/>, the monotonic confirmed-present count.</param>
-    /// <param name="presentTimestampTicks">When this returns <see langword="true"/>, the present's timestamp in <see cref="System.Diagnostics.Stopwatch"/> ticks.</param>
-    /// <returns><see langword="true"/> when a usable sample exists; otherwise <see langword="false"/>.</returns>
-    public bool TryGetPresentTiming(out uint presentCount, out long presentTimestampTicks) =>
-        framePresenter.TryGetPresentTiming(presentCount: out presentCount, presentTimestampTicks: out presentTimestampTicks);
 
     // The DXGI-comparable adapter LUID (VkPhysicalDeviceIDProperties) — the identity a Direct3D 12/11 device is
     // created on so shared textures cross the API boundary on this same physical adapter. Zero before initialization
@@ -373,8 +88,46 @@ public sealed class VulkanRenderer(
     );
     nint IGpuDeviceContext.DeviceHandle => LogicalDevice.Handle;
 
+    /// <summary>The logical device, valid after <see cref="Initialize"/>.</summary>
+    public VulkanLogicalDevice Device => (m_device ?? throw new InvalidOperationException(message: "The renderer must be initialized before its device is used."));
+    /// <summary>The Vulkan instance, valid after <see cref="Initialize"/>.</summary>
+    public VulkanInstance Instance => (m_instance ?? throw new InvalidOperationException(message: "The renderer must be initialized before its instance is used."));
+    /// <summary>The logical device as the shared device-context view (alias of <see cref="Device"/>).</summary>
+    public VulkanLogicalDevice LogicalDevice => Device;
+    /// <summary>The selected physical device; valid after <see cref="Initialize"/>.</summary>
+    public VkPhysicalDevice PhysicalDevice => m_physicalDevice;
+    /// <summary>The current render pass; valid after the first <see cref="BeginFrame"/> and replaced on
+    /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
+    public VulkanRenderPass RenderPass => (m_renderPass ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
+    /// <summary>The running total of <see cref="VulkanFramePresentationResult.Skipped"/> outcomes since this renderer
+    /// was created — the backing read for <see cref="IPresentationSkipFeedback.SkippedPresentCount"/>.</summary>
+    public ulong SkippedPresentCount => m_skippedPresentCount;
+    /// <summary>The window surface; valid after <see cref="Initialize"/>.</summary>
+    public VulkanSurface Surface => (m_surface ?? throw new InvalidOperationException(message: "The renderer must be initialized before its surface is used."));
+    /// <summary>The current swapchain; valid after the first <see cref="BeginFrame"/> and replaced on
+    /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
+    public VulkanSwapchain Swapchain => (m_swapchain ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
+
     void IGpuDeviceContext.WaitIdle() => WaitForGpuIdle();
 
+    private void DisposePresentationResources() {
+        TryWaitIdle();
+
+        for (var slot = 0; (slot < PresentFrameRingSize); slot++) {
+            m_synchronizations[slot]?.Dispose();
+            m_synchronizations[slot] = null;
+            m_commandResources[slot]?.Dispose();
+            m_commandResources[slot] = null;
+        }
+
+        m_frameSlot = 0;
+        m_framebufferSet?.Dispose();
+        m_framebufferSet = null;
+        m_renderPass?.Dispose();
+        m_renderPass = null;
+        m_swapchain?.Dispose();
+        m_swapchain = null;
+    }
     private void EnsurePresentationResources(uint width, uint height) {
         var device = m_device!;
         var supportDetails = swapchainSupportApi.Query(
@@ -450,25 +203,50 @@ public sealed class VulkanRenderer(
 
         PresentationResourcesRecreated?.Invoke();
     }
-    private void DisposePresentationResources() {
-        TryWaitIdle();
-
-        for (var slot = 0; (slot < PresentFrameRingSize); slot++) {
-            m_synchronizations[slot]?.Dispose();
-            m_synchronizations[slot] = null;
-            m_commandResources[slot]?.Dispose();
-            m_commandResources[slot] = null;
+    // A wait-for-idle that tolerates an already-lost device: vkDeviceWaitIdle returns VK_ERROR_DEVICE_LOST on a lost
+    // device (surfaced as DeviceLostException), which during teardown means "nothing left to drain" — swallow it.
+    private void TryWaitIdle() {
+        if (m_device is null) {
+            return;
         }
 
-        m_frameSlot = 0;
-        m_framebufferSet?.Dispose();
-        m_framebufferSet = null;
-        m_renderPass?.Dispose();
-        m_renderPass = null;
-        m_swapchain?.Dispose();
-        m_swapchain = null;
+        try {
+            m_device.WaitIdle();
+        } catch (DeviceLostException) {
+            // Device already lost; there is no in-flight work to wait on.
+        }
     }
 
+    /// <summary>Prepares the next frame: (re)creates presentation resources when this is the first frame, the
+    /// target size changed, or the last present reported the swapchain out of date.</summary>
+    /// <param name="width">The current render-target width in pixels.</param>
+    /// <param name="height">The current render-target height in pixels.</param>
+    public void BeginFrame(uint width, uint height) {
+        if (
+            (m_device is null) ||
+            (width == 0) ||
+            (height == 0)
+        ) {
+            return;
+        }
+
+        if (
+            (m_swapchain is null) ||
+            m_needsRecreate ||
+            (width != m_width) ||
+            (height != m_height)
+        ) {
+            m_height = height;
+            m_width = width;
+
+            DisposePresentationResources();
+            EnsurePresentationResources(
+                height: height,
+                width: width
+            );
+            m_needsRecreate = false;
+        }
+    }
     public void Dispose() {
         DisposePresentationResources();
         m_device?.Dispose();
@@ -477,5 +255,229 @@ public sealed class VulkanRenderer(
         m_surface = null;
         m_instance?.Dispose();
         m_instance = null;
+    }
+    /// <summary>Boots the Vulkan instance, surface, and device for a native surface binding at the given
+    /// initial size. Presentation resources are created lazily on the first <see cref="BeginFrame"/>.</summary>
+    /// <param name="binding">The native surface binding to present into.</param>
+    /// <param name="width">The initial render-target width in pixels.</param>
+    /// <param name="height">The initial render-target height in pixels.</param>
+    public void Initialize(NativeSurfaceBinding binding, uint width, uint height) {
+        if (!binding.HasSurfacePayload) {
+            throw new InvalidOperationException(message: $"The native surface binding carries no payload for display kind '{binding.DisplayKind}'.");
+        }
+
+        m_height = height;
+        m_width = width;
+
+        // A REACTIVATION (e.g. the backend switch returning to Vulkan): the instance + device deliberately survive
+        // ReleasePresentation — the renderer IS the published device-context capability and the parent of every node
+        // resource — so only the window surface is recreated; the swapchain chain follows lazily on the next
+        // BeginFrame. The same window backs the new surface, so the original present-support selection still holds.
+        if (
+            (m_instance is not null) &&
+            (m_device is not null)
+        ) {
+            m_surface?.Dispose();
+            m_surface = surfaceFactory.Create(
+                binding: binding,
+                instanceHandle: m_instance.Handle
+            );
+            m_needsRecreate = true;
+
+            return;
+        }
+
+        try {
+            m_instance = instanceFactory.Create(
+                applicationName: options.ApplicationName,
+                displayKind: binding.DisplayKind,
+                enableValidation: ValidationEnabled
+            );
+            m_surface = surfaceFactory.Create(
+                binding: binding,
+                instanceHandle: m_instance.Handle
+            );
+            m_physicalDevice = physicalDeviceSelector.Select(
+                instance: m_instance,
+                surface: m_surface
+            );
+            m_device = logicalDeviceFactory.Create(
+                instance: m_instance,
+                physicalDevice: m_physicalDevice
+            );
+        } catch {
+            m_device?.Dispose();
+            m_device = null;
+            m_surface?.Dispose();
+            m_surface = null;
+            m_instance?.Dispose();
+            m_instance = null;
+            throw;
+        }
+    }
+    /// <summary>Records and presents one frame from caller-supplied draw commands and the pipelines they
+    /// reference. A no-op until the first successful <see cref="BeginFrame"/>.</summary>
+    public void Present(
+        IReadOnlyList<VulkanDrawCommand> drawCommands,
+        IReadOnlyDictionary<AssetContentHash, VulkanGraphicsPipeline> graphicsPipelines
+    ) {
+        ArgumentNullException.ThrowIfNull(drawCommands);
+        ArgumentNullException.ThrowIfNull(graphicsPipelines);
+
+        if (
+            (m_device is null) ||
+            (m_swapchain is null)
+        ) {
+            return;
+        }
+
+        var outcome = framePresenter.Present(
+            commandResources: m_commandResources[m_frameSlot]!,
+            frameSynchronization: m_synchronizations[m_frameSlot]!,
+            logicalDevice: m_device,
+            recordAcquiredImage: imageIndex => commandBufferRecorder.RecordImage(
+                commandResources: m_commandResources[m_frameSlot]!,
+                drawCommands: drawCommands,
+                framebufferSet: m_framebufferSet!,
+                graphicsPipelines: graphicsPipelines,
+                imageIndex: ((int)imageIndex),
+                renderPass: m_renderPass!,
+                swapchain: m_swapchain
+            ),
+            swapchain: m_swapchain
+        );
+
+        if (outcome.Result == VulkanFramePresentationResult.Presented) {
+            // The frame's blit submitted and armed this slot's in-flight fence — advance the presentation ring. A
+            // skipped/recreate outcome leaves the slot in place (its fence state is unchanged or the whole chain is
+            // about to be rebuilt), so the ring can never run ahead of what was actually submitted.
+            m_frameSlot = ((m_frameSlot + 1) % PresentFrameRingSize);
+        } else if (outcome.Result == VulkanFramePresentationResult.RecreatePresentationResources) {
+            m_needsRecreate = true;
+        } else if (outcome.Result == VulkanFramePresentationResult.ResetVulkanResources) {
+            // Device/surface lost — surface it as the neutral recoverable signal for the host pump (this outcome was
+            // produced but consumed nowhere before; it is now the device-loss recovery trigger).
+            throw new DeviceLostException(message: "Vulkan present reported a lost device or surface.");
+        } else if (outcome.Result == VulkanFramePresentationResult.Skipped) {
+            // The fence/acquire was not ready this tick — no GPU work submitted. Tallied for the host's [frame-timing]
+            // digest (IPresentationSkipFeedback); not itself an error, so nothing else reacts to it. Under the frame
+            // ring this path is LIVE whenever the swapchain is backpressured (no image acquirable at timeout 0) — the
+            // produced frame's compute still ran; only its blit is dropped.
+            unchecked {
+                m_skippedPresentCount++;
+            }
+        }
+    }
+    /// <summary>Recreates the lost chain IN PLACE — keeping this renderer's object identity so the published
+    /// device-context capability and every node that resolved it stay valid (they release + rebuild their own resources).
+    /// Recreates the whole boot chain — INSTANCE, surface, physical-device selection, logical device — and (lazily, via
+    /// <see cref="m_needsRecreate"/>) the presentation resources. The instance is deliberately rebuilt, NOT kept: a real
+    /// adapter removal leaves the startup instance enumerating a device that no longer exists, and vkCreateDevice against
+    /// that stale physical device native-crashes in some ICDs. A fresh instance created after the removal enumerates only
+    /// the adapters actually present, so while the GPU is absent NO physical device is selectable and vkCreateDevice is
+    /// never reached — the selection failure is surfaced as a neutral <see cref="DeviceLostException"/> for the host pump
+    /// to wait on and retry (each retry rebuilds a fresh instance). Called on the pump thread during device-loss recovery.</summary>
+    public void RecreateDevice(NativeSurfaceBinding binding, uint width, uint height) {
+        m_height = height;
+        m_width = width;
+
+        // Tear the lost chain down completely — presentation resources, device, surface, AND the instance — so the
+        // rebuild below re-enumerates adapters from scratch (TryWaitIdle inside DisposePresentationResources swallows the
+        // device-lost a drain would raise).
+        DisposePresentationResources();
+        m_device?.Dispose();
+        m_device = null;
+        m_surface?.Dispose();
+        m_surface = null;
+        m_instance?.Dispose();
+        m_instance = null;
+        // The re-enumerated adapter may differ (e.g. a driver reset moved the default), so the cached LUID re-reads.
+        m_adapterLuid = null;
+
+        // Rebuild the instance, surface, physical-device selection, and logical device. While the adapter is still absent
+        // the fresh instance enumerates no suitable physical device, so Select fails BEFORE vkCreateDevice is reached
+        // (avoiding the ICD crash). Surface any failure here as the neutral DeviceLostException so the host pump treats it
+        // as "device not back yet" and waits/retries; tear the partial chain back down so the next retry starts clean.
+        try {
+            m_instance = instanceFactory.Create(
+                applicationName: options.ApplicationName,
+                displayKind: binding.DisplayKind,
+                enableValidation: ValidationEnabled
+            );
+            m_surface = surfaceFactory.Create(
+                binding: binding,
+                instanceHandle: m_instance.Handle
+            );
+            m_physicalDevice = physicalDeviceSelector.Select(
+                instance: m_instance,
+                surface: m_surface
+            );
+            m_device = logicalDeviceFactory.Create(
+                instance: m_instance,
+                physicalDevice: m_physicalDevice
+            );
+        } catch (DeviceLostException) {
+            throw;
+        } catch (Exception exception) {
+            m_device?.Dispose();
+            m_device = null;
+            m_surface?.Dispose();
+            m_surface = null;
+            m_instance?.Dispose();
+            m_instance = null;
+
+            throw new DeviceLostException(
+                message: "The Vulkan device could not be recreated yet (the adapter is unavailable).",
+                innerException: exception
+            );
+        }
+
+        // The swapchain-dependent resources rebuild on the next BeginFrame, which also fires
+        // PresentationResourcesRecreated so the compositor rebuilds its (now device-changed) blit resources.
+        m_needsRecreate = true;
+    }
+    /// <summary>Releases the window-bound presentation stack — the swapchain-dependent resources plus the surface —
+    /// while KEEPING the instance and logical device alive (the deactivation half of <see cref="Initialize"/>'s reuse
+    /// contract). The renderer is the published device-context capability and every node resource is a child of its
+    /// device, so a presenter deactivation (a backend switch away from Vulkan) must not destroy the device under
+    /// them — that is a use-after-free at their eventual release. Full device teardown belongs to <see cref="Dispose"/>
+    /// alone (the renderer is a container-owned singleton, disposed at host shutdown after the node tree).</summary>
+    public void ReleasePresentation() {
+        DisposePresentationResources();
+        m_surface?.Dispose();
+        m_surface = null;
+    }
+    /// <summary>Forwards the closed-loop present-timing sample (from VK_KHR_present_wait) for the host pacer to phase-lock to.</summary>
+    /// <param name="presentCount">When this returns <see langword="true"/>, the monotonic confirmed-present count.</param>
+    /// <param name="presentTimestampTicks">When this returns <see langword="true"/>, the present's timestamp in <see cref="System.Diagnostics.Stopwatch"/> ticks.</param>
+    /// <returns><see langword="true"/> when a usable sample exists; otherwise <see langword="false"/>.</returns>
+    public bool TryGetPresentTiming(out uint presentCount, out long presentTimestampTicks) =>
+        framePresenter.TryGetPresentTiming(
+            presentCount: out presentCount,
+            presentTimestampTicks: out presentTimestampTicks
+        );
+    /// <summary>The frame-ring gate: blocks until the CURRENT presentation slot's in-flight fence signals — the fence
+    /// armed by the present <see cref="PresentFrameRingSize"/> frames ago, whose blit was queued AFTER that whole
+    /// frame's compute submits, so its signal proves that frame's GPU work fully retired. This is the pipelined
+    /// replacement for the per-frame <see cref="WaitForGpuIdle"/> drain (which remains the recovery/teardown path):
+    /// with a ring of 2 the host produces frame N while the GPU still executes frame N−1. A no-op before the first
+    /// frame (fences are created signaled) or when presentation resources are not built.</summary>
+    public void WaitForFrameSlot() {
+        if (
+            (m_device is null) ||
+            (m_synchronizations[m_frameSlot] is not { } synchronization)
+        ) {
+            return;
+        }
+
+        // Unbounded like vkDeviceWaitIdle; a device loss surfaces as the neutral DeviceLostException for recovery.
+        synchronization.WaitForInFlightFence(timeout: ulong.MaxValue).ThrowIfFailed(operation: "vkWaitForFences");
+    }
+    public void WaitForGpuIdle() {
+        if (m_device is null) {
+            return;
+        }
+
+        m_device.WaitIdle();
     }
 }

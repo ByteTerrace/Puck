@@ -8,7 +8,6 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <param name="Counter">The divider counter the cartridge's own assertions establish for the revisions it names.</param>
 /// <param name="Models">The revisions the cartridge asserts that counter for.</param>
 internal readonly record struct BootRomReferenceCartridge(string Path, ushort Counter, ConsoleModel[] Models);
-
 /// <summary>
 /// Tier-A stage: a machine that boots through the forge's authored boot ROM lands on the same observable handoff as a
 /// machine started at the seeded post-boot state. Every revision runs against every header case — the licensee buckets,
@@ -77,14 +76,82 @@ internal sealed class BootRomHandoffStage : IPostStage<PostContext> {
     ];
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "boot-rom-handoff";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
+
+    // Boots one cartridge through the revision's authored image and reads the divider counter it hands off with. A
+    // wedge cannot reach here: the handoff comparison above boots the same pair first and reports it.
+    private static ushort BootedDivider(ConsoleModel model, byte[] image, byte[] rom) {
+        using var instance = MachineFactory.Create(
+            configuration: new MachineConfiguration(
+                bootRom: image,
+                cartridgeRom: rom,
+                model: model
+            ),
+            compose: static services => services.AddHumbleGamingBrickComponents()
+        );
+
+        _ = BootRomHandoff.TryRunToHandoff(
+            instance: instance,
+            instructionCeiling: BootRomHandoff.DefaultInstructionCeiling
+        );
+
+        return instance.GetRequiredService<ITimer>().DivCounter;
+    }
+    private static bool IsBootable(byte[] rom) {
+        if (rom.Length < MinimumRomLength) {
+            return false;
+        }
+
+        if (!rom.AsSpan(
+            length: CartridgeHeader.Logo.Length,
+            start: CartridgeHeader.LogoOffset
+        ).SequenceEqual(other: CartridgeHeader.Logo)) {
+            return false;
+        }
+
+        byte checksum = 0;
+
+        for (var offset = HeaderChecksumStart; (offset <= HeaderChecksumEnd); ++offset) {
+            checksum = ((byte)((checksum - rom[offset]) - 1));
+        }
+
+        return (checksum == rom[HeaderChecksumOffset]);
+    }
+    // The named reference cartridges the corpus actually holds, kept to the ones whose logo and header checksum the
+    // hardware would accept — a boot ROM wedges on anything else, exactly as the hardware does.
+    private static List<(BootRomReferenceCartridge Reference, byte[] Rom)> LoadReferences(PostContext context) {
+        var loaded = new List<(BootRomReferenceCartridge, byte[])>(capacity: References.Length);
+
+        if (string.IsNullOrEmpty(value: context.TestRomRoot)) {
+            return loaded;
+        }
+
+        foreach (var reference in References) {
+            byte[] rom;
+
+            try {
+                rom = File.ReadAllBytes(path: Path.Combine(
+                    path1: context.TestRomRoot,
+                    path2: reference.Path
+                ));
+            } catch (Exception exception) when ((exception is (IOException or UnauthorizedAccessException))) {
+                continue;
+            }
+
+            if (IsBootable(rom: rom)) {
+                loaded.Add(item: (reference, rom));
+            }
+        }
+
+        return loaded;
+    }
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -174,73 +241,5 @@ internal sealed class BootRomHandoffStage : IPostStage<PostContext> {
         }
 
         return PostStageOutcome.Pass(detail: $"{comparisons} boots across {Enum.GetValues<ConsoleModel>().Length} revisions reached the seeded handoff; {loaded.Count} of {References.Length} reference cartridges present; the divider is pinned to their own assertions on {pinned} of {Enum.GetValues<ConsoleModel>().Length} revisions for their one header, and is otherwise compared only against the prediction that seeded it; the picture-pipeline and audio-generator phase is outside the compared surface");
-    }
-
-    // Boots one cartridge through the revision's authored image and reads the divider counter it hands off with. A
-    // wedge cannot reach here: the handoff comparison above boots the same pair first and reports it.
-    private static ushort BootedDivider(ConsoleModel model, byte[] image, byte[] rom) {
-        using var instance = MachineFactory.Create(
-            configuration: new MachineConfiguration(
-                bootRom: image,
-                cartridgeRom: rom,
-                model: model
-            ),
-            compose: static services => services.AddHumbleGamingBrickComponents()
-        );
-
-        _ = BootRomHandoff.TryRunToHandoff(
-            instance: instance,
-            instructionCeiling: BootRomHandoff.DefaultInstructionCeiling
-        );
-
-        return instance.GetRequiredService<ITimer>().DivCounter;
-    }
-    // The named reference cartridges the corpus actually holds, kept to the ones whose logo and header checksum the
-    // hardware would accept — a boot ROM wedges on anything else, exactly as the hardware does.
-    private static List<(BootRomReferenceCartridge Reference, byte[] Rom)> LoadReferences(PostContext context) {
-        var loaded = new List<(BootRomReferenceCartridge, byte[])>(capacity: References.Length);
-
-        if (string.IsNullOrEmpty(value: context.TestRomRoot)) {
-            return loaded;
-        }
-
-        foreach (var reference in References) {
-            byte[] rom;
-
-            try {
-                rom = File.ReadAllBytes(path: Path.Combine(
-                    path1: context.TestRomRoot,
-                    path2: reference.Path
-                ));
-            } catch (Exception exception) when (exception is (IOException or UnauthorizedAccessException)) {
-                continue;
-            }
-
-            if (IsBootable(rom: rom)) {
-                loaded.Add(item: (reference, rom));
-            }
-        }
-
-        return loaded;
-    }
-    private static bool IsBootable(byte[] rom) {
-        if (rom.Length < MinimumRomLength) {
-            return false;
-        }
-
-        if (!rom.AsSpan(
-            length: CartridgeHeader.Logo.Length,
-            start: CartridgeHeader.LogoOffset
-        ).SequenceEqual(other: CartridgeHeader.Logo)) {
-            return false;
-        }
-
-        byte checksum = 0;
-
-        for (var offset = HeaderChecksumStart; (offset <= HeaderChecksumEnd); ++offset) {
-            checksum = ((byte)((checksum - rom[offset]) - 1));
-        }
-
-        return (checksum == rom[HeaderChecksumOffset]);
     }
 }

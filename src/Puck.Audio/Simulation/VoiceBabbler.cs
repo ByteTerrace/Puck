@@ -47,7 +47,10 @@ public static class VoiceBabbler {
     /// <paramref name="syllableCount"/>.</exception>
     public static void ComputeTriggerTicks(int syllableCount, long cadenceTicks, ulong identitySeed, ulong utteranceOrdinal, ulong baseTick, Span<ulong> destination) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: syllableCount);
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value: cadenceTicks, other: 0L);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+            value: cadenceTicks,
+            other: 0L
+        );
 
         if (destination.Length < syllableCount) {
             throw new ArgumentException(
@@ -64,7 +67,10 @@ public static class VoiceBabbler {
             state: utteranceOrdinal,
             stream: identitySeed
         );
-        var jitterCeiling = ((uint)Math.Min(val1: (cadenceTicks / JitterCeilingDivisor), val2: ((long)uint.MaxValue)));
+        var jitterCeiling = ((uint)Math.Min(
+            val1: (cadenceTicks / JitterCeilingDivisor),
+            val2: ((long)uint.MaxValue)
+        ));
 
         for (var i = 0; (i < syllableCount); i++) {
             var jitter = rng.NextUInt32(

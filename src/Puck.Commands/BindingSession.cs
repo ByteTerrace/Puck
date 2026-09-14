@@ -118,9 +118,9 @@ public sealed class BindingSession {
     public BindingSessionStatus Status => (m_abandoned
         ? BindingSessionStatus.Abandoned
         : ((m_stepIndex < m_plan.Steps.Count)
-        ? BindingSessionStatus.InProgress
-        : BindingSessionStatus.Completed)
-    );
+            ? BindingSessionStatus.InProgress
+            : BindingSessionStatus.Completed
+    ));
 
     private BindingSessionEvent Confirm(string source, BindingSessionStep step, int stepIndex) {
         m_captures.Add(item: new BindingSessionCapture(

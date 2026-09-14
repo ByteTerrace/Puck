@@ -41,12 +41,21 @@ public sealed partial class WorldReplayCommandModule {
     private CommandResult Drive(WireArgs args) {
         if (
             ((args.Count != 1) && (args.Count != 3)) ||
-            ((args.Count == 3) && !args.Is(index: 1, value: "to"))
+            ((args.Count == 3) && !args.Is(
+            index: 1,
+            value: "to"
+        ))
         ) {
             return CommandResult.Error(output: "[replay.drive: usage — replay.drive <name> [to <tick>]]");
         }
 
-        if (!TryName(args: in args, index: 0, verb: "replay.drive", name: out var name, refusal: out var nameRefusal)) {
+        if (!TryName(
+            args: in args,
+            index: 0,
+            name: out var name,
+            refusal: out var nameRefusal,
+            verb: "replay.drive"
+        )) {
             return nameRefusal;
         }
 
@@ -54,7 +63,10 @@ public sealed partial class WorldReplayCommandModule {
 
         if (args.Count == 3) {
             if (
-                !args.TryInt(index: 2, value: out var tick) ||
+                !args.TryInt(
+                index: 2,
+                value: out var tick
+            ) ||
                 (tick < 1)
             ) {
                 return CommandResult.Error(output: "[replay.drive: <tick> must be a positive integer — the number of recorded ticks to drive]");
@@ -75,18 +87,33 @@ public sealed partial class WorldReplayCommandModule {
             return CommandResult.Error(output: "[replay.fork: usage — replay.fork <name> <tick> <new>]");
         }
 
-        if (!TryName(args: in args, index: 0, verb: "replay.fork", name: out var name, refusal: out var nameRefusal)) {
+        if (!TryName(
+            args: in args,
+            index: 0,
+            name: out var name,
+            refusal: out var nameRefusal,
+            verb: "replay.fork"
+        )) {
             return nameRefusal;
         }
 
         if (
-            !args.TryInt(index: 1, value: out var tick) ||
+            !args.TryInt(
+            index: 1,
+            value: out var tick
+        ) ||
             (tick < 1)
         ) {
             return CommandResult.Error(output: "[replay.fork: <tick> must be a positive integer — how many of the parent's leading ticks the child copies before recording live]");
         }
 
-        if (!TryName(args: in args, index: 2, verb: "replay.fork", name: out var forkName, refusal: out var forkRefusal)) {
+        if (!TryName(
+            args: in args,
+            index: 2,
+            name: out var forkName,
+            refusal: out var forkRefusal,
+            verb: "replay.fork"
+        )) {
             return forkRefusal;
         }
 

@@ -1,9 +1,8 @@
 namespace Puck.Abstractions.Machines;
 
 /// <summary>
-/// Optional audio-output capability for an <see cref="IScreenMachine"/> whose content produces sound — the neutral
-/// seam a speaker device drains instead of reaching past the contract into a concrete core, mirroring
-/// <see cref="IQueuedScreenMachine"/>'s optional-capability precedent. Strictly output-only and presentation-side by
+/// One optional audio stream exposed through <see cref="IMachineAudioOutputs"/> — the neutral seam a host drains
+/// once and fans out to speaker consumers. Strictly output-only and presentation-side by
 /// design, exactly like the cores' own host-facing audio rings: a machine's simulation state never depends on
 /// whether (or how fast) a consumer drains this, so it carries no snapshot state and costs an unattached machine
 /// nothing. An implementor fixes whether (and at what rate) it synthesizes audio for its whole lifetime — the same

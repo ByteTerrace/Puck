@@ -10,22 +10,27 @@ public sealed partial class WorldBody {
     // cos 60 degrees. A representation tolerance rather than a feel knob — it separates the face the body is on,
     // turning, from a different face entirely, and one step of travel turns a real face by far less than this.
     private static readonly FixedQ4816 HoldTrackAlignment = FixedQ4816.FromDouble(value: 0.5);
-
     private FixedBodyHold[] m_holds = [];
     private int m_holdIndex = -1;
+
     private FixedVector3 m_holdAnchor;
     private FixedVector3 m_holdNormal;
+
     private FixedRateAccumulator m_holdSpendAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+
     // The axis the body is DRAWN standing on, carried across ticks so a pull's lean is reached by turning over the
     // body's own span rather than by snapping — see SteerAttitudeToward. Zero until the first resolve seats it.
     private FixedVector3 m_attitudeUp;
+
     private FixedRateAccumulator m_attitudeTurnAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+
     // Whether this body has ever taken a Surface-bond hold — the only source of a REAL lean (m_attitudeUp diverging
     // from ambient). A body that never does never has one to return from, so SetFreeAttitude seats the drawn axis
     // to ambient outright instead of turning toward a target that is itself moving: a hold list authoring nothing
     // but Free and Medium rows is otherwise a moving target the accumulator's bounded rate chases forever without
     // ever catching, one that never wants a leaned axis to begin with.
     private bool m_attitudeLeaned;
+
     // The world's compiled cos(maxSlopeDegrees) — the same threshold contact resolution grounds on, so a hold and
     // the ground it ends on cannot disagree about which faces are walkable.
     private FixedQ4816 m_walkableThreshold = FixedQ4816.One;
@@ -79,8 +84,7 @@ public sealed partial class WorldBody {
 
             return (((volume.Kind == FixedBodyColliderKind.Capsule)
                 ? ((volume.Center.Y + volume.Endpoint.Y) / FixedQ4816.FromInteger(value: 2L))
-                : volume.Center.Y
-            ) * m_scale);
+                : volume.Center.Y) * m_scale);
         }
     }
     private FixedQ4816 HoldStandoff => ((m_collider is { Volumes.Length: > 0 } collider)
@@ -161,7 +165,10 @@ public sealed partial class WorldBody {
 
         var slot = HoldSpendSlot(hold: in hold);
 
-        return ((slot < 0) || (m_actionStateValues[slot] > FixedQ4816.Zero));
+        return (
+            (slot < 0) ||
+            (m_actionStateValues[slot] > FixedQ4816.Zero)
+        );
     }
     // Drains one step of what the current hold spends. The remainder carries in the hold's own accumulator, so a
     // rate that does not divide the step evenly still drains exactly the authored amount over time.
@@ -246,13 +253,16 @@ public sealed partial class WorldBody {
 
         var normal = driven.Normal.Normalize();
 
-        if (!hold.ConeAdmits(alignment: FixedVector3.Dot(
+        if (
+            !hold.ConeAdmits(alignment: FixedVector3.Dot(
             left: normal,
             right: up
-        )) || (FixedVector3.Dot(
+        )) ||
+            (FixedVector3.Dot(
             left: drive,
             right: -normal
-        ) < hold.DriveAlignment)) {
+        ) < hold.DriveAlignment)
+        ) {
             return false;
         }
 
@@ -283,12 +293,15 @@ public sealed partial class WorldBody {
             return true;
         }
 
-        return (hold.ConeAdmitsAbove && TryTakeHoldAlong(
+        return (
+            hold.ConeAdmitsAbove &&
+            TryTakeHoldAlong(
             candidate: out candidate,
             direction: in up,
             hold: in hold,
             up: in up
-        ));
+        )
+        );
     }
     private bool TryTakeHoldAlong(in FixedBodyHold hold, in FixedVector3 direction, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) {
         candidate = default;
@@ -314,6 +327,7 @@ public sealed partial class WorldBody {
 
         return true;
     }
+
     // The body span every reach-past probe is measured in: the probe sits a mid-height above the feet and the body
     // stands one standoff out from whatever it holds, so this is how far a body has to travel to arrive on a face
     // whose edge it has just cleared.
@@ -382,7 +396,6 @@ public sealed partial class WorldBody {
         left: m_holdNormal,
         right: UnitY
     ) < m_walkableThreshold));
-
     // The ResolveHold operation. What the body is actively driving into outranks what it happens to be resting on,
     // so the drive pass runs first. Otherwise the ordered list decides, first match wins, with the row already held
     // evaluated by whether its own face is still there rather than by a fresh take — so the list order is a
@@ -593,7 +606,7 @@ public sealed partial class WorldBody {
             right: normal
         )));
 
-        return (tangent.TryLength(length: out var length) && (length > FixedQ4816.Zero)
+        return ((tangent.TryLength(length: out var length) && (length > FixedQ4816.Zero))
             ? (tangent / length)
             : FixedVector3.Zero
         );
@@ -725,6 +738,7 @@ public sealed partial class WorldBody {
             from: m_attitudeUp,
             to: target
         );
+
         var (halfSin, halfCos) = FixedQ4816.SinCos(angle: budget);
 
         if (rotation.W >= halfCos) {
@@ -833,11 +847,11 @@ public sealed partial class WorldBody {
     private void SetHoldAttitude(in FixedBodyHold hold, in FixedVector3 leaned, ref BodyMotionScratch scratch) {
         var source = (hold.Forward switch {
             BodyHoldForward.Intent => (TryCommandedDirection(
-                direction: out var commanded,
-                intent: in scratch.Intent
-            )
-                ? commanded
-                : FixedVector3.Zero),
+            direction: out var commanded,
+            intent: in scratch.Intent
+        )
+            ? commanded
+            : FixedVector3.Zero),
             BodyHoldForward.Velocity => m_planarVelocity,
             _ => FixedVector3.Zero,
         });
@@ -848,19 +862,23 @@ public sealed partial class WorldBody {
                 : scratch.Facing
             );
 
-            if (!TryPerpendicular(
+            if (
+                !TryPerpendicular(
                 axis: in leaned,
                 unit: out var aligned,
                 vector: in forward
-            ) && !TryPerpendicular(
+            ) &&
+                !TryPerpendicular(
                 axis: in leaned,
                 unit: out aligned,
                 vector: scratch.Orientation.Rotate(vector: -UnitZ)
-            ) && !TryPerpendicular(
+            ) &&
+                !TryPerpendicular(
                 axis: in leaned,
                 unit: out aligned,
                 vector: in scratch.Right
-            )) {
+            )
+            ) {
                 return;
             }
 
@@ -1105,6 +1123,7 @@ public sealed partial class WorldBody {
         m_verticalVelocityAccumulator.Reset();
         scratch.DirectVerticalVelocity = ((drive * scratch.MoveSpeed) * hold.Thrust);
     }
+
     // The floor on |Dot(gravity-up, field normal)| the displacement divide (surface.Point - position) / alignment
     // below is trusted at: past roughly an 87-degree tilt between the two, the ray a body would have to travel
     // along its own up to reach the field's horizontal plane blows up (division by a near-zero denominator), so the
@@ -1158,9 +1177,9 @@ public sealed partial class WorldBody {
 
         if (error > medium.EquilibriumOffset) {
             drift = FixedQ4816.Clamp(
-                value: idleDrift,
+                maximum: riseSpeed,
                 minimum: -sinkSpeed,
-                maximum: riseSpeed
+                value: idleDrift
             );
         } else {
             var upwardCap = ((idleDrift > FixedQ4816.Zero)
@@ -1197,10 +1216,10 @@ public sealed partial class WorldBody {
             // recompiles the propagator at the NEW rate but the batch already in flight still advances at its OLD
             // width. The follower steps through the mismatched width rather than fault on it.
             StepVerticalFollower(
-                step: in planar,
-                target: target,
+                maximum: riseSpeed,
                 minimum: -sinkSpeed,
-                maximum: riseSpeed
+                step: in planar,
+                target: target
             );
             WriteMediumFacts(
                 displacement: displacement,
@@ -1268,6 +1287,7 @@ public sealed partial class WorldBody {
         m_inMedium = (displacement > FixedQ4816.Zero);
         m_atMediumBand = (m_inMedium && (FixedQ4816.Abs(value: error) <= medium.EquilibriumOffset));
     }
+
     /// <summary>Gets a value indicating whether the current hold owns the body's vertical channel outright, so
     /// contact resolution must not fold its resolved velocity back into it.</summary>
     private bool HoldOwnsVerticalChannel => (TryCurrentHold(hold: out var hold) && (hold.Kind == BodyHoldKind.Pull));
@@ -1307,8 +1327,7 @@ public sealed partial class WorldBody {
 
         m_position -= (m_holdNormal * ((error < reach)
             ? error
-            : reach
-        ));
+            : reach));
     }
     // Whether the body is holding a surface the contact resolve would refuse to stand it on — the published
     // HoldingUnwalkable fact, stated over the world's own walkable threshold rather than any creature's idea of a wall.

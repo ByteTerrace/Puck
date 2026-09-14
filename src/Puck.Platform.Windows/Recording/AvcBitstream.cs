@@ -8,32 +8,36 @@ internal static class AvcBitstream {
     private const int NalCodedSlice = 1;
     private const int NalIdrSlice = 5;
 
-    /// <summary>Reads whether an access unit starts a random access point, from the bitstream rather than from an
-    /// encoder-reported flag: an IDR coded slice is one, a non-IDR coded slice is not.</summary>
-    /// <param name="annexB">The encoder's Annex-B output packet.</param>
-    /// <returns><see langword="true"/> for an IDR access unit, <see langword="false"/> for a non-IDR one, and
-    /// <see langword="null"/> when the unit carries no coded slice — the caller then has nothing to override its
-    /// encoder's own report with.</returns>
-    public static bool? TryReadIsIdr(ReadOnlySpan<byte> annexB) {
-        var sawCodedSlice = false;
-
-        foreach (var (offset, count) in SplitNalUnits(annexB: annexB)) {
-            if (count <= 0) {
-                continue;
-            }
-
-            var nalType = annexB[offset] & 0x1F;
-
-            if (nalType == NalIdrSlice) {
-                return true;
-            }
-
-            sawCodedSlice |= (nalType == NalCodedSlice);
+    /// <summary>Assembles the <c>avcC</c> CodecPrivate from an SPS and PPS NAL unit.</summary>
+    /// <param name="sps">The sequence parameter set NAL (including its 0x67 header byte).</param>
+    /// <param name="pps">The picture parameter set NAL (including its 0x68 header byte).</param>
+    /// <returns>The AVCDecoderConfigurationRecord bytes.</returns>
+    public static byte[] BuildConfigRecord(ReadOnlySpan<byte> sps, ReadOnlySpan<byte> pps) {
+        if (
+            (sps.Length < 4) ||
+            (pps.Length < 1)
+        ) {
+            return [];
         }
 
-        return (sawCodedSlice
-            ? false
-            : null);
+        var record = new List<byte>(capacity: ((sps.Length + pps.Length) + 16)) {
+            1,             // configurationVersion
+            sps[1],        // AVCProfileIndication
+            sps[2],        // profile_compatibility
+            sps[3],        // AVCLevelIndication
+            0xFF,          // 6 reserved bits + lengthSizeMinusOne = 3 (4-byte NAL lengths)
+            0xE1,          // 3 reserved bits + numOfSequenceParameterSets = 1
+            ((byte)((sps.Length >> 8) & 0xFF)),
+            ((byte)(sps.Length & 0xFF)),
+        };
+
+        record.AddRange(collection: sps.ToArray());
+        record.Add(item: 1); // numOfPictureParameterSets
+        record.Add(item: ((byte)((pps.Length >> 8) & 0xFF)));
+        record.Add(item: ((byte)(pps.Length & 0xFF)));
+        record.AddRange(collection: pps.ToArray());
+
+        return record.ToArray();
     }
     /// <summary>Splits an Annex-B access unit into its NAL units (payloads exclude the start code).</summary>
     /// <param name="annexB">The Annex-B byte stream (start codes 0x000001 or 0x00000001).</param>
@@ -45,12 +49,19 @@ internal static class AvcBitstream {
         var start = -1;
 
         while (index < (length - 2)) {
-            if ((annexB[index] == 0) && (annexB[(index + 1)] == 0) && (annexB[(index + 2)] == 1)) {
+            if (
+                (annexB[index] == 0) &&
+                (annexB[(index + 1)] == 0) &&
+                (annexB[(index + 2)] == 1)
+            ) {
                 if (start >= 0) {
                     var end = index;
 
                     // A four-byte start code (00 00 00 01) trailing zero belongs to the next code, not this NAL.
-                    if ((end > start) && (annexB[(end - 1)] == 0)) {
+                    if (
+                        (end > start) &&
+                        (annexB[(end - 1)] == 0)
+                    ) {
                         end--;
                     }
 
@@ -88,12 +99,18 @@ internal static class AvcBitstream {
 
             switch (nalType) {
                 case 7: {
-                        sps = annexB.Slice(length: count, start: offset).ToArray();
+                        sps = annexB.Slice(
+                            length: count,
+                            start: offset
+                        ).ToArray();
 
                         continue;
                     }
                 case 8: {
-                        pps = annexB.Slice(length: count, start: offset).ToArray();
+                        pps = annexB.Slice(
+                            length: count,
+                            start: offset
+                        ).ToArray();
 
                         continue;
                     }
@@ -118,32 +135,32 @@ internal static class AvcBitstream {
 
         return output.ToArray();
     }
-    /// <summary>Assembles the <c>avcC</c> CodecPrivate from an SPS and PPS NAL unit.</summary>
-    /// <param name="sps">The sequence parameter set NAL (including its 0x67 header byte).</param>
-    /// <param name="pps">The picture parameter set NAL (including its 0x68 header byte).</param>
-    /// <returns>The AVCDecoderConfigurationRecord bytes.</returns>
-    public static byte[] BuildConfigRecord(ReadOnlySpan<byte> sps, ReadOnlySpan<byte> pps) {
-        if ((sps.Length < 4) || (pps.Length < 1)) {
-            return [];
+    /// <summary>Reads whether an access unit starts a random access point, from the bitstream rather than from an
+    /// encoder-reported flag: an IDR coded slice is one, a non-IDR coded slice is not.</summary>
+    /// <param name="annexB">The encoder's Annex-B output packet.</param>
+    /// <returns><see langword="true"/> for an IDR access unit, <see langword="false"/> for a non-IDR one, and
+    /// <see langword="null"/> when the unit carries no coded slice — the caller then has nothing to override its
+    /// encoder's own report with.</returns>
+    public static bool? TryReadIsIdr(ReadOnlySpan<byte> annexB) {
+        var sawCodedSlice = false;
+
+        foreach (var (offset, count) in SplitNalUnits(annexB: annexB)) {
+            if (count <= 0) {
+                continue;
+            }
+
+            var nalType = annexB[offset] & 0x1F;
+
+            if (nalType == NalIdrSlice) {
+                return true;
+            }
+
+            sawCodedSlice |= (nalType == NalCodedSlice);
         }
 
-        var record = new List<byte>(capacity: ((sps.Length + pps.Length) + 16)) {
-            1,             // configurationVersion
-            sps[1],        // AVCProfileIndication
-            sps[2],        // profile_compatibility
-            sps[3],        // AVCLevelIndication
-            0xFF,          // 6 reserved bits + lengthSizeMinusOne = 3 (4-byte NAL lengths)
-            0xE1,          // 3 reserved bits + numOfSequenceParameterSets = 1
-            ((byte)((sps.Length >> 8) & 0xFF)),
-            ((byte)(sps.Length & 0xFF)),
-        };
-
-        record.AddRange(collection: sps.ToArray());
-        record.Add(item: 1); // numOfPictureParameterSets
-        record.Add(item: ((byte)((pps.Length >> 8) & 0xFF)));
-        record.Add(item: ((byte)(pps.Length & 0xFF)));
-        record.AddRange(collection: pps.ToArray());
-
-        return record.ToArray();
+        return (sawCodedSlice
+            ? false
+            : null
+        );
     }
 }

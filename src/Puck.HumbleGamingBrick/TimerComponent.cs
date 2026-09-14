@@ -50,7 +50,7 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
         m_interrupts = interrupts;
         m_key1 = key1;
 
-        if (configuration.BootRom is null) {
+        if (!configuration.ExecutesBootRom) {
             m_counter = BootDivPrediction.Compute(
                 header: header,
                 model: configuration.Model
@@ -59,9 +59,72 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
     }
 
     /// <inheritdoc/>
+    public ushort DivCounter =>
+        m_counter;
+    /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
 
+    private void IncrementTima() {
+        if (m_tima == 0xFF) {
+            // Overflow: TIMA reads zero until the reload lands a few T-cycles later (modelled by the countdown).
+            m_tima = 0x00;
+            m_overflowCountdown = OverflowReloadDelay;
+        } else {
+            ++m_tima;
+        }
+    }
+    private void SetCounter(ushort value) {
+        m_counter = value;
+
+        UpdateTimaInput();
+    }
+    // The single edge detector: TIMA advances on the 1→0 transition of the selected counter bit gated by the enable,
+    // both captured in the cached input mask.
+    private void UpdateTimaInput() {
+        var input = ((m_counter & m_timaInputMask) != 0);
+
+        if (
+            m_lastTimaInput &&
+            !input
+        ) {
+            IncrementTima();
+        }
+
+        m_lastTimaInput = input;
+    }
+    // The single counter bit that feeds the falling-edge detector when the timer is enabled, as a mask over the 16-bit
+    // counter; zero when the timer is disabled, so a disabled timer always reads a low input. Folding the enable bit and
+    // the TAC frequency select into one mask keeps the per-dot detector to a single AND. Rebuilt only when TAC changes.
+    private void UpdateTimaInputMask() {
+        var selectedBit = (m_tac & 0x03) switch {
+            0 => 9,
+            1 => 3,
+            2 => 5,
+            _ => 7,
+        };
+
+        m_timaInputMask = (((m_tac & ClockEnableBit) != 0)
+            ? (ushort)(1 << selectedBit)
+            : (ushort)0
+        );
+    }
+
+    /// <inheritdoc/>
+    public void LoadState(StateReader reader) {
+        m_counter = reader.ReadUInt16();
+        m_tima = reader.ReadByte();
+        m_tma = reader.ReadByte();
+        m_tac = reader.ReadByte();
+        m_lastTimaInput = reader.ReadBoolean();
+        m_overflowCountdown = reader.ReadInt32();
+        m_reloadedThisCycle = reader.ReadBoolean();
+        m_stopLatched = reader.ReadBoolean();
+        m_switchBlockLatched = reader.ReadBoolean();
+
+        // The input mask is derived from TAC, not part of the snapshot; rebuild it from the restored TAC.
+        UpdateTimaInputMask();
+    }
     /// <summary>Returns how many further T-cycles this unit can absorb as a plain counter advance: none while stop or
     /// the speed switch holds it, a reload is pending, or the selected bit is about to fall; every cycle up to that
     /// fall otherwise, and unbounded with the timer disabled.</summary>
@@ -83,6 +146,26 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
 
         return ((period - (m_counter & (period - 1))) - 1);
     }
+    /// <inheritdoc/>
+    public byte ReadRegister(ushort address) =>
+        address switch {
+            MemoryMap.Divider => ((byte)(m_counter >> 8)),
+            MemoryMap.TimerCounter => m_tima,
+            MemoryMap.TimerModulo => m_tma,
+            _ => ((byte)(~TacWritableMask | m_tac)),
+        };
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        writer.WriteUInt16(value: m_counter);
+        writer.WriteByte(value: m_tima);
+        writer.WriteByte(value: m_tma);
+        writer.WriteByte(value: m_tac);
+        writer.WriteBoolean(value: m_lastTimaInput);
+        writer.WriteInt32(value: m_overflowCountdown);
+        writer.WriteBoolean(value: m_reloadedThisCycle);
+        writer.WriteBoolean(value: m_stopLatched);
+        writer.WriteBoolean(value: m_switchBlockLatched);
+    }
     /// <summary>Advances the counter by <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed:
     /// no falling edge of the selected bit lies inside them, so TIMA holds and only the detector's input follows.</summary>
     /// <param name="cycles">The T-cycles to absorb.</param>
@@ -91,10 +174,6 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
         m_counter = ((ushort)(m_counter + cycles));
         m_lastTimaInput = ((m_counter & m_timaInputMask) != 0);
     }
-    /// <inheritdoc/>
-    public ushort DivCounter =>
-        m_counter;
-
     /// <inheritdoc/>
     public void Tick() {
         // Stop mode freezes the whole block after resetting DIV once on the way in.
@@ -142,14 +221,6 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
         SetCounter(value: ((ushort)(m_counter + 1)));
     }
     /// <inheritdoc/>
-    public byte ReadRegister(ushort address) =>
-        address switch {
-            MemoryMap.Divider => ((byte)(m_counter >> 8)),
-            MemoryMap.TimerCounter => m_tima,
-            MemoryMap.TimerModulo => m_tma,
-            _ => ((byte)(~TacWritableMask | m_tac)),
-        };
-    /// <inheritdoc/>
     public void WriteRegister(ushort address, byte value) {
         switch (address) {
             case MemoryMap.Divider:
@@ -184,77 +255,6 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
                 UpdateTimaInput();
 
                 break;
-        }
-    }
-    /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteUInt16(value: m_counter);
-        writer.WriteByte(value: m_tima);
-        writer.WriteByte(value: m_tma);
-        writer.WriteByte(value: m_tac);
-        writer.WriteBoolean(value: m_lastTimaInput);
-        writer.WriteInt32(value: m_overflowCountdown);
-        writer.WriteBoolean(value: m_reloadedThisCycle);
-        writer.WriteBoolean(value: m_stopLatched);
-        writer.WriteBoolean(value: m_switchBlockLatched);
-    }
-    /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_counter = reader.ReadUInt16();
-        m_tima = reader.ReadByte();
-        m_tma = reader.ReadByte();
-        m_tac = reader.ReadByte();
-        m_lastTimaInput = reader.ReadBoolean();
-        m_overflowCountdown = reader.ReadInt32();
-        m_reloadedThisCycle = reader.ReadBoolean();
-        m_stopLatched = reader.ReadBoolean();
-        m_switchBlockLatched = reader.ReadBoolean();
-
-        // The input mask is derived from TAC, not part of the snapshot; rebuild it from the restored TAC.
-        UpdateTimaInputMask();
-    }
-
-    // The single counter bit that feeds the falling-edge detector when the timer is enabled, as a mask over the 16-bit
-    // counter; zero when the timer is disabled, so a disabled timer always reads a low input. Folding the enable bit and
-    // the TAC frequency select into one mask keeps the per-dot detector to a single AND. Rebuilt only when TAC changes.
-    private void UpdateTimaInputMask() {
-        var selectedBit = (m_tac & 0x03) switch {
-            0 => 9,
-            1 => 3,
-            2 => 5,
-            _ => 7,
-        };
-
-        m_timaInputMask = (((m_tac & ClockEnableBit) != 0)
-            ? (ushort)(1 << selectedBit)
-            : (ushort)0);
-    }
-    private void SetCounter(ushort value) {
-        m_counter = value;
-
-        UpdateTimaInput();
-    }
-    // The single edge detector: TIMA advances on the 1→0 transition of the selected counter bit gated by the enable,
-    // both captured in the cached input mask.
-    private void UpdateTimaInput() {
-        var input = ((m_counter & m_timaInputMask) != 0);
-
-        if (
-            m_lastTimaInput &&
-            !input
-        ) {
-            IncrementTima();
-        }
-
-        m_lastTimaInput = input;
-    }
-    private void IncrementTima() {
-        if (m_tima == 0xFF) {
-            // Overflow: TIMA reads zero until the reload lands a few T-cycles later (modelled by the countdown).
-            m_tima = 0x00;
-            m_overflowCountdown = OverflowReloadDelay;
-        } else {
-            ++m_tima;
         }
     }
 }

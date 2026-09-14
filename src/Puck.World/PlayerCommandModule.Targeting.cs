@@ -58,7 +58,10 @@ internal sealed partial class PlayerCommandModule {
             principal: context.ActingPrincipal()
         );
 
-        return TargetsResult(index: index, verb: "body.designate");
+        return TargetsResult(
+            index: index,
+            verb: "body.designate"
+        );
     }
     // The at:x,y,z world-point token — three invariant-culture decimals quantized through the same FixedQ4816
     // conversion every authored document value takes.
@@ -116,7 +119,10 @@ internal sealed partial class PlayerCommandModule {
         );
         return ((player is null)
             ? CommandResult.Error(output: error!)
-            : TargetsResult(index: index, verb: "body.targets")
+            : TargetsResult(
+                index: index,
+                verb: "body.targets"
+            )
         );
     }
     private CommandResult TargetsResult(int index, string verb) {
@@ -125,9 +131,15 @@ internal sealed partial class PlayerCommandModule {
         m_link.Query(
             query: new WorldQuery.PlayerTargets(Index: index),
             completion: answer => {
-                const string prefix = "[body.targets:";
-                var text = answer.Text.StartsWith(prefix, StringComparison.Ordinal)
-                    ? $"[{verb}:{answer.Text.AsSpan(prefix.Length)}" : answer.Text;
+                const string Prefix = "[body.targets:";
+                var text = (answer.Text.StartsWith(
+                    comparisonType: StringComparison.Ordinal,
+                    value: Prefix
+                )
+                    ? $"[{verb}:{answer.Text.AsSpan(start: Prefix.Length)}"
+                    : answer.Text
+                );
+
                 result = new CommandResult(Output: text) { IsError = answer.Refused };
             }
         );

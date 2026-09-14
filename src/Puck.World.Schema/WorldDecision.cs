@@ -13,7 +13,6 @@ public enum WorldDecisionMode : byte {
     /// <summary>Positive scores are relative weights; non-positive scores cannot win.</summary>
     Weighted,
 }
-
 /// <summary>A bounded choice policy attached to an ordinary world rule, using its existing bindings and effects.</summary>
 /// <param name="Options">One to 32 uniquely named options, in deterministic tie-break order.</param>
 /// <param name="PeriodSeconds">Positive exact engine-tick duration between reconsiderations. First evaluation is immediate.</param>
@@ -42,7 +41,6 @@ public sealed record WorldDecision(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Interrupt = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionEffect>? OnNoChoice = null
 );
-
 /// <summary>One candidate in a decision; its score is read only when its gate holds.</summary>
 /// <param name="Name">The stable, non-empty option name.</param>
 /// <param name="Score">A numeric expression in the decision's score kind. Arithmetic failure makes this option ineligible for that reconsideration.</param>
@@ -58,7 +56,6 @@ public sealed record WorldDecisionOption(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDecisionNeighbors? Neighbors = null
 );
-
 /// <summary>Bounded physical perception for a parameterized decision option; memory alone does not reveal a body's location.</summary>
 /// <param name="Range">Inclusive spherical radius, in world units, from one Q48.16 unit through 1,000,000.</param>
 /// <param name="CandidateBudget">Maximum inspected points per reconsideration, including self, rejected points, and an incumbent recheck.</param>
@@ -73,20 +70,17 @@ public sealed record WorldDecisionOption(
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldDecisionNeighbors(decimal Range, int CandidateBudget, int MaxCandidates,
     decimal HalfAngleDegrees = 180, bool RequiresLineOfSight = false, bool RetainCurrent = true);
-
 /// <summary>Validated, fixed-point neighbor perception parameters.</summary>
 public sealed record CompiledWorldDecisionNeighbors(WorldDecisionNeighbors Source, FixedQ4816 Range, FixedQ4816 MinimumDot) {
     /// <summary>Gets the power-of-two raw grid width shared by ranges of the same scale. Bounds each query to 27 cells.</summary>
-    public FixedQ4816 CellWidth => FixedQ4816.FromRawBits(checked((long)BitOperations.RoundUpToPowerOf2((ulong)Range.Value)));
+    public FixedQ4816 CellWidth => FixedQ4816.FromRawBits(value: checked((long)BitOperations.RoundUpToPowerOf2(value: ((ulong)Range.Value))));
 }
-
 /// <summary>A compiled decision policy. PolicyIdentity is the canonical source rule and seeds lifecycle reconciliation, not randomness.</summary>
 public sealed record CompiledWorldDecision(
     CompiledWorldDecisionOption[] Options, WorldDecisionMode Mode, CellKind ScoreKind,
     ulong PeriodTicks, ulong CommitmentTicks, long IncumbentBonus, ulong Seed,
     GateToken[]? Interrupt, EffectFact[] OnNoChoice, string PolicyIdentity
 );
-
 /// <summary>A decision option compiled through the ordinary world predicate, expression, and effect compilers.</summary>
 public sealed record CompiledWorldDecisionOption(
     string Name, GateToken[] Gate, CompiledExpressionToken[] Score, EffectFact[] Effects,

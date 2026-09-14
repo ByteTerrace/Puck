@@ -12,46 +12,143 @@ public sealed class StateCellOperand : OperandFact, IStateAddressedOperand {
     /// <param name="stateHandle">The compiled row handle, for a fixed row.</param>
     /// <param name="valueKind">The row's own cell kind.</param>
     /// <param name="rowFrom">The live zone, or <see langword="null"/> for a fixed row.</param>
-    public StateCellOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, CellKind valueKind, LiveZone? rowFrom = null)
+    /// <param name="cellKey">The pre-parsed cell key for a literal key, or default.</param>
+    public StateCellOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, CellKind valueKind, LiveZone? rowFrom = null, CellName cellKey = default)
         : base(valueKind) {
         Row = row;
         Key = key;
         KeyFrom = keyFrom;
         StateHandle = stateHandle;
         RowFrom = rowFrom;
+        CellKey = ((cellKey != default)
+            ? cellKey
+            : ((key is null)
+                ? StateRow.SlotKey
+                : (CellName.TryParse(
+                    candidate: key,
+                    name: out var parsed,
+                    reason: out _
+                )
+                    ? parsed
+                    : default
+        )));
     }
 
+    /// <summary>Gets the pre-parsed literal cell key, the slot key for a null key, or default when the key cannot be parsed.</summary>
+    public CellName CellKey { get; }
     /// <inheritdoc/>
-    public string Row { get; }
+    public override bool HostOnly => ((RowFrom is { HostOnly: true }) || (KeyFrom is { Custom.HostOnly: true }));
     /// <summary>Gets the literal cell key, or <see langword="null"/> when <see cref="KeyFrom"/> applies.</summary>
     public string? Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
-    /// <summary>Gets the compiled row handle, for a fixed row.</summary>
-    public StateHandle StateHandle { get; }
+    /// <inheritdoc/>
+    public string Row { get; }
     /// <summary>Gets the live zone, or <see langword="null"/> for a fixed row.</summary>
     public LiveZone? RowFrom { get; }
+    /// <summary>Gets the compiled row handle, for a fixed row.</summary>
+    public StateHandle StateHandle { get; }
 
-    /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) =>
-        (RuleEvaluation.TryResolveRow(reader: reader, handle: StateHandle, rowFrom: RowFrom, resolved: out var handle)
-            ? RuleEvaluation.ReadStateFact(reader: reader, handle: handle, key: RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom))
-            : RuleFact.Absent(kind: ValueKind));
-    /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => 1L;
     /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) {
         if (RowFrom is { } live) {
             live.CollectReads(into: into);
         } else {
-            into.Add(item: new RuleAccess(Row: Row, Key: ((KeyFrom is null) ? Key : null)));
+            into.Add(item: new RuleAccess(
+                Row: Row,
+                Key: ((KeyFrom is null)
+                ? Key
+                : null)
+            ));
         }
-        RuleAccess.CollectReference(reference: KeyFrom, into: into);
+        RuleAccess.CollectReference(
+            reference: KeyFrom,
+            into: into
+        );
     }
     /// <inheritdoc/>
-    public override bool HostOnly => (RowFrom is { HostOnly: true }) || (KeyFrom is { Custom.HostOnly: true });
-}
+    public override long Cost(RuleCompileContext context) => 1L;
+    /// <inheritdoc/>
+    public override RuleFact Read(IRuleReader reader) {
+        if (!RuleEvaluation.TryResolveRow(
+            reader: reader,
+            handle: StateHandle,
+            rowFrom: RowFrom,
+            resolved: out var handle
+        )) {
+            return RuleFact.Absent(kind: ValueKind);
+        }
 
+        // Fast path for $each on the iterated row: answer by position without key parsing or cell scanning,
+        // guarded by checking that the key at that position still matches the bound key.
+        if (
+            (KeyFrom is { Binding: BoundKey.Each }) &&
+            (handle == reader.BoundEachRowHandle) &&
+            (reader.BoundEachPosition >= 0) &&
+            (reader.BoundEachKey is { } boundEachKey)
+        ) {
+            var store = reader.Store;
+
+            if (
+                StateReader.TryResolveRowHandle(
+                rows: store.Rows,
+                catalog: reader.Catalog,
+                handle: handle,
+                rowOrdinal: out var ordinal,
+                row: out var resolved
+            ) &&
+                store.TryKeyAt(
+                rowOrdinal: ordinal,
+                index: reader.BoundEachPosition,
+                key: out var liveKey
+            ) &&
+                string.Equals(
+                a: liveKey.Value,
+                b: boundEachKey,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                var liveValue = StateReader.LiveAt(
+                    store: store,
+                    rowOrdinal: ordinal,
+                    row: resolved,
+                    index: reader.BoundEachPosition,
+                    tick: reader.Tick,
+                    engineTick: reader.EngineTick
+                );
+
+                return RuleFact.Finite(
+                    value: liveValue,
+                    kind: ValueKind
+                );
+            }
+        }
+
+        if (
+            (KeyFrom is null) &&
+            (CellKey != default)
+        ) {
+            return RuleEvaluation.ReadStateFact(
+                reader: reader,
+                handle: handle,
+                key: CellKey
+            );
+        }
+
+        // Keep the string reader's distinction between an empty key (absent) and a missing cell (zero).
+        var key = RuleEvaluation.ResolveKey(
+            reader: reader,
+            key: Key,
+            keyFrom: KeyFrom
+        );
+
+        return RuleEvaluation.ReadStateFact(
+            handle: handle,
+            key: key,
+            reader: reader
+        );
+    }
+}
 /// <summary>A value the enclosing rule bound for this evaluation (<see cref="RuleFacts.BindPrefix"/>).</summary>
 public sealed class BindingOperand : OperandFact {
     /// <summary>Reads a value the enclosing rule bound for this evaluation.</summary>
@@ -66,29 +163,35 @@ public sealed class BindingOperand : OperandFact {
         Name = name;
         Source = source;
     }
-    /// <summary>Gets the binding's slot in the evaluation's bound-value scratch.</summary>
-    public int Ordinal { get; }
+
+    /// <inheritdoc/>
+    public override bool HostOnly => ((Source is { } source) && RuleDataflow.ExpressionReadsHost(tokens: source.Expression));
     /// <summary>Gets the authored binding name.</summary>
     public string Name { get; }
+    /// <summary>Gets the binding's slot in the evaluation's bound-value scratch.</summary>
+    public int Ordinal { get; }
     /// <summary>Gets the referenced binding's own compiled form, for folding its reads and host/tick dependence into
     /// whatever reads this operand — a read chained through <c>$bind:</c> is only as safe to skip as the whole chain
     /// it rests on.</summary>
     public CompiledRuleBinding? Source { get; }
 
     /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) => RuleFact.Finite(value: reader.BindingValue(ordinal: Ordinal), kind: ValueKind);
-    /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => 1L;
-    /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) {
         if (Source is { } source) {
-            RuleDataflow.CollectExpression(tokens: source.Expression, into: into);
+            RuleDataflow.CollectExpression(
+                tokens: source.Expression,
+                into: into
+            );
         }
     }
     /// <inheritdoc/>
-    public override bool HostOnly => ((Source is { } source) && RuleDataflow.ExpressionReadsHost(tokens: source.Expression));
+    public override long Cost(RuleCompileContext context) => 1L;
+    /// <inheritdoc/>
+    public override RuleFact Read(IRuleReader reader) => RuleFact.Finite(
+        value: reader.BindingValue(ordinal: Ordinal),
+        kind: ValueKind
+    );
 }
-
 /// <summary>A static table entry (<see cref="RuleFacts.TablePrefix"/>). A key the table does not carry reads
 /// as a forever fact: an expression over it refuses and a gate over it never holds.</summary>
 public sealed class TableOperand : OperandFact {
@@ -110,54 +213,80 @@ public sealed class TableOperand : OperandFact {
         Column = column;
         EntryCount = entryCount;
     }
+
     /// <summary>Gets the column index.</summary>
     public int Column { get; }
-    /// <summary>Gets the table's index in the section's <c>tables</c> rows.</summary>
-    public int TableOrdinal { get; }
-    /// <summary>Gets the table's authored name.</summary>
-    public string Table { get; }
+    /// <summary>Gets the table's entry count.</summary>
+    public int EntryCount { get; }
+    /// <inheritdoc/>
+    public override bool HostOnly => (KeyFrom is { Custom.HostOnly: true });
     /// <summary>Gets the literal key.</summary>
     public long Key { get; }
     /// <summary>Gets the live key indirection, or <see langword="null"/> for a literal key.</summary>
     public CompiledCellRef? KeyFrom { get; }
-    /// <summary>Gets the table's entry count.</summary>
-    public int EntryCount { get; }
+    /// <summary>Gets the table's authored name.</summary>
+    public string Table { get; }
+    /// <summary>Gets the table's index in the section's <c>tables</c> rows.</summary>
+    public int TableOrdinal { get; }
 
+    /// <inheritdoc/>
+    public override void CollectReads(List<RuleAccess> into) => RuleAccess.CollectReference(
+        reference: KeyFrom,
+        into: into
+    );
+    /// <inheritdoc/>
+    public override long Cost(RuleCompileContext context) => (2L + System.Numerics.BitOperations.Log2(value: ((uint)Math.Max(
+        val1: EntryCount,
+        val2: 1
+    ))));
     /// <inheritdoc/>
     public override RuleFact Read(IRuleReader reader) {
         var key = Key;
         // A live key that spells no integer (an empty zone's endpoint) names no entry: the absent fact, not a
         // missing-key report, since no key was ever looked up.
-        if ((KeyFrom is { } indirection) && !RuleEvaluation.TryResolveIndex(reader: reader, reference: in indirection, index: out key)) {
+        if (
+            (KeyFrom is { } indirection) &&
+            !RuleEvaluation.TryResolveIndex(
+            index: out key,
+            reader: reader,
+            reference: in indirection
+        )
+        ) {
             return RuleFact.Absent(kind: ValueKind);
         }
-        if (reader.Table(ordinal: TableOrdinal).TryLookup(key: key, column: Column, raw: out var raw)) {
-            return RuleFact.Finite(value: raw, kind: ValueKind);
+        if (reader.Table(ordinal: TableOrdinal).TryLookup(
+            key: key,
+            column: Column,
+            raw: out var raw
+        )) {
+            return RuleFact.Finite(
+                value: raw,
+                kind: ValueKind
+            );
         }
-        reader.ReportTableKeyMissing(table: Table, key: key);
+        reader.ReportTableKeyMissing(
+            table: Table,
+            key: key
+        );
         return RuleFact.Forever(kind: ValueKind);
     }
-    /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => (2L + System.Numerics.BitOperations.Log2((uint)Math.Max(EntryCount, 1)));
-    /// <inheritdoc/>
-    public override void CollectReads(List<RuleAccess> into) => RuleAccess.CollectReference(reference: KeyFrom, into: into);
-    /// <inheritdoc/>
-    public override bool HostOnly => (KeyFrom is { Custom.HostOnly: true });
 }
-
 /// <summary>The completed-tick counter (<see cref="RuleFacts.Tick"/>). Stateless: every read shares
 /// <see cref="Instance"/>.</summary>
 public sealed class TickOperand : OperandFact {
     /// <summary>The shared instance.</summary>
     public static readonly TickOperand Instance = new();
+
     private TickOperand() : base(CellKind.Int) { }
 
     /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) => RuleFact.Finite(value: unchecked((long)reader.Tick), kind: CellKind.Int);
-    /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => 1L;
+    /// <inheritdoc/>
+    public override RuleFact Read(IRuleReader reader) => RuleFact.Finite(
+        value: unchecked((long)reader.Tick),
+        kind: CellKind.Int
+    );
 }
-
 /// <summary>A numeric aggregate over a row's cells (<see cref="RuleFacts.ReducePrefix"/>). Count is always integer
 /// regardless of the row's declared kind; Max/Min/Sum preserve the row's kind. An empty row reads as zero for every
 /// op.</summary>
@@ -181,53 +310,128 @@ public sealed class ReductionOperand : OperandFact {
         RowFrom = rowFrom;
     }
 
-    /// <summary>Gets the aggregated row, or the live zone's spelling.</summary>
-    public string Row { get; }
-    /// <summary>Gets the compiled row handle, for a fixed row.</summary>
-    public StateHandle StateHandle { get; }
-    /// <summary>Gets the live zone aggregated, or <see langword="null"/> for a fixed row.</summary>
-    public LiveZone? RowFrom { get; }
-    /// <summary>Gets the aggregate.</summary>
-    public StateReduceOp Reduce { get; }
-    /// <summary>Gets the optional keyed row whose nonzero cells admit candidates.</summary>
-    public string? FilterRow { get; }
     /// <summary>Gets the compiled handle for <see cref="FilterRow"/>.</summary>
     public StateHandle FilterHandle { get; }
+    /// <summary>Gets the optional keyed row whose nonzero cells admit candidates.</summary>
+    public string? FilterRow { get; }
+    /// <inheritdoc/>
+    public override bool HostOnly => (RowFrom is { HostOnly: true });
     /// <summary>Gets the optional inclusive bounds applied to each candidate's live raw value.</summary>
     public (long Lower, long Upper)? Range { get; }
+    /// <summary>Gets the aggregate.</summary>
+    public StateReduceOp Reduce { get; }
+    /// <summary>Gets the aggregated row, or the live zone's spelling.</summary>
+    public string Row { get; }
+    /// <summary>Gets the live zone aggregated, or <see langword="null"/> for a fixed row.</summary>
+    public LiveZone? RowFrom { get; }
+    /// <summary>Gets the compiled row handle, for a fixed row.</summary>
+    public StateHandle StateHandle { get; }
 
-    /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) {
-        if (!RuleEvaluation.TryResolveRow(reader: reader, handle: StateHandle, rowFrom: RowFrom, resolved: out var handle)) {
-            return RuleFact.Absent(kind: ValueKind);
-        }
-        if (!StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: handle, key: null, tick: reader.Tick, row: out var declared, rawValue: out _, text: out _)) {
-            return RuleFact.Finite(value: 0L, kind: ValueKind);
-        }
-        if (Reduce == StateReduceOp.ArrangementRank) {
-            return RuleFact.Finite(value: StateReader.ArrangementRank(store: reader.Store, zone: declared), kind: ValueKind);
-        }
-        StateRow? filter = null;
-        if (FilterRow is not null && !StateReader.TryReadHandle(reader.Store, reader.Catalog, FilterHandle, null, reader.Tick, out filter, out _, out _)) {
-            return RuleFact.Finite(0L, ValueKind);
-        }
-        return RuleFact.Finite(StateReader.ReduceRaw(reader.Store, declared, Reduce, reader.Tick, filter, Range), ValueKind);
-    }
-    /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => (RowFrom?.Table.Capacity ?? context.RowCapacity(name: Row)) * (Range is null ? 1L : 3L);
     /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) {
         if (RowFrom is { } live) {
             live.CollectReads(into: into);
         } else {
-            into.Add(item: new RuleAccess(Row: Row, Key: null));
+            into.Add(item: new RuleAccess(
+                Row: Row,
+                Key: null
+            ));
         }
-        if (FilterRow is not null) { into.Add(item: new RuleAccess(Row: FilterRow, Key: null)); }
+        if (FilterRow is not null) { into.Add(item: new RuleAccess(
+            Row: FilterRow,
+            Key: null
+        )); }
     }
     /// <inheritdoc/>
-    public override bool HostOnly => (RowFrom is { HostOnly: true });
-}
+    public override long Cost(RuleCompileContext context) => ((RowFrom?.Table.Capacity ?? context.RowCapacity(name: Row)) * ((Range is null)
+        ? 1L
+        : 3L));
+    /// <inheritdoc/>
+    public override RuleFact Read(IRuleReader reader) {
+        if (!RuleEvaluation.TryResolveRow(
+            reader: reader,
+            handle: StateHandle,
+            rowFrom: RowFrom,
+            resolved: out var handle
+        )) {
+            return RuleFact.Absent(kind: ValueKind);
+        }
+        if (!StateReader.TryReadHandle(
+            store: reader.Store,
+            catalog: reader.Catalog,
+            handle: handle,
+            key: null,
+            tick: reader.Tick,
+            engineTick: reader.EngineTick,
+            row: out var declared,
+            rawValue: out _,
+            text: out _
+        )) {
+            return RuleFact.Finite(
+                value: 0L,
+                kind: ValueKind
+            );
+        }
+        var rowOrdinal = ((reader.Catalog.TryGetDescriptor(
+            descriptor: out var rowDesc,
+            handle: handle
+        ))
+            ? rowDesc.LaneOrdinal
+            : -1
+        );
+        if (Reduce == StateReduceOp.ArrangementRank) {
+            return RuleFact.Finite(
+                value: StateReader.ArrangementRank(
+                    store: reader.Store,
+                    zone: declared,
+                    rowOrdinal: rowOrdinal
+                ),
+                kind: ValueKind
+            );
+        }
+        StateRow? filter = null;
+        var filterOrdinal = -1;
 
+        if (FilterRow is not null) {
+            if (!StateReader.TryReadHandle(
+                reader.Store,
+                reader.Catalog,
+                FilterHandle,
+                null,
+                reader.Tick,
+                reader.EngineTick,
+                out filter,
+                out _,
+                out _
+            )) {
+                return RuleFact.Finite(
+                    0L,
+                    ValueKind
+                );
+            }
+            if (reader.Catalog.TryGetDescriptor(
+                descriptor: out var filterDesc,
+                handle: FilterHandle
+            )) {
+                filterOrdinal = filterDesc.LaneOrdinal;
+            }
+        }
+        return RuleFact.Finite(
+            StateReader.ReduceRaw(
+                reader.Store,
+                rowOrdinal,
+                declared,
+                Reduce,
+                reader.Tick,
+                reader.EngineTick,
+                filterOrdinal,
+                filter,
+                Range
+            ),
+            ValueKind
+        );
+    }
+}
 /// <summary>A <see cref="RuleFacts.SymmetryPrefix"/> read: a cell's node through one symmetry-lattice map. The source
 /// cell's whole part is the node; a cell holding no node reads the neutral value — -1 for the node-valued maps, 0 for
 /// orthogonal, the inner product, and the projections.</summary>
@@ -254,6 +458,91 @@ public sealed class SymmetryOperand : OperandFact, IStateAddressedOperand {
         SymmetryOtherCell = symmetryOtherCell;
     }
 
+    // A fact's whole part as a lattice node, or -1 when it names none.
+    private static int NodeOf(FixedQ4816 value) {
+        var whole = (value.Value >> FixedQ4816.FractionBitCount);
+
+        return (((whole < 0L) || (whole >= SymmetryLattice.NodeCount))
+            ? -1
+            : (int)whole
+        );
+    }
+    private FixedQ4816 ReadFixed(IRuleReader reader) {
+        var node = NodeOf(value: RuleEvaluation.ReadFixed(
+            reader: reader,
+            handle: StateHandle,
+            key: RuleEvaluation.ResolveKey(
+                reader: reader,
+                key: Key,
+                keyFrom: KeyFrom
+            )
+        ));
+        var other = ((SymmetryOtherCell is { } otherCell)
+            ? NodeOf(value: RuleEvaluation.ReadFixed(
+                reader: reader,
+                handle: otherCell.Handle,
+                key: ((otherCell.Key.Length == 0)
+                ? StateRow.SlotKey.Value
+                : otherCell.Key)
+            ))
+            : (int)Math.Clamp(
+                value: SymmetryArgument,
+                min: -1L,
+                max: (SymmetryLattice.NodeCount - 1L)
+            )
+        );
+        var neutral = ((Symmetry is SymmetryFunction.Orthogonal or SymmetryFunction.InnerProduct or SymmetryFunction.ProjectionX or SymmetryFunction.ProjectionY)
+            ? 0L
+            : -1L
+        );
+
+        if (
+            (node < 0) ||
+            ((Symmetry is SymmetryFunction.Reflect or SymmetryFunction.Orthogonal or SymmetryFunction.InnerProduct) && (other < 0))
+        ) {
+            return FixedQ4816.FromInteger(value: neutral);
+        }
+
+        return Symmetry switch {
+            SymmetryFunction.Ring => FixedQ4816.FromInteger(value: SymmetryLattice.Ring(node: node)),
+            SymmetryFunction.Antipode => FixedQ4816.FromInteger(value: SymmetryLattice.Antipode(node: node)),
+            SymmetryFunction.CanonicalRay => FixedQ4816.FromInteger(value: SymmetryLattice.CanonicalRay(node: node)),
+            SymmetryFunction.Cycle => FixedQ4816.FromInteger(value: SymmetryLattice.Cycle(
+            node: node,
+            steps: SymmetryArgument
+        )),
+            SymmetryFunction.Reflect => FixedQ4816.FromInteger(value: SymmetryLattice.Reflect(
+            mirror: other,
+            node: node
+        )),
+            SymmetryFunction.Orthogonal => FixedQ4816.FromInteger(value: (SymmetryLattice.AreOrthogonal(
+            first: node,
+            second: other
+        )
+            ? 1L
+            : 0L)),
+            SymmetryFunction.InnerProduct => FixedQ4816.FromInteger(value: SymmetryLattice.InnerProduct(
+            first: node,
+            second: other
+        )),
+            SymmetryFunction.ProjectionX => SymmetryLattice.Project(node: node).X,
+            _ => SymmetryLattice.Project(node: node).Y,
+        };
+    }
+
+    /// <inheritdoc/>
+    public override void CollectReads(List<RuleAccess> into) {
+        into.Add(item: new RuleAccess(
+            Row: Row,
+            Key: null
+        ));
+        RuleAccess.CollectReference(
+            reference: KeyFrom,
+            into: into
+        );
+    }
+    /// <inheritdoc/>
+    public override long Cost(RuleCompileContext context) => 1L;
     /// <summary>Reshapes an already-resolved <see cref="StateCellOperand"/> source into the symmetry read over it:
     /// the address (row/key/keyFrom/handle) carries over unchanged, and only the symmetry-specific fields are new.</summary>
     /// <param name="source">The resolved state-cell source.</param>
@@ -262,14 +551,31 @@ public sealed class SymmetryOperand : OperandFact, IStateAddressedOperand {
     /// <param name="symmetryOtherCell">The cell the other node is read from live, or <see langword="null"/>.</param>
     /// <param name="valueKind">Fixed for the two projection functions, else Int.</param>
     public static SymmetryOperand FromStateCell(StateCellOperand source, SymmetryFunction symmetry, long symmetryArgument, CompiledCellRef? symmetryOtherCell, CellKind valueKind) =>
-        new(source.Row, source.Key, source.KeyFrom, source.StateHandle, symmetry, symmetryArgument, symmetryOtherCell, valueKind);
-
+        new(
+            source.Row,
+            source.Key,
+            source.KeyFrom,
+            source.StateHandle,
+            symmetry,
+            symmetryArgument,
+            symmetryOtherCell,
+            valueKind
+        );
     /// <inheritdoc/>
-    public string Row { get; }
+    public override RuleFact Read(IRuleReader reader) => RuleFact.Finite(
+        value: RuleFact.RawOf(
+            value: ReadFixed(reader: reader),
+            kind: ValueKind
+        ),
+        kind: ValueKind
+    );
+
     /// <summary>Gets the literal source cell key, or <see langword="null"/> when <see cref="KeyFrom"/> applies.</summary>
     public string? Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
+    /// <inheritdoc/>
+    public string Row { get; }
     /// <summary>Gets the compiled row handle.</summary>
     public StateHandle StateHandle { get; }
     /// <summary>Gets the lattice map applied to the source node.</summary>
@@ -279,58 +585,7 @@ public sealed class SymmetryOperand : OperandFact, IStateAddressedOperand {
     /// <summary>Gets the cell the other node is read from live, or <see langword="null"/> for the literal
     /// <see cref="SymmetryArgument"/>.</summary>
     public CompiledCellRef? SymmetryOtherCell { get; }
-
-    /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) => RuleFact.Finite(value: RuleFact.RawOf(value: ReadFixed(reader: reader), kind: ValueKind), kind: ValueKind);
-    /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => 1L;
-    /// <inheritdoc/>
-    public override void CollectReads(List<RuleAccess> into) {
-        into.Add(item: new RuleAccess(Row: Row, Key: null));
-        RuleAccess.CollectReference(reference: KeyFrom, into: into);
-    }
-
-    private FixedQ4816 ReadFixed(IRuleReader reader) {
-        var node = NodeOf(value: RuleEvaluation.ReadFixed(
-            reader: reader,
-            handle: StateHandle,
-            key: RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom)
-        ));
-        var other = ((SymmetryOtherCell is { } otherCell)
-            ? NodeOf(value: RuleEvaluation.ReadFixed(
-                reader: reader,
-                handle: otherCell.Handle,
-                key: ((otherCell.Key.Length == 0) ? StateRow.SlotKey.Value : otherCell.Key)
-            ))
-            : (int)Math.Clamp(value: SymmetryArgument, min: -1L, max: (SymmetryLattice.NodeCount - 1L))
-        );
-        var neutral = ((Symmetry is SymmetryFunction.Orthogonal or SymmetryFunction.InnerProduct or SymmetryFunction.ProjectionX or SymmetryFunction.ProjectionY) ? 0L : -1L);
-
-        if ((node < 0) || ((Symmetry is SymmetryFunction.Reflect or SymmetryFunction.Orthogonal or SymmetryFunction.InnerProduct) && (other < 0))) {
-            return FixedQ4816.FromInteger(value: neutral);
-        }
-
-        return Symmetry switch {
-            SymmetryFunction.Ring => FixedQ4816.FromInteger(value: SymmetryLattice.Ring(node: node)),
-            SymmetryFunction.Antipode => FixedQ4816.FromInteger(value: SymmetryLattice.Antipode(node: node)),
-            SymmetryFunction.CanonicalRay => FixedQ4816.FromInteger(value: SymmetryLattice.CanonicalRay(node: node)),
-            SymmetryFunction.Cycle => FixedQ4816.FromInteger(value: SymmetryLattice.Cycle(node: node, steps: SymmetryArgument)),
-            SymmetryFunction.Reflect => FixedQ4816.FromInteger(value: SymmetryLattice.Reflect(mirror: other, node: node)),
-            SymmetryFunction.Orthogonal => FixedQ4816.FromInteger(value: (SymmetryLattice.AreOrthogonal(first: node, second: other) ? 1L : 0L)),
-            SymmetryFunction.InnerProduct => FixedQ4816.FromInteger(value: SymmetryLattice.InnerProduct(first: node, second: other)),
-            SymmetryFunction.ProjectionX => SymmetryLattice.Project(node: node).X,
-            _ => SymmetryLattice.Project(node: node).Y,
-        };
-    }
-
-    // A fact's whole part as a lattice node, or -1 when it names none.
-    private static int NodeOf(FixedQ4816 value) {
-        var whole = (value.Value >> FixedQ4816.FractionBitCount);
-
-        return (((whole < 0L) || (whole >= SymmetryLattice.NodeCount)) ? -1 : (int)whole);
-    }
 }
-
 /// <summary>A bounded discrete topology query over a board row (the <c>$board:</c> channel).</summary>
 public sealed class BoardOperand : OperandFact, IStateAddressedOperand {
     /// <param name="row">The board row.</param>
@@ -348,55 +603,134 @@ public sealed class BoardOperand : OperandFact, IStateAddressedOperand {
         Board = board;
     }
 
-    /// <inheritdoc/>
-    public string Row { get; }
+    /// <summary>Gets the compiled query.</summary>
+    public BoardQuery Board { get; }
     /// <summary>Gets the literal source cell key, or <see langword="null"/> when <see cref="KeyFrom"/> applies or the
     /// query needs no source cell.</summary>
     public string? Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
+    /// <inheritdoc/>
+    public string Row { get; }
     /// <summary>Gets the compiled row handle.</summary>
     public StateHandle StateHandle { get; }
-    /// <summary>Gets the compiled query.</summary>
-    public BoardQuery Board { get; }
-
-    /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) => RuleFact.Finite(value: ReadBoard(reader: reader), kind: CellKind.Int);
-    /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => (Board.Topology.CellCount + Board.Visits);
-    /// <inheritdoc/>
-    public override void CollectReads(List<RuleAccess> into) {
-        into.Add(item: new RuleAccess(Row: Row, Key: null));
-        RuleAccess.CollectReference(reference: KeyFrom, into: into);
-    }
 
     private long ReadBoard(IRuleReader reader) {
         var query = Board;
+
         if (
-            !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var row, rawValue: out _, text: out _) ||
+            !StateReader.TryReadHandle(
+            store: reader.Store,
+            catalog: reader.Catalog,
+            handle: StateHandle,
+            key: null,
+            tick: reader.Tick,
+            engineTick: reader.EngineTick,
+            row: out var row,
+            rawValue: out _,
+            text: out _
+        ) ||
             (row.EffectiveDomain is not StateDomain.CellsOf rowBoard)
         ) {
             return -1;
         }
         if (query is BoardOffsetQuery offsetQuery) {
-            var originKey = RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom);
-            var origin = ((originKey is not null) && query.Topology.TryCell(originKey, out var originCell)) ? originCell : -1;
-            return ((origin >= 0) && query.Topology.TryOffset(origin, offsetQuery.Dx, offsetQuery.Dz, out var offset)) ? offset : -1;
+            var originKey = RuleEvaluation.ResolveKey(
+                reader: reader,
+                key: Key,
+                keyFrom: KeyFrom
+            );
+            var origin = (((originKey is not null) && query.Topology.TryCell(
+                cell: out var originCell,
+                key: originKey
+            ))
+                ? originCell
+                : -1
+            );
+
+            return (((origin >= 0) && query.Topology.TryOffset(
+                origin,
+                offsetQuery.Dx,
+                offsetQuery.Dz,
+                out var offset
+            ))
+                ? offset
+                : -1
+            );
         }
+        var rowOrdinal = ((reader.Catalog.TryGetDescriptor(
+            descriptor: out var rowDesc,
+            handle: StateHandle
+        ))
+            ? rowDesc.LaneOrdinal
+            : -1
+        );
         var values = reader.BoardScratch(cells: query.Topology.CellCount);
-        reader.Store.ReadBoard(row: row, topology: query.Topology, values: values);
-        var key = RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom);
-        var source = ((key is not null) && query.Topology.TryCell(key, out var sourceCell)) ? sourceCell : -1;
+
+        if (rowOrdinal >= 0) {
+            reader.Store.ReadBoard(
+                rowOrdinal: rowOrdinal,
+                topology: query.Topology,
+                values: values
+            );
+        } else {
+            reader.Store.ReadBoard(
+                row: row,
+                topology: query.Topology,
+                values: values
+            );
+        }
+        var key = RuleEvaluation.ResolveKey(
+            reader: reader,
+            key: Key,
+            keyFrom: KeyFrom
+        );
+        var source = (((key is not null) && query.Topology.TryCell(
+            cell: out var sourceCell,
+            key: key
+        ))
+            ? sourceCell
+            : -1
+        );
         // A pathCost query's live target resolves on the same terms as a '$cell:' key indirection — the same
         // (row, key) cell read, answered as the destination ordinal rather than formatted as a key string.
         var dynamicTarget = ((query is BoardPathCostQuery { TargetFrom: { } targetFrom })
-            ? ((int)RuleEvaluation.IntegerOf(value: RuleEvaluation.ReadFixed(reader: reader, handle: targetFrom.Handle, key: targetFrom.Key)))
+            ? ((int)RuleEvaluation.IntegerOf(value: RuleEvaluation.ReadFixed(
+                reader: reader,
+                handle: targetFrom.Handle,
+                key: targetFrom.Key
+            )))
             : 0
         );
-        return BoardQueries.Evaluate(query, values, rowBoard.Empty, source, dynamicTarget);
-    }
-}
 
+        return BoardQueries.Evaluate(
+            query,
+            values,
+            rowBoard.Empty,
+            source,
+            dynamicTarget
+        );
+    }
+
+    /// <inheritdoc/>
+    public override void CollectReads(List<RuleAccess> into) {
+        into.Add(item: new RuleAccess(
+            Row: Row,
+            Key: null
+        ));
+        RuleAccess.CollectReference(
+            reference: KeyFrom,
+            into: into
+        );
+    }
+    /// <inheritdoc/>
+    public override long Cost(RuleCompileContext context) => (Board.Topology.CellCount + Board.Visits);
+    /// <inheritdoc/>
+    public override RuleFact Read(IRuleReader reader) => RuleFact.Finite(
+        value: ReadBoard(reader: reader),
+        kind: CellKind.Int
+    );
+}
 /// <summary>A phase protocol progression value (the <c>$phase:</c> channel) — the row's own generation, the same
 /// value a <see cref="PhaseGuard"/> checks against it.</summary>
 public sealed class PhaseOperand : OperandFact {
@@ -413,18 +747,36 @@ public sealed class PhaseOperand : OperandFact {
     public StateHandle StateHandle { get; }
 
     /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) {
-        if (!StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var declared, rawValue: out _, text: out _)) {
-            return RuleFact.Finite(value: -1L, kind: CellKind.Int);
-        }
-        return RuleFact.Finite(value: (declared.Phase?.Sequence ?? -1L), kind: CellKind.Int);
-    }
+    public override void CollectReads(List<RuleAccess> into) => into.Add(item: new RuleAccess(
+        Row: Row,
+        Key: null
+    ));
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => 1L;
     /// <inheritdoc/>
-    public override void CollectReads(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: Row, Key: null));
+    public override RuleFact Read(IRuleReader reader) {
+        if (!StateReader.TryReadHandle(
+            store: reader.Store,
+            catalog: reader.Catalog,
+            handle: StateHandle,
+            key: null,
+            tick: reader.Tick,
+            engineTick: reader.EngineTick,
+            row: out var declared,
+            rawValue: out _,
+            text: out _
+        )) {
+            return RuleFact.Finite(
+                kind: CellKind.Int,
+                value: -1L
+            );
+        }
+        return RuleFact.Finite(
+            value: (declared.Phase?.Sequence ?? -1L),
+            kind: CellKind.Int
+        );
+    }
 }
-
 /// <summary>A pattern-language match over a row's word (<see cref="RuleFacts.MatchPrefix"/>). The word is read at
 /// this tick through compiled row handles and the same per-cell read every other state read uses, so an advancing
 /// attribute cell reads its live value. Every source fits the word buffer, and a board origin that names no cell
@@ -457,61 +809,52 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
         RowFrom = rowFrom;
     }
 
+    /// <summary>Gets the board ray descriptor, for a board source; <see langword="null"/> otherwise. Only its
+    /// direction is read (-1 meaning every direction); the query is never evaluated by its kind.</summary>
+    public BoardNeighbourQuery? Board { get; }
+    /// <summary>Gets the compiled handle for <see cref="FilterRow"/>.</summary>
+    public StateHandle FilterHandle { get; }
+    /// <summary>Gets the zone's attribute row name, for a zone source; <see langword="null"/> otherwise.</summary>
+    public string? FilterRow { get; }
     /// <inheritdoc/>
-    public string Row { get; }
-    /// <summary>Gets the live zone read, or <see langword="null"/> for a fixed row.</summary>
-    public LiveZone? RowFrom { get; }
+    public override bool HostOnly => ((RowFrom is { HostOnly: true }) || (KeyFrom is { Custom.HostOnly: true }) || RuleDataflow.ExpressionReadsHost(tokens: TokenExpression));
     /// <summary>Gets the literal board-origin cell key, or the token a zone or keyed word starts at; <see langword="null"/>
     /// when <see cref="KeyFrom"/> applies or the word reads whole.</summary>
     public string? Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
-    /// <summary>Gets the compiled handle for <see cref="Row"/>.</summary>
-    public StateHandle StateHandle { get; }
-    /// <summary>Gets the pattern name.</summary>
-    public string Pattern { get; }
-    /// <summary>Gets the board ray descriptor, for a board source; <see langword="null"/> otherwise. Only its
-    /// direction is read (-1 meaning every direction); the query is never evaluated by its kind.</summary>
-    public BoardNeighbourQuery? Board { get; }
-    /// <summary>Gets the zone's attribute row name, for a zone source; <see langword="null"/> otherwise.</summary>
-    public string? FilterRow { get; }
-    /// <summary>Gets the compiled handle for <see cref="FilterRow"/>.</summary>
-    public StateHandle FilterHandle { get; }
     /// <summary>Gets what this operand answers about its word.</summary>
     public MatchFacet MatchFacet { get; }
+    /// <summary>Gets the pattern name.</summary>
+    public string Pattern { get; }
+    /// <inheritdoc/>
+    public string Row { get; }
+    /// <summary>Gets the live zone read, or <see langword="null"/> for a fixed row.</summary>
+    public LiveZone? RowFrom { get; }
+    /// <summary>Gets the compiled handle for <see cref="Row"/>.</summary>
+    public StateHandle StateHandle { get; }
     /// <summary>Gets the zone's per-token value expression, when the pattern carries one.</summary>
     public CompiledExpressionToken[]? TokenExpression { get; }
 
-    /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) =>
-        (RuleEvaluation.TryResolveRow(reader: reader, handle: StateHandle, rowFrom: RowFrom, resolved: out var handle)
-            ? RuleFact.Finite(value: ReadMatch(reader: reader, handle: handle), kind: CellKind.Int)
-            : RuleFact.Absent(kind: CellKind.Int));
-    /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => ((Board is { } board)
-        ? (board.Topology.CellCount + board.Visits)
-        : RuleWorkBudget.SaturatingMultiply((RowFrom?.Table.Capacity ?? context.RowCapacity(Row)),
-            RuleWorkBudget.SaturatingAdd(1L, RuleWorkBudget.ExpressionCost(TokenExpression ?? [], context))));
-    /// <inheritdoc/>
-    public override void CollectReads(List<RuleAccess> into) {
-        if (RowFrom is { } live) {
-            live.CollectReads(into: into);
-        } else {
-            into.Add(item: new RuleAccess(Row: Row, Key: null));
-        }
-        RuleAccess.CollectReference(reference: KeyFrom, into: into);
-        if (FilterRow is not null) { into.Add(new RuleAccess(FilterRow, null)); }
-        if (TokenExpression is { } expression) { RuleDataflow.CollectExpression(expression, into); }
-    }
-    /// <inheritdoc/>
-    public override bool HostOnly => (RowFrom is { HostOnly: true }) || (KeyFrom is { Custom.HostOnly: true }) || RuleDataflow.ExpressionReadsHost(tokens: TokenExpression);
-
     private long ReadMatch(IRuleReader reader, StateHandle handle) {
-        if (!reader.Patterns.TryGet(name: Pattern, pattern: out var pattern)) {
-            throw new InvalidOperationException($"pattern operand '{Pattern}' outlived the compiled rules");
+        if (!reader.Patterns.TryGet(
+            name: Pattern,
+            pattern: out var pattern
+        )) {
+            throw new InvalidOperationException(message: $"pattern operand '{Pattern}' outlived the compiled rules");
         }
-        if (!StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: handle, key: null, tick: reader.Tick, row: out var row, rawValue: out _, text: out _)) {
-            throw new InvalidOperationException($"pattern operand over '{Row}' outlived its compiled row handle");
+        if (!StateReader.TryReadHandle(
+            store: reader.Store,
+            catalog: reader.Catalog,
+            handle: handle,
+            key: null,
+            tick: reader.Tick,
+            engineTick: reader.EngineTick,
+            row: out var row,
+            rawValue: out _,
+            text: out _
+        )) {
+            throw new InvalidOperationException(message: $"pattern operand over '{Row}' outlived its compiled row handle");
         }
 
         var word = reader.PatternWord;
@@ -521,13 +864,49 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
                 return 0L;
             }
 
+            var rowOrdinal = ((reader.Catalog.TryGetDescriptor(
+                descriptor: out var rowDesc,
+                handle: handle
+            ))
+                ? rowDesc.LaneOrdinal
+                : -1
+            );
             var values = reader.BoardScratch(cells: query.Topology.CellCount);
-            reader.Store.ReadBoard(row: row, topology: query.Topology, values: values);
-            var key = RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom);
-            var origin = (((key is not null) && query.Topology.TryCell(key, out var cell)) ? cell : -1);
+
+            if (rowOrdinal >= 0) {
+                reader.Store.ReadBoard(
+                    rowOrdinal: rowOrdinal,
+                    topology: query.Topology,
+                    values: values
+                );
+            } else {
+                reader.Store.ReadBoard(
+                    row: row,
+                    topology: query.Topology,
+                    values: values
+                );
+            }
+            var key = RuleEvaluation.ResolveKey(
+                reader: reader,
+                key: Key,
+                keyFrom: KeyFrom
+            );
+            var origin = (((key is not null) && query.Topology.TryCell(
+                cell: out var cell,
+                key: key
+            ))
+                ? cell
+                : -1
+            );
 
             if (query.Direction >= 0) {
-                var length = BoardQueries.ReadRay(query.Topology, values, origin, query.Direction, word);
+                var length = BoardQueries.ReadRay(
+                    query.Topology,
+                    values,
+                    origin,
+                    query.Direction,
+                    word
+                );
 
                 if (MatchFacet is MatchFacet.Cell or MatchFacet.Distance) {
                     var prefixLength = pattern.LongestAcceptedPrefix(values: word[..length]);
@@ -536,92 +915,271 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
                         return -1L;
                     }
                     if (MatchFacet == MatchFacet.Distance) {
-                        return prefixLength + 1;
+                        return (prefixLength + 1);
                     }
 
                     var blocker = origin;
 
-                    for (var step = 0; step <= prefixLength; step++) {
-                        blocker = query.Topology.Neighbour(blocker, query.Direction);
+                    for (var step = 0; (step <= prefixLength); step++) {
+                        blocker = query.Topology.Neighbour(
+                            cell: blocker,
+                            direction: query.Direction
+                        );
                     }
 
                     return blocker;
                 }
 
-                return (MatchFacet == MatchFacet.Prefix)
+                return ((MatchFacet == MatchFacet.Prefix)
                     ? pattern.LongestAcceptedPrefix(values: word[..length])
-                    : pattern.Match(values: word[..length]);
+                    : pattern.Match(values: word[..length])
+                );
             }
 
             var mask = 0L;
             var count = 0L;
 
-            for (var direction = 0; direction < query.Topology.DirectionCount; direction++) {
-                var length = BoardQueries.ReadRay(query.Topology, values, origin, direction, word);
+            for (var direction = 0; (direction < query.Topology.DirectionCount); direction++) {
+                var length = BoardQueries.ReadRay(
+                    query.Topology,
+                    values,
+                    origin,
+                    direction,
+                    word
+                );
 
                 if (pattern.Match(values: word[..length]) == 1L) {
-                    mask |= 1L << direction;
+                    mask |= (1L << direction);
                     count++;
                 }
             }
 
-            return (MatchFacet == MatchFacet.DirectionCount) ? count : mask;
+            return ((MatchFacet == MatchFacet.DirectionCount)
+                ? count
+                : mask
+            );
         }
 
         var source = row;
         int wordLength;
-        var start = (((Key is not null) || (KeyFrom is not null)) ? RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom) : null);
+        var start = (((Key is not null) || (KeyFrom is not null))
+            ? RuleEvaluation.ResolveKey(
+                reader: reader,
+                key: Key,
+                keyFrom: KeyFrom
+            )
+            : null
+        );
 
         if (TokenExpression is { } tokenExpression) {
-            wordLength = ReadTupleWord(reader: reader, row: row, expression: tokenExpression, kind: pattern.Source.Kind, word: word, start: start);
+            wordLength = ReadTupleWord(
+                reader: reader,
+                row: row,
+                expression: tokenExpression,
+                kind: pattern.Source.Kind,
+                word: word,
+                start: start
+            );
         } else {
-            if ((row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) && !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: FilterHandle, key: null, tick: reader.Tick, row: out source, rawValue: out _, text: out _)) {
-                throw new InvalidOperationException($"pattern attribute '{FilterRow}' outlived its compiled row handle");
+            if (
+                (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) &&
+                !StateReader.TryReadHandle(
+                store: reader.Store,
+                catalog: reader.Catalog,
+                handle: FilterHandle,
+                key: null,
+                tick: reader.Tick,
+                engineTick: reader.EngineTick,
+                row: out source,
+                rawValue: out _,
+                text: out _
+            )
+            ) {
+                throw new InvalidOperationException(message: $"pattern attribute '{FilterRow}' outlived its compiled row handle");
             }
 
-            wordLength = ReadWord(store: reader.Store, row: row, source: source, tick: reader.Tick, word: word, start: start);
+            wordLength = ReadWord(
+                store: reader.Store,
+                row: row,
+                source: source,
+                tick: reader.Tick,
+                engineTick: reader.EngineTick,
+                word: word,
+                start: start
+            );
         }
 
-        return (MatchFacet == MatchFacet.Prefix)
+        return ((MatchFacet == MatchFacet.Prefix)
             ? pattern.LongestAcceptedPrefix(values: word[..wordLength])
-            : pattern.Match(values: word[..wordLength]);
+            : pattern.Match(values: word[..wordLength])
+        );
     }
 
+    /// <inheritdoc/>
+    public override void CollectReads(List<RuleAccess> into) {
+        if (RowFrom is { } live) {
+            live.CollectReads(into: into);
+        } else {
+            into.Add(item: new RuleAccess(
+                Row: Row,
+                Key: null
+            ));
+        }
+        RuleAccess.CollectReference(
+            reference: KeyFrom,
+            into: into
+        );
+        if (FilterRow is not null) { into.Add(item: new RuleAccess(
+            FilterRow,
+            null
+        )); }
+        if (TokenExpression is { } expression) { RuleDataflow.CollectExpression(
+            into: into,
+            tokens: expression
+        ); }
+    }
+    /// <inheritdoc/>
+    public override long Cost(RuleCompileContext context) => ((Board is { } board)
+        ? (board.Topology.CellCount + board.Visits)
+        : RuleWorkBudget.SaturatingMultiply(
+            left: (RowFrom?.Table.Capacity ?? context.RowCapacity(name: Row)),
+            right: RuleWorkBudget.SaturatingAdd(
+                left: 1L,
+                right: RuleWorkBudget.ExpressionCost(
+                    (TokenExpression ?? []),
+                    context
+                )
+            )
+        )
+    );
+    /// <inheritdoc/>
+    public override RuleFact Read(IRuleReader reader) =>
+        (RuleEvaluation.TryResolveRow(
+            reader: reader,
+            handle: StateHandle,
+            rowFrom: RowFrom,
+            resolved: out var handle
+        )
+            ? RuleFact.Finite(
+                value: ReadMatch(
+                    handle: handle,
+                    reader: reader
+                ),
+                kind: CellKind.Int
+            )
+            : RuleFact.Absent(kind: CellKind.Int)
+        );
+    /// <summary>Reads a zone's tokens in pile order, each through the pattern's value expression with <c>$token</c>
+    /// bound to it; an expression that fails on a token reads that letter as zero.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="row">The zone row.</param>
+    /// <param name="expression">The compiled value expression.</param>
+    /// <param name="kind">The pattern's kind.</param>
+    /// <param name="word">The word buffer.</param>
+    /// <returns>The word's length.</returns>
+    /// <param name="start">The token the word starts at, or <see langword="null"/> to read the whole row.</param>
+    public static int ReadTupleWord(IRuleReader reader, StateRow row, CompiledExpressionToken[] expression, CellKind kind, Span<long> word, string? start = null) {
+        var length = 0;
+        var store = reader.Store;
+        var count = store.CellCount(row: row);
+
+        try {
+            for (var index = StartIndex(
+                row: row,
+                start: start,
+                store: store
+            ); (index < count); index++) {
+                if (!store.TryKeyAt(
+                    index: index,
+                    key: out var key,
+                    row: row
+                )) { continue; }
+                reader.BoundTokenKey = key.Value;
+                reader.BoundPreviousKey = (((index > 0) && store.TryKeyAt(
+                    index: (index - 1),
+                    key: out var previous,
+                    row: row
+                ))
+                    ? previous.Value
+                    : null
+                );
+                word[length++] = (RuleEvaluation.TryEvaluateExpression(
+                    kind: kind,
+                    program: expression,
+                    reader: reader,
+                    value: out var raw
+                )
+                    ? raw
+                    : 0L
+                );
+            }
+        } finally {
+            reader.BoundTokenKey = null;
+            reader.BoundPreviousKey = null;
+        }
+
+        return length;
+    }
     /// <summary>Reads a zone's cells in pile order through its attribute row, a history ring oldest push first, or a
     /// keyed row's own cells in cell order.</summary>
     /// <param name="store">Where each value is read.</param>
     /// <param name="row">The word's row.</param>
     /// <param name="source">The row the values are read from — the attribute row for a zone, else <paramref name="row"/>.</param>
     /// <param name="tick">The tick the read answers as of.</param>
+    /// <param name="engineTick">The engine tick the read answers as of.</param>
     /// <param name="word">The word buffer.</param>
     /// <returns>The word's length.</returns>
     /// <param name="start">The token the word starts at, or <see langword="null"/> to read the whole row.</param>
-    public static int ReadWord(StateStore store, StateRow row, StateRow source, ulong tick, Span<long> word, string? start = null) {
+    public static int ReadWord(StateStore store, StateRow row, StateRow source, ulong tick, ulong engineTick, Span<long> word, string? start = null) {
         ArgumentNullException.ThrowIfNull(argument: store);
         var length = 0;
 
         if (row.EffectiveDomain is StateDomain.Ring history) {
-            var count = (int)Math.Min(store.HistoryCursor(row: row), history.Capacity);
+            var count = ((int)Math.Min(
+                val1: store.HistoryCursor(row: row),
+                val2: history.Capacity
+            ));
 
-            for (var age = count - 1; age >= 0; age--) {
-                word[length++] = HistoryOperand.ReadSlot(store: store, row: row, history: history, age: age);
+            for (var age = (count - 1); (age >= 0); age--) {
+                word[length++] = HistoryOperand.ReadSlot(
+                    age: age,
+                    history: history,
+                    row: row,
+                    store: store
+                );
             }
 
             return length;
         }
 
         var members = store.CellCount(row: row);
-        for (var index = StartIndex(store: store, row: row, start: start); index < members; index++) {
-            if (!store.TryKeyAt(row: row, index: index, key: out var key)) {
+
+        for (var index = StartIndex(
+            row: row,
+            start: start,
+            store: store
+        ); (index < members); index++) {
+            if (!store.TryKeyAt(
+                index: index,
+                key: out var key,
+                row: row
+            )) {
                 continue;
             }
-            StateReader.ReadCell(store: store, row: source, key: key.Value, tick: tick, rawValue: out var raw, text: out _);
-            word[length++] = raw ?? 0L;
+            StateReader.ReadCell(
+                store: store,
+                row: source,
+                key: key.Value,
+                tick: tick,
+                engineTick: engineTick,
+                rawValue: out var raw,
+                text: out _
+            );
+            word[length++] = (raw ?? 0L);
         }
 
         return length;
     }
-
     /// <summary>Returns the index the word starts at through a store — a frame's zone enumerates its live members —
     /// on <see cref="StartIndex(IReadOnlyList{StateCell}, string?)"/>'s terms.</summary>
     /// <param name="store">Where the row's members are read.</param>
@@ -635,15 +1193,25 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
             return 0;
         }
 
-        for (var index = 0; index < count; index++) {
-            if (store.TryKeyAt(row: row, index: index, key: out var key) && string.Equals(a: key.Value, b: start, comparisonType: StringComparison.Ordinal)) {
+        for (var index = 0; (index < count); index++) {
+            if (
+                store.TryKeyAt(
+                index: index,
+                key: out var key,
+                row: row
+            ) &&
+                string.Equals(
+                a: key.Value,
+                b: start,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
                 return index;
             }
         }
 
         return count;
     }
-
     /// <summary>Returns the index the word starts at: 0 for a whole word, the named token's position, or the row's
     /// count (an empty word) when the named token is not in the row.</summary>
     /// <param name="cells">The row's cells.</param>
@@ -653,45 +1221,19 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
             return 0;
         }
 
-        for (var index = 0; index < cells.Count; index++) {
-            if (string.Equals(a: cells[index].Key.Value, b: start, comparisonType: StringComparison.Ordinal)) {
+        for (var index = 0; (index < cells.Count); index++) {
+            if (string.Equals(
+                a: cells[index].Key.Value,
+                b: start,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return index;
             }
         }
 
         return cells.Count;
     }
-
-    /// <summary>Reads a zone's tokens in pile order, each through the pattern's value expression with <c>$token</c>
-    /// bound to it; an expression that fails on a token reads that letter as zero.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="row">The zone row.</param>
-    /// <param name="expression">The compiled value expression.</param>
-    /// <param name="kind">The pattern's kind.</param>
-    /// <param name="word">The word buffer.</param>
-    /// <returns>The word's length.</returns>
-    /// <param name="start">The token the word starts at, or <see langword="null"/> to read the whole row.</param>
-    public static int ReadTupleWord(IRuleReader reader, StateRow row, CompiledExpressionToken[] expression, CellKind kind, Span<long> word, string? start = null) {
-        var length = 0;
-        var store = reader.Store;
-        var count = store.CellCount(row);
-
-        try {
-            for (var index = StartIndex(store: store, row: row, start: start); index < count; index++) {
-                if (!store.TryKeyAt(row, index, out var key)) { continue; }
-                reader.BoundTokenKey = key.Value;
-                reader.BoundPreviousKey = index > 0 && store.TryKeyAt(row, index - 1, out var previous) ? previous.Value : null;
-                word[length++] = RuleEvaluation.TryEvaluateExpression(reader: reader, program: expression, kind: kind, value: out var raw) ? raw : 0L;
-            }
-        } finally {
-            reader.BoundTokenKey = null;
-            reader.BoundPreviousKey = null;
-        }
-
-        return length;
-    }
 }
-
 /// <summary>One value of a history ring by age (<see cref="RuleFacts.HistoryPrefix"/>).</summary>
 public sealed class HistoryOperand : OperandFact {
     /// <param name="row">The history row.</param>
@@ -704,29 +1246,49 @@ public sealed class HistoryOperand : OperandFact {
         Age = age;
     }
 
+    /// <summary>Gets the age: 0 is the latest push; an age the ring no longer holds reads the trait's empty value.</summary>
+    public long Age { get; }
     /// <summary>Gets the history row.</summary>
     public string Row { get; }
     /// <summary>Gets the compiled row handle.</summary>
     public StateHandle StateHandle { get; }
-    /// <summary>Gets the age: 0 is the latest push; an age the ring no longer holds reads the trait's empty value.</summary>
-    public long Age { get; }
 
     /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) {
-        if (
-            !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var row, rawValue: out _, text: out _) ||
-            (row.EffectiveDomain is not StateDomain.Ring history)
-        ) {
-            throw new InvalidOperationException($"history operand over '{Row}' outlived its compiled row handle");
-        }
-
-        return RuleFact.Finite(value: ReadSlot(store: reader.Store, row: row, history: history, age: Age), kind: ValueKind);
-    }
+    public override void CollectReads(List<RuleAccess> into) => into.Add(item: new RuleAccess(
+        Row: Row,
+        Key: null
+    ));
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => 1L;
     /// <inheritdoc/>
-    public override void CollectReads(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: Row, Key: null));
+    public override RuleFact Read(IRuleReader reader) {
+        if (
+            !StateReader.TryReadHandle(
+            store: reader.Store,
+            catalog: reader.Catalog,
+            handle: StateHandle,
+            key: null,
+            tick: reader.Tick,
+            engineTick: reader.EngineTick,
+            row: out var row,
+            rawValue: out _,
+            text: out _
+        ) ||
+            (row.EffectiveDomain is not StateDomain.Ring history)
+        ) {
+            throw new InvalidOperationException(message: $"history operand over '{Row}' outlived its compiled row handle");
+        }
 
+        return RuleFact.Finite(
+            value: ReadSlot(
+                store: reader.Store,
+                row: row,
+                history: history,
+                age: Age
+            ),
+            kind: ValueKind
+        );
+    }
     /// <summary>Reads the slot pushed <paramref name="age"/> pushes ago: (cursor - 1 - age) mod capacity, since the
     /// ring's cells are its slots in order; a slot never written reads the empty value. Ring slots carry no time
     /// trait, so the stored raw is the live value.</summary>
@@ -738,12 +1300,22 @@ public sealed class HistoryOperand : OperandFact {
         ArgumentNullException.ThrowIfNull(argument: store);
         var cursor = store.HistoryCursor(row: row);
 
-        if (age >= Math.Min(cursor, history.Capacity)) {
+        if (age >= Math.Min(
+            val1: cursor,
+            val2: history.Capacity
+        )) {
             return history.Empty;
         }
 
-        var slot = (int)((cursor - 1L - age) % history.Capacity);
+        var slot = ((int)(((cursor - 1L) - age) % history.Capacity));
 
-        return (store.TryStoredAt(row: row, index: slot, value: out var value) ? value : history.Empty);
+        return (store.TryStoredAt(
+            index: slot,
+            row: row,
+            value: out var value
+        )
+            ? value
+            : history.Empty
+        );
     }
 }

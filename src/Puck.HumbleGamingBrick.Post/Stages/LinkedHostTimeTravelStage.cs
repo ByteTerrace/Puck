@@ -18,35 +18,57 @@ internal sealed class LinkedHostTimeTravelStage : IPostStage<PostContext> {
     private const int ScriptedSteps = 28;
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "linked-host-time-travel";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
-    /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        var reference = RunScript(captureEveryStep: true);
-        var replay = RunScript(captureEveryStep: false);
+    // Fast-forward is a group-level segment repeat, not a clock multiplier: one submission buys the factor's worth of
+    // emulated cycles for every member at once, and still publishes one frame per member.
+    private static string? FastForward(LinkedMachineGroup link, MachineHost first, MachineHost second) {
+        var before = link.CycleCount;
 
-        if (reference.TrafficFingerprint != replay.TrafficFingerprint) {
-            return PostStageOutcome.Fail(detail: $"two identical linked runs produced different cable traffic (0x{reference.TrafficFingerprint:X16} then 0x{replay.TrafficFingerprint:X16})");
+        StepScript(
+            link: link,
+            step: 0
+        );
+
+        var oneSegment = (link.CycleCount - before);
+
+        link.SetFastForward(factor: FastForwardFactor);
+
+        var stepsBefore = (First: first.CompletedSteps, Second: second.CompletedSteps);
+        var cyclesBefore = link.CycleCount;
+
+        StepScript(
+            link: link,
+            step: 0
+        );
+
+        var advanced = (link.CycleCount - cyclesBefore);
+        var expected = (oneSegment * FastForwardFactor);
+
+        link.SetFastForward(factor: 1);
+
+        // Stepping is instruction-atomic and the tick-to-cycle accumulator carries a remainder, so a measured advance
+        // overshoots its budget by up to one instruction. The band is stated in whole segments rather than cycles: it
+        // still separates a repeated segment from an unrepeated one, without pinning an instruction-length constant.
+        if (
+            (advanced < (oneSegment * (FastForwardFactor - 1))) ||
+            (advanced > (oneSegment * (FastForwardFactor + 1)))
+        ) {
+            return $"an x{FastForwardFactor} group submission advanced {advanced} cycles; {FastForwardFactor} repeats of the {oneSegment}-cycle segment is about {expected}";
         }
 
-        if (reference.CompletedTransfers != replay.CompletedTransfers) {
-            return PostStageOutcome.Fail(detail: $"two identical linked runs exchanged {reference.CompletedTransfers} then {replay.CompletedTransfers} bytes");
-        }
-
-        if (!reference.Images[^1].AsSpan().SequenceEqual(other: replay.Images[^1])) {
-            return PostStageOutcome.Fail(detail: "two identical linked runs ended on different group state images; the linked pair is not replay-identical");
-        }
-
-        return Rewind(reference: reference);
+        return ((((first.CompletedSteps - stepsBefore.First) == 1L) && ((second.CompletedSteps - stepsBefore.Second) == 1L))
+            ? null
+            : $"an x{FastForwardFactor} group submission published {(first.CompletedSteps - stepsBefore.First)}/{(second.CompletedSteps - stepsBefore.Second)} member frames; fast-forward must skip intermediate presentation, not multiply it"
+        );
     }
-
     // The rewind leg reuses the reference run's own recorded instants: after moving back, the group's shared cycle count
     // identifies exactly which recorded step it landed on, so the landed image is compared against that step's image
     // rather than against a guess, and the input tail replayed forward is exactly the one the un-rewound run ran.
@@ -56,8 +78,8 @@ internal sealed class LinkedHostTimeTravelStage : IPostStage<PostContext> {
         var engine = new GamingBrickEngine();
 
         if (!engine.TryLink(
-            machines: [first, second],
             link: out var established,
+            machines: [first, second],
             reason: out var reason
         )) {
             return PostStageOutcome.Fail(detail: $"the engine refused to link two running machines: {reason}");
@@ -131,48 +153,6 @@ internal sealed class LinkedHostTimeTravelStage : IPostStage<PostContext> {
 
         return PostStageOutcome.Pass(detail: $"two identical linked runs agreed on {reference.CompletedTransfers} exchanged bytes, traffic fingerprint 0x{reference.TrafficFingerprint:X16}, and a {reference.Images[^1].Length}-byte group state image; a {rewound}-frame coupled rewind landed byte-identical on recorded step {landedStep} and its replayed tail reproduced the un-rewound future; x{FastForwardFactor} advanced the group by exactly {FastForwardFactor} segments per submission with both members still one published frame apiece");
     }
-    // Fast-forward is a group-level segment repeat, not a clock multiplier: one submission buys the factor's worth of
-    // emulated cycles for every member at once, and still publishes one frame per member.
-    private static string? FastForward(LinkedMachineGroup link, MachineHost first, MachineHost second) {
-        var before = link.CycleCount;
-
-        StepScript(
-            link: link,
-            step: 0
-        );
-
-        var oneSegment = (link.CycleCount - before);
-
-        link.SetFastForward(factor: FastForwardFactor);
-
-        var stepsBefore = (First: first.CompletedSteps, Second: second.CompletedSteps);
-        var cyclesBefore = link.CycleCount;
-
-        StepScript(
-            link: link,
-            step: 0
-        );
-
-        var advanced = (link.CycleCount - cyclesBefore);
-        var expected = (oneSegment * FastForwardFactor);
-
-        link.SetFastForward(factor: 1);
-
-        // Stepping is instruction-atomic and the tick-to-cycle accumulator carries a remainder, so a measured advance
-        // overshoots its budget by up to one instruction. The band is stated in whole segments rather than cycles: it
-        // still separates a repeated segment from an unrepeated one, without pinning an instruction-length constant.
-        if (
-            (advanced < (oneSegment * (FastForwardFactor - 1))) ||
-            (advanced > (oneSegment * (FastForwardFactor + 1)))
-        ) {
-            return $"an x{FastForwardFactor} group submission advanced {advanced} cycles; {FastForwardFactor} repeats of the {oneSegment}-cycle segment is about {expected}";
-        }
-
-        return ((((first.CompletedSteps - stepsBefore.First) == 1L) && ((second.CompletedSteps - stepsBefore.Second) == 1L))
-            ? null
-            : $"an x{FastForwardFactor} group submission published {(first.CompletedSteps - stepsBefore.First)}/{(second.CompletedSteps - stepsBefore.Second)} member frames; fast-forward must skip intermediate presentation, not multiply it"
-        );
-    }
     // One complete scripted run from freshly booted machines. The script's seat pads are a pure function of the step
     // index, so the whole run is reproducible; the per-step capture leg records the instants the rewind leg seeks.
     private static ScriptRun RunScript(bool captureEveryStep) {
@@ -181,8 +161,8 @@ internal sealed class LinkedHostTimeTravelStage : IPostStage<PostContext> {
         var engine = new GamingBrickEngine();
 
         if (!engine.TryLink(
-            machines: [first, second],
             link: out var established,
+            machines: [first, second],
             reason: out var reason
         )) {
             throw new InvalidOperationException(message: $"the engine refused to link two running machines: {reason}");
@@ -236,6 +216,26 @@ internal sealed class LinkedHostTimeTravelStage : IPostStage<PostContext> {
             deltaTicks: LinkedHostFixture.FrameTicks,
             inputs: [firstPad, secondPad]
         );
+    }
+
+    /// <inheritdoc/>
+    public PostStageOutcome Run(PostContext context) {
+        var reference = RunScript(captureEveryStep: true);
+        var replay = RunScript(captureEveryStep: false);
+
+        if (reference.TrafficFingerprint != replay.TrafficFingerprint) {
+            return PostStageOutcome.Fail(detail: $"two identical linked runs produced different cable traffic (0x{reference.TrafficFingerprint:X16} then 0x{replay.TrafficFingerprint:X16})");
+        }
+
+        if (reference.CompletedTransfers != replay.CompletedTransfers) {
+            return PostStageOutcome.Fail(detail: $"two identical linked runs exchanged {reference.CompletedTransfers} then {replay.CompletedTransfers} bytes");
+        }
+
+        if (!reference.Images[^1].AsSpan().SequenceEqual(other: replay.Images[^1])) {
+            return PostStageOutcome.Fail(detail: "two identical linked runs ended on different group state images; the linked pair is not replay-identical");
+        }
+
+        return Rewind(reference: reference);
     }
 
     private readonly record struct ScriptRun(

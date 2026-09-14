@@ -308,6 +308,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.Journal,
             writeItem: static (w, entry) => {
                 w.WriteUInt64(value: entry.Tick);
+                w.WriteUInt64(value: entry.EngineTick);
                 w.WriteBlock(value: EncodeLeafBlock<WorldMutation>(
                     tryEncode: WorldSubmissionCodec.TryEncodeCommittedMutation,
                     value: entry.Mutation,
@@ -336,13 +337,17 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteBoolean(value: row.Held);
             }
         );
-        WriteArray(writer, section.Decisions, static (w, s) => {
-            w.WriteString(s.Rule); w.WriteInt32(s.Key); w.WriteInt32(s.Generation); w.WriteInt32(s.Selected);
-            w.WriteBoolean(s.Evaluated); w.WriteBoolean(s.InterruptHeld);
-            w.WriteUInt64(s.PeriodRemaining); w.WriteUInt64(s.CommitmentRemaining); w.WriteUInt64(s.RandomState);
-            w.WriteUInt64(s.DrawCount); w.WriteUInt64(s.Reconsiderations); w.WriteInt64(s.LastScore);
-            w.WriteInt32(s.Candidate); w.WriteInt32(s.CandidateGeneration);
-        });
+        WriteArray(
+            writer,
+            section.Decisions,
+            static (w, s) => {
+            w.WriteString(value: s.Rule); w.WriteInt32(value: s.Key); w.WriteInt32(value: s.Generation); w.WriteInt32(value: s.Selected);
+            w.WriteBoolean(value: s.Evaluated); w.WriteBoolean(value: s.InterruptHeld);
+            w.WriteUInt64(value: s.PeriodRemaining); w.WriteUInt64(value: s.CommitmentRemaining); w.WriteUInt64(value: s.RandomState);
+            w.WriteUInt64(value: s.DrawCount); w.WriteUInt64(value: s.Reconsiderations); w.WriteInt64(value: s.LastScore);
+            w.WriteInt32(value: s.Candidate); w.WriteInt32(value: s.CandidateGeneration);
+        }
+        );
         WriteArray(
             writer: writer,
             items: section.InteractionGateHeld,
@@ -419,13 +424,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "server journal",
             readItem: static (ref WireReader r) => {
                 var tick = r.ReadUInt64();
+                var engineTick = r.ReadUInt64();
                 var mutation = ReadLeafBlock<WorldMutation>(
                     field: "journal mutation",
                     reader: ref r,
                     tryDecode: WorldSubmissionCodec.TryDecodeCommittedMutation
                 );
 
-                return (tick, mutation!);
+                return (tick, engineTick, mutation!);
             }
         );
         var lastCompletedTick = reader.ReadUInt64();
@@ -454,10 +460,29 @@ public static partial class WorldAuthorityCheckpointCodec {
                 return (rule, held);
             }
         );
-        var decisions = ReadArray(ref reader, "server decisions", static (ref WireReader r) => new WorldDecisionCheckpoint(
-            r.ReadString("decision rule", MaxStringBytes), r.ReadInt32(), r.ReadInt32(), r.ReadInt32(),
-            r.ReadBoolean(), r.ReadBoolean(), r.ReadUInt64(), r.ReadUInt64(), r.ReadUInt64(),
-            r.ReadUInt64(), r.ReadUInt64(), r.ReadInt64(), r.ReadInt32(), r.ReadInt32()));
+        var decisions = ReadArray(
+            ref reader,
+            "server decisions",
+            static (ref WireReader r) => new WorldDecisionCheckpoint(
+                r.ReadString(
+                    field: "decision rule",
+                    maxBytes: MaxStringBytes
+                ),
+                r.ReadInt32(),
+                r.ReadInt32(),
+                r.ReadInt32(),
+                r.ReadBoolean(),
+                r.ReadBoolean(),
+                r.ReadUInt64(),
+                r.ReadUInt64(),
+                r.ReadUInt64(),
+                r.ReadUInt64(),
+                r.ReadUInt64(),
+                r.ReadInt64(),
+                r.ReadInt32(),
+                r.ReadInt32()
+            )
+        );
         var interactionGateHeld = ReadArray(
             reader: ref reader,
             field: "server interaction gate held",
@@ -509,6 +534,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
+
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
             reason = $"server section: {failure}";
@@ -519,6 +545,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         section = new WorldServer.WorldServerCheckpoint(
             BaseDefinitionJson: baseDefinitionJson,
             BaseOrigin: baseOrigin,
+            Decisions: decisions,
             DefinitionJson: definitionJson,
             Intents: intents,
             InteractionGateHeld: interactionGateHeld,
@@ -538,7 +565,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             MusicDirectorTransitionCount: musicDirectorTransitionCount,
             Pending: pending,
             RuleGateHeld: ruleGateHeld,
-            Decisions: decisions,
             SolidRevision: solidRevision
         );
         reason = string.Empty;
@@ -812,6 +838,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             BodyMotionProgramName: bodyMotionProgramName,
             ChannelTimerTicks: channelTimerTicks,
             ChannelTimerValues: channelTimerValues,
+            DriveLatRemainder: driveLatRemainder,
+            DriveLongRemainder: driveLongRemainder,
+            DrivePitch: drivePitch,
+            DriveResidualRemainder: driveResidualRemainder,
             DurableInputPresent: durableInputPresent,
             DurableInputTick: durableInputTick,
             DurableInputTimers: durableInputTimers,
@@ -821,6 +851,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             LaneFactHeld: laneFactHeld,
             LaneLatch: laneLatch,
             LaneRecency: laneRecency,
+            MediumThrustRampRemainder: mediumThrustRampRemainder,
             MotionRecency: motionRecency,
             Orientation: orientation,
             OverlayRemainderX: overlayRemainderX,
@@ -842,13 +873,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             PlanarVelocity: planarVelocity,
             PreviousChannelBit: previousChannelBit,
             Source: source,
-            MediumThrustRampRemainder: mediumThrustRampRemainder,
             TapeIntents: tapeIntents,
             TapeRemainingTicks: tapeRemainingTicks,
-            DriveLatRemainder: driveLatRemainder,
-            DriveLongRemainder: driveLongRemainder,
-            DrivePitch: drivePitch,
-            DriveResidualRemainder: driveResidualRemainder,
             VerticalFollowerPositionRaw: verticalFollowerPositionRaw,
             VerticalFollowerPreviousTarget: verticalFollowerPreviousTarget,
             VerticalFollowerVelocityRaw: verticalFollowerVelocityRaw,
@@ -990,15 +1016,11 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return new WorldBody.IntegrationResidue(
             AffectingSubject: affectingSubject,
-            Tether: tether,
-            HoldAnchor: holdAnchor,
-            HoldIndex: holdIndex,
-            HoldNormal: holdNormal,
-            HoldSpendRemainder: holdSpendRemainder,
-            AttitudeUp: attitudeUp,
             AttitudeLeaned: attitudeLeaned,
             AttitudeTurnRemainder: attitudeTurnRemainder,
-            Home: home,
+            AttitudeUp: attitudeUp,
+            CarriedBy: carriedBy,
+            Carrying: carrying,
             ContactUpTurnRemainder: contactUpTurnRemainder,
             ContinuumConsumedThroughEngineTick: continuumConsumedThroughEngineTick,
             Engaged: engaged,
@@ -1006,29 +1028,33 @@ public static partial class WorldAuthorityCheckpointCodec {
             FieldUpTurnRemainder: fieldUpTurnRemainder,
             Frame: frame,
             Grounded: grounded,
+            HoldAnchor: holdAnchor,
+            HoldIndex: holdIndex,
+            HoldNormal: holdNormal,
+            HoldSpendRemainder: holdSpendRemainder,
+            Home: home,
             OrdinaryAdvanceAdmitted: ordinaryAdvanceAdmitted,
             PlanarFollowerSeeded: planarFollowerSeeded,
             PositionRemainderX: positionRemainderX,
             PositionRemainderY: positionRemainderY,
             PositionRemainderZ: positionRemainderZ,
             PreviousPosition: previousPosition,
+            RigidAngularVelocity: rigidAngularVelocity,
+            RigidGroundContacting: rigidGroundContacting,
+            RigidGroundMissStreak: rigidGroundMissStreak,
+            RigidObstructionContacting: rigidObstructionContacting,
+            RigidObstructionMissStreak: rigidObstructionMissStreak,
+            RigidResting: rigidResting,
+            RigidRestingHoldTicks: rigidRestingHoldTicks,
+            RigidVelocity: rigidVelocity,
             RotationRemainderX: rotationRemainderX,
             RotationRemainderY: rotationRemainderY,
             RotationRemainderZ: rotationRemainderZ,
+            Tether: tether,
             Up: up,
             UpNeedsReseat: upNeedsReseat,
             VerticalFollowerSeeded: verticalFollowerSeeded,
-            VerticalVelocityRemainder: verticalVelocityRemainder,
-            RigidVelocity: rigidVelocity,
-            RigidAngularVelocity: rigidAngularVelocity,
-            RigidResting: rigidResting,
-            RigidRestingHoldTicks: rigidRestingHoldTicks,
-            RigidGroundContacting: rigidGroundContacting,
-            RigidObstructionContacting: rigidObstructionContacting,
-            RigidGroundMissStreak: rigidGroundMissStreak,
-            RigidObstructionMissStreak: rigidObstructionMissStreak,
-            Carrying: carrying,
-            CarriedBy: carriedBy
+            VerticalVelocityRemainder: verticalVelocityRemainder
         );
     }
     private static void WriteTetherResidue(WireWriter writer, WorldBody.TetherResidue residue) {

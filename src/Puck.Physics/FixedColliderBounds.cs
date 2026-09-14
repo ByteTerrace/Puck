@@ -7,6 +7,26 @@ namespace Puck.Physics;
 internal static class FixedColliderBounds {
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
 
+    /// <summary>A box volume's world-space center and its three orthonormal face axes (unit vectors, since a
+    /// quaternion rotates a unit vector to another unit vector) — the shared basis <see cref="WorldBounds"/>'s own
+    /// box branch projects onto world axes, and <see cref="FixedDynamicBodyContacts"/>'s box-box separating-axis
+    /// test projects onto both boxes' own axes as well.</summary>
+    internal static (FixedVector3 Center, FixedVector3 AxisX, FixedVector3 AxisY, FixedVector3 AxisZ, FixedVector3 HalfExtents) BoxAxes(
+        FixedVector3 position,
+        in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume
+    ) {
+        var center = (position + orientation.Rotate(vector: volume.Center));
+        var rotation = (orientation * volume.Rotation).Normalize();
+
+        return (
+            Center: center,
+            AxisX: rotation.Rotate(vector: FixedAxisMath.UnitX),
+            AxisY: rotation.Rotate(vector: FixedAxisMath.UnitY),
+            AxisZ: rotation.Rotate(vector: FixedAxisMath.UnitZ),
+            HalfExtents: volume.HalfExtents
+        );
+    }
     internal static (FixedVector3 Center, FixedVector3 Extent) WorldBounds(
         FixedVector3 position,
         in FixedQuaternion orientation,
@@ -40,8 +60,8 @@ internal static class FixedColliderBounds {
 
         if (volume.Kind == FixedBodyColliderKind.Box) {
             var (center, axisX, axisY, axisZ, _) = BoxAxes(
-                position: position,
                 orientation: orientation,
+                position: position,
                 volume: in volume
             );
             var extent = new FixedVector3(
@@ -54,25 +74,5 @@ internal static class FixedColliderBounds {
         }
 
         throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}.");
-    }
-    /// <summary>A box volume's world-space center and its three orthonormal face axes (unit vectors, since a
-    /// quaternion rotates a unit vector to another unit vector) — the shared basis <see cref="WorldBounds"/>'s own
-    /// box branch projects onto world axes, and <see cref="FixedDynamicBodyContacts"/>'s box-box separating-axis
-    /// test projects onto both boxes' own axes as well.</summary>
-    internal static (FixedVector3 Center, FixedVector3 AxisX, FixedVector3 AxisY, FixedVector3 AxisZ, FixedVector3 HalfExtents) BoxAxes(
-        FixedVector3 position,
-        in FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume
-    ) {
-        var center = (position + orientation.Rotate(vector: volume.Center));
-        var rotation = (orientation * volume.Rotation).Normalize();
-
-        return (
-            Center: center,
-            AxisX: rotation.Rotate(vector: FixedAxisMath.UnitX),
-            AxisY: rotation.Rotate(vector: FixedAxisMath.UnitY),
-            AxisZ: rotation.Rotate(vector: FixedAxisMath.UnitZ),
-            HalfExtents: volume.HalfExtents
-        );
     }
 }

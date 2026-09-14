@@ -1,106 +1,7 @@
 {
-  "schema": "puck.cartridge.v1",
-  "target": "agb",
-  "title": "PIP",
+  "arrays": [],
   "gameCode": "PIPA",
-  "palette": [
-    4195,
-    28069,
-    5467,
-    10983,
-    4761,
-    28606,
-    9383,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0
-  ],
-  "tiles": [
-    {
-      "name": "floor",
-      "pixels": [
-        "00000000",
-        "00000000",
-        "00000000",
-        "00000000",
-        "00000000",
-        "00000000",
-        "00000000",
-        "00000000"
-      ]
-    },
-    {
-      "name": "wall-dive",
-      "pixels": [
-        "11111111",
-        "11111111",
-        "11111111",
-        "11111111",
-        "11111111",
-        "11111111",
-        "11111111",
-        "11111111"
-      ]
-    },
-    {
-      "name": "wall-kart",
-      "pixels": [
-        "22222222",
-        "22222222",
-        "22222222",
-        "22222222",
-        "22222222",
-        "22222222",
-        "22222222",
-        "22222222"
-      ]
-    },
-    {
-      "name": "wall-jump",
-      "pixels": [
-        "33333333",
-        "33333333",
-        "33333333",
-        "33333333",
-        "33333333",
-        "33333333",
-        "33333333",
-        "33333333"
-      ]
-    },
-    {
-      "name": "wall-studio",
-      "pixels": [
-        "44444444",
-        "44444444",
-        "44444444",
-        "44444444",
-        "44444444",
-        "44444444",
-        "44444444",
-        "44444444"
-      ]
-    },
-    {
-      "name": "pip",
-      "pixels": [
-        "00555500",
-        "05555550",
-        "05655650",
-        "05555550",
-        "00555500",
-        "05555550",
-        "05500550",
-        "05500550"
-      ]
-    }
-  ],
+  "layers": [],
   "map": [
     1,
     1,
@@ -1127,244 +1028,347 @@
     0,
     0
   ],
-  "variables": [
-    {
-      "name": "x",
-      "initial": 116
-    },
-    {
-      "name": "y",
-      "initial": 76
-    },
-    {
-      "name": "steps",
-      "initial": 0
-    }
-  ],
+  "palettes": {
+    "background": [
+      [
+        4195,
+        28069,
+        5467,
+        10983,
+        4761,
+        28606,
+        9383,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "object": [
+      [
+        4195,
+        28069,
+        5467,
+        10983,
+        4761,
+        28606,
+        9383,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    ]
+  },
+  "raster": [],
   "rules": [
     {
+      "body": [
+        {
+          "kind": "set",
+          "operation": "Subtract",
+          "target": {
+            "state": "x"
+          },
+          "value": "1"
+        }
+      ],
       "name": "walk-west",
-      "when": [
-        {
-          "kind": "key",
-          "key": "left",
-          "mode": "held"
-        }
-      ],
-      "actions": [
-        {
-          "variable": "x",
-          "operation": "subtract",
-          "value": {
-            "constant": 1
-          }
-        }
-      ]
+      "when": {
+        "$type": "compareValue",
+        "comparison": "Equal",
+        "kind": "Int",
+        "left": "$key:left:held",
+        "right": "1"
+      }
     },
     {
+      "body": [
+        {
+          "kind": "set",
+          "operation": "Add",
+          "target": {
+            "state": "x"
+          },
+          "value": "1"
+        }
+      ],
       "name": "walk-east",
-      "when": [
-        {
-          "kind": "key",
-          "key": "right",
-          "mode": "held"
-        }
-      ],
-      "actions": [
-        {
-          "variable": "x",
-          "operation": "add",
-          "value": {
-            "constant": 1
-          }
-        }
-      ]
+      "when": {
+        "$type": "compareValue",
+        "comparison": "Equal",
+        "kind": "Int",
+        "left": "$key:right:held",
+        "right": "1"
+      }
     },
     {
+      "body": [
+        {
+          "kind": "set",
+          "operation": "Subtract",
+          "target": {
+            "state": "y"
+          },
+          "value": "1"
+        }
+      ],
       "name": "walk-north",
-      "when": [
-        {
-          "kind": "key",
-          "key": "up",
-          "mode": "held"
-        }
-      ],
-      "actions": [
-        {
-          "variable": "y",
-          "operation": "subtract",
-          "value": {
-            "constant": 1
-          }
-        }
-      ]
+      "when": {
+        "$type": "compareValue",
+        "comparison": "Equal",
+        "kind": "Int",
+        "left": "$key:up:held",
+        "right": "1"
+      }
     },
     {
+      "body": [
+        {
+          "kind": "set",
+          "operation": "Add",
+          "target": {
+            "state": "y"
+          },
+          "value": "1"
+        }
+      ],
       "name": "walk-south",
-      "when": [
-        {
-          "kind": "key",
-          "key": "down",
-          "mode": "held"
-        }
-      ],
-      "actions": [
-        {
-          "variable": "y",
-          "operation": "add",
-          "value": {
-            "constant": 1
-          }
-        }
-      ]
+      "when": {
+        "$type": "compareValue",
+        "comparison": "Equal",
+        "kind": "Int",
+        "left": "$key:down:held",
+        "right": "1"
+      }
     },
     {
+      "body": [
+        {
+          "kind": "set",
+          "target": {
+            "state": "x"
+          },
+          "value": "8"
+        }
+      ],
       "name": "wall-west",
-      "when": [
-        {
-          "kind": "compare",
-          "left": {
-            "variable": "x"
-          },
-          "comparison": "lt",
-          "right": {
-            "constant": 8
-          }
-        }
-      ],
-      "actions": [
-        {
-          "variable": "x",
-          "operation": "set",
-          "value": {
-            "constant": 8
-          }
-        }
-      ]
+      "when": {
+        "$type": "compareValue",
+        "comparison": "Less",
+        "kind": "Int",
+        "left": "x",
+        "right": "8"
+      }
     },
     {
+      "body": [
+        {
+          "kind": "set",
+          "target": {
+            "state": "x"
+          },
+          "value": "224"
+        }
+      ],
       "name": "wall-east",
-      "when": [
-        {
-          "kind": "compare",
-          "left": {
-            "variable": "x"
-          },
-          "comparison": "gt",
-          "right": {
-            "constant": 224
-          }
-        }
-      ],
-      "actions": [
-        {
-          "variable": "x",
-          "operation": "set",
-          "value": {
-            "constant": 224
-          }
-        }
-      ]
+      "when": {
+        "$type": "compareValue",
+        "comparison": "Greater",
+        "kind": "Int",
+        "left": "x",
+        "right": "224"
+      }
     },
     {
+      "body": [
+        {
+          "kind": "set",
+          "target": {
+            "state": "y"
+          },
+          "value": "8"
+        }
+      ],
       "name": "wall-north",
-      "when": [
-        {
-          "kind": "compare",
-          "left": {
-            "variable": "y"
-          },
-          "comparison": "lt",
-          "right": {
-            "constant": 8
-          }
-        }
-      ],
-      "actions": [
-        {
-          "variable": "y",
-          "operation": "set",
-          "value": {
-            "constant": 8
-          }
-        }
-      ]
+      "when": {
+        "$type": "compareValue",
+        "comparison": "Less",
+        "kind": "Int",
+        "left": "y",
+        "right": "8"
+      }
     },
     {
+      "body": [
+        {
+          "kind": "set",
+          "target": {
+            "state": "y"
+          },
+          "value": "144"
+        }
+      ],
       "name": "wall-south",
-      "when": [
-        {
-          "kind": "compare",
-          "left": {
-            "variable": "y"
-          },
-          "comparison": "gt",
-          "right": {
-            "constant": 144
-          }
-        }
-      ],
-      "actions": [
-        {
-          "variable": "y",
-          "operation": "set",
-          "value": {
-            "constant": 144
-          }
-        }
-      ]
+      "when": {
+        "$type": "compareValue",
+        "comparison": "Greater",
+        "kind": "Int",
+        "left": "y",
+        "right": "144"
+      }
     },
     {
-      "name": "count-steps",
-      "when": [
+      "body": [
         {
-          "kind": "compare",
-          "left": {
-            "variable": "steps"
+          "kind": "set",
+          "operation": "Add",
+          "target": {
+            "state": "steps"
           },
-          "comparison": "lt",
-          "right": {
-            "constant": 255
-          }
-        },
-        {
-          "kind": "key",
-          "key": "a",
-          "mode": "pressed"
+          "value": "1"
         }
       ],
-      "actions": [
-        {
-          "variable": "steps",
-          "operation": "add",
-          "value": {
-            "constant": 1
+      "name": "count-steps",
+      "when": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareValue",
+            "comparison": "Less",
+            "kind": "Int",
+            "left": "steps",
+            "right": "255"
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "Equal",
+            "kind": "Int",
+            "left": "$key:a:pressed",
+            "right": "1"
           }
-        }
-      ]
-    }
-  ],
-  "sprites": [
-    {
-      "name": "pip",
-      "tile": {
-        "constant": 5
-      },
-      "x": {
-        "variable": "x"
-      },
-      "y": {
-        "variable": "y"
-      },
-      "visible": {
-        "constant": 1
+        ]
       }
     }
   ],
-  "scrollX": {
-    "constant": 0
-  },
-  "scrollY": {
-    "constant": 0
-  }
+  "schema": "puck.cartridge.v1",
+  "screens": [],
+  "scrollX": "0",
+  "scrollY": "0",
+  "sounds": [],
+  "sprites": [
+    {
+      "name": "pip",
+      "tile": "5",
+      "visible": "1",
+      "x": "x",
+      "y": "y"
+    }
+  ],
+  "target": "agb",
+  "tiles": [
+    {
+      "name": "floor",
+      "pixels": [
+        "00000000",
+        "00000000",
+        "00000000",
+        "00000000",
+        "00000000",
+        "00000000",
+        "00000000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "wall-dive",
+      "pixels": [
+        "11111111",
+        "11111111",
+        "11111111",
+        "11111111",
+        "11111111",
+        "11111111",
+        "11111111",
+        "11111111"
+      ]
+    },
+    {
+      "name": "wall-kart",
+      "pixels": [
+        "22222222",
+        "22222222",
+        "22222222",
+        "22222222",
+        "22222222",
+        "22222222",
+        "22222222",
+        "22222222"
+      ]
+    },
+    {
+      "name": "wall-jump",
+      "pixels": [
+        "33333333",
+        "33333333",
+        "33333333",
+        "33333333",
+        "33333333",
+        "33333333",
+        "33333333",
+        "33333333"
+      ]
+    },
+    {
+      "name": "wall-studio",
+      "pixels": [
+        "44444444",
+        "44444444",
+        "44444444",
+        "44444444",
+        "44444444",
+        "44444444",
+        "44444444",
+        "44444444"
+      ]
+    },
+    {
+      "name": "pip",
+      "pixels": [
+        "00555500",
+        "05555550",
+        "05655650",
+        "05555550",
+        "00555500",
+        "05555550",
+        "05500550",
+        "05500550"
+      ]
+    }
+  ],
+  "title": "PIP",
+  "variables": [
+    {
+      "initial": 116,
+      "name": "x"
+    },
+    {
+      "initial": 76,
+      "name": "y"
+    },
+    {
+      "initial": 0,
+      "name": "steps"
+    }
+  ]
 }

@@ -9,24 +9,42 @@ public sealed class PeerEndpointTests {
     [InlineData("[::1]:7825")]
     [Theory]
     public void FormattingRoundTripsWithoutDnsResolution(string address) {
-        Assert.True(PeerEndpoint.TryParse(address, out var endpoint));
-        Assert.Equal(address, PeerEndpoint.Format(endpoint));
-        Assert.True(PeerEndpoint.TryParse(PeerEndpoint.Format(endpoint), out var parsed));
-        Assert.Equal(endpoint, parsed);
+        Assert.True(condition: PeerEndpoint.TryParse(
+            endpoint: out var endpoint,
+            value: address
+        ));
+        Assert.Equal(
+            address,
+            PeerEndpoint.Format(endpoint: endpoint)
+        );
+        Assert.True(condition: PeerEndpoint.TryParse(
+            PeerEndpoint.Format(endpoint: endpoint),
+            out var parsed
+        ));
+        Assert.Equal(
+            actual: parsed,
+            expected: endpoint
+        );
     }
     [InlineData("play.puck.byteterrace.com:7825")]
     [InlineData("localhost:7825")]
     [Theory]
     public void KeepsDnsUnresolvedUntilDial(string address) {
-        Assert.True(PeerEndpoint.TryParse(address, out var endpoint));
-        Assert.IsType<DnsEndPoint>(endpoint);
+        Assert.True(condition: PeerEndpoint.TryParse(
+            endpoint: out var endpoint,
+            value: address
+        ));
+        Assert.IsType<DnsEndPoint>(@object: endpoint);
     }
     [InlineData("127.0.0.1:7825")]
     [InlineData("[::1]:7825")]
     [Theory]
     public void PreservesNumericRoutes(string address) {
-        Assert.True(PeerEndpoint.TryParse(address, out var endpoint));
-        Assert.IsType<IPEndPoint>(endpoint);
+        Assert.True(condition: PeerEndpoint.TryParse(
+            endpoint: out var endpoint,
+            value: address
+        ));
+        Assert.IsType<IPEndPoint>(@object: endpoint);
     }
     [InlineData(null)]
     [InlineData("localhost")]
@@ -36,5 +54,8 @@ public sealed class PeerEndpointTests {
     [InlineData("localhost:7825/path")]
     [InlineData("localhost:7825?x=1")]
     [Theory]
-    public void RefusesIncompleteOrUrlShapedRoutes(string? address) => Assert.False(PeerEndpoint.TryParse(address, out _));
+    public void RefusesIncompleteOrUrlShapedRoutes(string? address) => Assert.False(condition: PeerEndpoint.TryParse(
+        endpoint: out _,
+        value: address
+    ));
 }

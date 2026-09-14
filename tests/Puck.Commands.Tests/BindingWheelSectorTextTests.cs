@@ -14,29 +14,51 @@ namespace Puck.Commands.Tests;
 public sealed class BindingWheelSectorTextTests {
     private const string ActionCommand = "test.action";
 
-    [Fact]
-    public void TwoSectorsOnOneCommandAreDistinguishedOnlyByWhatTheySubmit() {
-        var wheel = Wheel();
+    private static InputRouter Router() => new(
+        registry: new CommandRegistry(modules: [new ProbeModule()]),
+        bindings: new EmptyBindings(),
+        principalResolver: new ConsolePrincipal()
+    );
+    // One ring, two sectors on the SAME command: the first authors a text payload and the second deliberately
+    // authors none.
+    private static BindingWheelView Wheel() {
+        var profile = BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(
+                        Id: "hold",
+                        Entries: []
+                    )
+                )],
+            Wheels: [new BindingWheelDefinition(
+                    Id: "menu",
+                    Group: "play",
+                    HoldPages: ["hold"],
+                    Rings: [new BindingPageDefinition(
+                            Id: "actions",
+                            Entries: [
+                        new BindingPageEntryDefinition(
+                                    Sources: null,
+                                    Command: ActionCommand,
+                                    Id: "north",
+                                    Text: "north"
+                                ),
+                        new BindingPageEntryDefinition(
+                                    Sources: null,
+                                    Command: ActionCommand,
+                                    Id: "south"
+                                ),
+                    ]
+                        )]
+                )]
+        ));
 
-        // The setup's whole point: the payload cannot be derived from the command, because both sectors name the
-        // same one. Only the authored text separates them, which is exactly what the two tests below measure.
-        Assert.Equal(
-            actual: wheel.Rings[0].Sectors[0].Command,
-            expected: ActionCommand
-        );
-        Assert.Equal(
-            actual: wheel.Rings[0].Sectors[1].Command,
-            expected: ActionCommand
-        );
-        Assert.Equal(
-            actual: wheel.Rings[0].Sectors[0].Id,
-            expected: "north"
-        );
-        Assert.Equal(
-            actual: wheel.Rings[0].Sectors[1].Id,
-            expected: "south"
-        );
+        return new PagedInputBindings(profile: profile).WheelFor(slot: 0)!;
     }
+
     [Fact]
     public void ACommittedSectorSubmitsItsCommandAndTextAsOneLine() {
         var router = Router();
@@ -95,50 +117,28 @@ public sealed class BindingWheelSectorTextTests {
         // proves the sibling sector's payload is not shared through the compiled ring.
         Assert.Null(@object: entry.Text);
     }
+    [Fact]
+    public void TwoSectorsOnOneCommandAreDistinguishedOnlyByWhatTheySubmit() {
+        var wheel = Wheel();
 
-    private static InputRouter Router() => new(
-        registry: new CommandRegistry(modules: [new ProbeModule()]),
-        bindings: new EmptyBindings(),
-        principalResolver: new ConsolePrincipal()
-    );
-    // One ring, two sectors on the SAME command: the first authors a text payload and the second deliberately
-    // authors none.
-    private static BindingWheelView Wheel() {
-        var profile = BindingProfile.Compile(document: new BindingProfileDocument(
-            Version: BindingProfileDocument.CurrentVersion,
-            Modifiers: [],
-            Chords: [new BindingChordDefinition(
-                Group: "play",
-                Chord: [],
-                Page: new BindingPageDefinition(
-                    Id: "hold",
-                    Entries: []
-                )
-            )],
-            Wheels: [new BindingWheelDefinition(
-                Id: "menu",
-                Group: "play",
-                HoldPages: ["hold"],
-                Rings: [new BindingPageDefinition(
-                    Id: "actions",
-                    Entries: [
-                        new BindingPageEntryDefinition(
-                            Sources: null,
-                            Command: ActionCommand,
-                            Id: "north",
-                            Text: "north"
-                        ),
-                        new BindingPageEntryDefinition(
-                            Sources: null,
-                            Command: ActionCommand,
-                            Id: "south"
-                        ),
-                    ]
-                )]
-            )]
-        ));
-
-        return new PagedInputBindings(profile: profile).WheelFor(slot: 0)!;
+        // The setup's whole point: the payload cannot be derived from the command, because both sectors name the
+        // same one. Only the authored text separates them, which is exactly what the two tests below measure.
+        Assert.Equal(
+            actual: wheel.Rings[0].Sectors[0].Command,
+            expected: ActionCommand
+        );
+        Assert.Equal(
+            actual: wheel.Rings[0].Sectors[1].Command,
+            expected: ActionCommand
+        );
+        Assert.Equal(
+            actual: wheel.Rings[0].Sectors[0].Id,
+            expected: "north"
+        );
+        Assert.Equal(
+            actual: wheel.Rings[0].Sectors[1].Id,
+            expected: "south"
+        );
     }
 
     private sealed class ConsolePrincipal : ICommandPrincipalResolver {

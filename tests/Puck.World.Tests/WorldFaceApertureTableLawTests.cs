@@ -16,10 +16,26 @@ public sealed class WorldFaceApertureTableLawTests {
         HalfDepth: FixedQ4816.FromDouble(value: 0.05),
         HalfHeight: FixedQ4816.FromDouble(value: 1.5),
         HalfWidth: FixedQ4816.FromDouble(value: 0.75),
-        Normal: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.One),
-        Origin: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero),
-        Right: new FixedVector3(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
-        Up: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero)
+        Normal: new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.One
+        ),
+        Origin: new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.One,
+            Z: FixedQ4816.Zero
+        ),
+        Right: new FixedVector3(
+            X: FixedQ4816.One,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.Zero
+        ),
+        Up: new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.One,
+            Z: FixedQ4816.Zero
+        )
     );
 
     private static WorldFaceRow Row(SdfSolidPrimitive? primitive) => new(
@@ -35,40 +51,20 @@ public sealed class WorldFaceApertureTableLawTests {
     );
 
     [Fact]
-    public void TheTableIsTheOnlyDecision_AndEveryConsumerAgreesWithItOnEveryPrimitive() {
-        var floor = FixedQ4816.FromDouble(value: 0.5);
-
-        foreach (var primitive in Enum.GetValues<SdfSolidPrimitive>()) {
-            var row = Row(primitive: primitive);
-            var opens = (WorldFaceApertures.For(primitive: primitive) is not null);
-
-            Assert.Equal(
-                actual: WorldFacePortalPolicy.TryAperture(
-                aperture: out var aperture,
-                crossingFloor: floor,
-                row: in row
-            ),
-                expected: opens
-            );
-            Assert.Equal(actual: (aperture is not null), expected: opens);
-        }
-
-        // A face naming no shape at all opens nothing — the same answer through the same door, not a second rule.
-        var shapeless = Row(primitive: null);
-
-        Assert.Null(@object: shapeless.Aperture);
-        Assert.False(condition: WorldFacePortalPolicy.TryAperture(
-            aperture: out _,
-            crossingFloor: floor,
-            row: in shapeless
-        ));
+    public void APrimitiveOutsideTheTableOpensNothing() {
+        // The refused half of the one decision, with the Box control beside it so the negative discriminates.
+        Assert.Null(@object: WorldFaceApertures.For(primitive: SdfSolidPrimitive.Sphere));
+        Assert.NotNull(@object: WorldFaceApertures.For(primitive: SdfSolidPrimitive.Box));
     }
     [Fact]
     public void TheBoxRecipeExtrudesTheFacesOwnFrame_NeverThinnerThanTheCrossingFloor() {
         var row = Row(primitive: SdfSolidPrimitive.Box);
         var recipe = Assert.IsType<WorldFaceApertureRecipe>(@object: row.Aperture);
 
-        Assert.Equal(expected: SdfSolidPrimitive.Box, actual: recipe.Primitive);
+        Assert.Equal(
+            expected: SdfSolidPrimitive.Box,
+            actual: recipe.Primitive
+        );
 
         var thickFloor = FixedQ4816.FromDouble(value: 0.5);
         var thinFloor = FixedQ4816.FromDouble(value: 0.001);
@@ -88,14 +84,49 @@ public sealed class WorldFaceApertureTableLawTests {
         var shallowBox = Assert.IsType<WorldFaceAperture.Box>(@object: shallow);
 
         // The floor wins when it is the larger term, the door's own half-depth when it is: max, never one or the other.
-        Assert.Equal(expected: thickFloor, actual: deepBox.Depth);
-        Assert.Equal(expected: Frame.HalfDepth, actual: shallowBox.Depth);
-        Assert.Equal(expected: Frame, actual: deepBox.Frame);
+        Assert.Equal(
+            expected: thickFloor,
+            actual: deepBox.Depth
+        );
+        Assert.Equal(
+            expected: Frame.HalfDepth,
+            actual: shallowBox.Depth
+        );
+        Assert.Equal(
+            expected: Frame,
+            actual: deepBox.Frame
+        );
     }
     [Fact]
-    public void APrimitiveOutsideTheTableOpensNothing() {
-        // The refused half of the one decision, with the Box control beside it so the negative discriminates.
-        Assert.Null(@object: WorldFaceApertures.For(primitive: SdfSolidPrimitive.Sphere));
-        Assert.NotNull(@object: WorldFaceApertures.For(primitive: SdfSolidPrimitive.Box));
+    public void TheTableIsTheOnlyDecision_AndEveryConsumerAgreesWithItOnEveryPrimitive() {
+        var floor = FixedQ4816.FromDouble(value: 0.5);
+
+        foreach (var primitive in Enum.GetValues<SdfSolidPrimitive>()) {
+            var row = Row(primitive: primitive);
+            var opens = (WorldFaceApertures.For(primitive: primitive) is not null);
+
+            Assert.Equal(
+                actual: WorldFacePortalPolicy.TryAperture(
+                    aperture: out var aperture,
+                    crossingFloor: floor,
+                    row: in row
+                ),
+                expected: opens
+            );
+            Assert.Equal(
+                actual: (aperture is not null),
+                expected: opens
+            );
+        }
+
+        // A face naming no shape at all opens nothing — the same answer through the same door, not a second rule.
+        var shapeless = Row(primitive: null);
+
+        Assert.Null(@object: shapeless.Aperture);
+        Assert.False(condition: WorldFacePortalPolicy.TryAperture(
+            aperture: out _,
+            crossingFloor: floor,
+            row: in shapeless
+        ));
     }
 }

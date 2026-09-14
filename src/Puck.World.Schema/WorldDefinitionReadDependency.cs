@@ -10,10 +10,14 @@ namespace Puck.World;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldDefinitionReadDependency(IReadOnlyList<string> PlacementIds, IReadOnlyList<string> StateRows, string Fingerprint) {
     /// <summary>Checks bounded, unique input names and fingerprint shape.</summary>
-    public bool TryValidate() => PlacementIds is { Count: <= 256 } && StateRows is { Count: <= 256 } &&
-        PlacementIds.All(name => !string.IsNullOrWhiteSpace(name)) &&
-        StateRows.All(name => CellName.TryParse(name, out _, out _)) &&
-        PlacementIds.Distinct(StringComparer.Ordinal).Count() == PlacementIds.Count &&
-        StateRows.Distinct(StringComparer.Ordinal).Count() == StateRows.Count &&
-        Fingerprint is { Length: 64 } && Fingerprint.All(char.IsAsciiHexDigit);
+    public bool TryValidate() => ((PlacementIds is { Count: <= 256 }) && (StateRows is { Count: <= 256 }) &&
+        PlacementIds.All(predicate: name => !string.IsNullOrWhiteSpace(value: name)) &&
+        StateRows.All(predicate: name => CellName.TryParse(
+        candidate: name,
+        name: out _,
+        reason: out _
+    )) &&
+        (PlacementIds.Distinct(comparer: StringComparer.Ordinal).Count() == PlacementIds.Count) &&
+        (StateRows.Distinct(comparer: StringComparer.Ordinal).Count() == StateRows.Count) &&
+        (Fingerprint is { Length: 64 }) && Fingerprint.All(predicate: char.IsAsciiHexDigit));
 }

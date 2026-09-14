@@ -15,7 +15,10 @@ public sealed partial class WorldServer {
         }
 
         var layers = ((director.ActiveLayerTuneIds.Count > 0)
-            ? string.Join(separator: ",", values: director.ActiveLayerTuneIds)
+            ? string.Join(
+                separator: ",",
+                values: director.ActiveLayerTuneIds
+            )
             : "none"
         );
 
@@ -31,9 +34,12 @@ public sealed partial class WorldServer {
             return 0L;
         }
 
-        var ticksPerBeat = (ulong)clock.TicksPerBeat;
+        var ticksPerBeat = ((ulong)clock.TicksPerBeat);
         var remainder = (clock.ElapsedTicks % ticksPerBeat);
 
-        return (remainder <= (ticksPerBeat / 2UL)) ? (long)remainder : ((long)remainder - (long)ticksPerBeat);
+        return ((remainder <= (ticksPerBeat / 2UL))
+            ? (long)remainder
+            : (((long)remainder) - ((long)ticksPerBeat))
+        );
     }
 }

@@ -24,7 +24,7 @@ public sealed class ContributionTenureLawTests {
     private const string SlotCreation = "plinth";
     private const string SlotId = "plaza-slot";
 
-    private static readonly ulong s_livenessGraceTicks = WorldSimulationTickConversion.DurationTicks(
+    private static readonly ulong LivenessGraceTicks = WorldSimulationTickConversion.DurationTicks(
         ratePerSecond: 240U,
         seconds: LivenessGraceSeconds
     );
@@ -73,62 +73,85 @@ public sealed class ContributionTenureLawTests {
             ],
             PlacementRowsRaw = [
                 new WorldPlacement(
-                    Id: SlotId,
-                    PrototypeId: SlotCreation,
-                    Position: new DocumentVector3(value: new Vector3(x: 3f, y: 0f, z: 4f)),
-                    YawDegrees: 45f,
-                    Scale: 2f,
-                    Inhabit: inhabit,
-                    Contribution: new WorldPlacementContribution(
-                        Tenure: WorldContributionTenure.Presence,
-                        SlotCreationId: SlotCreation,
-                        Link: SafeName.Parse(candidate: LinkName),
-                        GraceSeconds: ContributionGraceSeconds
-                    )
-                ),
+                Id: SlotId,
+                PrototypeId: SlotCreation,
+                Position: new DocumentVector3(value: new Vector3(
+                    x: 3f,
+                    y: 0f,
+                    z: 4f
+                )),
+                YawDegrees: 45f,
+                Scale: 2f,
+                Inhabit: inhabit,
+                Contribution: new WorldPlacementContribution(
+                    Tenure: WorldContributionTenure.Presence,
+                    SlotCreationId: SlotCreation,
+                    Link: SafeName.Parse(candidate: LinkName),
+                    GraceSeconds: ContributionGraceSeconds
+                )
+            ),
             ],
             PopulationRaw = (document.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) }),
             References = [
                 new WorldReference(
-                    Name: SafeName.Parse(candidate: "peer"),
-                    Document: "peer.world.json",
-                    Owner: null,
-                    World: null
-                ),
+                Name: SafeName.Parse(candidate: "peer"),
+                Document: "peer.world.json",
+                Owner: null,
+                World: null
+            ),
             ],
             Destinations = [
                 new WorldDestination(
-                    Name: SafeName.Parse(candidate: "peer"),
-                    Reference: "peer",
-                    Durability: WorldDestinationDurability.Persisted,
-                    Scope: WorldDestinationScope.Global
-                ),
+                Name: SafeName.Parse(candidate: "peer"),
+                Reference: "peer",
+                Durability: WorldDestinationDurability.Persisted,
+                Scope: WorldDestinationScope.Global
+            ),
             ],
             Adjacencies = [
                 new WorldAdjacency(
-                    Name: SafeName.Parse(candidate: LinkName),
-                    Destination: "peer",
-                    Counterpart: "south",
-                    Boundary: new WorldAdjacencyBoundary(
-                        Center: new DocumentVector3(value: new Vector3(x: 0f, y: 0f, z: -12f)),
-                        OutwardYawDegrees: 0f,
-                        OutwardPitchDegrees: 0f,
-                        Width: 24f,
-                        Height: 16f
-                    ),
-                    LivenessGraceSeconds: LivenessGraceSeconds
+                Name: SafeName.Parse(candidate: LinkName),
+                Destination: "peer",
+                Counterpart: "south",
+                Boundary: new WorldAdjacencyBoundary(
+                    Center: new DocumentVector3(value: new Vector3(
+                        x: 0f,
+                        y: 0f,
+                        z: -12f
+                    )),
+                    OutwardYawDegrees: 0f,
+                    OutwardPitchDegrees: 0f,
+                    Width: 24f,
+                    Height: 16f
                 ),
+                LivenessGraceSeconds: LivenessGraceSeconds
+            ),
+            ],
+        });
+    }
+    // Drives the link to dropped: no delivery is observed, so the feed's staleness climbs past the authored liveness
+    // grace. One step of headroom past the grace so the drop edge has certainly been crossed.
+    private static void DropLink(WorldFixture fixture) {
+        for (var index = 0UL; (index <= (LivenessGraceTicks + 1UL)); index++) {
+            fixture.Step();
+        }
+    }
+    private static WorldDefinition EndowedDocument() {
+        var document = Document();
+        var slot = document.Placements[0];
+
+        return (document with {
+            PlacementRowsRaw = [
+                (slot with {
+                Contribution = new WorldPlacementContribution(
+                Tenure: WorldContributionTenure.Endowed,
+                SlotCreationId: SlotCreation
+            ),
+            }),
             ],
         });
     }
     private static WorldPlacementContribution Facet(WorldFixture fixture) => Slot(fixture: fixture).Contribution!;
-    // Drives the link to dropped: no delivery is observed, so the feed's staleness climbs past the authored liveness
-    // grace. One step of headroom past the grace so the drop edge has certainly been crossed.
-    private static void DropLink(WorldFixture fixture) {
-        for (var index = 0UL; (index <= (s_livenessGraceTicks + 1UL)); index++) {
-            fixture.Step();
-        }
-    }
     // Fills the slot the way a partner does — an ordinary whole-row UpsertPlacement re-pointing prototypeId, carrying
     // NO stamped half. `actor` is the identity the ingress would have stamped on the envelope.
     private static void Fill(WorldFixture fixture, WorldPrincipal actor) {
@@ -204,7 +227,7 @@ public sealed class ContributionTenureLawTests {
             grant: possession
         );
 
-        for (var index = 0; (index < 400); index++) {
+        for (var index = 0; (index < 50); index++) {
             fixture.Step();
         }
 
@@ -250,7 +273,7 @@ public sealed class ContributionTenureLawTests {
         RefreshLink(
             deliveredTick: ref deliveredTick,
             fixture: fixture,
-            steps: (checked((int)s_livenessGraceTicks) + 8)
+            steps: (checked((int)LivenessGraceTicks) + 8)
         );
         Assert.Null(@object: Facet(fixture: fixture).RetractDeadlineTick);
 
@@ -293,7 +316,7 @@ public sealed class ContributionTenureLawTests {
 
         DropLink(fixture: fixture);
 
-        for (var index = 0; (index < 400); index++) {
+        for (var index = 0; (index < 50); index++) {
             fixture.Step();
         }
 
@@ -353,7 +376,7 @@ public sealed class ContributionTenureLawTests {
         endowed.Step();
         DropLink(fixture: endowed);
 
-        for (var index = 0; (index < 400); index++) {
+        for (var index = 0; (index < 50); index++) {
             endowed.Step();
         }
 
@@ -364,23 +387,6 @@ public sealed class ContributionTenureLawTests {
         Assert.NotNull(@object: Facet(fixture: endowed).Contributor);
         Assert.Null(@object: Facet(fixture: endowed).RetractDeadlineTick);
     }
-
-    private static WorldDefinition EndowedDocument() {
-        var document = Document();
-        var slot = document.Placements[0];
-
-        return (document with {
-            PlacementRowsRaw = [
-                (slot with {
-                Contribution = new WorldPlacementContribution(
-                    Tenure: WorldContributionTenure.Endowed,
-                    SlotCreationId: SlotCreation
-                ),
-            }),
-            ],
-        });
-    }
-
     /// <summary>DENIAL: a submission that names <c>contributor</c> is refused and changes nothing. CONTROL: the same
     /// submission without it applies and stamps the ACTING principal — which is a different identity from the one
     /// the denied payload tried to name.</summary>

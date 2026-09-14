@@ -46,6 +46,27 @@ internal static class RegisterSignatureProbe {
         }
     }
 
+    private static bool IsFailSignature(ICpu cpu) =>
+        (
+            (cpu.B == FailByte) &&
+            (cpu.C == FailByte) &&
+            (cpu.D == FailByte) &&
+            (cpu.E == FailByte) &&
+            (cpu.H == FailByte) &&
+            (cpu.L == FailByte)
+        );
+    private static bool IsPassSignature(ICpu cpu) =>
+        (
+            (cpu.B == 3) &&
+            (cpu.C == 5) &&
+            (cpu.D == 8) &&
+            (cpu.E == 13) &&
+            (cpu.H == 21) &&
+            (cpu.L == 34)
+        );
+    private static string RegisterDump(ICpu cpu) =>
+        $"b={cpu.B:X2} c={cpu.C:X2} d={cpu.D:X2} e={cpu.E:X2} h={cpu.H:X2} l={cpu.L:X2}";
+
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="romCase">The case to run.</param>
     /// <param name="budget">The case's wall-clock budget.</param>
@@ -85,7 +106,8 @@ internal static class RegisterSignatureProbe {
             var corroborated = (lockedUp || trap.SawTrap);
             var corroboration = (lockedUp
                 ? "core locked up"
-                : "LD B,B trap observed");
+                : "LD B,B trap observed"
+            );
 
             if (corroborated) {
                 if (IsPassSignature(cpu: cpu)) {
@@ -104,25 +126,4 @@ internal static class RegisterSignatureProbe {
 
         return (RegisterSignatureResult.Inconclusive, $"no corroborated signature within {romCase.FrameCap} frames ({RegisterDump(cpu: cpu)})");
     }
-
-    private static bool IsFailSignature(ICpu cpu) =>
-        (
-            (cpu.B == FailByte) &&
-            (cpu.C == FailByte) &&
-            (cpu.D == FailByte) &&
-            (cpu.E == FailByte) &&
-            (cpu.H == FailByte) &&
-            (cpu.L == FailByte)
-        );
-    private static bool IsPassSignature(ICpu cpu) =>
-        (
-            (cpu.B == 3) &&
-            (cpu.C == 5) &&
-            (cpu.D == 8) &&
-            (cpu.E == 13) &&
-            (cpu.H == 21) &&
-            (cpu.L == 34)
-        );
-    private static string RegisterDump(ICpu cpu) =>
-        $"b={cpu.B:X2} c={cpu.C:X2} d={cpu.D:X2} e={cpu.E:X2} h={cpu.H:X2} l={cpu.L:X2}";
 }

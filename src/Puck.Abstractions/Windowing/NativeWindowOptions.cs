@@ -24,6 +24,12 @@ public sealed class NativeWindowOptions {
     /// <summary>Whether to hide the mouse cursor while it is over the window. Best-effort: only the Win32 backend
     /// honors it today. Defaults to <see langword="false"/>.</summary>
     public bool HideMouseCursor { get; set; }
+    /// <summary>The icon file the window and its taskbar button wear — absolute, or relative to the application base
+    /// directory. A host authoring its own branding roots the path itself before it reaches here. When
+    /// <see langword="null"/>, or when the file is missing or unreadable, the window wears the host executable's own
+    /// icon resource. Best-effort: only the Win32 backend honors it today. Defaults to
+    /// <see langword="null"/>.</summary>
+    public string? IconPath { get; set; }
     /// <summary>Whether the window enters borderless fullscreen when first shown. Best-effort: only the Win32 backend
     /// honors it today (Alt+Enter toggles it thereafter). Defaults to <see langword="false"/>.</summary>
     public bool StartFullscreen { get; set; }

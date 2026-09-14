@@ -2,7 +2,7 @@ namespace Puck.HumbleGamingBrick.Forge;
 
 /// <summary>
 /// Builds the throwaway cartridge a boot image is booted against while its timing is solved. It carries a real logo and
-/// a real header checksum because the boot program refuses anything else, a header the caller varies to reach a
+/// a real header checksum so it also passes strict logo-checking firmware, a header the caller varies to reach a
 /// different row of the timing tables, and a two-byte spin at the entry point so the machine stays somewhere harmless
 /// after the handoff.
 /// </summary>
@@ -14,6 +14,17 @@ public static class BootRomProbeCartridge {
     private const int RomSize = 0x8000;
     private const int TitleEnd = 0x0142;
     private const int TitleStart = 0x0134;
+
+    // The header checksum the boot program recomputes: x = x - byte - 1 over 0x0134-0x014C.
+    private static byte HeaderChecksum(byte[] rom) {
+        byte checksum = 0;
+
+        for (var offset = HeaderChecksumStart; (offset <= HeaderChecksumEnd); ++offset) {
+            checksum = ((byte)((checksum - rom[offset]) - 1));
+        }
+
+        return checksum;
+    }
 
     /// <summary>Creates the probe cartridge image for a header.</summary>
     /// <param name="probe">The header the probe presents.</param>
@@ -34,7 +45,8 @@ public static class BootRomProbeCartridge {
 
             rom[offset] = ((index < title.Length)
                 ? ((byte)title[index])
-                : ((byte)0x00));
+                : ((byte)0x00)
+            );
         }
 
         var newLicensee = (probe.NewLicenseeCode ?? "  ");
@@ -46,16 +58,5 @@ public static class BootRomProbeCartridge {
         rom[HeaderChecksumOffset] = HeaderChecksum(rom: rom);
 
         return rom;
-    }
-
-    // The header checksum the boot program recomputes: x = x - byte - 1 over 0x0134-0x014C.
-    private static byte HeaderChecksum(byte[] rom) {
-        byte checksum = 0;
-
-        for (var offset = HeaderChecksumStart; (offset <= HeaderChecksumEnd); ++offset) {
-            checksum = ((byte)((checksum - rom[offset]) - 1));
-        }
-
-        return checksum;
     }
 }

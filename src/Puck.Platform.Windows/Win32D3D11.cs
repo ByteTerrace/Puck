@@ -22,24 +22,36 @@ internal static unsafe class Win32D3D11 {
         D3D_FEATURE_LEVEL granted;
         ReadOnlySpan<D3D_FEATURE_LEVEL> levels = [D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0];
         // Software is the NULL HMODULE (no software rasterizer); the generated wrapper wants a non-null SafeHandle.
-        using var noSoftwareModule = new SafeFileHandle(ownsHandle: false, preexistingHandle: 0);
+        using var noSoftwareModule = new SafeFileHandle(
+            ownsHandle: false,
+            preexistingHandle: 0
+        );
 
-        ThrowIfFailed(hr: PInvoke.D3D11CreateDevice(
-            DriverType: driverType,
-            Flags: flags,
-            SDKVersion: PInvoke.D3D11_SDK_VERSION,
-            Software: noSoftwareModule,
-            pAdapter: adapter,
-            pFeatureLevel: &granted,
-            pFeatureLevels: levels,
-            ppDevice: &createdDevice,
-            ppImmediateContext: &createdContext
-        ), operation: "D3D11CreateDevice");
+        ThrowIfFailed(
+            hr: PInvoke.D3D11CreateDevice(
+                DriverType: driverType,
+                Flags: flags,
+                SDKVersion: PInvoke.D3D11_SDK_VERSION,
+                Software: noSoftwareModule,
+                pAdapter: adapter,
+                pFeatureLevel: &granted,
+                pFeatureLevels: levels,
+                ppDevice: &createdDevice,
+                ppImmediateContext: &createdContext
+            ),
+            operation: "D3D11CreateDevice"
+        );
 
         try {
             var multithreadIid = ID3D10Multithread.IID_Guid;
 
-            ThrowIfFailed(hr: ((IUnknown*)createdDevice)->QueryInterface(ppvObject: out var multithread, riid: in multithreadIid), operation: "QueryInterface(ID3D10Multithread)");
+            ThrowIfFailed(
+                hr: ((IUnknown*)createdDevice)->QueryInterface(
+                    ppvObject: out var multithread,
+                    riid: in multithreadIid
+                ),
+                operation: "QueryInterface(ID3D10Multithread)"
+            );
             _ = ((ID3D10Multithread*)multithread)->SetMultithreadProtected(bMTProtect: true);
             _ = ((IUnknown*)multithread)->Release();
         } catch {
@@ -61,7 +73,12 @@ internal static unsafe class Win32D3D11 {
         BOOL done = false;
 
         while (!done) {
-            context->GetData(DataSize: ((uint)sizeof(BOOL)), GetDataFlags: 0, pAsync: ((ID3D11Asynchronous*)query), pData: &done);
+            context->GetData(
+                DataSize: ((uint)sizeof(BOOL)),
+                GetDataFlags: 0,
+                pAsync: ((ID3D11Asynchronous*)query),
+                pData: &done
+            );
 
             if (!done) {
                 Thread.SpinWait(iterations: 64);
@@ -70,27 +87,42 @@ internal static unsafe class Win32D3D11 {
     }
     public static void ThrowIfFailed(HRESULT hr, string operation) {
         if (hr.Value < 0) {
-            throw new COMException(errorCode: hr.Value, message: $"{operation} failed");
+            throw new COMException(
+                errorCode: hr.Value,
+                message: $"{operation} failed"
+            );
         }
     }
     // Returns an owned adapter pointer the caller must Release, or null when no adapter carries the LUID. Shared by the
     // capture feeds that must create their D3D11 device on a specific adapter (packed (HighPart << 32) | LowPart) so its
     // shared textures can be opened by a render device on the same adapter.
     public static IDXGIAdapter1* FindAdapterByLuid(long adapterLuid) {
-        ThrowIfFailed(hr: PInvoke.CreateDXGIFactory1(ppFactory: out var factoryPointer, riid: IDXGIFactory1.IID_Guid), operation: "CreateDXGIFactory1");
+        ThrowIfFailed(
+            hr: PInvoke.CreateDXGIFactory1(
+                ppFactory: out var factoryPointer,
+                riid: IDXGIFactory1.IID_Guid
+            ),
+            operation: "CreateDXGIFactory1"
+        );
 
         var factory = ((IDXGIFactory1*)factoryPointer);
 
         try {
             for (var index = 0u; ; index++) {
                 IDXGIAdapter1* adapter;
-                var hr = factory->EnumAdapters1(Adapter: index, ppAdapter: &adapter);
+                var hr = factory->EnumAdapters1(
+                    Adapter: index,
+                    ppAdapter: &adapter
+                );
 
                 if (HRESULT.DXGI_ERROR_NOT_FOUND == hr) {
                     return null;
                 }
 
-                ThrowIfFailed(hr: hr, operation: "IDXGIFactory1::EnumAdapters1");
+                ThrowIfFailed(
+                    hr: hr,
+                    operation: "IDXGIFactory1::EnumAdapters1"
+                );
 
                 var description = adapter->GetDesc1();
                 var luid = (((long)description.AdapterLuid.HighPart) << 32) | description.AdapterLuid.LowPart;

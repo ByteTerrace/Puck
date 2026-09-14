@@ -11,7 +11,11 @@ public sealed partial record ShaderSetManifest {
     /// <returns>The bound values, every absent field at its default.</returns>
     /// <exception cref="InvalidOperationException">The configuration is invalid.</exception>
     public ShaderConfigValues BindConfig(JsonElement? config) {
-        return (TryBindConfig(config: config, reason: out var reason, values: out var values)
+        return (TryBindConfig(
+            config: config,
+            reason: out var reason,
+            values: out var values
+        )
             ? values
             : throw new InvalidOperationException(message: $"'{Name}' config is invalid: {reason}")
         );
@@ -22,7 +26,11 @@ public sealed partial record ShaderSetManifest {
     /// defaulted takes an absent config).</summary>
     /// <returns>The schema node.</returns>
     public JsonObject ConfigJsonSchema() =>
-        ShaderConfigBinding.JsonSchema(schema: Config, description: Description, quantizeRateFields: QuantizeRateConfigFields());
+        ShaderConfigBinding.JsonSchema(
+            schema: Config,
+            description: Description,
+            quantizeRateFields: QuantizeRateConfigFields()
+        );
     /// <summary>Validates a document's <c>config</c> against this set's config schema and resolves every absent field
     /// to its default: an unknown property, a value of the wrong shape or type, a component outside its inclusive
     /// range, a missing field without a default, or a tick-quantization rate that does not divide
@@ -32,7 +40,14 @@ public sealed partial record ShaderSetManifest {
     /// <param name="reason">The refusal reason naming the field, set only when this returns <see langword="false"/>.</param>
     /// <returns><see langword="true"/> when <paramref name="config"/> is valid.</returns>
     public bool TryBindConfig(JsonElement? config, out ShaderConfigValues values, out string reason) =>
-        ShaderConfigBinding.TryBind(schema: Config, config: config, ownerName: Name, values: out values, reason: out reason, quantizeRateFields: QuantizeRateConfigFields());
+        ShaderConfigBinding.TryBind(
+            schema: Config,
+            config: config,
+            ownerName: Name,
+            values: out values,
+            reason: out reason,
+            quantizeRateFields: QuantizeRateConfigFields()
+        );
 
     private HashSet<string> QuantizeRateConfigFields() {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -48,5 +63,8 @@ public sealed partial record ShaderSetManifest {
         return names;
     }
     private void ValidateConfigSchema() =>
-        ShaderConfigBinding.ValidateSchema(schema: Config, ownerName: Name);
+        ShaderConfigBinding.ValidateSchema(
+            schema: Config,
+            ownerName: Name
+        );
 }

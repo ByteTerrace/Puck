@@ -6,6 +6,8 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Configuration;
 using System.Net;
 using Puck.Azure.Functions.Services;
+using Puck.Azure.Functions.Utilities;
+using Puck.Storage;
 
 namespace Puck.Azure.Functions.HttpTriggers;
 
@@ -14,8 +16,7 @@ public sealed class Publishing(
     IPartitionResolver partitionResolver,
     IUserCredentialContext userCredentialContext,
     IUserStorageLocationService userStorageLocationService
-)
-{
+) {
     // Published files are ANCHORED: they live under public/ in the user's oid-named container on
     // the anchor partition — Front Door's only blob origin — regardless of which partition the
     // user's home (private/, system/) is on. Front Door rewrites /public/<tenant>/<path> to
@@ -28,51 +29,10 @@ public sealed class Publishing(
     private const string PrivatePrefix = "private/";
     private const string PublicPrefix = "public/";
 
-    public sealed class PublishRequest
-    {
+    public sealed class PublishRequest {
         public string? BlobName { get; set; }
     }
 
-    private static string? GetDelegatedUserObjectId(FunctionContext functionContext) {
-        var user = functionContext
-            .GetHttpContext()!
-            .User;
-        var hasScopes = user
-            .Claims
-            .Any(predicate: static claim =>
-                ("scp" == claim.Type) ||
-                ("http://schemas.microsoft.com/identity/claims/scope" == claim.Type)
-            );
-
-        return hasScopes
-            ? user
-                .Identity
-                ?.Name
-                ?.ToLowerInvariant()
-            : null;
-    }
-
-    private BlobContainerClient GetAnchorContainerClient(string userObjectId) =>
-        new(
-            blobContainerUri: new Uri(
-                baseUri: partitionResolver.GetBlobEndpoint(partition: Constants.AnchorPartition),
-                relativeUri: userObjectId
-            ),
-            credential: userCredentialContext.UserContext
-        );
-    private BlobContainerClient GetHomeContainerClient(
-        string blobEndpoint,
-        string userObjectId
-    ) =>
-        new(
-            blobContainerUri: new Uri(
-                baseUri: new(uriString: blobEndpoint),
-                relativeUri: userObjectId
-            ),
-            credential: userCredentialContext.UserContext
-        );
-    private string GetPublicBaseUrl() =>
-        (configuration.GetValue<string>(key: "Publishing:PublicBaseUrl") ?? DefaultPublicBaseUrl).TrimEnd('/');
     private static async Task<HttpResponseData> CreateMigratingResponseAsync(
         HttpRequestData httpRequestData,
         CancellationToken cancellationToken
@@ -90,20 +50,27 @@ public sealed class Publishing(
 
         return response;
     }
-    private static (string RelativePath, HttpResponseData? Error) ParseBlobName(
-        HttpRequestData httpRequestData,
-        PublishRequest? request
-    ) {
-        var blobName = request?.BlobName?.Trim();
-
-        return (string.IsNullOrWhiteSpace(value: blobName) ||
-            !blobName.StartsWith(value: PrivatePrefix) ||
-            blobName.Contains(value: "..")
-        )
-            ? ("", httpRequestData.CreateResponse(statusCode: HttpStatusCode.BadRequest))
-            : (blobName[PrivatePrefix.Length..], null);
-    }
-
+    private BlobContainerClient GetAnchorContainerClient(string userObjectId) =>
+        new(
+            blobContainerUri: new Uri(
+                baseUri: partitionResolver.GetBlobEndpoint(partition: PartitioningOptions.AnchorPartition),
+                relativeUri: userObjectId
+            ),
+            credential: userCredentialContext.UserContext
+        );
+    private BlobContainerClient GetHomeContainerClient(
+        string blobEndpoint,
+        string userObjectId
+    ) =>
+        new(
+            blobContainerUri: new Uri(
+                baseUri: new(uriString: blobEndpoint),
+                relativeUri: userObjectId
+            ),
+            credential: userCredentialContext.UserContext
+        );
+    private string GetPublicBaseUrl() =>
+        (configuration.GetValue<string>(key: "Publishing:PublicBaseUrl") ?? DefaultPublicBaseUrl).TrimEnd(trimChar: '/');
     // Move between the tenant's own containers: private/<path> in their home becomes
     // public/<path> in their anchor container (unpublish is the exact inverse). The copy is a
     // native server-side operation (Put Blob From URL) — the storage service reads the source and
@@ -122,24 +89,85 @@ public sealed class Publishing(
         var sourceToken = await userCredentialContext
             .UserContext
             .GetTokenAsync(
-                cancellationToken: cancellationToken,
-                requestContext: new(scopes: ["https://storage.azure.com/.default"])
-            );
+            cancellationToken: cancellationToken,
+            requestContext: new(scopes: ["https://storage.azure.com/.default"])
+        );
 
         await destinationContainerClient
             .GetBlockBlobClient(blobName: destinationBlobName)
             .SyncUploadFromUriAsync(
-                cancellationToken: cancellationToken,
-                copySource: sourceBlobClient.Uri,
-                options: new BlobSyncUploadFromUriOptions {
-                    // Carry the source blob's content type and system properties to the copy.
-                    CopySourceBlobProperties = true,
-                    SourceAuthentication = new(scheme: "Bearer", parameter: sourceToken.Token),
-                }
-            );
+            cancellationToken: cancellationToken,
+            copySource: sourceBlobClient.Uri,
+            options: new BlobSyncUploadFromUriOptions {
+                // Carry the source blob's content type and system properties to the copy.
+                CopySourceBlobProperties = true,
+                SourceAuthentication = new(
+                scheme: "Bearer",
+                parameter: sourceToken.Token
+            ),
+            }
+        );
         await sourceBlobClient.DeleteAsync(cancellationToken: cancellationToken);
     }
+    private static (string RelativePath, HttpResponseData? Error) ParseBlobName(
+        HttpRequestData httpRequestData,
+        PublishRequest? request
+    ) {
+        var blobName = request?.BlobName?.Trim();
 
+        return ((string.IsNullOrWhiteSpace(value: blobName) ||
+            !blobName.StartsWith(value: PrivatePrefix) ||
+            blobName.Contains(value: "..")
+        )
+            ? ("", httpRequestData.CreateResponse(statusCode: HttpStatusCode.BadRequest))
+            : (blobName[PrivatePrefix.Length..], null)
+        );
+    }
+
+    [Function(name: nameof(ListPublicFiles))]
+    public async Task<HttpResponseData> ListPublicFiles(
+        [HttpTrigger(
+            authLevel: AuthorizationLevel.Anonymous,
+            methods: "get",
+            Route = "public-files"
+        )] HttpRequestData httpRequestData,
+        FunctionContext functionContext
+    ) {
+        var cancellationToken = functionContext.CancellationToken;
+        var userObjectId = functionContext.GetDelegatedUserObjectId();
+
+        if (userObjectId is null) {
+            return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);
+        }
+
+        var prefix = PublicPrefix;
+        var publicBaseUrl = GetPublicBaseUrl();
+        var files = new List<object>();
+
+        await foreach (var blob in GetAnchorContainerClient(userObjectId: userObjectId).GetBlobsAsync(
+            cancellationToken: cancellationToken,
+            prefix: prefix,
+            states: BlobStates.None,
+            traits: BlobTraits.None
+        )) {
+            var relativePath = blob.Name[prefix.Length..];
+
+            files.Add(item: new {
+                BlobName = $"{PrivatePrefix}{relativePath}",
+                PublicUrl = $"{publicBaseUrl}/{userObjectId}/{relativePath}",
+                SizeInBytes = blob.Properties.ContentLength,
+            });
+        }
+
+        var response = httpRequestData.CreateResponse();
+
+        await response.WriteAsJsonAsync(
+            cancellationToken: cancellationToken,
+            instance: files
+        );
+
+        return response;
+    }
     [Function(name: nameof(Publish))]
     public async Task<HttpResponseData> Publish(
         [HttpTrigger(
@@ -150,13 +178,14 @@ public sealed class Publishing(
         FunctionContext functionContext
     ) {
         var cancellationToken = functionContext.CancellationToken;
-        var userObjectId = GetDelegatedUserObjectId(functionContext: functionContext);
+        var userObjectId = functionContext.GetDelegatedUserObjectId();
 
         if (userObjectId is null) {
             return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);
         }
 
         var request = await httpRequestData.ReadFromJsonAsync<PublishRequest>(cancellationToken: cancellationToken);
+
         var (relativePath, error) = ParseBlobName(
             httpRequestData: httpRequestData,
             request: request
@@ -202,7 +231,6 @@ public sealed class Publishing(
 
         return response;
     }
-
     [Function(name: nameof(Unpublish))]
     public async Task<HttpResponseData> Unpublish(
         [HttpTrigger(
@@ -213,13 +241,14 @@ public sealed class Publishing(
         FunctionContext functionContext
     ) {
         var cancellationToken = functionContext.CancellationToken;
-        var userObjectId = GetDelegatedUserObjectId(functionContext: functionContext);
+        var userObjectId = functionContext.GetDelegatedUserObjectId();
 
         if (userObjectId is null) {
             return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);
         }
 
         var request = await httpRequestData.ReadFromJsonAsync<PublishRequest>(cancellationToken: cancellationToken);
+
         var (relativePath, error) = ParseBlobName(
             httpRequestData: httpRequestData,
             request: request
@@ -259,51 +288,6 @@ public sealed class Publishing(
         await response.WriteAsJsonAsync(
             cancellationToken: cancellationToken,
             instance: new { BlobName = $"{PrivatePrefix}{relativePath}", }
-        );
-
-        return response;
-    }
-
-    [Function(name: nameof(ListPublicFiles))]
-    public async Task<HttpResponseData> ListPublicFiles(
-        [HttpTrigger(
-            authLevel: AuthorizationLevel.Anonymous,
-            methods: "get",
-            Route = "public-files"
-        )] HttpRequestData httpRequestData,
-        FunctionContext functionContext
-    ) {
-        var cancellationToken = functionContext.CancellationToken;
-        var userObjectId = GetDelegatedUserObjectId(functionContext: functionContext);
-
-        if (userObjectId is null) {
-            return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);
-        }
-
-        var prefix = PublicPrefix;
-        var publicBaseUrl = GetPublicBaseUrl();
-        var files = new List<object>();
-
-        await foreach (var blob in GetAnchorContainerClient(userObjectId: userObjectId).GetBlobsAsync(
-            BlobTraits.None,
-            BlobStates.None,
-            prefix,
-            cancellationToken
-        )) {
-            var relativePath = blob.Name[prefix.Length..];
-
-            files.Add(item: new {
-                BlobName = $"{PrivatePrefix}{relativePath}",
-                PublicUrl = $"{publicBaseUrl}/{userObjectId}/{relativePath}",
-                SizeInBytes = blob.Properties.ContentLength,
-            });
-        }
-
-        var response = httpRequestData.CreateResponse();
-
-        await response.WriteAsJsonAsync(
-            cancellationToken: cancellationToken,
-            instance: files
         );
 
         return response;

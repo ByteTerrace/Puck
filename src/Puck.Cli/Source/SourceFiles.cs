@@ -17,6 +17,54 @@ internal static class SourceFiles {
     private static readonly HashSet<string>.AlternateLookup<ReadOnlySpan<char>> SkipLookup =
         FileWalk.SkipDirectories.GetAlternateLookup<ReadOnlySpan<char>>();
 
+    // Directory segments only — the final segment is the file name. FileWalk's artifact set carries the
+    // generated and vendored names; beyond it the corpus prunes agent worktrees (.claude/worktrees holds
+    // live duplicate checkouts another session may be editing), the same pair FileWalk prunes, so the two
+    // walkers cover the same tree. Tracked source elsewhere under .claude stays in the corpus.
+    private static bool AdmitsBelowRoot(ReadOnlySpan<char> belowRoot) {
+        var previousWasClaude = false;
+
+        while (true) {
+            var cut = belowRoot.IndexOfAny(values: SegmentSeparators);
+
+            if (cut < 0) {
+                return true;
+            }
+
+            var segment = belowRoot[..cut];
+
+            belowRoot = belowRoot[(cut + 1)..];
+
+            if (segment.IsEmpty) {
+                continue;
+            }
+
+            if (
+                SkipLookup.Contains(item: segment) ||
+                (previousWasClaude && segment.Equals(
+                other: "worktrees",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            ))
+            ) {
+                return false;
+            }
+
+            previousWasClaude = segment.Equals(
+                other: ".claude",
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            );
+        }
+    }
+
+    // The nearest ancestor directory (from `start` up) that holds a .csproj — the owning project whose
+    // build closure the semantic phase compiles against and whose whitespace phase 0 formats.
+    public static string? FindOwningProjectDirectory(string start) =>
+        CliPaths.AscendUntil(
+            start: start,
+            probe: static directory => (directory.EnumerateFiles(searchPattern: "*.csproj").Any()
+            ? directory.FullName
+            : null)
+        );
     public static bool TryEnumerate(string rootArgument, out string scanRoot, out string[] files) {
         scanRoot = string.Empty;
         files = [];
@@ -42,45 +90,17 @@ internal static class SourceFiles {
 
         var prefixLength = scanRoot.Length;
 
-        files = [.. Directory.EnumerateFiles(path: scanRoot, searchOption: SearchOption.AllDirectories, searchPattern: "*.cs")
+        files = [.. Directory.EnumerateFiles(
+                path: scanRoot,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*.cs"
+            )
             .Where(predicate: path => AdmitsBelowRoot(belowRoot: path.AsSpan(start: prefixLength)))
-            .OrderBy(keySelector: static path => path, comparer: StringComparer.OrdinalIgnoreCase)];
+            .OrderBy(
+                keySelector: static path => path,
+                comparer: StringComparer.OrdinalIgnoreCase
+            )];
 
         return true;
-    }
-    // The nearest ancestor directory (from `start` up) that holds a .csproj — the owning project whose
-    // build closure the semantic phase compiles against and whose whitespace phase 0 formats.
-    public static string? FindOwningProjectDirectory(string start) =>
-        CliPaths.AscendUntil(start: start, probe: static directory => (directory.EnumerateFiles(searchPattern: "*.csproj").Any() ? directory.FullName : null));
-
-    // Directory segments only — the final segment is the file name. FileWalk's artifact set carries the
-    // generated and vendored names; beyond it the corpus prunes agent worktrees (.claude/worktrees holds
-    // live duplicate checkouts another session may be editing), the same pair FileWalk prunes, so the two
-    // walkers cover the same tree. Tracked source elsewhere under .claude stays in the corpus.
-    private static bool AdmitsBelowRoot(ReadOnlySpan<char> belowRoot) {
-        var previousWasClaude = false;
-
-        while (true) {
-            var cut = belowRoot.IndexOfAny(values: SegmentSeparators);
-
-            if (cut < 0) {
-                return true;
-            }
-
-            var segment = belowRoot[..cut];
-
-            belowRoot = belowRoot[(cut + 1)..];
-
-            if (segment.IsEmpty) {
-                continue;
-            }
-
-            if (SkipLookup.Contains(item: segment)
-                || (previousWasClaude && segment.Equals(other: "worktrees", comparisonType: StringComparison.OrdinalIgnoreCase))) {
-                return false;
-            }
-
-            previousWasClaude = segment.Equals(other: ".claude", comparisonType: StringComparison.OrdinalIgnoreCase);
-        }
     }
 }

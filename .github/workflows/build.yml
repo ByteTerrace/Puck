@@ -2,12 +2,12 @@ name: Test compiled solution
 run-name: Solution tests — ${{ github.ref_name }}
 
 on:
-  workflow_dispatch:
   workflow_call:
     inputs:
       prebuilt:
-        type: boolean
         default: false
+        type: boolean
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,35 +18,37 @@ env:
 
 jobs:
   artifacts:
-    name: Build .NET artifacts
     if: ${{ !inputs.prebuilt }}
+    name: Build .NET artifacts
     uses: ./.github/workflows/artifacts.yml
   build:
+    if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Run .NET tests (Windows)
     needs: artifacts
-    if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     runs-on: windows-2025
-    timeout-minutes: 60
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
+        uses: ./.github/actions/setup-dotnet
       - name: Download compiled Windows assemblies
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: compiled-windows
           path: artifacts
-      - name: Restore this commit's compiled outputs
-        run: dotnet run -c Release --file build/BuildArtifacts.cs -- restore
-      - name: Test the producer's assembly manifest
-        run: dotnet run -c Release --file build/BuildArtifacts.cs -- test-windows
-      - name: Upload test diagnostics
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
+      - name: Install Puck CLI
+        uses: ./.github/actions/setup-puck
         with:
+          artifact: nuget-packages
+      - name: Restore this commit's compiled outputs
+        run: puck artifacts restore
+      - name: Test the producer's assembly manifest
+        run: puck artifacts test-windows
+      - if: always()
+        name: Upload test diagnostics
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: warn
           name: test-diagnostics
           path: artifacts/test-results
-          if-no-files-found: warn
+    timeout-minutes: 60

@@ -26,8 +26,14 @@ public sealed class MusicClock {
     /// <param name="ticksPerBeat">The positive engine-tick length of one beat.</param>
     /// <param name="beatsPerBar">The positive beat count of one bar.</param>
     public MusicClock(long ticksPerBeat, int beatsPerBar) {
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value: ticksPerBeat, other: 0L);
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value: beatsPerBar, other: 0);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+            value: ticksPerBeat,
+            other: 0L
+        );
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(
+            value: beatsPerBar,
+            other: 0
+        );
 
         m_beatsPerBar = beatsPerBar;
         m_ticksPerBeat = ticksPerBeat;
@@ -41,18 +47,11 @@ public sealed class MusicClock {
     public ulong CurrentBeat => (m_elapsedTicks / ((ulong)m_ticksPerBeat));
     /// <summary>Gets the total engine ticks elapsed since construction.</summary>
     public ulong ElapsedTicks => m_elapsedTicks;
-    /// <summary>Gets the authored engine-tick length of one beat.</summary>
-    public long TicksPerBeat => m_ticksPerBeat;
     /// <summary>Gets the engine-tick length of one bar.</summary>
     public long TicksPerBar => (m_ticksPerBeat * m_beatsPerBar);
+    /// <summary>Gets the authored engine-tick length of one beat.</summary>
+    public long TicksPerBeat => m_ticksPerBeat;
 
-    /// <summary>Sets the elapsed-ticks counter directly — a checkpoint restore's one write door, so a captured clock
-    /// resumes on the exact tick it was captured at rather than replaying from zero. Never called from ordinary
-    /// simulation, which only ever advances through <see cref="Advance"/>.</summary>
-    /// <param name="elapsedTicks">The elapsed engine ticks to resume from.</param>
-    public void RestoreElapsedTicks(ulong elapsedTicks) {
-        m_elapsedTicks = elapsedTicks;
-    }
     /// <summary>Advances the clock by a whole engine-tick step and reports which boundaries it crossed.</summary>
     /// <param name="stepTicks">The engine ticks the step advanced by.</param>
     /// <returns>The boundaries crossed during this step.</returns>
@@ -73,5 +72,12 @@ public sealed class MusicClock {
         }
 
         return boundary;
+    }
+    /// <summary>Sets the elapsed-ticks counter directly — a checkpoint restore's one write door, so a captured clock
+    /// resumes on the exact tick it was captured at rather than replaying from zero. Never called from ordinary
+    /// simulation, which only ever advances through <see cref="Advance"/>.</summary>
+    /// <param name="elapsedTicks">The elapsed engine ticks to resume from.</param>
+    public void RestoreElapsedTicks(ulong elapsedTicks) {
+        m_elapsedTicks = elapsedTicks;
     }
 }

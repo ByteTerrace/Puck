@@ -96,7 +96,8 @@ public sealed partial class Arm7Tdmi {
 
                     return (value >> 1) | (oldCarry
                         ? 0x80000000u
-                        : 0u);
+                        : 0u
+                    );
                 }
 
                 var rotate = amount & 31;
@@ -115,17 +116,20 @@ public sealed partial class Arm7Tdmi {
     private static void SetNZ(Arm7Tdmi cpu, uint result) {
         cpu.m_cpsr = (cpu.m_cpsr & ~(FlagN | FlagZ)) | (result & FlagN) | ((result == 0u)
             ? FlagZ
-            : 0u);
+            : 0u
+        );
     }
     private static void SetCarry(Arm7Tdmi cpu, bool carry) {
         cpu.m_cpsr = (carry
             ? cpu.m_cpsr | FlagC
-            : cpu.m_cpsr & ~FlagC);
+            : cpu.m_cpsr & ~FlagC
+        );
     }
     private static void SetOverflow(Arm7Tdmi cpu, bool overflow) {
         cpu.m_cpsr = (overflow
             ? cpu.m_cpsr | FlagV
-            : cpu.m_cpsr & ~FlagV);
+            : cpu.m_cpsr & ~FlagV
+        );
     }
     private static uint Add(Arm7Tdmi cpu, uint a, uint b, bool setFlags) {
         var wide = (((ulong)a) + b);
@@ -151,7 +155,8 @@ public sealed partial class Arm7Tdmi {
     private static uint AddWithCarry(Arm7Tdmi cpu, uint a, uint b, bool setFlags) {
         var carryIn = (((cpu.m_cpsr & FlagC) != 0u)
             ? 1ul
-            : 0ul);
+            : 0ul
+        );
         var wide = ((((ulong)a) + b) + carryIn);
         var result = ((uint)wide);
 
@@ -195,7 +200,8 @@ public sealed partial class Arm7Tdmi {
     private static uint SubtractWithCarry(Arm7Tdmi cpu, uint a, uint b, bool setFlags) {
         var borrow = (((cpu.m_cpsr & FlagC) != 0u)
             ? 0ul
-            : 1ul);
+            : 1ul
+        );
         var wide = ((((ulong)a) - b) - borrow);
         var result = ((uint)wide);
 

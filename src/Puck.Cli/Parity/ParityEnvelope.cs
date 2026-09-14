@@ -31,7 +31,10 @@ internal static class ParityEnvelope {
     /// <returns>The measured divergence and its envelope verdict.</returns>
     /// <exception cref="ArgumentException">The frames disagree on extent.</exception>
     public static ParityVerdict Compare(PngImage left, PngImage right) {
-        if ((left.Width != right.Width) || (left.Height != right.Height)) {
+        if (
+            (left.Width != right.Width) ||
+            (left.Height != right.Height)
+        ) {
             throw new ArgumentException(
                 message: $"Frame extents disagree: {left.Width}x{left.Height} vs {right.Width}x{right.Height}.",
                 paramName: nameof(right)
@@ -49,7 +52,13 @@ internal static class ParityEnvelope {
             var deltaR = Math.Abs(value: (leftPixels[(index + 0)] - rightPixels[(index + 0)]));
             var deltaG = Math.Abs(value: (leftPixels[(index + 1)] - rightPixels[(index + 1)]));
             var deltaB = Math.Abs(value: (leftPixels[(index + 2)] - rightPixels[(index + 2)]));
-            var pixelMax = Math.Max(val1: deltaR, val2: Math.Max(val1: deltaG, val2: deltaB));
+            var pixelMax = Math.Max(
+                val1: deltaR,
+                val2: Math.Max(
+                    val1: deltaG,
+                    val2: deltaB
+                )
+            );
 
             if (pixelMax > 0) {
                 differingPixels++;
@@ -61,8 +70,14 @@ internal static class ParityEnvelope {
             totalDelta += ((deltaR + deltaG) + deltaB);
         }
 
-        var diffFraction = ((pixelCount == 0) ? 0.0 : (differingPixels / ((double)pixelCount)));
-        var meanDelta = ((pixelCount == 0) ? 0.0 : (totalDelta / (pixelCount * 3.0)));
+        var diffFraction = ((pixelCount == 0)
+            ? 0.0
+            : (differingPixels / ((double)pixelCount))
+        );
+        var meanDelta = ((pixelCount == 0)
+            ? 0.0
+            : (totalDelta / (pixelCount * 3.0))
+        );
 
         return new ParityVerdict(
             DiffFraction: diffFraction,

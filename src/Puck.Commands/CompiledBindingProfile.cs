@@ -28,8 +28,8 @@ public sealed class CompiledBindingProfile {
     private readonly ImmutableArray<string> m_groups;
     private readonly FrozenDictionary<string, int> m_modifierIndexBySource;
     private readonly ImmutableArray<BindingModifierDefinition> m_modifiers;
-    private readonly int[][] m_pageRowsByGroup;
     private readonly FrozenDictionary<string, int> m_pageRowByPageId;
+    private readonly int[][] m_pageRowsByGroup;
     private readonly int[] m_restingRowByGroup;
     private readonly CompiledChordRow[] m_rows;
     private readonly FrozenDictionary<int, BindingWheelView> m_wheelViewByRow;

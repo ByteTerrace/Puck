@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Immutable;
 
 using Puck.Maths;
+using Puck.Physics.Fields;
 
 namespace Puck.World;
 
@@ -29,7 +30,10 @@ public readonly record struct WorldFieldHandle {
     /// <summary>Gets the field's stable declaration ordinal, or <c>-1</c> for the default handle.</summary>
     public int Ordinal => (m_encodedOrdinal - 1);
 
-    internal bool BelongsTo(object programIdentity) => ReferenceEquals(objA: m_programIdentity, objB: programIdentity);
+    internal bool BelongsTo(object programIdentity) => ReferenceEquals(
+        objA: m_programIdentity,
+        objB: programIdentity
+    );
 }
 /// <summary>Identifies one node in the <see cref="WorldFieldProgram"/> that minted it.</summary>
 /// <remarks>Handles are bound to one compiled program. Node ordinals are reaction document order, which is also
@@ -123,7 +127,14 @@ public abstract record WorldFieldNode(
         WorldFieldHandle Field,
         WorldFieldScalarInput Rate,
         ImmutableArray<StateHandle> StateReads
-    ) : WorldFieldNode(Handle, WorldFieldWorkKind.Cells, [Field], [Field], StateReads, []);
+    ) : WorldFieldNode(
+        Handle,
+        WorldFieldWorkKind.Cells,
+        [Field],
+        [Field],
+        StateReads,
+        []
+    );
     /// <summary>Decays one field toward zero.</summary>
     /// <param name="Handle">The program-bound node handle.</param>
     /// <param name="Field">The field read and written.</param>
@@ -134,7 +145,14 @@ public abstract record WorldFieldNode(
         WorldFieldHandle Field,
         WorldFieldScalarInput Rate,
         ImmutableArray<StateHandle> StateReads
-    ) : WorldFieldNode(Handle, WorldFieldWorkKind.Cells, [Field], [Field], StateReads, []);
+    ) : WorldFieldNode(
+        Handle,
+        WorldFieldWorkKind.Cells,
+        [Field],
+        [Field],
+        StateReads,
+        []
+    );
     /// <summary>Applies ordered writes where every condition holds.</summary>
     /// <param name="Handle">The program-bound node handle.</param>
     /// <param name="When">The immutable ordered condition list.</param>
@@ -149,7 +167,14 @@ public abstract record WorldFieldNode(
         ImmutableArray<WorldFieldHandle> FieldReads,
         ImmutableArray<WorldFieldHandle> FieldWrites,
         ImmutableArray<StateHandle> StateReads
-    ) : WorldFieldNode(Handle, WorldFieldWorkKind.Cells, FieldReads, FieldWrites, StateReads, []);
+    ) : WorldFieldNode(
+        Handle,
+        WorldFieldWorkKind.Cells,
+        FieldReads,
+        FieldWrites,
+        StateReads,
+        []
+    );
     /// <summary>Deposits into a field for every body carrying a nonzero keyed tag.</summary>
     /// <param name="Handle">The program-bound node handle.</param>
     /// <param name="Tag">The keyed state row selecting emitting bodies.</param>
@@ -162,7 +187,14 @@ public abstract record WorldFieldNode(
         WorldFieldHandle Field,
         WorldFieldScalarInput Amount,
         ImmutableArray<StateHandle> StateReads
-    ) : WorldFieldNode(Handle, WorldFieldWorkKind.Bodies, [Field], [Field], StateReads, []);
+    ) : WorldFieldNode(
+        Handle,
+        WorldFieldWorkKind.Bodies,
+        [Field],
+        [Field],
+        StateReads,
+        []
+    );
     /// <summary>Writes a keyed body row from a field test at each active body's cell.</summary>
     /// <param name="Handle">The program-bound node handle.</param>
     /// <param name="Field">The field sampled at each body's cell.</param>
@@ -177,7 +209,14 @@ public abstract record WorldFieldNode(
         WorldFieldScalarInput Value,
         StateHandle Row,
         ImmutableArray<StateHandle> StateReads
-    ) : WorldFieldNode(Handle, WorldFieldWorkKind.Bodies, [Field], [], StateReads, [Row]);
+    ) : WorldFieldNode(
+        Handle,
+        WorldFieldWorkKind.Bodies,
+        [Field],
+        [],
+        StateReads,
+        [Row]
+    );
     /// <summary>Moves one field downhill over a combined surface height, with an optional boundary spill. See
     /// <see cref="WorldReaction.Flow"/>.</summary>
     /// <param name="Handle">The program-bound node handle.</param>
@@ -202,7 +241,14 @@ public abstract record WorldFieldNode(
         ImmutableArray<WorldFieldHandle> FieldReads,
         ImmutableArray<StateHandle> StateReads,
         ImmutableArray<StateHandle> StateWrites
-    ) : WorldFieldNode(Handle, WorldFieldWorkKind.Cells, FieldReads, [Field], StateReads, StateWrites);
+    ) : WorldFieldNode(
+        Handle,
+        WorldFieldWorkKind.Cells,
+        FieldReads,
+        [Field],
+        StateReads,
+        StateWrites
+    );
 }
 /// <summary>The typed, deterministic reaction program compiled from one lattice topology and its ordered reactions.</summary>
 /// <remarks>This is the reaction inspection, scheduling, and future lowering boundary used alongside the complete
@@ -210,14 +256,14 @@ public abstract record WorldFieldNode(
 /// of an existing reaction, with no hidden mutable state or random stream. Runtime values remain in lane-specific
 /// stores, document cells, and lattice cells; the state catalog describes their types and addresses only.</remarks>
 public sealed class WorldFieldProgram {
+    private readonly WorldFieldDescriptor[] m_fields;
+    private readonly object m_identity;
     // Kept only as an immutable compatibility witness for the reaction-owned inputs. The live lattice must keep
     // receiving its complete companion document: HasSameProgram deliberately ignores origin, cell size, cadence,
     // colour, and paint, so this snapshot is never a topology or initialization source.
     private readonly WorldFieldsSection m_programSource;
-    private readonly object m_identity;
-    private readonly WorldFieldDescriptor[] m_fields;
-    private readonly ReadOnlyCollection<WorldFieldDescriptor> m_readOnlyFields;
     private readonly ReadOnlyCollection<WorldFieldDependency> m_readOnlyDependencies;
+    private readonly ReadOnlyCollection<WorldFieldDescriptor> m_readOnlyFields;
     private readonly ReadOnlyCollection<WorldFieldNode> m_readOnlyNodes;
 
     private WorldFieldProgram(object identity, StateCatalog stateCatalog, WorldFieldsSection programSource, WorldFieldDescriptor[] fields, WorldFieldNode[] nodes, int cellCount) {
@@ -239,25 +285,25 @@ public sealed class WorldFieldProgram {
         BodyPassCount = (nodes.Length - CellNodeCount);
     }
 
-    /// <summary>Gets the canonical typed state catalog that resolves every state handle carried by this program.</summary>
-    public StateCatalog StateCatalog { get; }
-    /// <summary>Gets the number of cell-work reaction nodes.</summary>
-    public int CellNodeCount { get; }
+    /// <summary>Gets the number of active-body passes per lattice step.</summary>
+    public int BodyPassCount { get; }
     /// <summary>Gets the lattice cell count traversed by each cell-work node.</summary>
     public int CellCount { get; }
+    /// <summary>Gets the number of cell-work reaction nodes.</summary>
+    public int CellNodeCount { get; }
     /// <summary>Gets the number of full-cell traversals per lattice step. Diffusion counts twice because it first
     /// snapshots the field, then visits every cell.</summary>
     public int CellPassCount { get; }
-    /// <summary>Gets the number of active-body passes per lattice step.</summary>
-    public int BodyPassCount { get; }
-    /// <summary>Gets the fields in stable handle order.</summary>
-    public IReadOnlyList<WorldFieldDescriptor> Fields => m_readOnlyFields;
     /// <summary>Gets every document-order edge required by typed read/write conflicts. A scheduler may run nodes
     /// without an edge concurrently, but commits each edge in <see cref="WorldFieldDependency.Before"/> →
     /// <see cref="WorldFieldDependency.After"/> order.</summary>
     public IReadOnlyList<WorldFieldDependency> Dependencies => m_readOnlyDependencies;
+    /// <summary>Gets the fields in stable handle order.</summary>
+    public IReadOnlyList<WorldFieldDescriptor> Fields => m_readOnlyFields;
     /// <summary>Gets the nodes in deterministic execution order.</summary>
     public IReadOnlyList<WorldFieldNode> Nodes => m_readOnlyNodes;
+    /// <summary>Gets the canonical typed state catalog that resolves every state handle carried by this program.</summary>
+    public StateCatalog StateCatalog { get; }
 
     /// <summary>Gets a compiled field descriptor by handle.</summary>
     /// <param name="handle">A handle minted by this program instance.</param>
@@ -266,12 +312,245 @@ public sealed class WorldFieldProgram {
     /// was minted by another program instance.</exception>
     public WorldFieldDescriptor this[WorldFieldHandle handle] => (
         (handle.IsValid && handle.BelongsTo(programIdentity: m_identity) && (handle.Ordinal < m_fields.Length))
-            ? m_fields[handle.Ordinal]
-            : throw new ArgumentOutOfRangeException(
-                paramName: nameof(handle),
-                actualValue: handle.Ordinal,
-                message: "The field handle is invalid or belongs to a different program instance."
+        ? m_fields[handle.Ordinal]
+        : throw new ArgumentOutOfRangeException(
+            paramName: nameof(handle),
+            actualValue: handle.Ordinal,
+            message: "The field handle is invalid or belongs to a different program instance."
+        )
+    );
+
+    private static ImmutableArray<WorldFieldHandle> CanonicalFields(IEnumerable<WorldFieldHandle> handles) => handles
+        .Distinct()
+        .OrderBy(keySelector: static handle => handle.Ordinal)
+        .ToImmutableArray();
+    private static ImmutableArray<StateHandle> CanonicalStates(IEnumerable<WorldFieldScalarInput> inputs) => inputs
+        .Where(predicate: static input => input.IsState)
+        .Select(selector: static input => input.State)
+        .Distinct()
+        .OrderBy(keySelector: static handle => handle.Ordinal)
+        .ToImmutableArray();
+    private static WorldFieldNode CompileDecay(WorldReaction.Decay reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar) {
+        var rate = scalar(
+            reaction.Rate,
+            index
+        );
+
+        return new WorldFieldNode.Decay(
+            handle,
+            field(
+                reaction.Field,
+                index
+            ),
+            rate,
+            StateReads(input: rate)
+        );
+    }
+    private static WorldFieldDependency[] CompileDependencies(IReadOnlyList<WorldFieldNode> nodes) {
+        var dependencies = new List<WorldFieldDependency>();
+
+        for (var after = 0; (after < nodes.Count); after++) {
+            for (var before = 0; (before < after); before++) {
+                if (Conflicts(
+                    earlier: nodes[before],
+                    later: nodes[after]
+                )) {
+                    dependencies.Add(item: new WorldFieldDependency(
+                        Before: nodes[before].Handle,
+                        After: nodes[after].Handle
+                    ));
+                }
+            }
+        }
+
+        return dependencies.ToArray();
+    }
+    private static WorldFieldNode CompileDiffuse(WorldReaction.Diffuse reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar) {
+        var rate = scalar(
+            reaction.Rate,
+            index
+        );
+
+        return new WorldFieldNode.Diffuse(
+            handle,
+            field(
+                reaction.Field,
+                index
+            ),
+            rate,
+            StateReads(input: rate)
+        );
+    }
+    private static WorldFieldNode CompileEmit(WorldReaction.Emit reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, StateCatalog state) {
+        var amount = scalar(
+            reaction.Amount,
+            index
+        );
+        var tag = RequireState(
+            state,
+            reaction.Tag,
+            StateStorageShape.Keyed,
+            StateValueKind.Int,
+            $"fields.reactions[{index}].tag"
+        );
+        var target = field(
+            reaction.Field,
+            index
+        );
+
+        return new WorldFieldNode.Emit(
+            handle,
+            tag,
+            target,
+            amount,
+            CanonicalStates(inputs: [new WorldFieldScalarInput(
+                    Literal: default,
+                    State: tag
+                ), amount])
+        );
+    }
+    private static WorldFieldNode CompileExpose(WorldReaction.Expose reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, StateCatalog state) {
+        var value = scalar(
+            reaction.Value,
+            index
+        );
+        var row = RequireState(
+            state,
+            reaction.Row,
+            StateStorageShape.Keyed,
+            StateValueKind.Int,
+            $"fields.reactions[{index}].row"
+        );
+
+        return new WorldFieldNode.Expose(
+            handle,
+            field(
+                reaction.Field,
+                index
+            ),
+            reaction.Comparison,
+            value,
+            row,
+            StateReads(input: value)
+        );
+    }
+    private static WorldFieldNode CompileFlow(WorldReaction.Flow reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, StateCatalog state) {
+        var target = field(
+            reaction.Field,
+            index
+        );
+        var rate = scalar(
+            reaction.Rate,
+            index
+        );
+        var over = (reaction.Over ?? []).Select(selector: name => field(
+            name,
+            index
+        )).ToImmutableArray();
+        var spillRow = ((reaction.SpillRow is { } spillName)
+            ? RequireState(
+                location: $"fields.reactions[{index}].spillRow",
+                name: spillName,
+                state: state,
+                storage: StateStorageShape.Slot,
+                valueKind: StateValueKind.Fixed
             )
+            : default
+        );
+        var stateInputs = new List<WorldFieldScalarInput> { rate };
+
+        if (spillRow.IsValid) {
+            stateInputs.Add(item: new WorldFieldScalarInput(
+                Literal: default,
+                State: spillRow
+            ));
+        }
+
+        return new WorldFieldNode.Flow(
+            handle,
+            target,
+            rate,
+            over,
+            spillRow,
+            CanonicalFields(handles: over.Append(element: target)),
+            CanonicalStates(inputs: stateInputs),
+            (spillRow.IsValid
+            ? ImmutableArray.Create(item: spillRow)
+            : ImmutableArray<StateHandle>.Empty)
+        );
+    }
+    private static WorldFieldNode CompileTransform(WorldReaction.Transform reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar) {
+        var conditions = (reaction.When ?? []).Select(selector: condition => new WorldFieldProgramCondition(
+            Field: field(
+                condition.Field,
+                index
+            ),
+            Comparison: condition.Comparison,
+            Value: scalar(
+                condition.Value,
+                index
+            )
+        )).ToImmutableArray();
+        var writes = (reaction.Then ?? []).Select(selector: write => new WorldFieldProgramWrite(
+            Field: field(
+                write.Field,
+                index
+            ),
+            Op: write.Op,
+            Value: scalar(
+                write.Value,
+                index
+            )
+        )).ToImmutableArray();
+
+        var fieldReads = conditions
+            .Select(selector: static condition => condition.Field)
+            .Concat(second: writes
+                .Where(predicate: static write => (write.Op == WorldFieldWriteOp.Add))
+                .Select(selector: static write => write.Field));
+
+        return new WorldFieldNode.Transform(
+            handle,
+            conditions,
+            writes,
+            CanonicalFields(handles: fieldReads),
+            CanonicalFields(handles: writes.Select(selector: static write => write.Field)),
+            CanonicalStates(inputs: conditions.Select(selector: static condition => condition.Value).Concat(second: writes.Select(selector: static write => write.Value)))
+        );
+    }
+    private static bool Conflicts(WorldFieldNode earlier, WorldFieldNode later) => ReadWriteHazard.Conflicts(
+        earlierFieldReads: earlier.FieldReads.AsSpan(),
+        earlierFieldWrites: earlier.FieldWrites.AsSpan(),
+        earlierStateReads: earlier.StateReads.AsSpan(),
+        earlierStateWrites: earlier.StateWrites.AsSpan(),
+        laterFieldReads: later.FieldReads.AsSpan(),
+        laterFieldWrites: later.FieldWrites.AsSpan(),
+        laterStateReads: later.StateReads.AsSpan(),
+        laterStateWrites: later.StateWrites.AsSpan()
+    );
+    private static StateHandle RequireState(StateCatalog state, string name, StateStorageShape storage, StateValueKind valueKind, string location) {
+        if (!state.TryResolve(
+            handle: out var handle,
+            lane: StateLane.Document,
+            name: name
+        )) {
+            throw new InvalidOperationException(message: $"{location} names undeclared world state row '{name}'.");
+        }
+
+        var descriptor = state[handle];
+
+        if (
+            (descriptor.Storage != storage) ||
+            (descriptor.ValueKind != valueKind)
+        ) {
+            throw new InvalidOperationException(message: $"{location} requires a {storage} {valueKind} world state row, but '{name}' is {descriptor.Storage} {descriptor.ValueKind}.");
+        }
+
+        return handle;
+    }
+    private static ImmutableArray<StateHandle> StateReads(WorldFieldScalarInput input) => (input.IsState
+        ? [input.State]
+        : []
     );
 
     /// <summary>Compiles an already-validated lattice composite into a typed deterministic reaction program.</summary>
@@ -297,7 +576,10 @@ public sealed class WorldFieldProgram {
                 programIdentity: identity
             );
 
-            if (!fieldsByName.TryAdd(key: row.Name, value: handle)) {
+            if (!fieldsByName.TryAdd(
+                key: row.Name,
+                value: handle
+            )) {
                 throw new InvalidOperationException(message: $"fields declares duplicate row '{row.Name}'.");
             }
 
@@ -321,7 +603,10 @@ public sealed class WorldFieldProgram {
             );
         }
 
-        WorldFieldHandle Field(string name, int reaction) => (fieldsByName.TryGetValue(key: name, value: out var handle)
+        WorldFieldHandle Field(string name, int reaction) => (fieldsByName.TryGetValue(
+            key: name,
+            value: out var handle
+        )
             ? handle
             : throw new InvalidOperationException(message: $"fields.reactions[{reaction}] names undeclared field '{name}'.")
         );
@@ -356,12 +641,51 @@ public sealed class WorldFieldProgram {
             );
 
             nodes[index] = reactions[index] switch {
-                WorldReaction.Diffuse reaction => CompileDiffuse(field: Field, handle: nodeHandle, index: index, reaction: reaction, scalar: Scalar),
-                WorldReaction.Decay reaction => CompileDecay(field: Field, handle: nodeHandle, index: index, reaction: reaction, scalar: Scalar),
-                WorldReaction.Transform reaction => CompileTransform(field: Field, handle: nodeHandle, index: index, reaction: reaction, scalar: Scalar),
-                WorldReaction.Emit reaction => CompileEmit(field: Field, handle: nodeHandle, index: index, reaction: reaction, scalar: Scalar, state: state),
-                WorldReaction.Expose reaction => CompileExpose(field: Field, handle: nodeHandle, index: index, reaction: reaction, scalar: Scalar, state: state),
-                WorldReaction.Flow reaction => CompileFlow(field: Field, handle: nodeHandle, index: index, reaction: reaction, scalar: Scalar, state: state),
+                WorldReaction.Diffuse reaction => CompileDiffuse(
+                field: Field,
+                handle: nodeHandle,
+                index: index,
+                reaction: reaction,
+                scalar: Scalar
+            ),
+                WorldReaction.Decay reaction => CompileDecay(
+                field: Field,
+                handle: nodeHandle,
+                index: index,
+                reaction: reaction,
+                scalar: Scalar
+            ),
+                WorldReaction.Transform reaction => CompileTransform(
+                field: Field,
+                handle: nodeHandle,
+                index: index,
+                reaction: reaction,
+                scalar: Scalar
+            ),
+                WorldReaction.Emit reaction => CompileEmit(
+                field: Field,
+                handle: nodeHandle,
+                index: index,
+                reaction: reaction,
+                scalar: Scalar,
+                state: state
+            ),
+                WorldReaction.Expose reaction => CompileExpose(
+                field: Field,
+                handle: nodeHandle,
+                index: index,
+                reaction: reaction,
+                scalar: Scalar,
+                state: state
+            ),
+                WorldReaction.Flow reaction => CompileFlow(
+                field: Field,
+                handle: nodeHandle,
+                index: index,
+                reaction: reaction,
+                scalar: Scalar,
+                state: state
+            ),
                 _ => throw new InvalidOperationException(message: $"fields.reactions[{index}] carries an unknown reaction kind."),
             };
         }
@@ -385,157 +709,5 @@ public sealed class WorldFieldProgram {
         ArgumentNullException.ThrowIfNull(argument: document);
 
         return m_programSource.HasSameProgram(other: document);
-    }
-
-    private static WorldFieldNode CompileDiffuse(WorldReaction.Diffuse reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar) {
-        var rate = scalar(reaction.Rate, index);
-
-        return new WorldFieldNode.Diffuse(handle, field(reaction.Field, index), rate, StateReads(input: rate));
-    }
-    private static WorldFieldNode CompileDecay(WorldReaction.Decay reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar) {
-        var rate = scalar(reaction.Rate, index);
-
-        return new WorldFieldNode.Decay(handle, field(reaction.Field, index), rate, StateReads(input: rate));
-    }
-    private static WorldFieldNode CompileTransform(WorldReaction.Transform reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar) {
-        var conditions = (reaction.When ?? []).Select(selector: condition => new WorldFieldProgramCondition(
-            Field: field(condition.Field, index),
-            Comparison: condition.Comparison,
-            Value: scalar(condition.Value, index)
-        )).ToImmutableArray();
-        var writes = (reaction.Then ?? []).Select(selector: write => new WorldFieldProgramWrite(
-            Field: field(write.Field, index),
-            Op: write.Op,
-            Value: scalar(write.Value, index)
-        )).ToImmutableArray();
-
-        var fieldReads = conditions
-            .Select(selector: static condition => condition.Field)
-            .Concat(second: writes
-                .Where(predicate: static write => (write.Op == WorldFieldWriteOp.Add))
-                .Select(selector: static write => write.Field));
-
-        return new WorldFieldNode.Transform(
-            handle,
-            conditions,
-            writes,
-            CanonicalFields(handles: fieldReads),
-            CanonicalFields(handles: writes.Select(selector: static write => write.Field)),
-            CanonicalStates(inputs: conditions.Select(selector: static condition => condition.Value).Concat(second: writes.Select(selector: static write => write.Value)))
-        );
-    }
-    private static WorldFieldNode CompileEmit(WorldReaction.Emit reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, StateCatalog state) {
-        var amount = scalar(reaction.Amount, index);
-        var tag = RequireState(state, reaction.Tag, StateStorageShape.Keyed, StateValueKind.Int, $"fields.reactions[{index}].tag");
-        var target = field(reaction.Field, index);
-
-        return new WorldFieldNode.Emit(
-            handle,
-            tag,
-            target,
-            amount,
-            CanonicalStates(inputs: [new WorldFieldScalarInput(Literal: default, State: tag), amount])
-        );
-    }
-    private static WorldFieldNode CompileExpose(WorldReaction.Expose reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, StateCatalog state) {
-        var value = scalar(reaction.Value, index);
-        var row = RequireState(state, reaction.Row, StateStorageShape.Keyed, StateValueKind.Int, $"fields.reactions[{index}].row");
-
-        return new WorldFieldNode.Expose(
-            handle,
-            field(reaction.Field, index),
-            reaction.Comparison,
-            value,
-            row,
-            StateReads(input: value)
-        );
-    }
-    private static WorldFieldNode CompileFlow(WorldReaction.Flow reaction, WorldFieldNodeHandle handle, int index, Func<string, int, WorldFieldHandle> field, Func<WorldLatticeScalar, int, WorldFieldScalarInput> scalar, StateCatalog state) {
-        var target = field(reaction.Field, index);
-        var rate = scalar(reaction.Rate, index);
-        var over = (reaction.Over ?? []).Select(selector: name => field(name, index)).ToImmutableArray();
-        var spillRow = ((reaction.SpillRow is { } spillName)
-            ? RequireState(location: $"fields.reactions[{index}].spillRow", name: spillName, state: state, storage: StateStorageShape.Slot, valueKind: StateValueKind.Fixed)
-            : default
-        );
-        var stateInputs = new List<WorldFieldScalarInput> { rate };
-
-        if (spillRow.IsValid) {
-            stateInputs.Add(item: new WorldFieldScalarInput(Literal: default, State: spillRow));
-        }
-
-        return new WorldFieldNode.Flow(
-            handle,
-            target,
-            rate,
-            over,
-            spillRow,
-            CanonicalFields(handles: over.Append(element: target)),
-            CanonicalStates(inputs: stateInputs),
-            (spillRow.IsValid ? ImmutableArray.Create(item: spillRow) : ImmutableArray<StateHandle>.Empty)
-        );
-    }
-    private static ImmutableArray<WorldFieldHandle> CanonicalFields(IEnumerable<WorldFieldHandle> handles) => handles
-        .Distinct()
-        .OrderBy(keySelector: static handle => handle.Ordinal)
-        .ToImmutableArray();
-    private static WorldFieldDependency[] CompileDependencies(IReadOnlyList<WorldFieldNode> nodes) {
-        var dependencies = new List<WorldFieldDependency>();
-
-        for (var after = 0; (after < nodes.Count); after++) {
-            for (var before = 0; (before < after); before++) {
-                if (Conflicts(earlier: nodes[before], later: nodes[after])) {
-                    dependencies.Add(item: new WorldFieldDependency(
-                        Before: nodes[before].Handle,
-                        After: nodes[after].Handle
-                    ));
-                }
-            }
-        }
-
-        return dependencies.ToArray();
-    }
-    private static bool Conflicts(WorldFieldNode earlier, WorldFieldNode later) => (
-        Intersects(left: earlier.FieldWrites, right: later.FieldReads) ||
-        Intersects(left: earlier.FieldWrites, right: later.FieldWrites) ||
-        Intersects(left: earlier.FieldReads, right: later.FieldWrites) ||
-        Intersects(left: earlier.StateWrites, right: later.StateReads) ||
-        Intersects(left: earlier.StateWrites, right: later.StateWrites) ||
-        Intersects(left: earlier.StateReads, right: later.StateWrites)
-    );
-    private static bool Intersects<T>(IReadOnlyList<T> left, IReadOnlyList<T> right)
-        where T : IEquatable<T> {
-        for (var leftIndex = 0; (leftIndex < left.Count); leftIndex++) {
-            for (var rightIndex = 0; (rightIndex < right.Count); rightIndex++) {
-                if (left[leftIndex].Equals(other: right[rightIndex])) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-    private static ImmutableArray<StateHandle> CanonicalStates(IEnumerable<WorldFieldScalarInput> inputs) => inputs
-        .Where(predicate: static input => input.IsState)
-        .Select(selector: static input => input.State)
-        .Distinct()
-        .OrderBy(keySelector: static handle => handle.Ordinal)
-        .ToImmutableArray();
-    private static ImmutableArray<StateHandle> StateReads(WorldFieldScalarInput input) => (input.IsState
-        ? [input.State]
-        : []
-    );
-    private static StateHandle RequireState(StateCatalog state, string name, StateStorageShape storage, StateValueKind valueKind, string location) {
-        if (!state.TryResolve(handle: out var handle, lane: StateLane.Document, name: name)) {
-            throw new InvalidOperationException(message: $"{location} names undeclared world state row '{name}'.");
-        }
-
-        var descriptor = state[handle];
-
-        if ((descriptor.Storage != storage) || (descriptor.ValueKind != valueKind)) {
-            throw new InvalidOperationException(message: $"{location} requires a {storage} {valueKind} world state row, but '{name}' is {descriptor.Storage} {descriptor.ValueKind}.");
-        }
-
-        return handle;
     }
 }

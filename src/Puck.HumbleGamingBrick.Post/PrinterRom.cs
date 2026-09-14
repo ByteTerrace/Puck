@@ -10,25 +10,25 @@ namespace Puck.HumbleGamingBrick.Post;
 /// correct 16-bit additive checksums computed here, so the SM83 side stays a fixed loop and the protocol lives in data.
 /// </summary>
 internal static class PrinterRom {
+    // A full DATA band is 0x280 (640) decompressed bytes = two 8-pixel tile rows.
+    private const int BandByteCount = 0x280;
+    private const byte CommandData = 0x04;
+    // Printer command bytes.
+    private const byte CommandInit = 0x01;
+    private const byte CommandNul = 0x0F;
+    private const byte CommandPrint = 0x02;
     private const int EntryPoint = 0x0100;
     private const int PacketStreamBase = 0x0150;
     private const int RomSize = 0x8000;
-    // A full DATA band is 0x280 (640) decompressed bytes = two 8-pixel tile rows.
-    private const int BandByteCount = 0x280;
-    // Printer command bytes.
-    private const byte CommandInit = 0x01;
-    private const byte CommandData = 0x04;
-    private const byte CommandNul = 0x0F;
-    private const byte CommandPrint = 0x02;
 
+    /// <summary>The completion-marker value.</summary>
+    public const byte CompletionMarker = 0xA5;
+    /// <summary>The work-RAM address the driver writes its completion marker to when every packet has been sent.</summary>
+    public const ushort CompletionMarkerAddress = 0xC000;
     /// <summary>The number of image pixel rows the print job produces (two 16-row DATA bands).</summary>
     public const int PrintedRowCount = 32;
     /// <summary>The number of STATUS-poll packets the driver sends after PRINT (enough to span the busy → ready window).</summary>
     public const int StatusPollCount = 20;
-    /// <summary>The work-RAM address the driver writes its completion marker to when every packet has been sent.</summary>
-    public const ushort CompletionMarkerAddress = 0xC000;
-    /// <summary>The completion-marker value.</summary>
-    public const byte CompletionMarker = 0xA5;
 
     // The serial-blaster driver at the post-boot entry point 0x0100. Registers: HL = packet-stream cursor, BC = bytes left
     // in the current packet, E = idle-delay counter.
@@ -92,167 +92,6 @@ internal static class PrinterRom {
         0xEA, ((byte)(CompletionMarkerAddress & 0xFF)), ((byte)(CompletionMarkerAddress >> 8)),
         0x18, 0xFE,
     ];
-
-    /// <summary>Creates the printer test ROM image.</summary>
-    /// <returns>A 32&#160;KiB ROM-only cartridge image whose entry point drives the full print job.</returns>
-    public static byte[] Create() {
-        var band = BuildBand();
-        var stream = new List<byte>();
-
-        // INIT clears the printer and image.
-        AppendPacket(
-            command: CommandInit,
-            compressed: false,
-            payload: [],
-            stream: stream
-        );
-        // Two DATA bands carrying the IDENTICAL image content — one raw, one RLE-compressed — so the emitted print's two
-        // halves must match byte-for-byte, proving the decompressor against the raw path.
-        AppendPacket(
-            command: CommandData,
-            compressed: false,
-            payload: band,
-            stream: stream
-        );
-        AppendPacket(
-            stream: stream,
-            command: CommandData,
-            compressed: true,
-            payload: RleEncode(data: band)
-        );
-        // PRINT: one sheet, no margins, identity palette (0xE4 maps each 2-bit dot to itself), mid exposure.
-        AppendPacket(
-            command: CommandPrint,
-            compressed: false,
-            payload: [0x01, 0x00, 0xE4, 0x40],
-            stream: stream
-        );
-
-        // STATUS polls (NUL command) so the driver keeps the link live across the busy → ready transition.
-        for (var poll = 0; (poll < StatusPollCount); ++poll) {
-            AppendPacket(
-                command: CommandNul,
-                compressed: false,
-                payload: [],
-                stream: stream
-            );
-        }
-
-        // The zero terminator the driver stops on.
-        stream.Add(item: 0x00);
-        stream.Add(item: 0x00);
-
-        // A zero-filled image already carries a valid ROM-only header (type 0x00, 32 KiB, no RAM); the driver sits below
-        // the header fields and the packet stream begins past the header (0x0150), so neither disturbs the parsed header.
-        var rom = new byte[RomSize];
-
-        Driver.CopyTo(
-            array: rom,
-            index: EntryPoint
-        );
-        stream.CopyTo(
-            array: rom,
-            arrayIndex: PacketStreamBase
-        );
-
-        return rom;
-    }
-    /// <summary>Builds the reference 640-byte band content the ROM prints — the deterministic source the stage decodes to
-    /// its expected image (both DATA bands carry it). Mixed on purpose: the first half is 8-byte runs (compressible) and
-    /// the second half is a non-repeating ramp (raw), so the RLE-compressed band exercises both run kinds.</summary>
-    /// <returns>The 640-byte band.</returns>
-    public static byte[] BuildBand() {
-        var band = new byte[BandByteCount];
-
-        for (var index = 0; (index < band.Length); ++index) {
-            band[index] = ((index < (BandByteCount / 2))
-                ? (byte)(index >> 3)
-                : (byte)index);
-        }
-
-        return band;
-    }
-    /// <summary>Creates a synthetic ROM (the H-05 overflow probe) that drives <paramref name="bandCount"/> consecutive
-    /// raw DATA bands — built from <see cref="BuildOverflowBand"/>, so every band decodes to the same two-value pattern —
-    /// into the printer with no intervening PRINT, then a PRINT and a run of STATUS polls. Used to drive the image
-    /// buffer's 12/13-band capacity boundary and beyond without a crash, per <c>GamePrinterDevice.UnpackBand</c>'s
-    /// wrap policy.</summary>
-    /// <param name="bandCount">The number of full DATA bands to send before PRINT.</param>
-    /// <returns>A 32&#160;KiB ROM-only cartridge image whose entry point drives the overflow scenario.</returns>
-    public static byte[] CreateOverflow(int bandCount) {
-        var band = BuildOverflowBand();
-        var stream = new List<byte>();
-
-        AppendPacket(
-            command: CommandInit,
-            compressed: false,
-            payload: [],
-            stream: stream
-        );
-
-        for (var index = 0; (index < bandCount); ++index) {
-            AppendPacket(
-                command: CommandData,
-                compressed: false,
-                payload: band,
-                stream: stream
-            );
-        }
-
-        AppendPacket(
-            command: CommandPrint,
-            compressed: false,
-            payload: [0x01, 0x00, 0xE4, 0x40],
-            stream: stream
-        );
-
-        for (var poll = 0; (poll < StatusPollCount); ++poll) {
-            AppendPacket(
-                command: CommandNul,
-                compressed: false,
-                payload: [],
-                stream: stream
-            );
-        }
-
-        stream.Add(item: 0x00);
-        stream.Add(item: 0x00);
-
-        var rom = new byte[RomSize];
-
-        Driver.CopyTo(
-            array: rom,
-            index: EntryPoint
-        );
-        stream.CopyTo(
-            array: rom,
-            arrayIndex: PacketStreamBase
-        );
-
-        return rom;
-    }
-    /// <summary>Builds the 640-byte band the overflow probe repeats: the identity palette maps a decoded 2bpp dot to
-    /// itself, so setting the first tile-row half's low plane to 0xFF/high plane to 0x00 decodes every dot in that half
-    /// to shade 1, and the second half's low/high planes swapped decodes every dot to shade 2. Every overflow band
-    /// carries the same content, so the printer's circular-buffer wrap is checkable purely from the final image's
-    /// segment count and alternating 1/2 parity — an independent model of <c>GamePrinterDevice.UnpackBand</c>'s
-    /// policy, not a re-test of the tile decoder (already covered by <see cref="BuildBand"/>'s RLE round-trip check).</summary>
-    /// <returns>The 640-byte band.</returns>
-    public static byte[] BuildOverflowBand() {
-        var band = new byte[BandByteCount];
-
-        for (var index = 0; (index < (BandByteCount / 2)); index += 2) {
-            band[index] = 0xFF;
-            band[(index + 1)] = 0x00;
-        }
-
-        for (var index = (BandByteCount / 2); (index < BandByteCount); index += 2) {
-            band[index] = 0x00;
-            band[(index + 1)] = 0xFF;
-        }
-
-        return band;
-    }
 
     // Appends one length-prefixed printer packet (2-byte little-endian on-wire length, then the bytes) to the stream. The
     // on-wire bytes are the two magic bytes, command, compression flag, 16-bit payload length, the payload, the 16-bit
@@ -339,5 +178,167 @@ internal static class PrinterRom {
         }
 
         return [.. output];
+    }
+
+    /// <summary>Builds the reference 640-byte band content the ROM prints — the deterministic source the stage decodes to
+    /// its expected image (both DATA bands carry it). Mixed on purpose: the first half is 8-byte runs (compressible) and
+    /// the second half is a non-repeating ramp (raw), so the RLE-compressed band exercises both run kinds.</summary>
+    /// <returns>The 640-byte band.</returns>
+    public static byte[] BuildBand() {
+        var band = new byte[BandByteCount];
+
+        for (var index = 0; (index < band.Length); ++index) {
+            band[index] = ((index < (BandByteCount / 2))
+                ? (byte)(index >> 3)
+                : (byte)index
+            );
+        }
+
+        return band;
+    }
+    /// <summary>Builds the 640-byte band the overflow probe repeats: the identity palette maps a decoded 2bpp dot to
+    /// itself, so setting the first tile-row half's low plane to 0xFF/high plane to 0x00 decodes every dot in that half
+    /// to shade 1, and the second half's low/high planes swapped decodes every dot to shade 2. Every overflow band
+    /// carries the same content, so the printer's circular-buffer wrap is checkable purely from the final image's
+    /// segment count and alternating 1/2 parity — an independent model of <c>GamePrinterDevice.UnpackBand</c>'s
+    /// policy, not a re-test of the tile decoder (already covered by <see cref="BuildBand"/>'s RLE round-trip check).</summary>
+    /// <returns>The 640-byte band.</returns>
+    public static byte[] BuildOverflowBand() {
+        var band = new byte[BandByteCount];
+
+        for (var index = 0; (index < (BandByteCount / 2)); index += 2) {
+            band[index] = 0xFF;
+            band[(index + 1)] = 0x00;
+        }
+
+        for (var index = (BandByteCount / 2); (index < BandByteCount); index += 2) {
+            band[index] = 0x00;
+            band[(index + 1)] = 0xFF;
+        }
+
+        return band;
+    }
+    /// <summary>Creates the printer test ROM image.</summary>
+    /// <returns>A 32&#160;KiB ROM-only cartridge image whose entry point drives the full print job.</returns>
+    public static byte[] Create() {
+        var band = BuildBand();
+        var stream = new List<byte>();
+
+        // INIT clears the printer and image.
+        AppendPacket(
+            command: CommandInit,
+            compressed: false,
+            payload: [],
+            stream: stream
+        );
+        // Two DATA bands carrying the IDENTICAL image content — one raw, one RLE-compressed — so the emitted print's two
+        // halves must match byte-for-byte, proving the decompressor against the raw path.
+        AppendPacket(
+            command: CommandData,
+            compressed: false,
+            payload: band,
+            stream: stream
+        );
+        AppendPacket(
+            stream: stream,
+            command: CommandData,
+            compressed: true,
+            payload: RleEncode(data: band)
+        );
+        // PRINT: one sheet, no margins, identity palette (0xE4 maps each 2-bit dot to itself), mid exposure.
+        AppendPacket(
+            command: CommandPrint,
+            compressed: false,
+            payload: [0x01, 0x00, 0xE4, 0x40],
+            stream: stream
+        );
+
+        // STATUS polls (NUL command) so the driver keeps the link live across the busy → ready transition.
+        for (var poll = 0; (poll < StatusPollCount); ++poll) {
+            AppendPacket(
+                command: CommandNul,
+                compressed: false,
+                payload: [],
+                stream: stream
+            );
+        }
+
+        // The zero terminator the driver stops on.
+        stream.Add(item: 0x00);
+        stream.Add(item: 0x00);
+
+        // A zero-filled image already carries a valid ROM-only header (type 0x00, 32 KiB, no RAM); the driver sits below
+        // the header fields and the packet stream begins past the header (0x0150), so neither disturbs the parsed header.
+        var rom = new byte[RomSize];
+
+        Driver.CopyTo(
+            array: rom,
+            index: EntryPoint
+        );
+        stream.CopyTo(
+            array: rom,
+            arrayIndex: PacketStreamBase
+        );
+
+        return rom;
+    }
+    /// <summary>Creates a synthetic ROM (the H-05 overflow probe) that drives <paramref name="bandCount"/> consecutive
+    /// raw DATA bands — built from <see cref="BuildOverflowBand"/>, so every band decodes to the same two-value pattern —
+    /// into the printer with no intervening PRINT, then a PRINT and a run of STATUS polls. Used to drive the image
+    /// buffer's 12/13-band capacity boundary and beyond without a crash, per <c>GamePrinterDevice.UnpackBand</c>'s
+    /// wrap policy.</summary>
+    /// <param name="bandCount">The number of full DATA bands to send before PRINT.</param>
+    /// <returns>A 32&#160;KiB ROM-only cartridge image whose entry point drives the overflow scenario.</returns>
+    public static byte[] CreateOverflow(int bandCount) {
+        var band = BuildOverflowBand();
+        var stream = new List<byte>();
+
+        AppendPacket(
+            command: CommandInit,
+            compressed: false,
+            payload: [],
+            stream: stream
+        );
+
+        for (var index = 0; (index < bandCount); ++index) {
+            AppendPacket(
+                command: CommandData,
+                compressed: false,
+                payload: band,
+                stream: stream
+            );
+        }
+
+        AppendPacket(
+            command: CommandPrint,
+            compressed: false,
+            payload: [0x01, 0x00, 0xE4, 0x40],
+            stream: stream
+        );
+
+        for (var poll = 0; (poll < StatusPollCount); ++poll) {
+            AppendPacket(
+                command: CommandNul,
+                compressed: false,
+                payload: [],
+                stream: stream
+            );
+        }
+
+        stream.Add(item: 0x00);
+        stream.Add(item: 0x00);
+
+        var rom = new byte[RomSize];
+
+        Driver.CopyTo(
+            array: rom,
+            index: EntryPoint
+        );
+        stream.CopyTo(
+            array: rom,
+            arrayIndex: PacketStreamBase
+        );
+
+        return rom;
     }
 }

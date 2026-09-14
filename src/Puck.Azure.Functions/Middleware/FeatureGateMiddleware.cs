@@ -15,8 +15,7 @@ namespace Puck.Azure.Functions.Middleware;
     AllowMultiple = false,
     Inherited = false
 )]
-public sealed class FeatureGateAttribute : Attribute
-{
+public sealed class FeatureGateAttribute : Attribute {
     public string[] Features { get; }
     public bool RequireAll { get; init; } = true;
 
@@ -33,9 +32,7 @@ public sealed class FeatureGateAttribute : Attribute
         Features = features;
     }
 }
-
-public static partial class FeatureGateLog
-{
+public static partial class FeatureGateLog {
     [LoggerMessage(
         EventId = 0,
         Level = LogLevel.Information,
@@ -49,9 +46,7 @@ public static partial class FeatureGateLog
     )]
     public static partial void AccessGranted(ILogger logger, string features, string resource, string userId);
 }
-
-public sealed class FeatureGateMiddleware(ILogger<FeatureGateMiddleware> logger) : IFunctionsWorkerMiddleware
-{
+public sealed class FeatureGateMiddleware(ILogger<FeatureGateMiddleware> logger) : IFunctionsWorkerMiddleware {
     private static readonly ConcurrentDictionary<string, FeatureGateAttribute?> AttributeCache = new();
 
     private static bool TryGetFeatureGateAttribute(
@@ -102,15 +97,17 @@ public sealed class FeatureGateMiddleware(ILogger<FeatureGateMiddleware> logger)
                         isAllowed &= isEnabled;
 
                         if (!isAllowed) { break; }
-                    }
-                    else {
+                    } else {
                         isAllowed |= isEnabled;
 
                         if (isAllowed) { break; }
                     }
                 }
 
-                if (isAllowed && requireAll) {
+                if (
+                    isAllowed &&
+                    requireAll
+                ) {
                     featuresLogValue = string.Join(
                         separator: ',',
                         values: features
@@ -127,8 +124,7 @@ public sealed class FeatureGateMiddleware(ILogger<FeatureGateMiddleware> logger)
                 );
 
                 await next(context: context);
-            }
-            else {
+            } else {
                 FeatureGateLog.AccessDenied(
                     features: featuresLogValue,
                     logger: logger,
@@ -138,8 +134,7 @@ public sealed class FeatureGateMiddleware(ILogger<FeatureGateMiddleware> logger)
 
                 context.GetHttpContext()!.Response.StatusCode = StatusCodes.Status403Forbidden;
             }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             logger.LogError(
                 exception: e,
                 message: "Unhandled error occurred during Feature Gate middleware execution."

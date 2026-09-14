@@ -19,7 +19,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: items.Count);
 
         foreach (var item in items) {
-            writeItem(writer, item);
+            writeItem(
+                writer,
+                item
+            );
         }
     }
     private static T[] ReadArray<T>(ref WireReader reader, string field, ReadItem<T> readItem, int maximum = MaxCollectionCount) {
@@ -45,7 +48,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteBoolean(value: value.HasValue);
 
         if (value is { } present) {
-            writeValue(writer, present);
+            writeValue(
+                writer,
+                present
+            );
         }
     }
     private static T? ReadOptional<T>(ref WireReader reader, ReadStructItem<T> readValue) where T : struct =>
@@ -57,7 +63,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteBoolean(value: (value is not null));
 
         if (value is { } present) {
-            writeValue(writer, present);
+            writeValue(
+                writer,
+                present
+            );
         }
     }
     private static T? ReadOptionalClass<T>(ref WireReader reader, ReadClassItem<T> readValue) where T : class =>

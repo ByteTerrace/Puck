@@ -12,20 +12,17 @@ public sealed class CommandRegistryBoundaryTests {
     );
 
     [Fact]
-    public void AThrowingObserverNeitherStopsTheTickNorStrandsALaterBarrier() {
+    public void ACancellationReleasesTheBarriersOfTheEntriesItLeavesUnapplied() {
         var applied = new List<string>();
         var submitted = new List<string>();
-        var registry = new CommandRegistry(
-            modules: [
-                new SumModule(),
-                new BoundProbeModule(),
-                new RecordingSimulationModule(applied: applied),
-            ],
-            observers: [new ThrowingObserver()]
-        );
+        var registry = new CommandRegistry(modules: [
+            new SumModule(),
+            new CancellingSimulationModule(),
+            new RecordingSimulationModule(applied: applied),
+        ]);
         var router = new InputRouter(
             registry: registry,
-            bindings: new FixedBindings(command: "bound.probe"),
+            bindings: new EmptyBindings(),
             principalResolver: new ConsolePrincipal()
         );
         var source = new TextCommandSource(registry: registry);
@@ -35,101 +32,86 @@ public sealed class CommandRegistryBoundaryTests {
             slot: 0
         );
 
-        session.Enqueue(line: "sim.record payload");
+        // Collect keeps draining Simulation-routed lines, so BOTH deferred lines fold into the same tick and each one
+        // holds a Begin() on this session's barrier. The immediate line behind them waits for that barrier to clear.
+        session.Enqueue(line: "sim.cancel");
+        session.Enqueue(line: "sim.record second");
         session.Enqueue(line: "sum 2 3");
-        // Captured BEFORE the drain injects the text entry, so the bound entry — whose dispatch notifies the throwing
-        // observer — sorts ahead of it in the lane.
-        router.Capture(signal: InputSignal.Press(source: "key.a"));
         source.Collect();
 
-        Assert.Equal(actual: submitted, expected: ["sim.record payload"]);
+        Assert.Equal(
+            actual: submitted,
+            expected: ["sim.cancel", "sim.record second"]
+        );
 
         var snapshot = Tick(router: router);
 
-        registry.ApplySnapshot(snapshot: in snapshot);
+        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.ApplySnapshot(snapshot: in snapshot));
 
-        // The observer threw on the FIRST entry; the submitted line behind it still ran, and its session's barrier
-        // still released, so the queued immediate line drains on the next frame.
-        Assert.Equal(actual: applied, expected: ["payload"]);
+        // The cancellation applies a PREFIX: the second entry never ran.
+        Assert.Empty(collection: applied);
 
+        // …but it is never going to run either, so its barrier had to be released on the way out. Leaving it standing
+        // suspended the session permanently — Collect saw a pending submission for a line the tick had abandoned and
+        // rotated the session to the tail on every frame from then on, so `sum 2 3` never drained.
         source.Collect();
 
-        Assert.Equal(actual: submitted, expected: ["sim.record payload", "sum 2 3"]);
+        Assert.Equal(
+            actual: submitted,
+            expected: ["sim.cancel", "sim.record second", "sum 2 3"]
+        );
     }
     [Fact]
-    public void AThrowingObserverDoesNotSilenceTheObserversAfterIt() {
-        var seen = new List<string>();
-        var registry = new CommandRegistry(
-            modules: [new BoundProbeModule()],
-            observers: [new ThrowingObserver(), new RecordingObserver(seen: seen)]
-        );
-        var router = new InputRouter(
-            registry: registry,
-            bindings: new FixedBindings(command: "bound.probe"),
-            principalResolver: new ConsolePrincipal()
-        );
-
-        router.Capture(signal: InputSignal.Press(source: "key.a"));
-
-        var snapshot = Tick(router: router);
-
-        registry.ApplySnapshot(snapshot: in snapshot);
-
-        Assert.Equal(actual: seen, expected: ["bound.probe"]);
-        // The swallowed notification carried a verdict that never reached its sink, so it is counted rather than
-        // passing silently — but as an observer fault, in its own segment. Nothing was submitted here at all.
-        Assert.Equal(expected: "[wire.errors: 0 rejected | 1 observer fault]", actual: registry.Submit(line: "wire.errors").Output);
-    }
-    [Fact]
-    public void ObserverFaultsAreCountedApartFromTheCallersRefusedLines() {
-        var registry = new CommandRegistry(
-            modules: [new BoundProbeModule()],
-            observers: [new ThrowingObserver(), new ThrowingObserver(), new ThrowingObserver()]
-        );
-        var router = new InputRouter(
-            registry: registry,
-            bindings: new FixedBindings(command: "bound.probe"),
-            principalResolver: new ConsolePrincipal()
-        );
-
-        router.Capture(signal: InputSignal.Press(source: "key.a"));
-
-        var snapshot = Tick(router: router);
-
-        registry.ApplySnapshot(snapshot: in snapshot);
-
-        // ONE bound press, no submitted line anywhere — yet each of the three sinks threw. Folding those into
-        // wire.errors reported `3 rejected` for a caller that had submitted nothing, so a scripted driver asserting
-        // zero refusals was poisoned by a broken UI sink on a gamepad press.
-        Assert.Equal(expected: "[wire.errors: 0 rejected | 3 observer faults]", actual: registry.Submit(line: "wire.errors").Output);
-
-        // A genuinely refused line still lands on the refusal count, beside the faults rather than mixed into them.
-        _ = registry.Submit(line: "does.not.exist");
-        Assert.Equal(expected: "[wire.errors: 1 rejected | 3 observer faults]", actual: registry.Submit(line: "wire.errors reset").Output);
-        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
-    }
-    [Fact]
-    public void AMalformedDeferredLineWithABrokenSinkIsStillOneRefusal() {
-        var registry = new CommandRegistry(
-            modules: [new StrictSimulationModule()],
-            observers: [new ThrowingObserver()]
-        );
+    public void ACancellationSignalUnwindsOutOfApplySnapshotAfterReleasingItsOwnBarrier() {
+        var submitted = new List<string>();
+        var registry = new CommandRegistry(modules: [new SumModule(), new CancellingSimulationModule()]);
         var router = new InputRouter(
             registry: registry,
             bindings: new EmptyBindings(),
             principalResolver: new ConsolePrincipal()
         );
+        var source = new TextCommandSource(registry: registry);
+        var session = source.CreateSeatSession(
+            onResult: (line, _) => submitted.Add(item: line),
+            router: router,
+            slot: 0
+        );
 
-        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+        session.Enqueue(line: "sim.cancel");
+        session.Enqueue(line: "sum 2 3");
+        source.Collect();
 
-        // Submit accepted the line (its arguments are read a tick later), and the apply-time decode then refused it and
-        // told the observer, which threw. One caller line, one refusal — the observer's own fault used to add a second.
-        Assert.Equal(actual: registry.Submit(line: "sim.strict a b c d e"), expected: CommandResult.None);
+        Assert.Equal(
+            actual: submitted,
+            expected: ["sim.cancel"]
+        );
 
         var snapshot = Tick(router: router);
 
-        registry.ApplySnapshot(snapshot: in snapshot);
-        Assert.Equal(expected: "[wire.errors: 1 rejected | 1 observer fault]", actual: registry.Submit(line: "wire.errors").Output);
+        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.ApplySnapshot(snapshot: in snapshot));
+
+        // Unwinding still runs the per-entry finally, so the session is not left holding a barrier no later tick can
+        // release; the host decides whether to drain again after the cancellation it asked for.
+        source.Collect();
+
+        Assert.Equal(
+            actual: submitted,
+            expected: ["sim.cancel", "sum 2 3"]
+        );
+    }
+    [Fact]
+    public void ACancellationSignalUnwindsToTheHostInsteadOfBecomingAWireError() {
+        var registry = new CommandRegistry(modules: [new CancellingModule()]);
+
+        // A handler raises this by observing the HOST's token, so it is a request to stop rather than a verdict about
+        // the verb: converting it into `[cancel.probe: handler threw …]` would leave the host to pattern-match its own
+        // shutdown back out of the wire, and would count it as a refused line.
+        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.Submit(line: "cancel.probe"));
+        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.Submit(line: "cancel.probe \"quoted\""));
+        Assert.Equal(
+            expected: "[wire.errors: 0 rejected]",
+            actual: registry.Submit(line: "wire.errors").Output
+        );
     }
     [Fact]
     public void AFaultTheHandlerBoundaryCannotContainStillReleasesTheEntrysBarrier() {
@@ -163,11 +145,46 @@ public sealed class CommandRegistryBoundaryTests {
         // again, from OUTSIDE the handler boundary. Only a boundary around the whole ENTRY contains it.
         registry.ApplySnapshot(snapshot: in snapshot);
 
-        Assert.Equal(actual: applied, expected: ["payload"]);
+        Assert.Equal(
+            actual: applied,
+            expected: ["payload"]
+        );
 
         source.Collect();
 
-        Assert.Equal(actual: submitted, expected: ["sim.record payload", "sum 2 3"]);
+        Assert.Equal(
+            actual: submitted,
+            expected: ["sim.record payload", "sum 2 3"]
+        );
+    }
+    [Fact]
+    public void AMalformedDeferredLineWithABrokenSinkIsStillOneRefusal() {
+        var registry = new CommandRegistry(
+            modules: [new StrictSimulationModule()],
+            observers: [new ThrowingObserver()]
+        );
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        registry.RouteSimulationTo(sink: router.ConsoleTextSink);
+
+        // Submit accepted the line (its arguments are read a tick later), and the apply-time decode then refused it and
+        // told the observer, which threw. One caller line, one refusal — the observer's own fault used to add a second.
+        Assert.Equal(
+            actual: registry.Submit(line: "sim.strict a b c d e"),
+            expected: CommandResult.None
+        );
+
+        var snapshot = Tick(router: router);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+        Assert.Equal(
+            expected: "[wire.errors: 1 rejected | 1 observer fault]",
+            actual: registry.Submit(line: "wire.errors").Output
+        );
     }
     [Fact]
     public void ASnapshotBuiltForAnotherRegistryIsRefusedWholeBeforeAnyEntryRuns() {
@@ -188,93 +205,6 @@ public sealed class CommandRegistryBoundaryTests {
         // decode, so the snapshot is refused whole — before anything is dispatched and before any barrier is touched.
         _ = Assert.Throws<ArgumentException>(testCode: () => other.ApplySnapshot(snapshot: in snapshot));
         Assert.Empty(collection: applied);
-    }
-    [Fact]
-    public void ACancellationSignalUnwindsToTheHostInsteadOfBecomingAWireError() {
-        var registry = new CommandRegistry(modules: [new CancellingModule()]);
-
-        // A handler raises this by observing the HOST's token, so it is a request to stop rather than a verdict about
-        // the verb: converting it into `[cancel.probe: handler threw …]` would leave the host to pattern-match its own
-        // shutdown back out of the wire, and would count it as a refused line.
-        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.Submit(line: "cancel.probe"));
-        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.Submit(line: "cancel.probe \"quoted\""));
-        Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
-    }
-    [Fact]
-    public void ACancellationSignalUnwindsOutOfApplySnapshotAfterReleasingItsOwnBarrier() {
-        var submitted = new List<string>();
-        var registry = new CommandRegistry(modules: [new SumModule(), new CancellingSimulationModule()]);
-        var router = new InputRouter(
-            registry: registry,
-            bindings: new EmptyBindings(),
-            principalResolver: new ConsolePrincipal()
-        );
-        var source = new TextCommandSource(registry: registry);
-        var session = source.CreateSeatSession(
-            onResult: (line, _) => submitted.Add(item: line),
-            router: router,
-            slot: 0
-        );
-
-        session.Enqueue(line: "sim.cancel");
-        session.Enqueue(line: "sum 2 3");
-        source.Collect();
-
-        Assert.Equal(actual: submitted, expected: ["sim.cancel"]);
-
-        var snapshot = Tick(router: router);
-
-        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.ApplySnapshot(snapshot: in snapshot));
-
-        // Unwinding still runs the per-entry finally, so the session is not left holding a barrier no later tick can
-        // release; the host decides whether to drain again after the cancellation it asked for.
-        source.Collect();
-
-        Assert.Equal(actual: submitted, expected: ["sim.cancel", "sum 2 3"]);
-    }
-    [Fact]
-    public void ACancellationReleasesTheBarriersOfTheEntriesItLeavesUnapplied() {
-        var applied = new List<string>();
-        var submitted = new List<string>();
-        var registry = new CommandRegistry(modules: [
-            new SumModule(),
-            new CancellingSimulationModule(),
-            new RecordingSimulationModule(applied: applied),
-        ]);
-        var router = new InputRouter(
-            registry: registry,
-            bindings: new EmptyBindings(),
-            principalResolver: new ConsolePrincipal()
-        );
-        var source = new TextCommandSource(registry: registry);
-        var session = source.CreateSeatSession(
-            onResult: (line, _) => submitted.Add(item: line),
-            router: router,
-            slot: 0
-        );
-
-        // Collect keeps draining Simulation-routed lines, so BOTH deferred lines fold into the same tick and each one
-        // holds a Begin() on this session's barrier. The immediate line behind them waits for that barrier to clear.
-        session.Enqueue(line: "sim.cancel");
-        session.Enqueue(line: "sim.record second");
-        session.Enqueue(line: "sum 2 3");
-        source.Collect();
-
-        Assert.Equal(actual: submitted, expected: ["sim.cancel", "sim.record second"]);
-
-        var snapshot = Tick(router: router);
-
-        _ = Assert.Throws<OperationCanceledException>(testCode: () => registry.ApplySnapshot(snapshot: in snapshot));
-
-        // The cancellation applies a PREFIX: the second entry never ran.
-        Assert.Empty(collection: applied);
-
-        // …but it is never going to run either, so its barrier had to be released on the way out. Leaving it standing
-        // suspended the session permanently — Collect saw a pending submission for a line the tick had abandoned and
-        // rotated the session to the tail on every frame from then on, so `sum 2 3` never drained.
-        source.Collect();
-
-        Assert.Equal(actual: submitted, expected: ["sim.cancel", "sim.record second", "sum 2 3"]);
     }
     [Fact]
     public void ATextEntryNamingAnIdThisRegistryCannotDecodeIsSkippedWithoutStrandingItsSession() {
@@ -301,7 +231,10 @@ public sealed class CommandRegistryBoundaryTests {
         session.Enqueue(line: "sum 2 3");
         source.Collect();
 
-        Assert.Equal(actual: submitted, expected: ["sim.wide payload"]);
+        Assert.Equal(
+            actual: submitted,
+            expected: ["sim.wide payload"]
+        );
 
         var snapshot = Tick(router: router);
 
@@ -311,7 +244,131 @@ public sealed class CommandRegistryBoundaryTests {
         // still released, so the writer's session drains its queued line instead of rotating forever.
         source.Collect();
 
-        Assert.Equal(actual: submitted, expected: ["sim.wide payload", "sum 2 3"]);
+        Assert.Equal(
+            actual: submitted,
+            expected: ["sim.wide payload", "sum 2 3"]
+        );
+    }
+    [Fact]
+    public void AThrowingObserverDoesNotSilenceTheObserversAfterIt() {
+        var seen = new List<string>();
+        var registry = new CommandRegistry(
+            modules: [new BoundProbeModule()],
+            observers: [new ThrowingObserver(), new RecordingObserver(seen: seen)]
+        );
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new FixedBindings(command: "bound.probe"),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+
+        var snapshot = Tick(router: router);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        Assert.Equal(
+            actual: seen,
+            expected: ["bound.probe"]
+        );
+        // The swallowed notification carried a verdict that never reached its sink, so it is counted rather than
+        // passing silently — but as an observer fault, in its own segment. Nothing was submitted here at all.
+        Assert.Equal(
+            expected: "[wire.errors: 0 rejected | 1 observer fault]",
+            actual: registry.Submit(line: "wire.errors").Output
+        );
+    }
+    [Fact]
+    public void AThrowingObserverNeitherStopsTheTickNorStrandsALaterBarrier() {
+        var applied = new List<string>();
+        var submitted = new List<string>();
+        var registry = new CommandRegistry(
+            modules: [
+                new SumModule(),
+                new BoundProbeModule(),
+                new RecordingSimulationModule(applied: applied),
+            ],
+            observers: [new ThrowingObserver()]
+        );
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new FixedBindings(command: "bound.probe"),
+            principalResolver: new ConsolePrincipal()
+        );
+        var source = new TextCommandSource(registry: registry);
+        var session = source.CreateSeatSession(
+            onResult: (line, _) => submitted.Add(item: line),
+            router: router,
+            slot: 0
+        );
+
+        session.Enqueue(line: "sim.record payload");
+        session.Enqueue(line: "sum 2 3");
+        // Captured BEFORE the drain injects the text entry, so the bound entry — whose dispatch notifies the throwing
+        // observer — sorts ahead of it in the lane.
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+        source.Collect();
+
+        Assert.Equal(
+            actual: submitted,
+            expected: ["sim.record payload"]
+        );
+
+        var snapshot = Tick(router: router);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        // The observer threw on the FIRST entry; the submitted line behind it still ran, and its session's barrier
+        // still released, so the queued immediate line drains on the next frame.
+        Assert.Equal(
+            actual: applied,
+            expected: ["payload"]
+        );
+
+        source.Collect();
+
+        Assert.Equal(
+            actual: submitted,
+            expected: ["sim.record payload", "sum 2 3"]
+        );
+    }
+    [Fact]
+    public void ObserverFaultsAreCountedApartFromTheCallersRefusedLines() {
+        var registry = new CommandRegistry(
+            modules: [new BoundProbeModule()],
+            observers: [new ThrowingObserver(), new ThrowingObserver(), new ThrowingObserver()]
+        );
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new FixedBindings(command: "bound.probe"),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+
+        var snapshot = Tick(router: router);
+
+        registry.ApplySnapshot(snapshot: in snapshot);
+
+        // ONE bound press, no submitted line anywhere — yet each of the three sinks threw. Folding those into
+        // wire.errors reported `3 rejected` for a caller that had submitted nothing, so a scripted driver asserting
+        // zero refusals was poisoned by a broken UI sink on a gamepad press.
+        Assert.Equal(
+            expected: "[wire.errors: 0 rejected | 3 observer faults]",
+            actual: registry.Submit(line: "wire.errors").Output
+        );
+
+        // A genuinely refused line still lands on the refusal count, beside the faults rather than mixed into them.
+        _ = registry.Submit(line: "does.not.exist");
+        Assert.Equal(
+            expected: "[wire.errors: 1 rejected | 3 observer faults]",
+            actual: registry.Submit(line: "wire.errors reset").Output
+        );
+        Assert.Equal(
+            expected: "[wire.errors: 0 rejected]",
+            actual: registry.Submit(line: "wire.errors").Output
+        );
     }
 
     private sealed class ManyCommandsModule(int count) : ICommandModule {

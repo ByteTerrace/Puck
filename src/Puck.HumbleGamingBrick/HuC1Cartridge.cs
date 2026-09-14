@@ -42,14 +42,57 @@ public sealed class HuC1Cartridge : CartridgeBase, IInfraredCartridge {
     }
 
     /// <inheritdoc/>
+    protected override bool RamAccessible =>
+        Header.HasRam;
+
+    /// <inheritdoc/>
     public IInfrared? Infrared {
         set => m_infrared = value;
     }
 
     /// <inheritdoc/>
-    protected override bool RamAccessible =>
-        Header.HasRam;
+    protected override void LoadRegisters(StateReader reader) {
+        m_infraredMode = reader.ReadBoolean();
+        m_ramBank = reader.ReadInt32();
+        m_romBank = reader.ReadInt32();
+    }
+    /// <inheritdoc/>
+    protected override int MapRamOffset(ushort address) =>
+        (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
+    /// <inheritdoc/>
+    protected override int MapRomOffset(ushort address) =>
+        MapStandardRomOffset(
+            address: address,
+            bankSize: RomBankSize,
+            romBank: m_romBank
+        );
+    /// <inheritdoc/>
+    protected override void SaveRegisters(StateWriter writer) {
+        writer.WriteBoolean(value: m_infraredMode);
+        writer.WriteInt32(value: m_ramBank);
+        writer.WriteInt32(value: m_romBank);
+    }
 
+    /// <summary>Reads from the external window: the IR register while in IR mode, otherwise banked RAM. The IR read is
+    /// <c>0xC0</c> with bit 0 set when the shared transceiver detects a lit peer.</summary>
+    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
+    /// <returns>The IR value in IR mode, or the RAM byte.</returns>
+    public override byte ReadRam(ushort address) =>
+        (m_infraredMode
+            ? (byte)(InfraredNoLight | ((m_infrared?.ReceivedLight ?? false)
+                ? 0x01
+                : 0x00))
+            : base.ReadRam(address: address)
+        );
+    /// <inheritdoc/>
+    /// <remarks>Overridden: the window is mode-selected between banked RAM and the IR register, so it stays on the
+    /// interface path.</remarks>
+    public override bool TryComputeRamWindow(out int offset, out int length) {
+        offset = 0;
+        length = 0;
+
+        return false;
+    }
     /// <inheritdoc/>
     public override void WriteControl(ushort address, byte value) {
         switch (address >> 13) {
@@ -73,16 +116,6 @@ public sealed class HuC1Cartridge : CartridgeBase, IInfraredCartridge {
                 break;
         }
     }
-    /// <summary>Reads from the external window: the IR register while in IR mode, otherwise banked RAM. The IR read is
-    /// <c>0xC0</c> with bit 0 set when the shared transceiver detects a lit peer.</summary>
-    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
-    /// <returns>The IR value in IR mode, or the RAM byte.</returns>
-    public override byte ReadRam(ushort address) =>
-        (m_infraredMode
-        ? (byte)(InfraredNoLight | ((m_infrared?.ReceivedLight ?? false)
-            ? 0x01
-            : 0x00))
-        : base.ReadRam(address: address));
     /// <summary>Writes to the external window: in IR mode bit 0 drives the shared IR LED (the same LED the RP register
     /// drives), otherwise banked RAM.</summary>
     /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
@@ -100,37 +133,5 @@ public sealed class HuC1Cartridge : CartridgeBase, IInfraredCartridge {
             address: address,
             value: value
         );
-    }
-    /// <inheritdoc/>
-    /// <remarks>Overridden: the window is mode-selected between banked RAM and the IR register, so it stays on the
-    /// interface path.</remarks>
-    public override bool TryComputeRamWindow(out int offset, out int length) {
-        offset = 0;
-        length = 0;
-
-        return false;
-    }
-
-    /// <inheritdoc/>
-    protected override int MapRomOffset(ushort address) =>
-        MapStandardRomOffset(
-            address: address,
-            bankSize: RomBankSize,
-            romBank: m_romBank
-        );
-    /// <inheritdoc/>
-    protected override int MapRamOffset(ushort address) =>
-        (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
-    /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBoolean(value: m_infraredMode);
-        writer.WriteInt32(value: m_ramBank);
-        writer.WriteInt32(value: m_romBank);
-    }
-    /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_infraredMode = reader.ReadBoolean();
-        m_ramBank = reader.ReadInt32();
-        m_romBank = reader.ReadInt32();
     }
 }

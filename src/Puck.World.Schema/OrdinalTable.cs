@@ -6,21 +6,21 @@ namespace Puck.World;
 /// per-consumer table (e.g. <see cref="WorldChannelTable"/> also carries per-ordinal shape/frame/threshold), never
 /// used as the whole compiled shape on its own.</summary>
 public sealed class OrdinalTable {
-    private readonly Dictionary<string, int> m_ordinalByName;
     private readonly string[] m_names;
+    private readonly Dictionary<string, int> m_ordinalByName;
 
     private OrdinalTable(Dictionary<string, int> ordinalByName, string[] names) {
         m_ordinalByName = ordinalByName;
         m_names = names;
     }
 
+    /// <summary>Gets the declared row count.</summary>
+    public int Count => m_names.Length;
     /// <summary>Gets the empty table.</summary>
     public static OrdinalTable Empty { get; } = new(
         ordinalByName: new Dictionary<string, int>(comparer: StringComparer.Ordinal),
         names: []
     );
-    /// <summary>Gets the declared row count.</summary>
-    public int Count => m_names.Length;
 
     /// <summary>Builds a table assigning each name its position in <paramref name="names"/> as its ordinal.
     /// A name repeated in the sequence throws — <paramref name="names"/> must already be the validated, unique

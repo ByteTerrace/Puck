@@ -116,7 +116,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var overlapping = ReadArray(
             reader: ref reader,
             field: "event feed overlapping",
-            maximum: WorldEventFeed.MaximumTrackedPairsForCapacity(WorldBodiesLimits.CapacityCeiling),
+            maximum: WorldEventFeed.MaximumTrackedPairsForCapacity(capacity: WorldBodiesLimits.CapacityCeiling),
             readItem: static (ref WireReader r) => {
                 var a = r.ReadInt32();
                 var b = r.ReadInt32();

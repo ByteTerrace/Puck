@@ -43,16 +43,25 @@ public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
     /// <summary>What the slot is doing this step.</summary>
     public FixedPairManifoldSlotDisposition Disposition;
 
-    readonly bool IManifoldSlotEvictionKey.Occupied => Occupied;
-    readonly int IManifoldSlotEvictionKey.LastTouchedStep => LastTouchedStep;
-    readonly long IManifoldSlotEvictionKey.NormalImpulseRaw => NormalImpulseRaw;
-    readonly int IManifoldSlotState.SourceId => SourceId;
     readonly int IManifoldSlotState.FeatureId => FeatureId;
-    readonly FixedVector3 IManifoldSlotState.Normal => Normal;
     readonly bool IManifoldSlotState.IsIdle => (Disposition == FixedPairManifoldSlotDisposition.Idle);
+    readonly int IManifoldSlotEvictionKey.LastTouchedStep => LastTouchedStep;
+    readonly FixedVector3 IManifoldSlotState.Normal => Normal;
+    readonly long IManifoldSlotEvictionKey.NormalImpulseRaw => NormalImpulseRaw;
+    readonly bool IManifoldSlotEvictionKey.Occupied => Occupied;
+    readonly int IManifoldSlotState.SourceId => SourceId;
 
-    void IManifoldSlotState.MarkIdle() {
-        Disposition = FixedPairManifoldSlotDisposition.Idle;
+    void IManifoldSlot<FixedTwoBodyContact>.Claim(in FixedTwoBodyContact candidate, int step) {
+        Occupied = true;
+        SourceId = candidate.SourceId;
+        FeatureId = candidate.FeatureId;
+        AnchorA = candidate.AnchorA;
+        AnchorB = candidate.AnchorB;
+        Normal = candidate.Normal;
+        Separation = candidate.Separation;
+        TotalNormalImpulseRaw = 0L;
+        LastTouchedStep = step;
+        Disposition = FixedPairManifoldSlotDisposition.Constraint;
     }
     void IManifoldSlotState.ClearWarmStart() {
         NormalImpulseRaw = 0L;
@@ -94,17 +103,8 @@ public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
             value: ((long)(step - LastTouchedStep))
         );
     }
-    void IManifoldSlot<FixedTwoBodyContact>.Claim(in FixedTwoBodyContact candidate, int step) {
-        Occupied = true;
-        SourceId = candidate.SourceId;
-        FeatureId = candidate.FeatureId;
-        AnchorA = candidate.AnchorA;
-        AnchorB = candidate.AnchorB;
-        Normal = candidate.Normal;
-        Separation = candidate.Separation;
-        TotalNormalImpulseRaw = 0L;
-        LastTouchedStep = step;
-        Disposition = FixedPairManifoldSlotDisposition.Constraint;
+    void IManifoldSlotState.MarkIdle() {
+        Disposition = FixedPairManifoldSlotDisposition.Idle;
     }
     readonly bool IManifoldSlot<FixedTwoBodyContact>.TryMatchDistance(in FixedTwoBodyContact candidate, FixedQ4816 matchRadiusSquared, out FixedQ4816 distanceSquared) {
         distanceSquared = default;

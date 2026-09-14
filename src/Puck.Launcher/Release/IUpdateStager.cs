@@ -8,7 +8,13 @@ namespace Puck.Launcher.Release;
 /// <param name="RefusalReason">Why staging failed, when <paramref name="Staged"/> is <see langword="false"/>.</param>
 public sealed record UpdateStageResult(bool Staged, string? StagedPath, int FilesDownloaded, int FilesReused, string? RefusalReason) {
     /// <summary>Builds a refused result.</summary>
-    public static UpdateStageResult Refuse(string reason) => new(FilesDownloaded: 0, FilesReused: 0, RefusalReason: reason, Staged: false, StagedPath: null);
+    public static UpdateStageResult Refuse(string reason) => new(
+        FilesDownloaded: 0,
+        FilesReused: 0,
+        RefusalReason: reason,
+        Staged: false,
+        StagedPath: null
+    );
 }
 /// <summary>
 /// Stages one RID's verified payload under <c>&lt;cacheRoot&gt;/versions/&lt;version&gt;/</c>: every file's content

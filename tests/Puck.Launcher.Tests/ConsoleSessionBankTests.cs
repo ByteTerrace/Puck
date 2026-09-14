@@ -7,10 +7,8 @@ using Xunit;
 namespace Puck.Launcher.Tests;
 
 public sealed class ConsoleSessionBankTests {
-    [Fact]
-    public void TextDevicesFeedIndependentPrincipalBoundSeatSessions() {
-        var seen = new List<CommandContext>();
-        var registry = new CommandRegistry(modules: [new ProbeModule(seen: seen)]);
+    private static (ConsoleSessionBank Sessions, ConsoleInputSink Sink, TwoSeatSlots Slots, TestFocus Focus, TerminalConsoleSessions TerminalSessions) CreateSessions() {
+        var registry = new CommandRegistry(modules: [new ProbeModule(seen: [])]);
         var slots = new TwoSeatSlots();
         var router = new InputRouter(
             registry: registry,
@@ -18,81 +16,46 @@ public sealed class ConsoleSessionBankTests {
             principalResolver: new SeatPrincipals(),
             slotResolver: slots
         );
-        var source = new TextCommandSource(registry: registry);
         var focus = new TestFocus();
         var terminalSessions = new TerminalConsoleSessions();
         var sessions = new ConsoleSessionBank(
             seatCount: 2,
-            source: source,
+            source: new TextCommandSource(registry: registry),
             router: router,
             slotResolver: slots,
             clipboard: new TestClipboard(),
             focus: focus,
             terminalSessions: terminalSessions
         );
-        var sink = new ConsoleInputSink(sessions: sessions, slotResolver: slots);
 
-        // The closed-session key observations associate each physical text device with its roster seat.
-        sink.Observe(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Backtick, deviceId: slots.SeatOne));
-        sink.Observe(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Backtick, deviceId: slots.SeatTwo));
-        Assert.True(condition: terminalSessions.TrySetVisible(resolved: out _, slot: 0, visible: true));
-        Assert.True(condition: terminalSessions.TrySetVisible(resolved: out _, slot: 1, visible: true));
-        Assert.False(condition: focus.IsActiveFor(deviceId: slots.SeatOne));
-        Assert.False(condition: focus.IsActiveFor(deviceId: slots.SeatTwo));
-
-        TypeAndSubmit(sink: sink, device: slots.SeatTwo);
-        TypeAndSubmit(sink: sink, device: slots.SeatOne);
-        source.Collect();
-
-        Assert.Equal(expected: [1, 0], actual: seen.Select(selector: static context => context.Slot));
-        Assert.All(collection: seen, action: static context => Assert.Equal(
-            expected: CommandPrincipal.Seat(slot: context.Slot),
-            actual: context.Principal
+        return (sessions, new ConsoleInputSink(
+            sessions: sessions,
+            slotResolver: slots
+        ), slots, focus, terminalSessions);
+    }
+    private static void TypeAndSubmit(ConsoleInputSink sink, InputDeviceId device) {
+        sink.Observe(inputEvent: WindowInputEvent.TypedText(
+            deviceId: device,
+            text: "probe"
         ));
-
-        Assert.True(condition: sessions.StoreFor(slot: 0).TrySnapshot(frame: out var seatOneTape));
-        Assert.True(condition: sessions.StoreFor(slot: 1).TrySnapshot(frame: out var seatTwoTape));
-        Assert.Contains(collection: seatOneTape.Lines, filter: static line => (line.Text == "[probe: seat=1]"));
-        Assert.Contains(collection: seatTwoTape.Lines, filter: static line => (line.Text == "[probe: seat=2]"));
-        Assert.DoesNotContain(collection: seatOneTape.Lines, filter: static line => (line.Text == "[probe: seat=2]"));
-        Assert.DoesNotContain(collection: seatTwoTape.Lines, filter: static line => (line.Text == "[probe: seat=1]"));
+        sink.Observe(inputEvent: WindowInputEvent.KeyDown(
+            deviceId: device,
+            key: KeyCode.Enter
+        ));
     }
-    [Fact]
-    public void OnlyFirstTextCapableEventAssociatesADeviceAndPointerEventsAreIgnored() {
-        var (sessions, sink, slots, focus, _) = CreateSessions();
 
-        Assert.True(condition: sessions.TrySetVisible(resolved: out _, slot: 0, visible: true));
-        sink.Observe(inputEvent: new WindowInputEvent(Kind: WindowInputKind.PointerMove, DeviceId: slots.SeatOne));
-        Assert.Equal(expected: 0, actual: focus.ReleaseCalls);
-
-        sink.Observe(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Backtick, deviceId: slots.SeatOne));
-        sink.Observe(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Backtick, deviceId: slots.SeatOne));
-
-        Assert.Equal(expected: 1, actual: focus.ReleaseCalls);
-    }
-    [Fact]
-    public void ReassigningADeviceEvictsItsOldConsoleAssociation() {
-        var (sessions, sink, slots, focus, _) = CreateSessions();
-
-        sink.Observe(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Backtick, deviceId: slots.SeatOne));
-        Assert.True(condition: sessions.TrySetVisible(resolved: out _, slot: 0, visible: true));
-        Assert.False(condition: focus.IsActiveFor(deviceId: slots.SeatOne));
-
-        slots.MoveSeatOneTo(slot: 1);
-        Assert.True(condition: focus.IsActiveFor(deviceId: slots.SeatOne));
-        Assert.True(condition: sessions.TrySetVisible(resolved: out _, slot: 1, visible: true));
-        sink.Observe(inputEvent: WindowInputEvent.KeyDown(key: KeyCode.Backtick, deviceId: slots.SeatOne));
-        Assert.False(condition: focus.IsActiveFor(deviceId: slots.SeatOne));
-
-        Assert.True(condition: sessions.TrySetVisible(resolved: out _, slot: 0, visible: false));
-        Assert.False(condition: focus.IsActiveFor(deviceId: slots.SeatOne));
-    }
     [Fact]
     public void AdministrativeExchangeAndDeferredEchoReachTheDisplayedTape() {
         var (sessions, _, _, _, terminalSessions) = CreateSessions();
 
-        terminalSessions.RecordAdministrative(line: "probe", result: new CommandResult(Output: "ok"));
-        terminalSessions.RecordAdministrativeEcho(message: "edit applied", refused: false);
+        terminalSessions.RecordAdministrative(
+            line: "probe",
+            result: new CommandResult(Output: "ok")
+        );
+        terminalSessions.RecordAdministrativeEcho(
+            message: "edit applied",
+            refused: false
+        );
         terminalSessions.RecordAdministrativeActivation(activation: new CommandActivation(
             Name: "simulate",
             Phase: CommandPhase.Completed,
@@ -102,14 +65,35 @@ public sealed class ConsoleSessionBankTests {
         ));
 
         Assert.True(condition: sessions.StoreFor(slot: 0).TrySnapshot(frame: out var frame));
-        Assert.Contains(collection: frame.Lines, filter: static line => (line.Text == "> probe"));
-        Assert.Contains(collection: frame.Lines, filter: static line => (line.Text == "ok"));
-        Assert.Contains(collection: frame.Lines, filter: static line => (line.Text == "edit applied"));
-        Assert.Contains(collection: frame.Lines, filter: static line => (line.Text == "deferred result"));
+        Assert.Contains(
+            collection: frame.Lines,
+            filter: static line => (line.Text == "> probe")
+        );
+        Assert.Contains(
+            collection: frame.Lines,
+            filter: static line => (line.Text == "ok")
+        );
+        Assert.Contains(
+            collection: frame.Lines,
+            filter: static line => (line.Text == "edit applied")
+        );
+        Assert.Contains(
+            collection: frame.Lines,
+            filter: static line => (line.Text == "deferred result")
+        );
         Assert.True(condition: terminalSessions.OperatorStore.TrySnapshot(frame: out var operatorFrame));
-        Assert.Contains(collection: operatorFrame.Lines, filter: static line => (line.Text == "> probe"));
-        Assert.Contains(collection: operatorFrame.Lines, filter: static line => (line.Text == "edit applied"));
-        Assert.Contains(collection: operatorFrame.Lines, filter: static line => (line.Text == "deferred result"));
+        Assert.Contains(
+            collection: operatorFrame.Lines,
+            filter: static line => (line.Text == "> probe")
+        );
+        Assert.Contains(
+            collection: operatorFrame.Lines,
+            filter: static line => (line.Text == "edit applied")
+        );
+        Assert.Contains(
+            collection: operatorFrame.Lines,
+            filter: static line => (line.Text == "deferred result")
+        );
     }
     [Fact]
     public void AdministrativeSimulationResultReachesBothTapesThroughTheRegistryObserver() {
@@ -148,37 +132,181 @@ public sealed class ConsoleSessionBankTests {
 
         source.Enqueue(line: "deferred-probe");
         source.Collect();
-        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        var snapshot = router.SnapshotForTick(
+            tick: 1UL,
+            windowEndTick: ulong.MaxValue
+        );
 
         registry.ApplySnapshot(snapshot: in snapshot);
 
         Assert.True(condition: sessions.StoreFor(slot: 0).TrySnapshot(frame: out var seatFrame));
-        Assert.Contains(collection: seatFrame.Lines, filter: static line => (line.Text == "[deferred-probe: ok]"));
+        Assert.Contains(
+            collection: seatFrame.Lines,
+            filter: static line => (line.Text == "[deferred-probe: ok]")
+        );
         Assert.True(condition: terminalSessions.OperatorStore.TrySnapshot(frame: out var operatorFrame));
-        Assert.Contains(collection: operatorFrame.Lines, filter: static line => (line.Text == "[deferred-probe: ok]"));
+        Assert.Contains(
+            collection: operatorFrame.Lines,
+            filter: static line => (line.Text == "[deferred-probe: ok]")
+        );
     }
+    [Fact]
+    public void OnlyFirstTextCapableEventAssociatesADeviceAndPointerEventsAreIgnored() {
+        var (sessions, sink, slots, focus, _) = CreateSessions();
 
-    private static (ConsoleSessionBank Sessions, ConsoleInputSink Sink, TwoSeatSlots Slots, TestFocus Focus, TerminalConsoleSessions TerminalSessions) CreateSessions() {
-        var registry = new CommandRegistry(modules: [new ProbeModule(seen: [])]);
+        Assert.True(condition: sessions.TrySetVisible(
+            resolved: out _,
+            slot: 0,
+            visible: true
+        ));
+        sink.Observe(inputEvent: new WindowInputEvent(
+            Kind: WindowInputKind.PointerMove,
+            DeviceId: slots.SeatOne
+        ));
+        Assert.Equal(
+            expected: 0,
+            actual: focus.ReleaseCalls
+        );
+
+        sink.Observe(inputEvent: WindowInputEvent.KeyDown(
+            key: KeyCode.Backtick,
+            deviceId: slots.SeatOne
+        ));
+        sink.Observe(inputEvent: WindowInputEvent.KeyDown(
+            key: KeyCode.Backtick,
+            deviceId: slots.SeatOne
+        ));
+
+        Assert.Equal(
+            expected: 1,
+            actual: focus.ReleaseCalls
+        );
+    }
+    [Fact]
+    public void ReassigningADeviceEvictsItsOldConsoleAssociation() {
+        var (sessions, sink, slots, focus, _) = CreateSessions();
+
+        sink.Observe(inputEvent: WindowInputEvent.KeyDown(
+            key: KeyCode.Backtick,
+            deviceId: slots.SeatOne
+        ));
+        Assert.True(condition: sessions.TrySetVisible(
+            resolved: out _,
+            slot: 0,
+            visible: true
+        ));
+        Assert.False(condition: focus.IsActiveFor(deviceId: slots.SeatOne));
+
+        slots.MoveSeatOneTo(slot: 1);
+        Assert.True(condition: focus.IsActiveFor(deviceId: slots.SeatOne));
+        Assert.True(condition: sessions.TrySetVisible(
+            resolved: out _,
+            slot: 1,
+            visible: true
+        ));
+        sink.Observe(inputEvent: WindowInputEvent.KeyDown(
+            key: KeyCode.Backtick,
+            deviceId: slots.SeatOne
+        ));
+        Assert.False(condition: focus.IsActiveFor(deviceId: slots.SeatOne));
+
+        Assert.True(condition: sessions.TrySetVisible(
+            resolved: out _,
+            slot: 0,
+            visible: false
+        ));
+        Assert.False(condition: focus.IsActiveFor(deviceId: slots.SeatOne));
+    }
+    [Fact]
+    public void TextDevicesFeedIndependentPrincipalBoundSeatSessions() {
+        var seen = new List<CommandContext>();
+        var registry = new CommandRegistry(modules: [new ProbeModule(seen: seen)]);
         var slots = new TwoSeatSlots();
-        var router = new InputRouter(registry: registry, bindings: new EmptyBindings(), principalResolver: new SeatPrincipals(), slotResolver: slots);
+        var router = new InputRouter(
+            registry: registry,
+            bindings: new EmptyBindings(),
+            principalResolver: new SeatPrincipals(),
+            slotResolver: slots
+        );
+        var source = new TextCommandSource(registry: registry);
         var focus = new TestFocus();
         var terminalSessions = new TerminalConsoleSessions();
         var sessions = new ConsoleSessionBank(
             seatCount: 2,
-            source: new TextCommandSource(registry: registry),
+            source: source,
             router: router,
             slotResolver: slots,
             clipboard: new TestClipboard(),
             focus: focus,
             terminalSessions: terminalSessions
         );
+        var sink = new ConsoleInputSink(
+            sessions: sessions,
+            slotResolver: slots
+        );
 
-        return (sessions, new ConsoleInputSink(sessions: sessions, slotResolver: slots), slots, focus, terminalSessions);
-    }
-    private static void TypeAndSubmit(ConsoleInputSink sink, InputDeviceId device) {
-        sink.Observe(inputEvent: WindowInputEvent.TypedText(deviceId: device, text: "probe"));
-        sink.Observe(inputEvent: WindowInputEvent.KeyDown(deviceId: device, key: KeyCode.Enter));
+        // The closed-session key observations associate each physical text device with its roster seat.
+        sink.Observe(inputEvent: WindowInputEvent.KeyDown(
+            key: KeyCode.Backtick,
+            deviceId: slots.SeatOne
+        ));
+        sink.Observe(inputEvent: WindowInputEvent.KeyDown(
+            key: KeyCode.Backtick,
+            deviceId: slots.SeatTwo
+        ));
+        Assert.True(condition: terminalSessions.TrySetVisible(
+            resolved: out _,
+            slot: 0,
+            visible: true
+        ));
+        Assert.True(condition: terminalSessions.TrySetVisible(
+            resolved: out _,
+            slot: 1,
+            visible: true
+        ));
+        Assert.False(condition: focus.IsActiveFor(deviceId: slots.SeatOne));
+        Assert.False(condition: focus.IsActiveFor(deviceId: slots.SeatTwo));
+
+        TypeAndSubmit(
+            sink: sink,
+            device: slots.SeatTwo
+        );
+        TypeAndSubmit(
+            sink: sink,
+            device: slots.SeatOne
+        );
+        source.Collect();
+
+        Assert.Equal(
+            expected: [1, 0],
+            actual: seen.Select(selector: static context => context.Slot)
+        );
+        Assert.All(
+            collection: seen,
+            action: static context => Assert.Equal(
+                expected: CommandPrincipal.Seat(slot: context.Slot),
+                actual: context.Principal
+            )
+        );
+
+        Assert.True(condition: sessions.StoreFor(slot: 0).TrySnapshot(frame: out var seatOneTape));
+        Assert.True(condition: sessions.StoreFor(slot: 1).TrySnapshot(frame: out var seatTwoTape));
+        Assert.Contains(
+            collection: seatOneTape.Lines,
+            filter: static line => (line.Text == "[probe: seat=1]")
+        );
+        Assert.Contains(
+            collection: seatTwoTape.Lines,
+            filter: static line => (line.Text == "[probe: seat=2]")
+        );
+        Assert.DoesNotContain(
+            collection: seatOneTape.Lines,
+            filter: static line => (line.Text == "[probe: seat=2]")
+        );
+        Assert.DoesNotContain(
+            collection: seatTwoTape.Lines,
+            filter: static line => (line.Text == "[probe: seat=1]")
+        );
     }
 
     private sealed class ProbeModule(List<CommandContext> seen) : ICommandModule {
@@ -221,11 +349,14 @@ public sealed class ConsoleSessionBankTests {
         public event Action<InputDeviceId>? DeviceSlotChanging;
 
         public bool CommitSlot(InputDeviceId device, int slot) => false;
-        public int ResolveSlot(InputDeviceId device) => ((device == SeatTwo) ? 1 : m_seatOneSlot);
         public void MoveSeatOneTo(int slot) {
             DeviceSlotChanging?.Invoke(obj: SeatOne);
             m_seatOneSlot = slot;
         }
+        public int ResolveSlot(InputDeviceId device) => ((device == SeatTwo)
+            ? 1
+            : m_seatOneSlot
+        );
     }
     private sealed class TestFocus : IInputFocus {
         private readonly HashSet<InputDeviceId> m_released = [];

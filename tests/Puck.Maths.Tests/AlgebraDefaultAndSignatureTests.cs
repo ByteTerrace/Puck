@@ -6,126 +6,168 @@ using BigMonogenic = Puck.Maths.MonogenicAlgebra<System.Numerics.BigInteger>;
 namespace Puck.Maths.Tests;
 
 public sealed class AlgebraDefaultAndSignatureTests {
-    [InlineData(4, 0, 0)]
-    [InlineData(0, 4, 0)]
-    [InlineData(0, 0, 4)]
-    [InlineData(1, 2, 1)]
-    [Theory]
-    public void GeometricSignatureAdmissionAcceptsEveryExactCapacityPartition(
-        int positiveCount,
-        int negativeCount,
-        int degenerateCount
-    ) {
-        var algebra = GeometricAlgebra.Create(
-            degenerateCount: degenerateCount,
-            negativeCount: negativeCount,
-            positiveCount: positiveCount
-        );
+    private static void AssertArgumentException(string expectedParamName, Action action) {
+        var exception = Assert.Throws<ArgumentException>(testCode: action);
 
-        Assert.Equal(expected: 4, actual: algebra.GeneratorCount);
-        Assert.Equal(expected: Multivector.BladeCapacity, actual: algebra.BladeCount);
+        Assert.Equal(
+            expected: expectedParamName,
+            actual: exception.ParamName
+        );
     }
-    [InlineData(int.MaxValue, 0, 0, "positiveCount")]
-    [InlineData(0, int.MaxValue, 0, "negativeCount")]
-    [InlineData(0, 0, int.MaxValue, "degenerateCount")]
-    [InlineData(int.MaxValue, 1, 0, "positiveCount")]
-    [InlineData(1, int.MaxValue, 1, "negativeCount")]
-    [InlineData(4, 1, 0, "negativeCount")]
-    [InlineData(2, 2, 1, "degenerateCount")]
-    [Theory]
-    public void GeometricSignatureAdmissionRejectsOversizedAndOverflowingTotalsAgainstPublicParameters(
-        int positiveCount,
-        int negativeCount,
-        int degenerateCount,
-        string expectedParamName
+    private static void AssertElementConsumersReject(
+        BigMonogenic receiver,
+        BigMonogenic.Element malformed,
+        BigMonogenic.Element valid
     ) {
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(
-            testCode: () => GeometricAlgebra.Create(
-                degenerateCount: degenerateCount,
-                negativeCount: negativeCount,
-                positiveCount: positiveCount
+        AssertArgumentException(
+            expectedParamName: "left",
+            action: () => receiver.Add(
+                left: malformed,
+                right: valid
             )
         );
-
-        Assert.Equal(expected: expectedParamName, actual: exception.ParamName);
+        AssertArgumentException(
+            expectedParamName: "right",
+            action: () => receiver.Add(
+                left: valid,
+                right: malformed
+            )
+        );
+        AssertArgumentException(
+            expectedParamName: "left",
+            action: () => receiver.Subtract(
+                left: malformed,
+                right: valid
+            )
+        );
+        AssertArgumentException(
+            expectedParamName: "right",
+            action: () => receiver.Subtract(
+                left: valid,
+                right: malformed
+            )
+        );
+        AssertArgumentException(
+            expectedParamName: "value",
+            action: () => receiver.Negate(value: malformed)
+        );
+        AssertArgumentException(
+            expectedParamName: "left",
+            action: () => receiver.Multiply(
+                left: malformed,
+                right: valid
+            )
+        );
+        AssertArgumentException(
+            expectedParamName: "right",
+            action: () => receiver.Multiply(
+                left: valid,
+                right: malformed
+            )
+        );
+        AssertArgumentException(
+            expectedParamName: "value",
+            action: () => receiver.MultiplyByRoot(value: malformed)
+        );
+        AssertArgumentException(
+            expectedParamName: "value",
+            action: () => receiver.Trace(value: malformed)
+        );
+        AssertArgumentException(
+            expectedParamName: "value",
+            action: () => receiver.Norm(value: malformed)
+        );
     }
+    private static void AssertElementEqual(BigMonogenic.Element expected, BigMonogenic.Element actual) =>
+        Assert.Equal(
+            expected: expected.Coordinates.ToArray(),
+            actual: actual.Coordinates.ToArray()
+        );
+    private static void AssertWindowEqual(BigMonogenic.Projective expected, BigMonogenic.Projective actual) =>
+        Assert.Equal(
+            expected: expected.Coordinates.ToArray(),
+            actual: actual.Coordinates.ToArray()
+        );
+
     [Fact]
     public void DefaultGeometricDescriptorIsTheCanonicalScalarAlgebraAcrossItsSemanticSurface() {
         var algebra = default(GeometricAlgebra);
-        var canonical = GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 0);
+        var canonical = GeometricAlgebra.Create(
+            degenerateCount: 0,
+            negativeCount: 0,
+            positiveCount: 0
+        );
         var left = Multivector.Scalar(value: FixedQ4816.FromRawBits(value: -196609L));
         var right = Multivector.Scalar(value: FixedQ4816.FromRawBits(value: 32769L));
         var one = Multivector.Scalar(value: FixedQ4816.One);
         var zero = default(Multivector);
 
-        Assert.Equal(expected: canonical.PositiveCount, actual: algebra.PositiveCount);
-        Assert.Equal(expected: canonical.NegativeCount, actual: algebra.NegativeCount);
-        Assert.Equal(expected: canonical.DegenerateCount, actual: algebra.DegenerateCount);
-        Assert.Equal(expected: canonical.GeneratorCount, actual: algebra.GeneratorCount);
-        Assert.Equal(expected: canonical.BladeCount, actual: algebra.BladeCount);
-        Assert.Equal(expected: canonical.GeometricProduct(left: left, right: right), actual: algebra.GeometricProduct(left: left, right: right));
-        Assert.Equal(expected: canonical.Reverse(value: left), actual: algebra.Reverse(value: left));
-        Assert.Equal(expected: canonical.GradeProjection(grade: 0, value: left), actual: algebra.GradeProjection(grade: 0, value: left));
-        Assert.Equal(expected: canonical.IsEven(value: left), actual: algebra.IsEven(value: left));
-        Assert.Equal(expected: canonical.Exponential(bivector: zero), actual: algebra.Exponential(bivector: zero));
         Assert.Equal(
-            expected: canonical.SandwichTransform(motor: one, vector: left),
-            actual: algebra.SandwichTransform(motor: one, vector: left)
+            expected: canonical.PositiveCount,
+            actual: algebra.PositiveCount
+        );
+        Assert.Equal(
+            expected: canonical.NegativeCount,
+            actual: algebra.NegativeCount
+        );
+        Assert.Equal(
+            expected: canonical.DegenerateCount,
+            actual: algebra.DegenerateCount
+        );
+        Assert.Equal(
+            expected: canonical.GeneratorCount,
+            actual: algebra.GeneratorCount
+        );
+        Assert.Equal(
+            expected: canonical.BladeCount,
+            actual: algebra.BladeCount
+        );
+        Assert.Equal(
+            expected: canonical.GeometricProduct(
+                left: left,
+                right: right
+            ),
+            actual: algebra.GeometricProduct(
+                left: left,
+                right: right
+            )
+        );
+        Assert.Equal(
+            expected: canonical.Reverse(value: left),
+            actual: algebra.Reverse(value: left)
+        );
+        Assert.Equal(
+            expected: canonical.GradeProjection(
+                grade: 0,
+                value: left
+            ),
+            actual: algebra.GradeProjection(
+                grade: 0,
+                value: left
+            )
+        );
+        Assert.Equal(
+            expected: canonical.IsEven(value: left),
+            actual: algebra.IsEven(value: left)
+        );
+        Assert.Equal(
+            expected: canonical.Exponential(bivector: zero),
+            actual: algebra.Exponential(bivector: zero)
+        );
+        Assert.Equal(
+            expected: canonical.SandwichTransform(
+                motor: one,
+                vector: left
+            ),
+            actual: algebra.SandwichTransform(
+                motor: one,
+                vector: left
+            )
         );
 
         Assert.Equal(
             expected: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => canonical.Square(generatorIndex: 0)).ParamName,
             actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => algebra.Square(generatorIndex: 0)).ParamName
-        );
-    }
-    [Fact]
-    public void GeometricSemanticOperationsRejectEveryNonzeroLaneOutsideTheReceiverSignature() {
-        var algebra = GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 1);
-        var one = Multivector.Scalar(value: FixedQ4816.One);
-        var foreign = Multivector.FromCoefficients(
-            coefficients: [FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.One]
-        );
-
-        AssertArgumentException(
-            expectedParamName: "left",
-            action: () => algebra.GeometricProduct(left: foreign, right: one)
-        );
-        AssertArgumentException(
-            expectedParamName: "right",
-            action: () => algebra.GeometricProduct(left: one, right: foreign)
-        );
-        AssertArgumentException(expectedParamName: "value", action: () => algebra.Reverse(value: foreign));
-        AssertArgumentException(
-            expectedParamName: "value",
-            action: () => algebra.GradeProjection(grade: 0, value: foreign)
-        );
-        AssertArgumentException(expectedParamName: "value", action: () => algebra.IsEven(value: foreign));
-        AssertArgumentException(expectedParamName: "bivector", action: () => algebra.Exponential(bivector: foreign));
-        AssertArgumentException(
-            expectedParamName: "motor",
-            action: () => algebra.SandwichTransform(motor: foreign, vector: one)
-        );
-        AssertArgumentException(
-            expectedParamName: "vector",
-            action: () => algebra.SandwichTransform(motor: one, vector: foreign)
-        );
-    }
-    [Fact]
-    public void GeometricGradeProjectionValidatesTheSignatureGradeRange() {
-        var algebra = GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 1, positiveCount: 1);
-        var value = Multivector.Scalar(value: FixedQ4816.One);
-
-        Assert.Equal(
-            expected: "grade",
-            actual: Assert.Throws<ArgumentOutOfRangeException>(
-                testCode: () => algebra.GradeProjection(grade: -1, value: value)
-            ).ParamName
-        );
-        Assert.Equal(
-            expected: "grade",
-            actual: Assert.Throws<ArgumentOutOfRangeException>(
-                testCode: () => algebra.GradeProjection(grade: 3, value: value)
-            ).ParamName
         );
     }
     [Fact]
@@ -141,10 +183,19 @@ public sealed class AlgebraDefaultAndSignatureTests {
         Assert.Throws<InvalidOperationException>(testCode: () => _ = algebra.Zero);
         Assert.Throws<InvalidOperationException>(testCode: () => algebra.FromCoordinates(coordinates: [BigInteger.Zero]));
         Assert.Throws<InvalidOperationException>(testCode: () => algebra.FromWindow(window: [BigInteger.Zero]));
-        Assert.Throws<InvalidOperationException>(testCode: () => algebra.Add(left: element, right: element));
-        Assert.Throws<InvalidOperationException>(testCode: () => algebra.Subtract(left: element, right: element));
+        Assert.Throws<InvalidOperationException>(testCode: () => algebra.Add(
+            left: element,
+            right: element
+        ));
+        Assert.Throws<InvalidOperationException>(testCode: () => algebra.Subtract(
+            left: element,
+            right: element
+        ));
         Assert.Throws<InvalidOperationException>(testCode: () => algebra.Negate(value: element));
-        Assert.Throws<InvalidOperationException>(testCode: () => algebra.Multiply(left: element, right: element));
+        Assert.Throws<InvalidOperationException>(testCode: () => algebra.Multiply(
+            left: element,
+            right: element
+        ));
         Assert.Throws<InvalidOperationException>(testCode: () => algebra.MultiplyByRoot(value: element));
         Assert.Throws<InvalidOperationException>(testCode: () => algebra.CompanionPower(exponent: 0));
         Assert.Throws<InvalidOperationException>(testCode: () => algebra.ProjectiveStep(window: window));
@@ -165,6 +216,138 @@ public sealed class AlgebraDefaultAndSignatureTests {
         Assert.Throws<InvalidOperationException>(testCode: () => _ = window[0]);
     }
     [Fact]
+    public void GeometricGradeProjectionValidatesTheSignatureGradeRange() {
+        var algebra = GeometricAlgebra.Create(
+            degenerateCount: 0,
+            negativeCount: 1,
+            positiveCount: 1
+        );
+        var value = Multivector.Scalar(value: FixedQ4816.One);
+
+        Assert.Equal(
+            expected: "grade",
+            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => algebra.GradeProjection(
+                grade: -1,
+                value: value
+            )).ParamName
+        );
+        Assert.Equal(
+            expected: "grade",
+            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => algebra.GradeProjection(
+                grade: 3,
+                value: value
+            )).ParamName
+        );
+    }
+    [Fact]
+    public void GeometricSemanticOperationsRejectEveryNonzeroLaneOutsideTheReceiverSignature() {
+        var algebra = GeometricAlgebra.Create(
+            degenerateCount: 0,
+            negativeCount: 0,
+            positiveCount: 1
+        );
+        var one = Multivector.Scalar(value: FixedQ4816.One);
+        var foreign = Multivector.FromCoefficients(coefficients: [FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.One]);
+
+        AssertArgumentException(
+            expectedParamName: "left",
+            action: () => algebra.GeometricProduct(
+                left: foreign,
+                right: one
+            )
+        );
+        AssertArgumentException(
+            expectedParamName: "right",
+            action: () => algebra.GeometricProduct(
+                left: one,
+                right: foreign
+            )
+        );
+        AssertArgumentException(
+            expectedParamName: "value",
+            action: () => algebra.Reverse(value: foreign)
+        );
+        AssertArgumentException(
+            expectedParamName: "value",
+            action: () => algebra.GradeProjection(
+                grade: 0,
+                value: foreign
+            )
+        );
+        AssertArgumentException(
+            expectedParamName: "value",
+            action: () => algebra.IsEven(value: foreign)
+        );
+        AssertArgumentException(
+            expectedParamName: "bivector",
+            action: () => algebra.Exponential(bivector: foreign)
+        );
+        AssertArgumentException(
+            expectedParamName: "motor",
+            action: () => algebra.SandwichTransform(
+                motor: foreign,
+                vector: one
+            )
+        );
+        AssertArgumentException(
+            expectedParamName: "vector",
+            action: () => algebra.SandwichTransform(
+                motor: one,
+                vector: foreign
+            )
+        );
+    }
+    [InlineData(4, 0, 0)]
+    [InlineData(0, 4, 0)]
+    [InlineData(0, 0, 4)]
+    [InlineData(1, 2, 1)]
+    [Theory]
+    public void GeometricSignatureAdmissionAcceptsEveryExactCapacityPartition(
+        int positiveCount,
+        int negativeCount,
+        int degenerateCount
+    ) {
+        var algebra = GeometricAlgebra.Create(
+            degenerateCount: degenerateCount,
+            negativeCount: negativeCount,
+            positiveCount: positiveCount
+        );
+
+        Assert.Equal(
+            expected: 4,
+            actual: algebra.GeneratorCount
+        );
+        Assert.Equal(
+            expected: Multivector.BladeCapacity,
+            actual: algebra.BladeCount
+        );
+    }
+    [InlineData(int.MaxValue, 0, 0, "positiveCount")]
+    [InlineData(0, int.MaxValue, 0, "negativeCount")]
+    [InlineData(0, 0, int.MaxValue, "degenerateCount")]
+    [InlineData(int.MaxValue, 1, 0, "positiveCount")]
+    [InlineData(1, int.MaxValue, 1, "negativeCount")]
+    [InlineData(4, 1, 0, "negativeCount")]
+    [InlineData(2, 2, 1, "degenerateCount")]
+    [Theory]
+    public void GeometricSignatureAdmissionRejectsOversizedAndOverflowingTotalsAgainstPublicParameters(
+        int positiveCount,
+        int negativeCount,
+        int degenerateCount,
+        string expectedParamName
+    ) {
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GeometricAlgebra.Create(
+            degenerateCount: degenerateCount,
+            negativeCount: negativeCount,
+            positiveCount: positiveCount
+        ));
+
+        Assert.Equal(
+            expected: expectedParamName,
+            actual: exception.ParamName
+        );
+    }
+    [Fact]
     public void MonogenicElementConsumersRejectDefaultShortAndLongOperandsBeforeComputing() {
         var receiver = BigMonogenic.Create(monicModulus: [BigInteger.One, BigInteger.One]);
         var valid = receiver.FromCoordinates(coordinates: [new BigInteger(value: 2), new BigInteger(value: 3)]);
@@ -173,9 +356,21 @@ public sealed class AlgebraDefaultAndSignatureTests {
         var longValue = BigMonogenic.Create(monicModulus: [BigInteger.One, BigInteger.One, BigInteger.One])
             .FromCoordinates(coordinates: [new BigInteger(value: 7), new BigInteger(value: 11), new BigInteger(value: 13)]);
 
-        AssertElementConsumersReject(malformed: default, receiver: receiver, valid: valid);
-        AssertElementConsumersReject(malformed: shortValue, receiver: receiver, valid: valid);
-        AssertElementConsumersReject(malformed: longValue, receiver: receiver, valid: valid);
+        AssertElementConsumersReject(
+            malformed: default,
+            receiver: receiver,
+            valid: valid
+        );
+        AssertElementConsumersReject(
+            malformed: shortValue,
+            receiver: receiver,
+            valid: valid
+        );
+        AssertElementConsumersReject(
+            malformed: longValue,
+            receiver: receiver,
+            valid: valid
+        );
     }
     [Fact]
     public void MonogenicProjectiveConsumerRejectsDefaultShortAndLongWindowsBeforeComputing() {
@@ -209,53 +404,54 @@ public sealed class AlgebraDefaultAndSignatureTests {
         var foreignWindow = foreign.FromWindow(window: coordinates);
 
         AssertElementEqual(
-            expected: receiver.Add(left: localElement, right: localElement),
-            actual: receiver.Add(left: foreignElement, right: foreignElement)
+            expected: receiver.Add(
+                left: localElement,
+                right: localElement
+            ),
+            actual: receiver.Add(
+                left: foreignElement,
+                right: foreignElement
+            )
         );
         AssertElementEqual(
-            expected: receiver.Subtract(left: localElement, right: localElement),
-            actual: receiver.Subtract(left: foreignElement, right: foreignElement)
+            expected: receiver.Subtract(
+                left: localElement,
+                right: localElement
+            ),
+            actual: receiver.Subtract(
+                left: foreignElement,
+                right: foreignElement
+            )
         );
-        AssertElementEqual(expected: receiver.Negate(value: localElement), actual: receiver.Negate(value: foreignElement));
         AssertElementEqual(
-            expected: receiver.Multiply(left: localElement, right: localElement),
-            actual: receiver.Multiply(left: foreignElement, right: foreignElement)
+            expected: receiver.Negate(value: localElement),
+            actual: receiver.Negate(value: foreignElement)
+        );
+        AssertElementEqual(
+            expected: receiver.Multiply(
+                left: localElement,
+                right: localElement
+            ),
+            actual: receiver.Multiply(
+                left: foreignElement,
+                right: foreignElement
+            )
         );
         AssertElementEqual(
             expected: receiver.MultiplyByRoot(value: localElement),
             actual: receiver.MultiplyByRoot(value: foreignElement)
         );
-        Assert.Equal(expected: receiver.Trace(value: localElement), actual: receiver.Trace(value: foreignElement));
-        Assert.Equal(expected: receiver.Norm(value: localElement), actual: receiver.Norm(value: foreignElement));
+        Assert.Equal(
+            expected: receiver.Trace(value: localElement),
+            actual: receiver.Trace(value: foreignElement)
+        );
+        Assert.Equal(
+            expected: receiver.Norm(value: localElement),
+            actual: receiver.Norm(value: foreignElement)
+        );
         AssertWindowEqual(
             expected: receiver.ProjectiveStep(window: localWindow),
             actual: receiver.ProjectiveStep(window: foreignWindow)
         );
     }
-
-    private static void AssertElementConsumersReject(
-        BigMonogenic receiver,
-        BigMonogenic.Element malformed,
-        BigMonogenic.Element valid
-    ) {
-        AssertArgumentException(expectedParamName: "left", action: () => receiver.Add(left: malformed, right: valid));
-        AssertArgumentException(expectedParamName: "right", action: () => receiver.Add(left: valid, right: malformed));
-        AssertArgumentException(expectedParamName: "left", action: () => receiver.Subtract(left: malformed, right: valid));
-        AssertArgumentException(expectedParamName: "right", action: () => receiver.Subtract(left: valid, right: malformed));
-        AssertArgumentException(expectedParamName: "value", action: () => receiver.Negate(value: malformed));
-        AssertArgumentException(expectedParamName: "left", action: () => receiver.Multiply(left: malformed, right: valid));
-        AssertArgumentException(expectedParamName: "right", action: () => receiver.Multiply(left: valid, right: malformed));
-        AssertArgumentException(expectedParamName: "value", action: () => receiver.MultiplyByRoot(value: malformed));
-        AssertArgumentException(expectedParamName: "value", action: () => receiver.Trace(value: malformed));
-        AssertArgumentException(expectedParamName: "value", action: () => receiver.Norm(value: malformed));
-    }
-    private static void AssertArgumentException(string expectedParamName, Action action) {
-        var exception = Assert.Throws<ArgumentException>(testCode: action);
-
-        Assert.Equal(expected: expectedParamName, actual: exception.ParamName);
-    }
-    private static void AssertElementEqual(BigMonogenic.Element expected, BigMonogenic.Element actual) =>
-        Assert.Equal(expected: expected.Coordinates.ToArray(), actual: actual.Coordinates.ToArray());
-    private static void AssertWindowEqual(BigMonogenic.Projective expected, BigMonogenic.Projective actual) =>
-        Assert.Equal(expected: expected.Coordinates.ToArray(), actual: actual.Coordinates.ToArray());
 }

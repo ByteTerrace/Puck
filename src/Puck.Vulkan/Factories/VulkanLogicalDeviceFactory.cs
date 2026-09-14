@@ -12,23 +12,36 @@ namespace Puck.Vulkan.Factories;
 /// features only when the physical device supports them.
 /// </summary>
 public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
-    private const string SwapchainExtension = "VK_KHR_swapchain";
-
-    /// <summary>The device-extension bundle for the optional ray-query path; enabled only
-    /// when the device supports the full set. Callers probe again — via the
-    /// acceleration-structure API's <c>SupportsDevice</c> — before relying on it, so devices
-    /// without it are left to fall back on their own.</summary>
-    private static readonly string[] RayQueryExtensions = [
-        "VK_KHR_acceleration_structure",
-        "VK_KHR_ray_query",
-        "VK_KHR_deferred_host_operations",
-        "VK_KHR_buffer_device_address",
-    ];
-
     /// <summary>Diagnostic introspection extension (compiled register counts etc.); enabled
     /// whenever supported. Pure read-back — it changes no pipeline codegen by itself, so
     /// enabling it is pixel-neutral.</summary>
     private const string PipelineExecutablePropertiesExtension = "VK_KHR_pipeline_executable_properties";
+    private const uint StructureTypePhysicalDevice16BitStorageFeatures = 1000083000;
+    private const uint StructureTypePhysicalDeviceAccelerationStructureFeaturesKhr = 1000150013;
+    // Extension feature struct sTypes, verified against the Vulkan SDK 1.4.350 header
+    // (vulkan_core.h). Each enables the struct's first VkBool32 when chained.
+    private const uint StructureTypePhysicalDeviceBufferDeviceAddressFeatures = 1000257000;
+    private const uint StructureTypePhysicalDevicePipelineExecutablePropertiesFeaturesKhr = 1000269000;
+    // CAUTION: the present_id block has TWO adjacent sTypes that are easy to transpose —
+    // VK_STRUCTURE_TYPE_PRESENT_ID_KHR = 1000294000 (the present-info struct, used at present time in
+    // VulkanNativeFramePresentationApi) and VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR = 1000294001
+    // (the FEATURE struct, used here). Swapping them silently breaks the feature query AND device creation. (1000294001)
+    private const uint StructureTypePhysicalDevicePresentIdFeaturesKhr = 1000294001;
+    private const uint StructureTypePhysicalDevicePresentWaitFeaturesKhr = 1000248000;
+    private const uint StructureTypePhysicalDeviceRayQueryFeaturesKhr = 1000348013;
+    // The GPU capability floor requires fp16 arithmetic and 16-bit storage — supported at 2× rate on all four target
+    // GPUs (Turing / RDNA2 / RDNA3) — plus subgroup-size-control from Vulkan 1.3. Each is enabled only when the
+    // device reports it, through the generic single-flag chain: the FIRST VkBool32 of each struct is exactly the
+    // feature wanted — shaderFloat16 / storageBuffer16BitAccess / subgroupSizeControl — so the chain reaches it.
+    // Enabling these features is pixel- and performance-neutral until a kernel uses them. Do not route them through the aggregate
+    // VkPhysicalDeviceVulkan1xFeatures structs — their flags are not first, so the single-flag chain would miss them.
+    private const uint StructureTypePhysicalDeviceShaderFloat16Int8Features = 1000082000;
+    // 1000225002 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES (verified against the Vulkan SDK
+    // 1.4.350 header). NOT 1000225001 — that is VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,
+    // the pipeline-stage create-info; probing the device's Features2 with it returns FALSE on hardware that DOES
+    // support the feature.
+    private const uint StructureTypePhysicalDeviceSubgroupSizeControlFeatures = 1000225002;
+    private const string SwapchainExtension = "VK_KHR_swapchain";
 
     /// <summary>Win32 external-memory import, for sampling a texture another backend (Direct3D 12) produced
     /// without a CPU round-trip. Enabled whenever supported; the base extension is core in Vulkan 1.1, only
@@ -44,47 +57,78 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         "VK_KHR_present_id",
         "VK_KHR_present_wait",
     ];
-
-    // Extension feature struct sTypes, verified against the Vulkan SDK 1.4.350 header
-    // (vulkan_core.h). Each enables the struct's first VkBool32 when chained.
-    private const uint StructureTypePhysicalDeviceBufferDeviceAddressFeatures = 1000257000;
-    private const uint StructureTypePhysicalDeviceAccelerationStructureFeaturesKhr = 1000150013;
-    private const uint StructureTypePhysicalDevicePipelineExecutablePropertiesFeaturesKhr = 1000269000;
-    private const uint StructureTypePhysicalDeviceRayQueryFeaturesKhr = 1000348013;
-    // CAUTION: the present_id block has TWO adjacent sTypes that are easy to transpose —
-    // VK_STRUCTURE_TYPE_PRESENT_ID_KHR = 1000294000 (the present-info struct, used at present time in
-    // VulkanNativeFramePresentationApi) and VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR = 1000294001
-    // (the FEATURE struct, used here). Swapping them silently breaks the feature query AND device creation. (1000294001)
-    private const uint StructureTypePhysicalDevicePresentIdFeaturesKhr = 1000294001;
-    private const uint StructureTypePhysicalDevicePresentWaitFeaturesKhr = 1000248000;
-    // The GPU capability floor requires fp16 arithmetic and 16-bit storage — supported at 2× rate on all four target
-    // GPUs (Turing / RDNA2 / RDNA3) — plus subgroup-size-control from Vulkan 1.3. Each is enabled only when the
-    // device reports it, through the generic single-flag chain: the FIRST VkBool32 of each struct is exactly the
-    // feature wanted — shaderFloat16 / storageBuffer16BitAccess / subgroupSizeControl — so the chain reaches it.
-    // Enabling these features is pixel- and performance-neutral until a kernel uses them. Do not route them through the aggregate
-    // VkPhysicalDeviceVulkan1xFeatures structs — their flags are not first, so the single-flag chain would miss them.
-    private const uint StructureTypePhysicalDeviceShaderFloat16Int8Features = 1000082000;
-    private const uint StructureTypePhysicalDevice16BitStorageFeatures = 1000083000;
-    // 1000225002 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES (verified against the Vulkan SDK
-    // 1.4.350 header). NOT 1000225001 — that is VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,
-    // the pipeline-stage create-info; probing the device's Features2 with it returns FALSE on hardware that DOES
-    // support the feature.
-    private const uint StructureTypePhysicalDeviceSubgroupSizeControlFeatures = 1000225002;
-
+    /// <summary>The device-extension bundle for the optional ray-query path; enabled only
+    /// when the device supports the full set. Callers probe again — via the
+    /// acceleration-structure API's <c>SupportsDevice</c> — before relying on it, so devices
+    /// without it are left to fall back on their own.</summary>
+    private static readonly string[] RayQueryExtensions = [
+        "VK_KHR_acceleration_structure",
+        "VK_KHR_ray_query",
+        "VK_KHR_deferred_host_operations",
+        "VK_KHR_buffer_device_address",
+    ];
     // 0-based VkPhysicalDeviceFeatures flag indices for storage-image read/write without a
     // shader format qualifier (shaderStorageImage*WithoutFormat) — needed to write image
     // views whose format (commonly BGRA8) has no GLSL format qualifier. Enabled only when
     // the device reports them; callers that need them probe separately and fall back otherwise.
     private static readonly uint[] StorageImageFeatureIndices = [31u, 32u, 36u];
 
+    private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
+    private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;
+
+    // Enable the GPU capability-floor features (fp16, 16-bit storage, subgroup-size-control) on any device that reports
+    // them. Core-promoted (Vulkan 1.1/1.2/1.3), so no device extension is needed — just the chained feature struct.
+    private void AppendCapabilityFloorFeatures(
+        List<uint> featureStructureTypes,
+        nint instanceHandle,
+        nint physicalDeviceHandle
+    ) {
+        var shaderFloat16 = m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceShaderFloat16Int8Features
+        );
+
+        if (shaderFloat16) {
+            featureStructureTypes.Add(item: StructureTypePhysicalDeviceShaderFloat16Int8Features);
+        }
+
+        var storage16Bit = m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDevice16BitStorageFeatures
+        );
+
+        if (storage16Bit) {
+            featureStructureTypes.Add(item: StructureTypePhysicalDevice16BitStorageFeatures);
+        }
+
+        var subgroupSizeControl = m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceSubgroupSizeControlFeatures
+        );
+
+        if (subgroupSizeControl) {
+            featureStructureTypes.Add(item: StructureTypePhysicalDeviceSubgroupSizeControlFeatures);
+        }
+
+        Console.Error.WriteLine(value: $"[capability-floor] shaderFloat16 {(shaderFloat16
+            ? "ENABLED"
+            : "unavailable")}, storageBuffer16BitAccess {(storage16Bit
+            ? "ENABLED"
+            : "unavailable")}, subgroupSizeControl {(subgroupSizeControl
+            ? "ENABLED"
+            : "unavailable")}");
+    }
     private static IReadOnlyList<VulkanDeviceQueueCreateRequest> BuildQueues(
         VulkanQueueFamilySelection queueFamilySelection
     ) {
         if (queueFamilySelection.UsesSingleQueueFamily) {
             return [new VulkanDeviceQueueCreateRequest(
-                FamilyIndex: queueFamilySelection.GraphicsFamilyIndex,
-                Priority: 1.0f
-            )];
+                    FamilyIndex: queueFamilySelection.GraphicsFamilyIndex,
+                    Priority: 1.0f
+                )];
         }
 
         return [
@@ -97,96 +141,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
                 Priority: 1.0f
             ),
         ];
-    }
-
-    private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
-    private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;
-
-    /// <summary>Initializes a new instance of the <see cref="VulkanLogicalDeviceFactory"/> class.</summary>
-    /// <param name="logicalDeviceApi">The logical-device API used to create the device and retrieve its queues.</param>
-    /// <param name="physicalDeviceApi">The physical-device API used to probe optional extension and feature support.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="logicalDeviceApi"/> or <paramref name="physicalDeviceApi"/> is <see langword="null"/>.</exception>
-    public VulkanLogicalDeviceFactory(
-        IVulkanLogicalDeviceApi logicalDeviceApi,
-        IVulkanPhysicalDeviceApi physicalDeviceApi
-    ) {
-        ArgumentNullException.ThrowIfNull(argument: logicalDeviceApi);
-        ArgumentNullException.ThrowIfNull(argument: physicalDeviceApi);
-
-        m_logicalDeviceApi = logicalDeviceApi;
-        m_physicalDeviceApi = physicalDeviceApi;
-    }
-
-    /// <summary>Whether the device supports the full ray-query bundle (all extensions AND
-    /// the accelerationStructure/rayQuery/bufferDeviceAddress features).</summary>
-    private bool SupportsRayQuery(nint instanceHandle, nint physicalDeviceHandle) {
-        foreach (var extension in RayQueryExtensions) {
-            if (!m_physicalDeviceApi.HasDeviceExtension(
-                extensionName: extension,
-                instanceHandle: instanceHandle,
-                physicalDeviceHandle: physicalDeviceHandle
-            )) {
-                return false;
-            }
-        }
-
-        return (
-            m_physicalDeviceApi.IsExtensionFeatureSupported(
-                instanceHandle: instanceHandle,
-                physicalDeviceHandle: physicalDeviceHandle,
-                structureType: StructureTypePhysicalDeviceRayQueryFeaturesKhr
-            ) &&
-            m_physicalDeviceApi.IsExtensionFeatureSupported(
-                instanceHandle: instanceHandle,
-                physicalDeviceHandle: physicalDeviceHandle,
-                structureType: StructureTypePhysicalDeviceAccelerationStructureFeaturesKhr
-            ) &&
-            m_physicalDeviceApi.IsExtensionFeatureSupported(
-                instanceHandle: instanceHandle,
-                physicalDeviceHandle: physicalDeviceHandle,
-                structureType: StructureTypePhysicalDeviceBufferDeviceAddressFeatures
-            )
-        );
-    }
-    private bool SupportsPipelineExecutableProperties(nint instanceHandle, nint physicalDeviceHandle) {
-        return (
-            m_physicalDeviceApi.HasDeviceExtension(
-                extensionName: PipelineExecutablePropertiesExtension,
-                instanceHandle: instanceHandle,
-                physicalDeviceHandle: physicalDeviceHandle
-            ) &&
-            m_physicalDeviceApi.IsExtensionFeatureSupported(
-                instanceHandle: instanceHandle,
-                physicalDeviceHandle: physicalDeviceHandle,
-                structureType: StructureTypePhysicalDevicePipelineExecutablePropertiesFeaturesKhr
-            )
-        );
-    }
-    /// <summary>Whether the device supports the full present-timing bundle (both extensions AND both features), so the
-    /// host pacer can phase-lock to actual present times. Falls back to open-loop pacing when any piece is missing.</summary>
-    private bool SupportsPresentTiming(nint instanceHandle, nint physicalDeviceHandle) {
-        foreach (var extension in PresentTimingExtensions) {
-            if (!m_physicalDeviceApi.HasDeviceExtension(
-                extensionName: extension,
-                instanceHandle: instanceHandle,
-                physicalDeviceHandle: physicalDeviceHandle
-            )) {
-                return false;
-            }
-        }
-
-        return (
-            m_physicalDeviceApi.IsExtensionFeatureSupported(
-                instanceHandle: instanceHandle,
-                physicalDeviceHandle: physicalDeviceHandle,
-                structureType: StructureTypePhysicalDevicePresentIdFeaturesKhr
-            ) &&
-            m_physicalDeviceApi.IsExtensionFeatureSupported(
-                instanceHandle: instanceHandle,
-                physicalDeviceHandle: physicalDeviceHandle,
-                structureType: StructureTypePhysicalDevicePresentWaitFeaturesKhr
-            )
-        );
     }
     private (IReadOnlyList<string> ExtensionNames, IReadOnlyList<uint> FeatureStructureTypes) ComposeExtensionsAndFeatures(
         nint instanceHandle,
@@ -232,7 +186,9 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             featureStructureTypes.Add(item: StructureTypePhysicalDevicePresentWaitFeaturesKhr);
         }
 
-        Console.Error.WriteLine(value: $"[present-timing] VK_KHR_present_wait/present_id {(presentTiming ? "ENABLED (closed-loop pacing)" : "unavailable (open-loop pacing)")}");
+        Console.Error.WriteLine(value: $"[present-timing] VK_KHR_present_wait/present_id {(presentTiming
+            ? "ENABLED (closed-loop pacing)"
+            : "unavailable (open-loop pacing)")}");
 
         AppendCapabilityFloorFeatures(
             featureStructureTypes: featureStructureTypes,
@@ -241,45 +197,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         );
 
         return (extensions, featureStructureTypes);
-    }
-    // Enable the GPU capability-floor features (fp16, 16-bit storage, subgroup-size-control) on any device that reports
-    // them. Core-promoted (Vulkan 1.1/1.2/1.3), so no device extension is needed — just the chained feature struct.
-    private void AppendCapabilityFloorFeatures(
-        List<uint> featureStructureTypes,
-        nint instanceHandle,
-        nint physicalDeviceHandle
-    ) {
-        var shaderFloat16 = m_physicalDeviceApi.IsExtensionFeatureSupported(
-            instanceHandle: instanceHandle,
-            physicalDeviceHandle: physicalDeviceHandle,
-            structureType: StructureTypePhysicalDeviceShaderFloat16Int8Features
-        );
-
-        if (shaderFloat16) {
-            featureStructureTypes.Add(item: StructureTypePhysicalDeviceShaderFloat16Int8Features);
-        }
-
-        var storage16Bit = m_physicalDeviceApi.IsExtensionFeatureSupported(
-            instanceHandle: instanceHandle,
-            physicalDeviceHandle: physicalDeviceHandle,
-            structureType: StructureTypePhysicalDevice16BitStorageFeatures
-        );
-
-        if (storage16Bit) {
-            featureStructureTypes.Add(item: StructureTypePhysicalDevice16BitStorageFeatures);
-        }
-
-        var subgroupSizeControl = m_physicalDeviceApi.IsExtensionFeatureSupported(
-            instanceHandle: instanceHandle,
-            physicalDeviceHandle: physicalDeviceHandle,
-            structureType: StructureTypePhysicalDeviceSubgroupSizeControlFeatures
-        );
-
-        if (subgroupSizeControl) {
-            featureStructureTypes.Add(item: StructureTypePhysicalDeviceSubgroupSizeControlFeatures);
-        }
-
-        Console.Error.WriteLine(value: $"[capability-floor] shaderFloat16 {(shaderFloat16 ? "ENABLED" : "unavailable")}, storageBuffer16BitAccess {(storage16Bit ? "ENABLED" : "unavailable")}, subgroupSizeControl {(subgroupSizeControl ? "ENABLED" : "unavailable")}");
     }
     private IReadOnlyList<uint> ComposeFeatureIndices(nint instanceHandle, nint physicalDeviceHandle) {
         var support = m_physicalDeviceApi.GetFeatureSupport(
@@ -316,6 +233,77 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         return new VkQueue(
             familyIndex: queueFamilyIndex,
             handle: queueHandle
+        );
+    }
+    private bool SupportsPipelineExecutableProperties(nint instanceHandle, nint physicalDeviceHandle) {
+        return (
+            m_physicalDeviceApi.HasDeviceExtension(
+            extensionName: PipelineExecutablePropertiesExtension,
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle
+        ) &&
+            m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDevicePipelineExecutablePropertiesFeaturesKhr
+        )
+        );
+    }
+    /// <summary>Whether the device supports the full present-timing bundle (both extensions AND both features), so the
+    /// host pacer can phase-lock to actual present times. Falls back to open-loop pacing when any piece is missing.</summary>
+    private bool SupportsPresentTiming(nint instanceHandle, nint physicalDeviceHandle) {
+        foreach (var extension in PresentTimingExtensions) {
+            if (!m_physicalDeviceApi.HasDeviceExtension(
+                extensionName: extension,
+                instanceHandle: instanceHandle,
+                physicalDeviceHandle: physicalDeviceHandle
+            )) {
+                return false;
+            }
+        }
+
+        return (
+            m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDevicePresentIdFeaturesKhr
+        ) &&
+            m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDevicePresentWaitFeaturesKhr
+        )
+        );
+    }
+    /// <summary>Whether the device supports the full ray-query bundle (all extensions AND
+    /// the accelerationStructure/rayQuery/bufferDeviceAddress features).</summary>
+    private bool SupportsRayQuery(nint instanceHandle, nint physicalDeviceHandle) {
+        foreach (var extension in RayQueryExtensions) {
+            if (!m_physicalDeviceApi.HasDeviceExtension(
+                extensionName: extension,
+                instanceHandle: instanceHandle,
+                physicalDeviceHandle: physicalDeviceHandle
+            )) {
+                return false;
+            }
+        }
+
+        return (
+            m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceRayQueryFeaturesKhr
+        ) &&
+            m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceAccelerationStructureFeaturesKhr
+        ) &&
+            m_physicalDeviceApi.IsExtensionFeatureSupported(
+            instanceHandle: instanceHandle,
+            physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceBufferDeviceAddressFeatures
+        )
         );
     }
 
@@ -361,7 +349,8 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             : CreateQueue(
                 deviceHandle: deviceHandle,
                 queueFamilyIndex: physicalDevice.QueueFamilySelection.PresentFamilyIndex
-            ));
+            )
+        );
 
         return new(
             deviceHandle: deviceHandle,
@@ -370,5 +359,20 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             physicalDevice: physicalDevice,
             presentQueue: presentQueue
         );
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanLogicalDeviceFactory"/> class.</summary>
+    /// <param name="logicalDeviceApi">The logical-device API used to create the device and retrieve its queues.</param>
+    /// <param name="physicalDeviceApi">The physical-device API used to probe optional extension and feature support.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="logicalDeviceApi"/> or <paramref name="physicalDeviceApi"/> is <see langword="null"/>.</exception>
+    public VulkanLogicalDeviceFactory(
+        IVulkanLogicalDeviceApi logicalDeviceApi,
+        IVulkanPhysicalDeviceApi physicalDeviceApi
+    ) {
+        ArgumentNullException.ThrowIfNull(argument: logicalDeviceApi);
+        ArgumentNullException.ThrowIfNull(argument: physicalDeviceApi);
+
+        m_logicalDeviceApi = logicalDeviceApi;
+        m_physicalDeviceApi = physicalDeviceApi;
     }
 }

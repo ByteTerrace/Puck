@@ -124,28 +124,6 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
             values[i] = ring.Decode(value: values[i]);
         }
     }
-
-    private readonly struct MontgomeryBatchRing(ScaledResidueRing64 ring) : IBatchInvertible<ulong> {
-        private readonly ScaledResidueRing64 m_ring = ring;
-
-        public ulong One => m_ring.One;
-
-        public ulong Decode(ulong value) => m_ring.Decode(value: value);
-        public ulong Encode(ulong value) => m_ring.Encode(value: value);
-        public ulong Inverse(ulong value) {
-            if (0UL == value) { throw new DivideByZeroException(message: "Zero has no multiplicative inverse."); }
-
-            return m_ring.Power(
-                exponent: (m_ring.Modulus - 2UL),
-                value: value
-            );
-        }
-        public ulong Multiply(ulong left, ulong right) => m_ring.Multiply(
-            left: left,
-            right: right
-        );
-    }
-
     /// <summary>Creates the prime field <c>F_<paramref name="modulus"/></c>.</summary>
     /// <param name="modulus">The field's modulus, which must be an odd prime below <see cref="MaximumModulus"/>.</param>
     /// <returns>The described field.</returns>
@@ -757,6 +735,27 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
         root = ring.Decode(value: candidate);
 
         return true;
+    }
+
+    private readonly struct MontgomeryBatchRing(ScaledResidueRing64 ring) : IBatchInvertible<ulong> {
+        private readonly ScaledResidueRing64 m_ring = ring;
+
+        public ulong One => m_ring.One;
+
+        public ulong Decode(ulong value) => m_ring.Decode(value: value);
+        public ulong Encode(ulong value) => m_ring.Encode(value: value);
+        public ulong Inverse(ulong value) {
+            if (0UL == value) { throw new DivideByZeroException(message: "Zero has no multiplicative inverse."); }
+
+            return m_ring.Power(
+                exponent: (m_ring.Modulus - 2UL),
+                value: value
+            );
+        }
+        public ulong Multiply(ulong left, ulong right) => m_ring.Multiply(
+            left: left,
+            right: right
+        );
     }
 
     /// <summary>Gets the field's modulus, so that the field has <c>Modulus</c> elements.</summary>

@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Recording;
-using Puck.Platform.Recording;
 
 namespace Puck.Platform.Windows.Recording;
 
@@ -24,9 +23,19 @@ public sealed class WasapiAudioCaptureSourceFactory : IAudioCaptureSourceFactory
     }
 
     /// <inheritdoc/>
-    public IAudioCaptureSource? CreateLoopback(out string reason) => TryCreate(deviceId: null, label: "system loopback", loopback: true, reason: out reason);
+    public IAudioCaptureSource? CreateLoopback(out string reason) => TryCreate(
+        deviceId: null,
+        label: "system loopback",
+        loopback: true,
+        reason: out reason
+    );
     /// <inheritdoc/>
-    public IAudioCaptureSource? CreateMicrophone(string? deviceId, out string reason) => TryCreate(deviceId: deviceId, label: "microphone", loopback: false, reason: out reason);
+    public IAudioCaptureSource? CreateMicrophone(string? deviceId, out string reason) => TryCreate(
+        deviceId: deviceId,
+        label: "microphone",
+        loopback: false,
+        reason: out reason
+    );
 
     private IAudioCaptureSource? TryCreate(bool loopback, string? deviceId, string label, out string reason) {
         if (!OperatingSystem.IsWindows()) {
@@ -38,11 +47,16 @@ public sealed class WasapiAudioCaptureSourceFactory : IAudioCaptureSourceFactory
         try {
             reason = "";
 
-            return new WasapiAudioCaptureSource(clock: m_clock, deviceId: deviceId, loopback: loopback);
+            return new WasapiAudioCaptureSource(
+                clock: m_clock,
+                deviceId: deviceId,
+                loopback: loopback
+            );
         } catch (COMException exception) {
             reason = ((exception.HResult == Wasapi.EAccessDenied)
                 ? $"{label} access was denied by OS privacy settings (0x{exception.HResult:X8})"
-                : $"{label} could not be opened: 0x{exception.HResult:X8} {exception.Message}");
+                : $"{label} could not be opened: 0x{exception.HResult:X8} {exception.Message}"
+            );
 
             return null;
         } catch (Exception exception) {

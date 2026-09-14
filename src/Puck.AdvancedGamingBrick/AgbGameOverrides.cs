@@ -19,7 +19,7 @@ public readonly record struct AgbGameOverride(CartridgeBackup? Backup, bool? Has
 /// emulator keeps one — the string scan has a known-broken minority (anti-piracy carts that embed decoy save strings,
 /// the retro-classics series that baits with SRAM strings but is EEPROM-backed) that only an exact-code override
 /// resolves. The facts are public documentation (game codes are printed in the cartridge header; the behaviours are
-/// widely documented); no external emulator's data file was copied. See ACKNOWLEDGMENTS.md for citations.
+/// widely documented); no external emulator's data file was copied. See docs/citations.md for citations.
 /// <para>
 /// GPIO sensor presence (solar/tilt/gyro/rumble) keys off the same 4-character code. Game codes are public
 /// cartridge-header data; only the mapping from code to modeled hardware is encoded here. Any curated fixed-address
@@ -31,6 +31,8 @@ public static class AgbGameOverrides {
     // Game-code strings are 4 ASCII chars (AXXY: title code + region). Packed big-endian into a uint key.
     private static readonly FrozenDictionary<uint, AgbGameOverride> OverrideTable = Build();
 
+    private static void Add(Dictionary<uint, AgbGameOverride> table, string code, AgbGameOverride entry) =>
+        table[Key(code: code)] = entry;
     private static FrozenDictionary<uint, AgbGameOverride> Build() {
         var table = new Dictionary<uint, AgbGameOverride>();
 
@@ -149,8 +151,6 @@ public static class AgbGameOverrides {
 
         return table.ToFrozenDictionary();
     }
-    private static void Add(Dictionary<uint, AgbGameOverride> table, string code, AgbGameOverride entry) =>
-        table[Key(code: code)] = entry;
     private static uint Key(string code) =>
         (((uint)((byte)code[0])) << 24) | (((uint)((byte)code[1])) << 16) | (((uint)((byte)code[2])) << 8) | ((byte)code[3]);
 

@@ -23,6 +23,84 @@ public sealed class MutationKindMaskLawTests {
     // One ordinal past the old ceiling: the exact value that used to alias bit 0.
     private const int PastOldCeiling = 64;
 
+    // Encodes and decodes a grant carrying the mask through the SAME leaf the live submission path and the replay
+    // tape both use (the tape rides the shared grant/revoke leaf), so this covers both doors at once.
+    private static MutationKindMask RoundTrip(MutationKindMask mask) {
+        var grant = new WorldGrant(
+            // Console, not World: the codec refuses World as a SUBMITTER by design (the world's own program acts
+            // inside the process and is stamped by the server), and that refusal is not what this law is about.
+            Principal: WorldPrincipal.Console,
+            Capability: WorldCapability.Mutate,
+            Subject: GrantSubject.All,
+            Exclusive: false,
+            KindMask: mask
+        );
+
+        Assert.True(
+            condition: WorldSubmissionCodec.TryEncodeGrant(
+                bytes: out var bytes,
+                failure: out var encodeFailure,
+                grant: grant
+            ),
+            userMessage: $"encode refused: {encodeFailure}"
+        );
+        Assert.True(
+            condition: WorldSubmissionCodec.TryDecodeGrant(
+                bytes: bytes,
+                failure: out var decodeFailure,
+                grant: out var decoded
+            ),
+            userMessage: $"decode refused: {decodeFailure}"
+        );
+
+        return (decoded.KindMask ?? MutationKindMask.Empty);
+    }
+
+    [Fact]
+    public void AnOrdinalOutsideTheLane_AdmitsNothing() {
+        // Defence in depth behind the catalog's boot refusal: an out-of-lane ordinal must resolve to NO bit rather
+        // than wrapping onto a real kind. 128 is to the new lane what 64 was to the old one.
+        var mask = MutationKindMask.Empty.With(ordinal: 128);
+
+        Assert.True(condition: mask.IsEmpty);
+        Assert.False(condition: mask.Contains(ordinal: 0));
+    }
+    [Fact]
+    public void EveryDeclaredKind_FitsTheLane() {
+        // The catalog's own ordinals must all be addressable, and each must set exactly the bit it names — the
+        // property that ties the lane back to what actually dispatches, rather than to a hand-picked constant.
+        foreach (var entry in WorldMutationKindCatalog.All()) {
+            var mask = MutationKindMask.Empty.With(ordinal: entry.Ordinal);
+
+            Assert.True(condition: mask.Contains(ordinal: entry.Ordinal));
+            Assert.InRange(
+                actual: entry.Ordinal,
+                low: 0,
+                high: WorldMutationKindCatalog.MaxOrdinal
+            );
+        }
+    }
+    [Fact]
+    public void EveryOrdinalInTheOldRange_SurvivesUnchanged() {
+        // Necessary but NOT sufficient (see this class's remarks): every assertion here passes on a truncating codec.
+        // It is here to prove the widen APPENDED rather than re-laid — the existing range must be untouched.
+        var mask = MutationKindMask.Empty;
+
+        for (var ordinal = 0; (ordinal <= 63); ordinal++) {
+            mask = mask.With(ordinal: ordinal);
+        }
+
+        var decoded = RoundTrip(mask: mask);
+
+        for (var ordinal = 0; (ordinal <= 63); ordinal++) {
+            Assert.True(condition: decoded.Contains(ordinal: ordinal));
+        }
+
+        Assert.Equal(
+            actual: decoded,
+            expected: mask
+        );
+    }
     [Fact]
     public void OrdinalPastOldCeiling_SetsItsOwnBitAndNotBitZero() {
         var mask = MutationKindMask.Empty.With(ordinal: PastOldCeiling);
@@ -43,63 +121,9 @@ public sealed class MutationKindMaskLawTests {
         Assert.True(condition: decoded.Contains(ordinal: PastOldCeiling));
         Assert.True(condition: decoded.Contains(ordinal: 3));
         Assert.False(condition: decoded.Contains(ordinal: 0));
-        Assert.Equal(actual: decoded, expected: authored);
-    }
-    [Fact]
-    public void EveryOrdinalInTheOldRange_SurvivesUnchanged() {
-        // Necessary but NOT sufficient (see this class's remarks): every assertion here passes on a truncating codec.
-        // It is here to prove the widen APPENDED rather than re-laid — the existing range must be untouched.
-        var mask = MutationKindMask.Empty;
-
-        for (var ordinal = 0; (ordinal <= 63); ordinal++) {
-            mask = mask.With(ordinal: ordinal);
-        }
-
-        var decoded = RoundTrip(mask: mask);
-
-        for (var ordinal = 0; (ordinal <= 63); ordinal++) {
-            Assert.True(condition: decoded.Contains(ordinal: ordinal));
-        }
-
-        Assert.Equal(actual: decoded, expected: mask);
-    }
-    [Fact]
-    public void EveryDeclaredKind_FitsTheLane() {
-        // The catalog's own ordinals must all be addressable, and each must set exactly the bit it names — the
-        // property that ties the lane back to what actually dispatches, rather than to a hand-picked constant.
-        foreach (var entry in WorldMutationKindCatalog.All()) {
-            var mask = MutationKindMask.Empty.With(ordinal: entry.Ordinal);
-
-            Assert.True(condition: mask.Contains(ordinal: entry.Ordinal));
-            Assert.InRange(actual: entry.Ordinal, low: 0, high: WorldMutationKindCatalog.MaxOrdinal);
-        }
-    }
-    [Fact]
-    public void AnOrdinalOutsideTheLane_AdmitsNothing() {
-        // Defence in depth behind the catalog's boot refusal: an out-of-lane ordinal must resolve to NO bit rather
-        // than wrapping onto a real kind. 128 is to the new lane what 64 was to the old one.
-        var mask = MutationKindMask.Empty.With(ordinal: 128);
-
-        Assert.True(condition: mask.IsEmpty);
-        Assert.False(condition: mask.Contains(ordinal: 0));
-    }
-
-    // Encodes and decodes a grant carrying the mask through the SAME leaf the live submission path and the replay
-    // tape both use (the tape rides the shared grant/revoke leaf), so this covers both doors at once.
-    private static MutationKindMask RoundTrip(MutationKindMask mask) {
-        var grant = new WorldGrant(
-            // Console, not World: the codec refuses World as a SUBMITTER by design (the world's own program acts
-            // inside the process and is stamped by the server), and that refusal is not what this law is about.
-            Principal: WorldPrincipal.Console,
-            Capability: WorldCapability.Mutate,
-            Subject: GrantSubject.All,
-            Exclusive: false,
-            KindMask: mask
+        Assert.Equal(
+            actual: decoded,
+            expected: authored
         );
-
-        Assert.True(condition: WorldSubmissionCodec.TryEncodeGrant(bytes: out var bytes, failure: out var encodeFailure, grant: grant), userMessage: $"encode refused: {encodeFailure}");
-        Assert.True(condition: WorldSubmissionCodec.TryDecodeGrant(bytes: bytes, failure: out var decodeFailure, grant: out var decoded), userMessage: $"decode refused: {decodeFailure}");
-
-        return (decoded.KindMask ?? MutationKindMask.Empty);
     }
 }

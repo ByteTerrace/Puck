@@ -20,7 +20,10 @@ internal sealed partial class Diagnostics {
             return 0;
         }
 
-        if (!File.Exists(path: cosimExe) || !File.Exists(path: biosPath)) {
+        if (
+            !File.Exists(path: cosimExe) ||
+            !File.Exists(path: biosPath)
+        ) {
             Console.Error.WriteLine(value: "lockstep requires existing --ares <executable> and --bios <image> paths.");
             return 2;
         }

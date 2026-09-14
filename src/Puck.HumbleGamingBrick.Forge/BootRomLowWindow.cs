@@ -16,15 +16,15 @@ internal static class BootRomLowWindow {
     /// <summary>The first byte the unmap occupies; the data must end before it.</summary>
     public const ushort End = 0x00FE;
 
-    /// <summary>Gets the address of the title-checksum rows the palette selection scans.</summary>
-    public static ushort TitleChecksumRows =>
-        Base;
     /// <summary>Gets the address of the palette combination each checksum row selects.</summary>
     public static ushort CombinationPerRow =>
         ((ushort)(TitleChecksumRows + CompatibilityPalette.TitleChecksumRows.Length));
     /// <summary>Gets the address of the fourth-title-letter tie-breaks for the duplicated checksum rows.</summary>
     public static ushort DuplicateLetters =>
         ((ushort)(CombinationPerRow + CompatibilityPalette.CombinationPerRow.Length));
+    /// <summary>Gets the address of the title-checksum rows the palette selection scans.</summary>
+    public static ushort TitleChecksumRows =>
+        Base;
 
     /// <summary>Builds the low window's data block, to be placed at <see cref="Base"/>.</summary>
     /// <returns>The bytes.</returns>

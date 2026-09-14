@@ -24,16 +24,16 @@ public sealed class SdfNoiseDisplaceLawTests {
         return builder
             .ResetPoint()
             .Sphere(
-                radius: 1.0f,
-                material: material
-            )
+            radius: 1.0f,
+            material: material
+        )
             .NoiseDisplace(
-                amplitude: amplitude,
-                frequency: frequency,
-                gain: gain,
-                lacunarity: lacunarity,
-                octaves: octaves
-            )
+            amplitude: amplitude,
+            frequency: frequency,
+            gain: gain,
+            lacunarity: lacunarity,
+            octaves: octaves
+        )
             .Build();
     }
     private static float MirrorStepScale(float frequency, float amplitude, int octaves, float gain, float lacunarity) {
@@ -59,47 +59,27 @@ public sealed class SdfNoiseDisplaceLawTests {
     }
 
     [Fact]
-    public void TheStepClampMatchesTheDerivativeBound() {
-        const float Frequency = 0.35f;
-        const float Amplitude = 2.5f;
-        const int Octaves = 4;
-        const float Gain = 0.5f;
-        const float Lacunarity = 2.0f;
-
-        var program = BuildNoiseSphere(
-            amplitude: Amplitude,
-            frequency: Frequency,
-            gain: Gain,
-            lacunarity: Lacunarity,
-            octaves: Octaves
-        );
-
-        Assert.Equal(
-            actual: program.StepScale,
-            expected: MirrorStepScale(
-                amplitude: Amplitude,
-                frequency: Frequency,
-                gain: Gain,
-                lacunarity: Lacunarity,
-                octaves: Octaves
+    public void AContainableCellJitterPrototypeBuildsWithABoundedStepClamp() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var program = builder
+            .ResetPoint()
+            .CellJitter(
+            jitter: 1.0f,
+            spacing: new Vector3(
+                x: 7f,
+                y: 7f,
+                z: 7f
             )
-        );
-        Assert.True(condition: (program.StepScale < 1.0f));
-    }
-    [Fact]
-    public void AZeroAmplitudeIsAnExactIdentityOnTheStepScale() {
-        var program = BuildNoiseSphere(
-            amplitude: 0.0f,
-            frequency: 3.0f,
-            gain: 0.5f,
-            lacunarity: 2.0f,
-            octaves: 8
-        );
+        )
+            .Sphere(
+            material: material,
+            radius: 1.0f
+        )
+            .Build();
 
-        Assert.Equal(
-            actual: program.StepScale,
-            expected: 1.0f
-        );
+        Assert.True(condition: (program.StepScale > 0.01f));
+        Assert.True(condition: (program.StepScale <= 1.0f));
     }
     [Fact]
     public void ANoiseFreeProgramKeepsTheExactUnitStepScale() {
@@ -108,30 +88,14 @@ public sealed class SdfNoiseDisplaceLawTests {
         var program = builder
             .ResetPoint()
             .Sphere(
-                radius: 1.0f,
-                material: material
-            )
+            radius: 1.0f,
+            material: material
+        )
             .Build();
 
         Assert.Equal(
             actual: program.StepScale,
             expected: 1.0f
-        );
-    }
-    [InlineData(0)]
-    [InlineData((SdfProgramBuilder.MaxNoiseOctaves + 1))]
-    [Theory]
-    public void AnOctaveCountOutsideTheCapRefusesByName(int octaves) {
-        var builder = new SdfProgramBuilder();
-        var exception = Assert.Throws<ArgumentException>(testCode: () => builder.NoiseDisplace(
-            amplitude: 1.0f,
-            frequency: 1.0f,
-            octaves: octaves
-        ));
-
-        Assert.Equal(
-            actual: exception.ParamName,
-            expected: "octaves"
         );
     }
     [Fact]
@@ -167,26 +131,57 @@ public sealed class SdfNoiseDisplaceLawTests {
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
         var exception = Assert.Throws<ArgumentException>(testCode: () => builder
             .BeginInstanceDynamic(
-                active: false,
-                boundOffset: Vector3.Zero,
-                boundRadius: 2.0f,
-                slot: 0
-            )
+            active: false,
+            boundOffset: Vector3.Zero,
+            boundRadius: 2.0f,
+            slot: 0
+        )
             .ResetPoint()
             .Sphere(
-                radius: 1.0f,
-                material: material
-            )
+            radius: 1.0f,
+            material: material
+        )
             .NoiseDisplace(
-                amplitude: 0.5f,
-                frequency: 1.0f
-            )
+            amplitude: 0.5f,
+            frequency: 1.0f
+        )
             .EndInstance()
             .Build());
 
         Assert.Contains(
             actualString: exception.Message,
             expectedSubstring: "NoiseDisplace"
+        );
+    }
+    [Fact]
+    public void AZeroAmplitudeIsAnExactIdentityOnTheStepScale() {
+        var program = BuildNoiseSphere(
+            amplitude: 0.0f,
+            frequency: 3.0f,
+            gain: 0.5f,
+            lacunarity: 2.0f,
+            octaves: 8
+        );
+
+        Assert.Equal(
+            actual: program.StepScale,
+            expected: 1.0f
+        );
+    }
+    [InlineData(0)]
+    [InlineData((SdfProgramBuilder.MaxNoiseOctaves + 1))]
+    [Theory]
+    public void AnOctaveCountOutsideTheCapRefusesByName(int octaves) {
+        var builder = new SdfProgramBuilder();
+        var exception = Assert.Throws<ArgumentException>(testCode: () => builder.NoiseDisplace(
+            amplitude: 1.0f,
+            frequency: 1.0f,
+            octaves: octaves
+        ));
+
+        Assert.Equal(
+            actual: exception.ParamName,
+            expected: "octaves"
         );
     }
     [Fact]
@@ -198,14 +193,22 @@ public sealed class SdfNoiseDisplaceLawTests {
         var exception = Assert.Throws<ArgumentException>(testCode: () => builder
             .ResetPoint()
             .CellJitter(
-                jitter: 2.4f,
-                spacing: new Vector3(x: 3.5f, y: 3.5f, z: 3.5f)
+            jitter: 2.4f,
+            spacing: new Vector3(
+                x: 3.5f,
+                y: 3.5f,
+                z: 3.5f
             )
+        )
             .Capsule(
-                endpoint: new Vector3(x: 0f, y: 3.4f, z: 0f),
-                material: material,
-                radius: 0.35f
-            )
+            endpoint: new Vector3(
+                x: 0f,
+                y: 3.4f,
+                z: 0f
+            ),
+            material: material,
+            radius: 0.35f
+        )
             .Build());
 
         Assert.Contains(
@@ -214,23 +217,32 @@ public sealed class SdfNoiseDisplaceLawTests {
         );
     }
     [Fact]
-    public void AContainableCellJitterPrototypeBuildsWithABoundedStepClamp() {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-        var program = builder
-            .ResetPoint()
-            .CellJitter(
-                jitter: 1.0f,
-                spacing: new Vector3(x: 7f, y: 7f, z: 7f)
-            )
-            .Sphere(
-                material: material,
-                radius: 1.0f
-            )
-            .Build();
+    public void TheStepClampMatchesTheDerivativeBound() {
+        const float Frequency = 0.35f;
+        const float Amplitude = 2.5f;
+        const int Octaves = 4;
+        const float Gain = 0.5f;
+        const float Lacunarity = 2.0f;
 
-        Assert.True(condition: (program.StepScale > 0.01f));
-        Assert.True(condition: (program.StepScale <= 1.0f));
+        var program = BuildNoiseSphere(
+            amplitude: Amplitude,
+            frequency: Frequency,
+            gain: Gain,
+            lacunarity: Lacunarity,
+            octaves: Octaves
+        );
+
+        Assert.Equal(
+            actual: program.StepScale,
+            expected: MirrorStepScale(
+                amplitude: Amplitude,
+                frequency: Frequency,
+                gain: Gain,
+                lacunarity: Lacunarity,
+                octaves: Octaves
+            )
+        );
+        Assert.True(condition: (program.StepScale < 1.0f));
     }
     [Fact]
     public void TheWarpFreeEvaluatorRefusesTheOpByName() {

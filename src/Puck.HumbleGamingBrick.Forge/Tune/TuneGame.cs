@@ -1,6 +1,8 @@
 using Puck.Assets.Documents;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
+using Puck.GamingBricks.Forge;
+
 namespace Puck.HumbleGamingBrick.Forge.Tune;
 
 /// <summary>
@@ -16,11 +18,11 @@ public sealed class TuneGame {
     private const int PromptRow = 10;
     private const int TitleRow = 6;
 
-    private readonly GameFramework m_fw;
     private readonly RomTable m_bgPalettes;
+    private readonly GameFramework m_fw;
     private readonly RomTable m_objPalettes;
-    private readonly RomTable m_tiles;
     private readonly RomTable m_playMap;
+    private readonly RomTable m_tiles;
 
     // The game's identity as a declarative manifest: one flat tile (the felt-style background fill) + the font +
     // one palette + the single screen (name + prompt as text overlays) + the document's compiled sound tables (the
@@ -29,33 +31,153 @@ public sealed class TuneGame {
     private static GameManifest BuildManifest(AudioDocument document, byte[] musicLoop) {
         var manifest = new GameManifest();
 
-        manifest.DefineTiles(name: "game-tiles", tiles2bpp: MinimalArt.BuildBlankTile());
+        manifest.DefineTiles(
+            name: "game-tiles",
+            tiles2bpp: MinimalArt.BuildBlankTile()
+        );
         manifest.DefineFontTiles();
-        manifest.DefineBackgroundPalettes(name: "bg-gameplay", paletteData: BuildPalette());
-        manifest.DefineObjectPalettes(name: "obj-gameplay", paletteData: BuildPalette());
-        manifest.DefineScreen(name: "play", cells: new byte[0x400], overlays: BuildOverlays(document: document));
-        SoundTables.DefineIn(manifest: manifest, musicLoop: musicLoop);
+        manifest.DefineBackgroundPalettes(
+            name: "bg-gameplay",
+            paletteData: BuildPalette()
+        );
+        manifest.DefineObjectPalettes(
+            name: "obj-gameplay",
+            paletteData: BuildPalette()
+        );
+        manifest.DefineScreen(
+            name: "play",
+            cells: new byte[0x400],
+            overlays: BuildOverlays(document: document)
+        );
+        SoundTables.DefineIn(
+            manifest: manifest,
+            musicLoop: musicLoop
+        );
 
         return manifest;
     }
+    // The overlays: the song name (sanitized to the framework font's character set) centred-ish on one row, "PUSH
+    // START" on another — the whole title screen this cart needs, since it has no separate title state.
+    private static IReadOnlyList<ScreenText> BuildOverlays(AudioDocument document) {
+        var name = SanitizeForFont(text: (document.Name ?? "UNTITLED"));
+        var nameColumn = Math.Clamp(
+            value: ((32 - name.Length) / 2),
+            max: 31,
+            min: 0
+        );
 
-    private TuneGame(AudioDocument document, byte[] musicLoop) {
-        var manifest = BuildManifest(document: document, musicLoop: musicLoop);
-        var sound = new ApuSoundDriver();
+        return [
+            new ScreenText(
+                Column: nameColumn,
+                Row: TitleRow,
+                Text: name
+            ),
+            new ScreenText(
+                Column: 8,
+                Row: PromptRow,
+                Text: "PUSH START"
+            ),
+        ];
+    }
+    // A calm two-tone palette (both BG/OBJ tables share it — the OBJ table is unused, but the boot spec needs one).
+    private static byte[] BuildPalette() =>
+        HgbImage.EncodePalette(palette: [
+            new HgbImage.Rgb(
+                B: 0x30,
+                G: 0x18,
+                R: 0x10
+            ),
+            new HgbImage.Rgb(
+                B: 0x78,
+                G: 0x48,
+                R: 0x30
+            ),
+            new HgbImage.Rgb(
+                B: 0xD8,
+                G: 0xA8,
+                R: 0x88
+            ),
+            new HgbImage.Rgb(
+                B: 0xFC,
+                G: 0xF4,
+                R: 0xF0
+            ),
+        ]);
+    // Entering play: the flag starts set, and the loop starts immediately — no title screen to wait through, the
+    // one screen IS the jukebox.
+    private void EmitPlayEnter(Sm83Emitter e) {
+        e.LoadAImmediate(value: 1);
+        e.StoreAToAddress(address: TuneProtocol.PlayingFlag);
+        m_fw.Sound.EmitEffect(
+            effectId: SoundTables.MusicLoop,
+            emitter: e
+        );
+    }
+    // START (edge) toggles the playing flag and starts/stops the loop to match.
+    private void EmitPlayTick(Sm83Emitter e) {
+        var toStop = e.NewLabel();
+        var done = e.NewLabel();
 
-        // The jukebox persists nothing; the framework still needs a non-empty defaults payload for the save mirror.
-        m_fw = new GameFramework(fontTileBase: manifest.FontTileBase, saveDefaultPayload: [0x00], saveVersion: 1, sound: sound);
+        e.LoadAFromAddress(address: FrameworkMemoryMap.InputPressed);
+        e.TestBit(
+            bit: 7,
+            register: Reg8.A
+        );
+        e.JumpRelative(
+            condition: Condition.Zero,
+            label: done
+        );
 
-        var linked = manifest.Link(framework: m_fw);
+        e.LoadAFromAddress(address: TuneProtocol.PlayingFlag);
+        e.Arithmetic(
+            op: AluOp.Or,
+            source: Reg8.A
+        );
+        e.JumpRelative(
+            condition: Condition.Zero,
+            label: toStop
+        );
 
-        sound.Bind(linked: linked);
+        // Was playing: stop it.
+        e.XorA();
+        e.StoreAToAddress(address: TuneProtocol.PlayingFlag);
+        m_fw.Sound.EmitEffect(
+            effectId: SoundTables.MusicStop,
+            emitter: e
+        );
+        e.JumpRelative(label: done);
 
-        m_bgPalettes = linked.BackgroundPalettes;
-        m_objPalettes = linked.ObjectPalettes;
-        m_tiles = linked.TileBank;
-        m_playMap = linked.Screen(name: "play").Map;
+        // Was stopped: start it (from the top — retriggering restarts the pattern, matching every other framework
+        // game's START-to-play convention).
+        e.MarkLabel(label: toStop);
+        e.LoadAImmediate(value: 1);
+        e.StoreAToAddress(address: TuneProtocol.PlayingFlag);
+        m_fw.Sound.EmitEffect(
+            effectId: SoundTables.MusicLoop,
+            emitter: e
+        );
 
-        m_fw.States.DefineState(emitEnter: EmitPlayEnter, emitTick: EmitPlayTick, id: TuneProtocol.StatePlay);
+        e.MarkLabel(label: done);
+    }
+    // The title sanitizer restricts to space, 0-9, A-Z, '>', '-' for the cart's title art (the framework font also
+    // has '.', deliberately excluded here): fold to upper invariant and replace anything else with a space so an
+    // arbitrary document name never throws the linker's overlay encoder.
+    private static string SanitizeForFont(string text) {
+        var upper = text.ToUpperInvariant();
+        var builder = new System.Text.StringBuilder(capacity: upper.Length);
+
+        foreach (var character in upper) {
+            builder.Append(value: (((character is (>= '0') and (<= '9')) || (character is (>= 'A') and (<= 'Z')) || (character is ' ' or '>' or '-'))
+                ? character
+                : ' '));
+        }
+
+        var sanitized = builder.ToString().Trim();
+
+        return ((sanitized.Length > 20)
+            ? sanitized[..20]
+            : sanitized
+        );
     }
 
     /// <summary>Assembles the jukebox <c>.gbc</c> from a compiled audio document.</summary>
@@ -66,7 +188,10 @@ public sealed class TuneGame {
         ArgumentNullException.ThrowIfNull(document);
 
         var musicLoop = AudioDocumentCompiler.CompileMusicLoop(document: document);
-        var game = new TuneGame(document: document, musicLoop: musicLoop);
+        var game = new TuneGame(
+            document: document,
+            musicLoop: musicLoop
+        );
 
         return game.m_fw.BuildRom(
             title: title,
@@ -82,73 +207,34 @@ public sealed class TuneGame {
         );
     }
 
-    // Entering play: the flag starts set, and the loop starts immediately — no title screen to wait through, the
-    // one screen IS the jukebox.
-    private void EmitPlayEnter(Sm83Emitter e) {
-        e.LoadAImmediate(value: 1);
-        e.StoreAToAddress(address: TuneProtocol.PlayingFlag);
-        m_fw.Sound.EmitEffect(effectId: SoundTables.MusicLoop, emitter: e);
+    private TuneGame(AudioDocument document, byte[] musicLoop) {
+        var manifest = BuildManifest(
+            document: document,
+            musicLoop: musicLoop
+        );
+        var sound = new ApuSoundDriver();
+
+        // The jukebox persists nothing; the framework still needs a non-empty defaults payload for the save mirror.
+        m_fw = new GameFramework(
+            fontTileBase: manifest.FontTileBase,
+            saveDefaultPayload: [0x00],
+            saveVersion: 1,
+            sound: sound
+        );
+
+        var linked = manifest.Link(framework: m_fw);
+
+        sound.Bind(linked: linked);
+
+        m_bgPalettes = linked.BackgroundPalettes;
+        m_objPalettes = linked.ObjectPalettes;
+        m_tiles = linked.TileBank;
+        m_playMap = linked.Screen(name: "play").Map;
+
+        m_fw.States.DefineState(
+            emitEnter: EmitPlayEnter,
+            emitTick: EmitPlayTick,
+            id: TuneProtocol.StatePlay
+        );
     }
-    // START (edge) toggles the playing flag and starts/stops the loop to match.
-    private void EmitPlayTick(Sm83Emitter e) {
-        var toStop = e.NewLabel();
-        var done = e.NewLabel();
-
-        e.LoadAFromAddress(address: FrameworkMemoryMap.InputPressed);
-        e.TestBit(bit: 7, register: Reg8.A);
-        e.JumpRelative(condition: Condition.Zero, label: done);
-
-        e.LoadAFromAddress(address: TuneProtocol.PlayingFlag);
-        e.Arithmetic(op: AluOp.Or, source: Reg8.A);
-        e.JumpRelative(condition: Condition.Zero, label: toStop);
-
-        // Was playing: stop it.
-        e.XorA();
-        e.StoreAToAddress(address: TuneProtocol.PlayingFlag);
-        m_fw.Sound.EmitEffect(effectId: SoundTables.MusicStop, emitter: e);
-        e.JumpRelative(label: done);
-
-        // Was stopped: start it (from the top — retriggering restarts the pattern, matching every other framework
-        // game's START-to-play convention).
-        e.MarkLabel(label: toStop);
-        e.LoadAImmediate(value: 1);
-        e.StoreAToAddress(address: TuneProtocol.PlayingFlag);
-        m_fw.Sound.EmitEffect(effectId: SoundTables.MusicLoop, emitter: e);
-
-        e.MarkLabel(label: done);
-    }
-    // The overlays: the song name (sanitized to the framework font's character set) centred-ish on one row, "PUSH
-    // START" on another — the whole title screen this cart needs, since it has no separate title state.
-    private static IReadOnlyList<ScreenText> BuildOverlays(AudioDocument document) {
-        var name = SanitizeForFont(text: (document.Name ?? "UNTITLED"));
-        var nameColumn = Math.Clamp(value: ((32 - name.Length) / 2), max: 31, min: 0);
-
-        return [
-            new ScreenText(Column: nameColumn, Row: TitleRow, Text: name),
-            new ScreenText(Column: 8, Row: PromptRow, Text: "PUSH START"),
-        ];
-    }
-    // The title sanitizer restricts to space, 0-9, A-Z, '>', '-' for the cart's title art (the framework font also
-    // has '.', deliberately excluded here): fold to upper invariant and replace anything else with a space so an
-    // arbitrary document name never throws the linker's overlay encoder.
-    private static string SanitizeForFont(string text) {
-        var upper = text.ToUpperInvariant();
-        var builder = new System.Text.StringBuilder(capacity: upper.Length);
-
-        foreach (var character in upper) {
-            builder.Append(value: (((character is (>= '0') and (<= '9')) || (character is (>= 'A') and (<= 'Z')) || (character is ' ' or '>' or '-')) ? character : ' '));
-        }
-
-        var sanitized = builder.ToString().Trim();
-
-        return ((sanitized.Length > 20) ? sanitized[..20] : sanitized);
-    }
-    // A calm two-tone palette (both BG/OBJ tables share it — the OBJ table is unused, but the boot spec needs one).
-    private static byte[] BuildPalette() =>
-        HgbImage.EncodePalette(palette: [
-            new HgbImage.Rgb(B: 0x30, G: 0x18, R: 0x10),
-            new HgbImage.Rgb(B: 0x78, G: 0x48, R: 0x30),
-            new HgbImage.Rgb(B: 0xD8, G: 0xA8, R: 0x88),
-            new HgbImage.Rgb(B: 0xFC, G: 0xF4, R: 0xF0),
-        ]);
 }

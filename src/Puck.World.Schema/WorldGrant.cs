@@ -57,6 +57,9 @@ public enum WorldSection : byte {
     /// <summary>The diegetic screen rows.</summary>
     Screens,
 
+    /// <summary>The independently hosted machine instance declarations.</summary>
+    Machines,
+
     /// <summary>The placeable camera rows.</summary>
     Cameras,
 
@@ -93,10 +96,10 @@ public enum WorldSection : byte {
     /// <c>WorldMutation.RemoveSpeaker</c>.</summary>
     Speakers,
 
-    /// <summary>The tune asset rows — inline-canonical <c>puck.audio.v1</c> documents with pinned hashes.</summary>
+    /// <summary>The tune asset rows — inline-canonical <c>puck.tune.v1</c> documents with pinned hashes.</summary>
     Tunes,
 
-    /// <summary>The synth-patch asset rows — inline-canonical <c>puck.synth.v1</c> documents with pinned hashes.</summary>
+    /// <summary>The synth-patch asset rows — inline-canonical <c>puck.synthesizer-patch.v1</c> documents with pinned hashes.</summary>
     Patches,
 
     /// <summary>The audio host-section defaults (master gain, attenuation coalescing, the listener policy).</summary>
@@ -109,9 +112,10 @@ public enum WorldSection : byte {
     /// (see <see cref="WorldHostDefaults"/>).</summary>
     Host,
 
-    /// <summary>The window-composition defaults — the seat rig and the authored named layouts (the
-    /// <c>WorldMutation.SetViewDefaults</c> / <c>WorldMutation.UpsertViewLayout</c> /
-    /// <c>WorldMutation.RemoveViewLayout</c> mutations).</summary>
+    /// <summary>The window-composition defaults — the seat rig, the authored named layouts, and the authored shader
+    /// pipelines (the <c>WorldMutation.SetViewDefaults</c> / <c>WorldMutation.UpsertViewLayout</c> /
+    /// <c>WorldMutation.RemoveViewLayout</c> / <c>WorldMutation.UpsertViewPipeline</c> /
+    /// <c>WorldMutation.RemoveViewPipeline</c> mutations).</summary>
     Views,
 
     /// <summary>The look rows and the look→entity assignment policy — the appearance peer of <see cref="Kits"/>,
@@ -262,6 +266,9 @@ public enum GrantSubjectKind : byte {
     /// principals only, and — exactly like <see cref="Region"/> — never bound-checked against the document: an event
     /// simply never fires for a name no adjacency row carries.</summary>
     Adjacency,
+
+    /// <summary>A single named machine instance for live machine operation control.</summary>
+    Machine = 12,
 }
 /// <summary>The typed target a <see cref="WorldGrant"/> scopes to — a wildcard, a body, a screen, a document section,
 /// or one named row of a section. A zero-alloc value key into the grant table's per-capability subject sets: row names
@@ -270,7 +277,7 @@ public enum GrantSubjectKind : byte {
 /// <param name="Kind">The subject flavor.</param>
 /// <param name="Value">The 0-based body/screen/seat index, or the <see cref="WorldSection"/> ordinal for a section;
 /// zero for every named and wildcard kind.</param>
-/// <param name="Id">The state, region, creation, placement, or adjacency id for named subject kinds;
+/// <param name="Id">The state, region, creation, placement, adjacency, or machine id for named subject kinds;
 /// <see langword="null"/> otherwise.</param>
 public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, string? Id = null) {
     /// <summary>Gets the wildcard subject — the capability over its whole domain.</summary>
@@ -310,7 +317,7 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
     /// <summary>Describes a short stable label for console echoes — <c>all</c>, <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>,
     /// <c>section:&lt;name&gt;</c>, <c>state:&lt;name&gt;</c>, <c>composition</c>, <c>region:&lt;name&gt;</c>,
     /// <c>seat:&lt;n&gt;</c>, <c>creation:&lt;id&gt;</c>, <c>placement:&lt;id&gt;</c>,
-    /// <c>adjacency:&lt;name&gt;</c>.</summary>
+    /// <c>adjacency:&lt;name&gt;</c>, <c>machine:&lt;name&gt;</c>.</summary>
     /// <returns>The label.</returns>
     public string Describe() => Kind switch {
         GrantSubjectKind.All => "all",
@@ -324,8 +331,16 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         GrantSubjectKind.Creation => $"creation:{Id}",
         GrantSubjectKind.Placement => $"placement:{Id}",
         GrantSubjectKind.Adjacency => $"adjacency:{Id}",
+        GrantSubjectKind.Machine => $"machine:{Id}",
         _ => "?",
     };
+    /// <summary>Creates a named machine instance subject for live operation control.</summary>
+    /// <param name="name">The authored machine instance name.</param>
+    public static GrantSubject Machine(string name) => new(
+        Id: name,
+        Kind: GrantSubjectKind.Machine,
+        Value: 0
+    );
     /// <summary>Creates a single <c>placements</c> row by its stable id.</summary>
     /// <param name="id">The placement row id.</param>
     public static GrantSubject Placement(string id) => new(
@@ -368,7 +383,7 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
     );
     /// <summary>Parses a subject token (<c>all</c> | <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> |
     /// <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c> | <c>region:&lt;name&gt;</c> | <c>seat:&lt;n&gt;</c> |
-    /// <c>creation:&lt;id&gt;</c> | <c>placement:&lt;id&gt;</c> | <c>adjacency:&lt;name&gt;</c>) — shared by
+    /// <c>creation:&lt;id&gt;</c> | <c>placement:&lt;id&gt;</c> | <c>adjacency:&lt;name&gt;</c> | <c>machine:&lt;name&gt;</c>) — shared by
     /// <c>Puck.World.GrantSubjectJsonConverter</c>
     /// and <c>Puck.World.WorldGrantCommandModule</c>'s <c>world.grant</c>/<c>world.revoke</c> console verbs, so a
     /// document-sourced subject (a <c>WorldCapabilityRequest.Subject</c>, a <see cref="WorldGrant.Subject"/> row)
@@ -519,6 +534,17 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
             return true;
         }
 
+        if (
+            token.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "machine:"
+        ) &&
+            (token.Length > 8)
+        ) {
+            subject = Machine(name: token[8..].ToString());
+
+            return true;
+        }
         return false;
     }
     /// <summary>Parses a bare <see cref="WorldSection"/> member name — no <c>section:</c> prefix — the shared

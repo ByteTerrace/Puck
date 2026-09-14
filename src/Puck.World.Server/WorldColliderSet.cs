@@ -54,6 +54,7 @@ internal sealed class WorldColliderSet : IContactField {
     // it" fact.
     private readonly bool[] m_holdableGrantedByOverride;
     private readonly FixedStaticContactSolver m_solver;
+
     // A running fold of the last-refreshed m_attachedColliders, so RefreshAttached can tell whether the carrier
     // actually moved without keeping a second snapshot array. AttachedRevision only advances when the fold changes —
     // never on every call — so a world with no moving attached row (the common case) never wakes a sleeping body.
@@ -71,6 +72,10 @@ internal sealed class WorldColliderSet : IContactField {
         );
     }
 
+    /// <summary>Gets a counter that advances whenever <see cref="RefreshAttached"/> finds an attached solid row at a
+    /// different resolved pose than the snapshot it replaces — never on a call that leaves every collider unchanged.
+    /// A sleeping body compares this against the value it last observed to decide whether a moving carrier woke it.</summary>
+    public ulong AttachedRevision { get; private set; }
     /// <summary>Gets the number of solid boxes in the set.</summary>
     public int BoxCount { get; private init; }
     /// <summary>Gets the number of placement-derived boxes in the set.</summary>
@@ -85,10 +90,6 @@ internal sealed class WorldColliderSet : IContactField {
     public int SolidCount => ((SphereCount + BoxCount) + PlaneCount);
     /// <summary>Gets the number of solid spheres in the set.</summary>
     public int SphereCount { get; private init; }
-    /// <summary>Gets a counter that advances whenever <see cref="RefreshAttached"/> finds an attached solid row at a
-    /// different resolved pose than the snapshot it replaces — never on a call that leaves every collider unchanged.
-    /// A sleeping body compares this against the value it last observed to decide whether a moving carrier woke it.</summary>
-    public ulong AttachedRevision { get; private set; }
 
     /// <summary>Measures the analytic collider vocabulary without materializing the collider array.</summary>
     /// <param name="definition">The live world definition.</param>
@@ -122,7 +123,10 @@ internal sealed class WorldColliderSet : IContactField {
 
             var copies = CreationStampLattice.MaterializedCopyCount(
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
-                sampledCount: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed)?.Count,
+                sampledCount: WorldPlacementStamp.SampledFixedOffsetsFor(
+                    placement: placement,
+                    worldSeed: worldSeed
+                )?.Count,
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement)
             );
 
@@ -192,6 +196,15 @@ internal sealed class WorldColliderSet : IContactField {
         ? long.MaxValue
         : (left + right)
     );
+    private static void FoldCollider(in FixedStaticCollider collider, ref Fnv1aHash hash) {
+        hash.Add(value: ((byte)collider.Kind));
+        hash.Add(value: collider.Center.X.Value);
+        hash.Add(value: collider.Center.Y.Value);
+        hash.Add(value: collider.Center.Z.Value);
+        hash.Add(value: collider.Extent.X.Value);
+        hash.Add(value: collider.Extent.Y.Value);
+        hash.Add(value: collider.Extent.Z.Value);
+    }
     // The axis-aligned bounding box of a screen slab's oriented frame: the geometry center sits one HalfDepth behind the
     // front-face Origin along the face normal, and each world-axis half-extent is the |projection| of the three oriented
     // axes. Exact for the axis-aligned screens the built-in world ships; conservative (bounding) for a rotated slab.
@@ -288,7 +301,10 @@ internal sealed class WorldColliderSet : IContactField {
             }
 
             var margin = FixedQ4816.FromDouble(value: solid.Margin);
-            var resolvedFrame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+            var resolvedFrame = WorldDefinitionRows.ResolvedFrame(
+                definition: definition,
+                placement: placement
+            );
             // The resolved yaw enters the contract through the SAME degrees-to-fixed-radians idiom every other
             // fixed-point placement path already uses (WorldPopulation, WorldPlacementAttachment), and
             // FixedQuaternion.FromAxisAngle is integer arithmetic — so no platform libm sine reaches a collider.
@@ -308,7 +324,10 @@ internal sealed class WorldColliderSet : IContactField {
                 origin: FixedVector3.FromVector3(value: resolvedFrame.Position),
                 rotation: rotation,
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
-                sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed),
+                sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(
+                    placement: placement,
+                    worldSeed: worldSeed
+                ),
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement),
                 visitor: instance => CreationStampEmitter.VisitFixedPrimitiveCopies(
                     document: creation.EngineDocument,
@@ -445,7 +464,10 @@ internal sealed class WorldColliderSet : IContactField {
                             normal: normal
                         );
                         m_attachedColliders.Add(item: attached);
-                        FoldCollider(collider: in attached, hash: ref hash);
+                        FoldCollider(
+                            collider: in attached,
+                            hash: ref hash
+                        );
                     } else if (
                         (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
                         (copy.UniformScale > FixedQ4816.Zero)
@@ -457,7 +479,10 @@ internal sealed class WorldColliderSet : IContactField {
                             radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
                         );
                         m_attachedColliders.Add(item: attached);
-                        FoldCollider(collider: in attached, hash: ref hash);
+                        FoldCollider(
+                            collider: in attached,
+                            hash: ref hash
+                        );
                     } else {
                         attached = FixedStaticCollider.AxisAlignedBox(
                             center: copy.Center,
@@ -468,7 +493,10 @@ internal sealed class WorldColliderSet : IContactField {
                             ))
                         );
                         m_attachedColliders.Add(item: attached);
-                        FoldCollider(collider: in attached, hash: ref hash);
+                        FoldCollider(
+                            collider: in attached,
+                            hash: ref hash
+                        );
                     }
                 }
             );
@@ -478,15 +506,6 @@ internal sealed class WorldColliderSet : IContactField {
             m_attachedHash = hash.Value;
             AttachedRevision++;
         }
-    }
-    private static void FoldCollider(in FixedStaticCollider collider, ref Fnv1aHash hash) {
-        hash.Add(value: ((byte)collider.Kind));
-        hash.Add(value: collider.Center.X.Value);
-        hash.Add(value: collider.Center.Y.Value);
-        hash.Add(value: collider.Center.Z.Value);
-        hash.Add(value: collider.Extent.X.Value);
-        hash.Add(value: collider.Extent.Y.Value);
-        hash.Add(value: collider.Extent.Z.Value);
     }
     /// <inheritdoc/>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
@@ -501,13 +520,6 @@ internal sealed class WorldColliderSet : IContactField {
             velocity: ref velocity,
             volumes: volumes
         );
-    /// <inheritdoc/>
-    public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
-        _ = position;
-        up = UnitY;
-
-        return true;
-    }
     /// <inheritdoc/>
     // Searches m_holdableColliders alone (never m_attachedColliders — see the field's own remarks), with a zero
     // assist cone: a hold aims at the surface it is already touching, not at a target it is trying to acquire.
@@ -541,4 +553,11 @@ internal sealed class WorldColliderSet : IContactField {
         maxDistance: maxDistance,
         origin: in origin
     );
+    /// <inheritdoc/>
+    public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
+        _ = position;
+        up = UnitY;
+
+        return true;
+    }
 }

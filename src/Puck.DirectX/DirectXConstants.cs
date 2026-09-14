@@ -17,6 +17,11 @@ public static unsafe class DirectXConstants {
     public const uint DefaultShader4ComponentMapping = 0x00001688u;
     /// <summary><c>GENERIC_ALL</c>: the shared-resource access flag passed when opening a cross-API shared handle.</summary>
     public const uint GenericAll = 0x10000000u;
+    /// <summary>The vtable slot of <c>ID3D12Device::GetAdapterLuid</c> (the three <c>IUnknown</c> methods,
+    /// <c>ID3D12Object</c>'s four, then the thirty-six <c>ID3D12Device</c> methods preceding it). Like the descriptor
+    /// handle getters it returns a struct by value through the hidden-pointer x64 COM ABI the CsWin32 wrapper omits, so
+    /// callers invoke the slot directly with the return-by-pointer signature.</summary>
+    public const int GetAdapterLuidSlot = 43;
     /// <summary>
     /// The vtable slot of <c>ID3D12DescriptorHeap::GetCPUDescriptorHandleForHeapStart</c> (after the three
     /// <c>IUnknown</c> methods, <c>ID3D12Object</c>'s five, and <c>ID3D12DeviceChild</c>'s one). The method
@@ -24,21 +29,26 @@ public static unsafe class DirectXConstants {
     /// wrapper omits — so callers invoke the slot directly with the return-by-pointer signature.
     /// </summary>
     public const int GetCpuDescriptorHandleSlot = 9;
-    /// <summary>The vtable slot of <c>ID3D12DescriptorHeap::GetGPUDescriptorHandleForHeapStart</c> (the slot after
-    /// <see cref="GetCpuDescriptorHandleSlot"/>); invoked directly for the same return-by-pointer ABI reason.</summary>
-    public const int GetGpuDescriptorHandleSlot = 10;
-    /// <summary>The vtable slot of <c>ID3D12Device::GetAdapterLuid</c> (the three <c>IUnknown</c> methods,
-    /// <c>ID3D12Object</c>'s four, then the thirty-six <c>ID3D12Device</c> methods preceding it). Like the descriptor
-    /// handle getters it returns a struct by value through the hidden-pointer x64 COM ABI the CsWin32 wrapper omits, so
-    /// callers invoke the slot directly with the return-by-pointer signature.</summary>
-    public const int GetAdapterLuidSlot = 43;
     /// <summary>The vtable slot of <c>ID3D12Device::GetDeviceRemovedReason</c> (the last <c>ID3D12Device</c> method
     /// before <c>GetCopyableFootprints</c>; six slots precede <c>GetAdapterLuid</c> at 43). The CsWin32 wrapper folds
     /// its returned HRESULT into a throwing, <c>void</c>-returning friendly overload, so callers wanting the raw
     /// removal-reason HRESULT invoke the slot directly.</summary>
     public const int GetDeviceRemovedReasonSlot = 37;
+    /// <summary>The vtable slot of <c>ID3D12DescriptorHeap::GetGPUDescriptorHandleForHeapStart</c> (the slot after
+    /// <see cref="GetCpuDescriptorHandleSlot"/>); invoked directly for the same return-by-pointer ABI reason.</summary>
+    public const int GetGpuDescriptorHandleSlot = 10;
     /// <summary><c>D3D12_TEXTURE_DATA_PITCH_ALIGNMENT</c>: the required row-pitch alignment for buffer-texture copies.</summary>
     public const uint TextureRowPitchAlignment = 256;
+
+    internal static D3D12_CLEAR_VALUE BlackClearValue(DXGI_FORMAT format) {
+        var clearValue = new D3D12_CLEAR_VALUE {
+            Format = format,
+        };
+
+        clearValue.Anonymous.Color[3] = 1f;
+
+        return clearValue;
+    }
 
     /// <summary>Rounds a packed row-byte count up to <see cref="TextureRowPitchAlignment"/> — the padded row
     /// pitch buffer-texture copies require.</summary>
@@ -86,15 +96,5 @@ public static unsafe class DirectXConstants {
             _ = ((IUnknown*)pointer)->Release();
             pointer = 0;
         }
-    }
-
-    internal static D3D12_CLEAR_VALUE BlackClearValue(DXGI_FORMAT format) {
-        var clearValue = new D3D12_CLEAR_VALUE {
-            Format = format,
-        };
-
-        clearValue.Anonymous.Color[3] = 1f;
-
-        return clearValue;
     }
 }

@@ -397,7 +397,6 @@ param location string = resourceGroup().location
 param worldMcp worldMcpType?
 param tags tagsType = {}
 param website {
-  hostNames: string[]
   officialContentBaseUrl: string
 }
 param lockKind ('CanNotDelete' | 'None' | 'ReadOnly') = (ephemeral ? 'None' : 'CanNotDelete')
@@ -1377,6 +1376,113 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
             name: 'SpaContentSecurityPolicy'
             order: 0
           }
+          // Hash-named directories are immutable; every other website path is revalidated on
+          // each request, and the release marker is never stored. KEEP IN SYNC with
+          // HashedWebsiteDirectories in build/Azure.cs, which publishes those directories first.
+          {
+            actions: [
+              {
+                name: 'RouteConfigurationOverride'
+                parameters: {
+                  cacheConfiguration: {
+                    cacheBehavior: 'OverrideAlways'
+                    cacheDuration: '365.00:00:00'
+                    isCompressionEnabled: 'Disabled'
+                    queryStringCachingBehavior: 'IgnoreQueryString'
+                  }
+                  originGroupOverride: null
+                  typeName: 'DeliveryRuleRouteConfigurationOverrideActionParameters'
+                }
+              }
+              {
+                name: 'ModifyResponseHeader'
+                parameters: {
+                  headerAction: 'Overwrite'
+                  headerName: 'Cache-Control'
+                  typeName: 'DeliveryRuleHeaderActionParameters'
+                  value: 'public, max-age=31536000, immutable'
+                }
+              }
+            ]
+            conditions: [
+              {
+                name: 'UrlPath'
+                parameters: {
+                  matchValues: ['^(assets|portal\\/assets)\\/']
+                  negateCondition: false
+                  operator: 'RegEx'
+                  transforms: ['Lowercase']
+                  typeName: 'DeliveryRuleUrlPathMatchConditionParameters'
+                }
+              }
+            ]
+            matchProcessingBehavior: 'Continue'
+            name: 'SpaCacheHashed'
+            order: 1
+          }
+          {
+            actions: [
+              {
+                name: 'RouteConfigurationOverride'
+                parameters: {
+                  originGroupOverride: null
+                  typeName: 'DeliveryRuleRouteConfigurationOverrideActionParameters'
+                }
+              }
+              {
+                name: 'ModifyResponseHeader'
+                parameters: {
+                  headerAction: 'Overwrite'
+                  headerName: 'Cache-Control'
+                  typeName: 'DeliveryRuleHeaderActionParameters'
+                  value: 'no-cache'
+                }
+              }
+            ]
+            conditions: [
+              {
+                name: 'UrlPath'
+                parameters: {
+                  matchValues: ['^(assets|portal\\/assets)\\/']
+                  negateCondition: true
+                  operator: 'RegEx'
+                  transforms: ['Lowercase']
+                  typeName: 'DeliveryRuleUrlPathMatchConditionParameters'
+                }
+              }
+            ]
+            matchProcessingBehavior: 'Continue'
+            name: 'SpaCacheMutable'
+            order: 2
+          }
+          {
+            actions: [
+              {
+                name: 'ModifyResponseHeader'
+                parameters: {
+                  headerAction: 'Overwrite'
+                  headerName: 'Cache-Control'
+                  typeName: 'DeliveryRuleHeaderActionParameters'
+                  value: 'no-store'
+                }
+              }
+            ]
+            conditions: [
+              {
+                name: 'UrlPath'
+                parameters: {
+                  matchValues: ['release.json', 'release-previous.json']
+                  negateCondition: false
+                  operator: 'Equal'
+                  transforms: ['Lowercase']
+                  typeName: 'DeliveryRuleUrlPathMatchConditionParameters'
+                }
+              }
+            ]
+            matchProcessingBehavior: 'Continue'
+            name: 'SpaCacheReleaseMarker'
+            order: 3
+          }
           {
             actions: [
               {
@@ -1403,7 +1509,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
             ]
             matchProcessingBehavior: 'Continue'
             name: 'SpaUrlRewriteAssets'
-            order: 1
+            order: 4
           }
           {
             actions: [
@@ -1449,7 +1555,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
             ]
             matchProcessingBehavior: 'Stop'
             name: 'SpaUrlRewriteGeneral'
-            order: 2
+            order: 5
           }
           {
             actions: [
@@ -1486,7 +1592,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
             ]
             matchProcessingBehavior: 'Stop'
             name: 'SpaContentEncodingOverwrite'
-            order: 3
+            order: 6
           }
         ]
       }
@@ -2528,6 +2634,44 @@ module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.4' = {
 // outright (the Blob.List clause has no OR branch) so this identity can never enumerate a
 // container. The host identities need no extra grants here — their conditioned "ByteTerrace
 // Storage User" assignments already cover every non-private/ path, including public/*.
+resource publicStorageWebsite 'Microsoft.Storage/storageAccounts@2024-01-01' existing = {
+  name: publicStorageAccounts[0].name
+}
+// Each publish overwrites mutable website files and deletes retired ones; versioning keeps
+// the superseded bytes for the soft-delete window. Age counts from a version's creation,
+// so a long-lived file loses its rollback version soon after it is replaced.
+resource publicStorageWebsite_lifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2024-01-01' = {
+  dependsOn: [publicFlexApi]
+  name: 'default'
+  parent: publicStorageWebsite
+  properties: {
+    policy: {
+      rules: [
+        {
+          definition: {
+            actions: {
+              version: {
+                delete: {
+                  daysAfterCreationGreaterThan: 13
+                }
+              }
+            }
+            filters: {
+              blobTypes: ['blockBlob']
+              prefixMatch: [
+                '${storage.staticSiteContainerName}/'
+                '${frontDoor_userAssignedIdentity.outputs.principalId}/public/puck/official/'
+              ]
+            }
+          }
+          enabled: true
+          name: 'expire-superseded-publication-versions'
+          type: 'Lifecycle'
+        }
+      ]
+    }
+  }
+}
 module publicFlexApi_publicFilesRoleAssignmentFrontDoor './avm-temp/resource-role-assignment/main.bicep' = [
   for account in publicStorageAccounts: {
     dependsOn: [publicFlexApi]
@@ -3145,7 +3289,7 @@ output configurationStoreEndpoint string = configurationStore.outputs.endpoint
 output containerRegistryEndpoint string = (containerRegistry.?outputs.loginServer ?? '')
 output functionApplicationEndpoint string = 'https://${publicFlexApi.outputs.function.defaultHostname}/api'
 output officialContentBaseUrl string = website.officialContentBaseUrl
-output websiteHostNames string[] = website.hostNames
+output websiteHostNames string[] = first(filter(resources.frontDoor.routes, route => (route.name == 'portal')))!.customDomains
 output officialContentContainerName string = frontDoor_userAssignedIdentity.outputs.principalId
 output postgreSqlEndpoint string = (postgreSql.?outputs.fqdn ?? '')
 // azure.yml's Azure/login step consumes these two: AZURE_CLIENT_ID from clientId, plus the repo's

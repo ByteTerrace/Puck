@@ -17,26 +17,6 @@ internal struct ApuEnvelopeUnit {
     /// <summary>The 64&#160;Hz countdown to the next volume step.</summary>
     public int Timer;
 
-    /// <summary>Reads back NRx2: initial volume, direction, and period (all bits readable).</summary>
-    /// <returns>The register image.</returns>
-    public readonly byte Read() => ((byte)((Initial << 4) | (Increase
-        ? 0x8
-        : 0) | Period));
-    /// <summary>Applies an NRx2 write.</summary>
-    /// <param name="value">The written byte.</param>
-    /// <returns>Whether the channel's DAC is powered (any of the upper five bits set).</returns>
-    public bool Write(byte value) {
-        Initial = (value >> 4) & 0xF;
-        Increase = ((value & 0x8) != 0);
-        Period = value & 0x7;
-
-        return ((value & 0xF8) != 0);
-    }
-    /// <summary>Latches the reload volume and period on a channel trigger.</summary>
-    public void Trigger() {
-        Volume = Initial;
-        Timer = Period;
-    }
     /// <summary>Clocks the envelope (64&#160;Hz), stepping the volume one unit toward its rail when the period expires.</summary>
     public void Clock() {
         if (Period == 0) {
@@ -58,5 +38,25 @@ internal struct ApuEnvelopeUnit {
                 --Volume;
             }
         }
+    }
+    /// <summary>Reads back NRx2: initial volume, direction, and period (all bits readable).</summary>
+    /// <returns>The register image.</returns>
+    public readonly byte Read() => ((byte)((Initial << 4) | (Increase
+        ? 0x8
+        : 0) | Period));
+    /// <summary>Latches the reload volume and period on a channel trigger.</summary>
+    public void Trigger() {
+        Volume = Initial;
+        Timer = Period;
+    }
+    /// <summary>Applies an NRx2 write.</summary>
+    /// <param name="value">The written byte.</param>
+    /// <returns>Whether the channel's DAC is powered (any of the upper five bits set).</returns>
+    public bool Write(byte value) {
+        Initial = (value >> 4) & 0xF;
+        Increase = ((value & 0x8) != 0);
+        Period = value & 0x7;
+
+        return ((value & 0xF8) != 0);
     }
 }

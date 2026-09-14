@@ -81,6 +81,9 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     /// <summary>Whether this offscreen camera skips soft shadows. Defaults to false; low-resolution diegetic displays
     /// may opt in independently of the host world's lighting quality.</summary>
     public bool DisableSoftShadows { get; set; }
+    /// <summary>Ends a successful <see cref="TryBeginExportWrite"/> reservation after submission, reporting whether
+    /// the export queue reached a complete frame.</summary>
+    public Action<bool>? EndExportWrite { get; set; }
     /// <summary>The output-image factory forwarded to <see cref="SdfWorldEngineOptions.CreateOutputImage"/> —
     /// <see langword="null"/> (the default) builds a plain same-device image; a factory returning an
     /// <see cref="IGpuExportableStorageImage"/> puts the engine in export mode (see <see cref="ExportSharedHandle"/>).
@@ -91,7 +94,10 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     public Func<IGpuDeviceContext, IGpuStorageImage>? ExportFactory {
         get => m_exportFactory;
         set {
-            if (ReferenceEquals(objA: m_exportFactory, objB: value)) {
+            if (ReferenceEquals(
+                objA: m_exportFactory,
+                objB: value
+            )) {
                 return;
             }
 
@@ -111,20 +117,13 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
             }
         }
     }
-    /// <summary>Optional cross-device write reservation used by an exported-image consumer. When present,
-    /// <see cref="Resolve"/> keeps the last completed image instead of overwriting it while a consumer holds a read
-    /// lease.</summary>
-    public Func<bool>? TryBeginExportWrite { get; set; }
-    /// <summary>Ends a successful <see cref="TryBeginExportWrite"/> reservation after submission, reporting whether
-    /// the export queue reached a complete frame.</summary>
-    public Action<bool>? EndExportWrite { get; set; }
-    /// <summary>Gets the live engine's exported shared handle (see <see cref="SdfWorldEngine.ExportSharedHandle"/>),
-    /// or 0 while <see cref="ExportFactory"/> is unset or no engine has been built yet.</summary>
-    public nint ExportSharedHandle => (m_engine?.ExportSharedHandle ?? 0);
     /// <summary>Gets an identity that changes every time the underlying engine (and so its exported image) is
     /// rebuilt — a fresh <see cref="SdfWorldEngine"/> instance on every <see cref="ExportFactory"/> change, device
     /// loss, or dimension recreation. <see langword="null"/> while no engine exists.</summary>
     public object? ExportGeneration => m_engine;
+    /// <summary>Gets the live engine's exported shared handle (see <see cref="SdfWorldEngine.ExportSharedHandle"/>),
+    /// or 0 while <see cref="ExportFactory"/> is unset or no engine has been built yet.</summary>
+    public nint ExportSharedHandle => (m_engine?.ExportSharedHandle ?? 0);
     /// <inheritdoc/>
     /// <remarks>Always <see langword="true"/> — a camera resolve is a real offscreen render pass.</remarks>
     public bool IsBudgeted => true;
@@ -136,6 +135,10 @@ public sealed class SdfCameraView : IViewContent, IDisposable {
     /// <remarks>Always zero — a camera FILMS an already-lit world; it is not itself a light source (matches
     /// <c>CameraFeedPool</c>'s camera feeds, which reported no light of their own).</remarks>
     public Vector3 RoomGlow => Vector3.Zero;
+    /// <summary>Optional cross-device write reservation used by an exported-image consumer. When present,
+    /// <see cref="Resolve"/> keeps the last completed image instead of overwriting it while a consumer holds a read
+    /// lease.</summary>
+    public Func<bool>? TryBeginExportWrite { get; set; }
 
     private void EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfProgram program) {
         if (m_engine is not null) {

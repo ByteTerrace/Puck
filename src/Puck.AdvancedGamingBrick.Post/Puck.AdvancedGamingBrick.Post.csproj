@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <PuckLicenseKind>OpenSource</PuckLicenseKind>
         <AssemblyName>Puck.AdvancedGamingBrick.Post</AssemblyName>
         <OutputType>Exe</OutputType>
         <PuckKind>Validation</PuckKind>

@@ -91,6 +91,9 @@ public readonly record struct EntitySnapshot(
 /// <paramref name="FieldsFull"/> is set. Empty for a world without a <c>fields</c> section.</param>
 /// <param name="FieldsFull"><see langword="true"/> when <paramref name="FieldCells"/> carries every cell (a primer or a
 /// resync), so a mirror replaces rather than patches.</param>
+/// <param name="EngineTick">The engine-tick coordinate <see cref="Tick"/> completed at — what a presentation-side
+/// reader (a HUD binding, a gait driver) must pass to evaluate a <c>StateAdvance</c> row's live value; never derived
+/// from <see cref="Tick"/> at a simulation rate.</param>
 /// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
 /// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> inside <c>WorldServer.Step</c>, in-process,
 /// since machine stepping runs server-side and needs no wire lane to a presentation-side consumer.</remarks>
@@ -101,7 +104,8 @@ public readonly record struct WorldSnapshot(
     ReadOnlyMemory<EntitySnapshot> Entries,
     string Authority = "",
     ReadOnlyMemory<FieldCellDelta> FieldCells = default,
-    bool FieldsFull = false
+    bool FieldsFull = false,
+    ulong EngineTick = 0UL
 );
 /// <summary>One field-lattice cell write carried on a snapshot.</summary>
 /// <param name="Cell">The cell index (row-major: z, then layer, then x).</param>

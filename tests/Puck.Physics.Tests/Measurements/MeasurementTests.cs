@@ -33,7 +33,10 @@ public sealed class MeasurementTests {
                     fractionBitCount: FixedSoftConstraint.DefaultFractionBitCount
                 );
 
-                Assert.Equal(expected: (1L << FixedSoftConstraint.DefaultFractionBitCount), actual: (softness.MassScaleRaw + softness.ImpulseScaleRaw));
+                Assert.Equal(
+                    expected: (1L << FixedSoftConstraint.DefaultFractionBitCount),
+                    actual: (softness.MassScaleRaw + softness.ImpulseScaleRaw)
+                );
                 MeasurementReport.Write(line: string.Join(
                     separator: " | ",
                     values: [
@@ -72,7 +75,10 @@ public sealed class MeasurementTests {
             fractionBitCount: FixedSoftConstraint.DefaultFractionBitCount
         );
 
-        Assert.Equal(expected: (1L << FixedSoftConstraint.DefaultFractionBitCount), actual: (underBoundary.MassScaleRaw + underBoundary.ImpulseScaleRaw));
+        Assert.Equal(
+            expected: (1L << FixedSoftConstraint.DefaultFractionBitCount),
+            actual: (underBoundary.MassScaleRaw + underBoundary.ImpulseScaleRaw)
+        );
     }
     [Fact]
     public void IterationsToConvergeAreRecordedAcrossEveryRateAndSubstepCount() {
@@ -84,14 +90,24 @@ public sealed class MeasurementTests {
                 foreach (var warmStart in new[] { true, false, }) {
                     Measure(
                         name: "corner",
-                        world: SpikeFixtures.Corner(options: SpikeFixtures.CornerOptions(rateHz: rate, substepCount: substeps, solveIterations: 16, warmStart: warmStart)),
+                        world: SpikeFixtures.Corner(options: SpikeFixtures.CornerOptions(
+                            rateHz: rate,
+                            substepCount: substeps,
+                            solveIterations: 16,
+                            warmStart: warmStart
+                        )),
                         rate: rate,
                         substeps: substeps,
                         warmStart: warmStart
                     );
                     Measure(
                         name: "boxInCorner",
-                        world: SpikeFixtures.BoxInCorner(options: SpikeFixtures.BoxInCornerOptions(rateHz: rate, substepCount: substeps, solveIterations: 16, warmStart: warmStart)),
+                        world: SpikeFixtures.BoxInCorner(options: SpikeFixtures.BoxInCornerOptions(
+                            rateHz: rate,
+                            substepCount: substeps,
+                            solveIterations: 16,
+                            warmStart: warmStart
+                        )),
                         rate: rate,
                         substeps: substeps,
                         warmStart: warmStart
@@ -106,7 +122,11 @@ public sealed class MeasurementTests {
         MeasurementReport.Write(line: "mode | phase | samplesPerStep | candidates | endpointSeparation | witnessSeparation");
 
         foreach (var mode in new[] { CapsuleWitnessMode.SegmentScan, CapsuleWitnessMode.EndpointsOnly, }) {
-            var world = SpikeFixtures.CapsuleWaist(options: new() { RateHz = 60, SubstepCount = 4, }, mode: mode, surface: out var surface);
+            var world = SpikeFixtures.CapsuleWaist(
+                options: new() { RateHz = 60, SubstepCount = 4, },
+                mode: mode,
+                surface: out var surface
+            );
             var approachSamples = 0;
             var approachCandidates = 0;
 
@@ -116,7 +136,10 @@ public sealed class MeasurementTests {
             MeasurementReport.Write(line: $"{mode} | approach | {approachSamples} | {approachCandidates} | {MeasurementReport.Format(value: surface.LastEndpointSeparation)} | {MeasurementReport.Format(value: surface.LastWitnessSeparation)}");
             world.Advance(count: 119);
             MeasurementReport.Write(line: $"{mode} | settled | {world.LastStepSampleCount} | {world.LastStepCandidateCount} | {MeasurementReport.Format(value: surface.LastEndpointSeparation)} | {MeasurementReport.Format(value: surface.LastWitnessSeparation)}");
-            Assert.Equal(expected: 0, actual: world.Solver.RefusalCount);
+            Assert.Equal(
+                expected: 0,
+                actual: world.Solver.RefusalCount
+            );
         }
     }
     [Fact]
@@ -124,32 +147,77 @@ public sealed class MeasurementTests {
         MeasurementReport.Section(title: "Observed solver quantity ranges (raw carriers)");
         MeasurementReport.Write(line: "fixture | minimumNormalMassRaw | maximumImpulseRaw | inverseMassRaw | inverseInertiaXXRaw");
 
-        RecordRanges(name: "corner", world: SpikeFixtures.Corner(options: SpikeFixtures.CornerOptions(rateHz: 60, substepCount: 4)), steps: 240);
-        RecordRanges(name: "rotatingBox", world: SpikeFixtures.RotatingBox(options: new() { RateHz = 60, SubstepCount = 4, }), steps: 240);
-        RecordRanges(name: "boxInCorner", world: SpikeFixtures.BoxInCorner(options: SpikeFixtures.BoxInCornerOptions(rateHz: 60, substepCount: 4)), steps: 240);
+        RecordRanges(
+            name: "corner",
+            world: SpikeFixtures.Corner(options: SpikeFixtures.CornerOptions(
+                rateHz: 60,
+                substepCount: 4
+            )),
+            steps: 240
+        );
+        RecordRanges(
+            name: "rotatingBox",
+            world: SpikeFixtures.RotatingBox(options: new() { RateHz = 60, SubstepCount = 4, }),
+            steps: 240
+        );
+        RecordRanges(
+            name: "boxInCorner",
+            world: SpikeFixtures.BoxInCorner(options: SpikeFixtures.BoxInCornerOptions(
+                rateHz: 60,
+                substepCount: 4
+            )),
+            steps: 240
+        );
     }
     [Fact]
     public void SabotageOutcomesAreRecorded() {
         MeasurementReport.Section(title: "Sabotage outcomes (the observation each red run leaves)");
         MeasurementReport.Write(line: "law | mechanism | intended | sabotaged");
 
-        var corner = SpikeFixtures.Corner(options: SpikeFixtures.CornerOptions(rateHz: 60, substepCount: 4));
-        var aliased = SpikeFixtures.Corner(options: SpikeFixtures.CornerOptions(rateHz: 60, substepCount: 4, compositeIdentity: false));
+        var corner = SpikeFixtures.Corner(options: SpikeFixtures.CornerOptions(
+            rateHz: 60,
+            substepCount: 4
+        ));
+        var aliased = SpikeFixtures.Corner(options: SpikeFixtures.CornerOptions(
+            rateHz: 60,
+            substepCount: 4,
+            compositeIdentity: false
+        ));
 
         corner.Advance(count: 240);
         aliased.Advance(count: 240);
         MeasurementReport.Write(line: $"corner non-aliasing | composite identity | slots={corner.Slots.ActiveCount} y={MeasurementReport.Format(value: corner.Pose.Center.Y)} | slots={aliased.Slots.ActiveCount} y={MeasurementReport.Format(value: aliased.Pose.Center.Y)}");
 
-        var scanned = SpikeFixtures.CapsuleWaist(options: new() { RateHz = 60, SubstepCount = 4, }, mode: CapsuleWitnessMode.SegmentScan, surface: out _);
-        var endpoints = SpikeFixtures.CapsuleWaist(options: new() { RateHz = 60, SubstepCount = 4, }, mode: CapsuleWitnessMode.EndpointsOnly, surface: out _);
+        var scanned = SpikeFixtures.CapsuleWaist(
+            options: new() { RateHz = 60, SubstepCount = 4, },
+            mode: CapsuleWitnessMode.SegmentScan,
+            surface: out _
+        );
+        var endpoints = SpikeFixtures.CapsuleWaist(
+            options: new() { RateHz = 60, SubstepCount = 4, },
+            mode: CapsuleWitnessMode.EndpointsOnly,
+            surface: out _
+        );
 
         scanned.Advance(count: 120);
         endpoints.Advance(count: 120);
         MeasurementReport.Write(line: $"capsule waist | witness search | y={MeasurementReport.Format(value: scanned.Pose.Center.Y)} | y={MeasurementReport.Format(value: endpoints.Pose.Center.Y)}");
 
-        var caught = SpikeFixtures.HighSpeedApproach(options: new() { RateHz = 60, SubstepCount = 1, }, height: 1d, downwardSpeed: 400d);
-        var tunnelled = SpikeFixtures.HighSpeedApproach(options: new() { Activation = FixedSpeculativeActivation.CurrentOnly, RateHz = 60, SubstepCount = 1, }, height: 1d, downwardSpeed: 400d);
-        var nearest = SpikeFixtures.HighSpeedApproach(options: new() { Activation = FixedSpeculativeActivation.NearestRounded, RateHz = 60, SubstepCount = 1, }, height: 1d, downwardSpeed: 400d);
+        var caught = SpikeFixtures.HighSpeedApproach(
+            options: new() { RateHz = 60, SubstepCount = 1, },
+            height: 1d,
+            downwardSpeed: 400d
+        );
+        var tunnelled = SpikeFixtures.HighSpeedApproach(
+            options: new() { Activation = FixedSpeculativeActivation.CurrentOnly, RateHz = 60, SubstepCount = 1, },
+            height: 1d,
+            downwardSpeed: 400d
+        );
+        var nearest = SpikeFixtures.HighSpeedApproach(
+            options: new() { Activation = FixedSpeculativeActivation.NearestRounded, RateHz = 60, SubstepCount = 1, },
+            height: 1d,
+            downwardSpeed: 400d
+        );
 
         caught.Advance();
         tunnelled.Advance();
@@ -171,15 +239,28 @@ public sealed class MeasurementTests {
         var digests = new string[keys.Length];
 
         for (var index = 0; (index < keys.Length); ++index) {
-            var world = SpikeFixtures.BoxInCorner(options: SpikeFixtures.BoxInCornerOptions(rateHz: 60, substepCount: 4, canonicalOrder: canonicalOrder));
+            var world = SpikeFixtures.BoxInCorner(options: SpikeFixtures.BoxInCornerOptions(
+                rateHz: 60,
+                substepCount: 4,
+                canonicalOrder: canonicalOrder
+            ));
             var key = keys[index];
 
-            world.Permutation = candidates => Reorder(key: key, source: candidates);
+            world.Permutation = candidates => Reorder(
+                key: key,
+                source: candidates
+            );
             world.Advance(count: 240);
-            digests[index] = world.Digest.ToString(format: "X16", provider: CultureInfo.InvariantCulture);
+            digests[index] = world.Digest.ToString(
+                format: "X16",
+                provider: CultureInfo.InvariantCulture
+            );
         }
 
-        return string.Join(separator: ",", value: digests);
+        return string.Join(
+            separator: ",",
+            value: digests
+        );
     }
     private static List<FixedContactCandidate> Reorder(List<FixedContactCandidate> source, int key) {
         var pool = new List<FixedContactCandidate>(collection: source);
@@ -203,7 +284,10 @@ public sealed class MeasurementTests {
         for (var step = 0; (step < steps); ++step) {
             world.Advance();
 
-            if ((world.Solver.LastStepMinimumNormalMassRaw > 0L) && (world.Solver.LastStepMinimumNormalMassRaw < minimumNormalMass)) {
+            if (
+                (world.Solver.LastStepMinimumNormalMassRaw > 0L) &&
+                (world.Solver.LastStepMinimumNormalMassRaw < minimumNormalMass)
+            ) {
                 minimumNormalMass = world.Solver.LastStepMinimumNormalMassRaw;
             }
 
@@ -212,24 +296,39 @@ public sealed class MeasurementTests {
             }
         }
 
-        Assert.Equal(expected: 0, actual: world.Solver.RefusalCount);
+        Assert.Equal(
+            expected: 0,
+            actual: world.Solver.RefusalCount
+        );
         MeasurementReport.Write(line: $"{name} | {minimumNormalMass} | {maximumImpulse} | {world.Body.InverseMassRaw} | {world.Body.InverseInertiaXX}");
     }
     private static void Measure(string name, SpikeWorld world, int rate, int substeps, bool warmStart) {
         world.Advance(count: (4 * rate));
-        Assert.Equal(expected: 0, actual: world.Solver.RefusalCount);
+        Assert.Equal(
+            expected: 0,
+            actual: world.Solver.RefusalCount
+        );
         MeasurementReport.Write(line: $"{name} | {rate} | {substeps} | {warmStart} | {world.Solver.IterationsToConverge(toleranceRaw: 64L)} | {world.Solver.IterationsToConverge(toleranceRaw: 512L)} | {Profile(solver: world.Solver)}");
     }
     private static string Profile(FixedRigidSolver solver) {
         var profile = solver.IterationProfile;
-        var parts = new string[Math.Min(val1: 6, val2: profile.Length)];
+        var parts = new string[Math.Min(
+            val1: 6,
+            val2: profile.Length
+        )];
 
         for (var index = 0; (index < parts.Length); ++index) {
             parts[index] = profile[index].ToString(provider: CultureInfo.InvariantCulture);
         }
 
-        return string.Join(separator: ",", value: parts);
+        return string.Join(
+            separator: ",",
+            value: parts
+        );
     }
     private static string Scaled(long raw) =>
-        (((double)raw) / (1L << FixedSoftConstraint.DefaultFractionBitCount)).ToString(format: "0.######", provider: CultureInfo.InvariantCulture);
+        (((double)raw) / (1L << FixedSoftConstraint.DefaultFractionBitCount)).ToString(
+            format: "0.######",
+            provider: CultureInfo.InvariantCulture
+        );
 }

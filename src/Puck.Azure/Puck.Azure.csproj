@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.Azure</AssemblyName>
+        <!-- Data Protection's key-ring XML serialization and the Azure SDK credential chain are both
+             reflection-driven, so the trim/AOT analyzers cannot see through either. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Leaf contracts and data</PuckLayer>
+        <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+        <RootNamespace>Puck.Azure</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Data Protection, the health-check contract, and the options/DI abstractions all ship in the
+             ASP.NET Core shared framework; only the Azure-backed extensions come from packages. -->
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <!-- The single owner of the key-ring package versions: every host reaches them through this
+             project, so pinning them anywhere else only splits the graph. Below 1.5.2/1.6.2 these drag
+             in System.Security.Cryptography.Xml 8.0.2, which restore refuses (NU1903). -->
+        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="[1.*,2.0)" />
+        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="[1.*,2.0)" />
+        <PackageReference Include="Azure.Identity" Version="[1.*,2.0)" />
+        <PackageReference Include="Azure.Storage.Blobs" Version="[12.*,13.0)" />
+        <PackageReference Include="Microsoft.Extensions.Azure" Version="[1.*,2.0)" />
+    </ItemGroup>
+</Project>

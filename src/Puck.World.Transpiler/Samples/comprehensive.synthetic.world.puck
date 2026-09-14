@@ -1,0 +1,177 @@
+﻿schema: "puck.world.definition.v1"
+basis: "worlds/base.puck"
+documentId: "comprehensive-synthetic-v1"
+
+// Compile-time constants
+let defaultGravity = [0, -9.81, 0]
+let tickRate = 0.25s
+let targetFps = 60hz
+let turnAngle = 45deg
+let zeroAngle = 0rad
+let feltColor = #1b4d3e
+let accentColor = #ffaa00ff
+let doubleFps = 60 * 2
+
+// Module imports
+import "extensions/rules.world.puck" as rules
+import "modules/arcade.world.json"
+
+// Facet exports
+export read state, scores, tableStatus
+export action step, reset, deal
+export binding input, pointer, pad
+
+// Parametric templates
+template seatRigPreset(rigName, angle = 0rad, dist = 2.5m) {
+    seatRig rigName {
+        version: "puck.camera.program.v1"
+        operations [
+            orbit(distance: dist, pitch: angle, yaw: 0)
+            fieldOfView(fieldOfViewRadians: 0.001)
+        ]
+    }
+}
+
+// Host settings block
+host {
+    authority: null
+    backend: "auto"
+    exitAfterSeconds: 0
+    fullscreen: false
+    genlock: null
+    height: 720
+    journalDepth: 2000
+    listen: null
+    presentMode: "Immediate"
+    presentation: "Windowed"
+    rayQuery: true
+    surfaceFormat: "r8g8b8a8"
+    targetHertz: targetFps
+    timing: false
+    width: 1280
+}
+
+// Views section
+views {
+    layout "arena" {
+        seatCount: 2
+        slots [
+            {
+                camera: null
+                height: 1
+                pipeline: "moth-pipeline"
+                width: 1
+                x: 0
+                y: 0
+            }
+        ]
+        transitionRenderScale: 1
+        transitionSeconds: tickRate
+    }
+
+    seatControl {
+        maxPitch: 0.01
+        minPitch: -0.01
+        yawReference: "World"
+    }
+
+    seatRigPreset("pilot", turnAngle, 2.5m)
+
+    pipeline "moth-pipeline" {
+        camera: null
+        source: "../pipelines/moth.glsl"
+        timeScale: 1
+    }
+}
+
+// Addon with auto-hashing
+addon "rules-engine" {
+    source: "addons/rules.wasm"
+    hash: "auto"
+}
+
+// State catalog with world cells
+state {
+    world [
+        {
+            name: "tableState"
+            kind: "Int"
+            capacity: 1
+            cells [
+                {
+                    key: "feltColor"
+                    value: feltColor
+                }
+                {
+                    key: "activeRound"
+                    value: 1
+                }
+            ]
+        }
+    ]
+}
+
+// Creation document: `shape <Type> "<name>" { }` rows, with the canonicalizer's own defaults elided.
+creation {
+    schema: "puck.creation.v1"
+
+    shape Box "felt" {
+        material: 0
+        position [0, -1, 0]
+        scale [24, 0.5, 24]
+    }
+
+    shape Cylinder "post" {
+        material: 1
+        position [0, 0, 0]
+        smooth: 0.25
+    }
+}
+
+// Placements: `placement "<id>" { }` rows, with `prototype:` and the bare `solid` flag.
+placements {
+    policy { collision: "Ignore" }
+
+    placement "table" {
+        prototype: tableTop
+        position [0, 0, 0]
+        yawDegrees: 45deg
+        solid
+    }
+
+    placement "stool" {
+        prototype: seat
+        parent: table
+        position [2, 0, 0]
+        scale: 2
+    }
+}
+
+// Rules: an infix `when` gate, effect statements, and a decision with one scored option.
+rule "advance-round" {
+    when tableState[activeRound] < 8 and not tableState[locked] == 1
+    mode: Edge
+    bind seat : Int = $each
+    tableState[activeRound] += 1
+    schedule tableState[settle] in 250ms
+    transaction {
+        tableState[busy] = 1
+        tableState[status] = "dealing"
+    } onFailure {
+        tableState[busy] = 0
+    }
+}
+
+rule "choose-seat" {
+    forEach: "seat"
+    decision {
+        periodSeconds: 1s
+        commitmentSeconds: 3s
+        seed: 11
+        option "hold" {
+            when tableState[activeRound] >= 1
+            score: tableState[activeRound] * 2
+            tableState[choice] = 1
+        }
+    }
+}

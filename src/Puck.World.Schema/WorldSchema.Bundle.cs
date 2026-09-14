@@ -27,15 +27,16 @@ public static partial class WorldSchema {
                 name: out var commonName,
                 obj: obj
             )) {
-                return ((obj.Count == 1) && !nullableDefs.GetValueOrDefault(key: commonName)
+                return (((obj.Count == 1) && !nullableDefs.GetValueOrDefault(key: commonName))
                     ? new JsonObject { ["$ref"] = $"#/$defs/{commonName}" }
                     : RewrapReferenceSiteSiblings(
-                        obj: obj,
-                        title: commonName,
-                        defs: defs,
                         defContentByTitle: defContentByTitle,
-                        nullableDefs: nullableDefs
-                    ));
+                        defs: defs,
+                        nullableDefs: nullableDefs,
+                        obj: obj,
+                        title: commonName
+                    )
+                );
             }
 
             // A common.schema.json def can itself reference ANOTHER common def by the SAME bare "#/$defs/X" form
@@ -47,18 +48,22 @@ public static partial class WorldSchema {
                 name: out var bareTarget,
                 obj: obj
             )) {
-                return ((obj.Count == 1) && !nullableDefs.GetValueOrDefault(key: bareTarget)
+                return (((obj.Count == 1) && !nullableDefs.GetValueOrDefault(key: bareTarget))
                     ? obj.DeepClone()!
                     : RewrapReferenceSiteSiblings(
-                        obj: obj,
-                        title: bareTarget,
-                        defs: defs,
                         defContentByTitle: defContentByTitle,
-                        nullableDefs: nullableDefs
-                    ));
+                        defs: defs,
+                        nullableDefs: nullableDefs,
+                        obj: obj,
+                        title: bareTarget
+                    )
+                );
             }
 
-            var nullable = AcceptsBundleNull(node: obj, referenceNullability: name => nullableDefs.GetValueOrDefault(key: name));
+            var nullable = AcceptsBundleNull(
+                node: obj,
+                referenceNullability: name => nullableDefs.GetValueOrDefault(key: name)
+            );
             var newObj = new JsonObject();
 
             foreach (var (key, value) in obj) {
@@ -80,20 +85,21 @@ public static partial class WorldSchema {
             // scalar type reused at many sites without a $ref would mint one numbered duplicate per site
             // (BindableColor, BindableColor1, BindableColor2, ...) instead of the one shared alias the class
             // doc's OUTCOME calls for.
-            return (
+            return ((
                 hoistSelf &&
                 (newObj["title"] is JsonValue titleValue) &&
                 titleValue.TryGetValue<string>(value: out var title)
             )
                 ? HoistOrReferenceTitledNode(
-                    obj: newObj,
-                    title: title,
-                    nullable: nullable,
-                    defs: defs,
                     defContentByTitle: defContentByTitle,
-                    nullableDefs: nullableDefs
+                    defs: defs,
+                    nullable: nullable,
+                    nullableDefs: nullableDefs,
+                    obj: newObj,
+                    title: title
                 )
-                : newObj;
+                : newObj
+            );
         }
 
         if (node is JsonArray arr) {
@@ -122,11 +128,17 @@ public static partial class WorldSchema {
             return null;
         }
 
-        if ((key is "properties" or "patternProperties" or "$defs" or "definitions" or "dependentSchemas") && (value is JsonObject map)) {
+        if (
+            (key is "properties" or "patternProperties" or "$defs" or "definitions" or "dependentSchemas") &&
+            (value is JsonObject map)
+        ) {
             var result = new JsonObject();
 
             foreach (var (name, schema) in map) {
-                result[name] = ((schema is null) ? null : rewrite(arg: schema));
+                result[name] = ((schema is null)
+                    ? null
+                    : rewrite(arg: schema)
+                );
             }
 
             return result;
@@ -144,8 +156,8 @@ public static partial class WorldSchema {
     private static JsonNode HoistOrReferenceTitledNode(JsonObject obj, string title, bool nullable, JsonObject defs, Dictionary<string, string> defContentByTitle, Dictionary<string, bool> nullableDefs) {
         var description = obj["description"]?.DeepClone();
         var hasDefault = obj.TryGetPropertyValue(
-            propertyName: "default",
-            jsonNode: out var defaultValue
+            jsonNode: out var defaultValue,
+            propertyName: "default"
         );
         var body = ((JsonObject)obj.DeepClone()!);
 
@@ -160,8 +172,15 @@ public static partial class WorldSchema {
         var baseTitle = title;
         var variant = 2;
 
-        while (defContentByTitle.TryGetValue(key: title, value: out var candidate)
-            ? !string.Equals(a: candidate, b: canonical, comparisonType: StringComparison.Ordinal)
+        while (defContentByTitle.TryGetValue(
+            key: title,
+            value: out var candidate
+        )
+            ? !string.Equals(
+                a: candidate,
+                b: canonical,
+                comparisonType: StringComparison.Ordinal
+            )
             : ((title != baseTitle) && nullableDefs.ContainsKey(key: title))) {
             title = $"{baseTitle}Variant{variant++}";
         }
@@ -174,8 +193,8 @@ public static partial class WorldSchema {
         }
 
         var reference = BuildReferenceSite(
-            title: title,
-            nullable: nullable
+            nullable: nullable,
+            title: title
         );
 
         if (description is not null) {
@@ -230,39 +249,91 @@ public static partial class WorldSchema {
     // type, literal equality, references, and applicators can. A nullable type array alone is insufficient:
     // an enum or an anyOf of object-only arms can still reject null.
     private static bool AcceptsBundleNull(JsonNode node, Func<string, bool> referenceNullability) {
-        if (node is JsonValue boolean && boolean.TryGetValue<bool>(value: out var allowed)) {
+        if (
+            (node is JsonValue boolean) &&
+            boolean.TryGetValue<bool>(value: out var allowed)
+        ) {
             return allowed;
         }
         if (node is not JsonObject obj) {
             return false;
         }
-        if ((IsCommonFileRef(obj: obj, name: out var target) || IsLocalDefsRef(obj: obj, name: out target)) && !referenceNullability(arg: target)) {
+        if (
+            (IsCommonFileRef(
+            name: out var target,
+            obj: obj
+        ) || IsLocalDefsRef(
+            name: out target,
+            obj: obj
+        )) &&
+            !referenceNullability(arg: target)
+        ) {
             return false;
         }
-        if (obj["type"] is { } type && !IsNullToken(value: type) && !((type is JsonArray types) && types.Any(predicate: IsNullToken))) {
+        if (
+            (obj["type"] is { } type) &&
+            !IsNullToken(value: type) &&
+            !((type is JsonArray types) && types.Any(predicate: IsNullToken))
+        ) {
             return false;
         }
-        if ((obj["enum"] is JsonArray values) && !values.Any(predicate: value => value is null)) {
+        if (
+            (obj["enum"] is JsonArray values) &&
+            !values.Any(predicate: value => (value is null))
+        ) {
             return false;
         }
-        if (obj.TryGetPropertyValue(propertyName: "const", jsonNode: out var constant) && (constant is not null)) {
+        if (
+            obj.TryGetPropertyValue(
+            jsonNode: out var constant,
+            propertyName: "const"
+        ) &&
+            (constant is not null)
+        ) {
             return false;
         }
         foreach (var key in new[] { "allOf", "anyOf", "oneOf" }) {
             if (obj[key] is not JsonArray arms) {
                 continue;
             }
-            var matches = arms.Count(predicate: arm => (arm is not null) && AcceptsBundleNull(node: arm, referenceNullability: referenceNullability));
-            if ((key == "allOf" && matches != arms.Count) || (key == "anyOf" && matches == 0) || (key == "oneOf" && matches != 1)) {
+            var matches = arms.Count(predicate: arm => ((arm is not null) && AcceptsBundleNull(
+                node: arm,
+                referenceNullability: referenceNullability
+            )));
+
+            if (
+                ((key == "allOf") && (matches != arms.Count)) ||
+                ((key == "anyOf") && (matches == 0)) ||
+                ((key == "oneOf") && (matches != 1))
+            ) {
                 return false;
             }
         }
-        if (obj["not"] is { } negated && AcceptsBundleNull(node: negated, referenceNullability: referenceNullability)) {
+        if (
+            (obj["not"] is { } negated) &&
+            AcceptsBundleNull(
+            node: negated,
+            referenceNullability: referenceNullability
+        )
+        ) {
             return false;
         }
         if (obj["if"] is { } condition) {
-            var branch = AcceptsBundleNull(node: condition, referenceNullability: referenceNullability) ? "then" : "else";
-            if (obj[branch] is { } constraint && !AcceptsBundleNull(node: constraint, referenceNullability: referenceNullability)) {
+            var branch = (AcceptsBundleNull(
+                node: condition,
+                referenceNullability: referenceNullability
+            )
+                ? "then"
+                : "else"
+            );
+
+            if (
+                (obj[branch] is { } constraint) &&
+                !AcceptsBundleNull(
+                node: constraint,
+                referenceNullability: referenceNullability
+            )
+            ) {
                 return false;
             }
         }
@@ -335,11 +406,19 @@ public static partial class WorldSchema {
 
         // Removing a null arm from a union without an explicit type can leave a body that still accepts null
         // (e.g. oneOf: [null, {}]). Every stored target is non-null; the reference site alone owns its admission.
-        if (AcceptsBundleNull(node: obj, referenceNullability: static _ => false)) {
+        if (AcceptsBundleNull(
+            node: obj,
+            referenceNullability: static _ => false
+        )) {
             var nullType = new JsonObject { ["type"] = "null" };
-            obj["not"] = (obj["not"] is { } negated)
-                ? new JsonObject { ["anyOf"] = new JsonArray(negated.DeepClone(), nullType) }
-                : nullType;
+
+            obj["not"] = ((obj["not"] is { } negated)
+                ? new JsonObject { ["anyOf"] = new JsonArray(
+                    negated.DeepClone(),
+                    nullType
+                ) }
+                : nullType
+            );
         }
     }
     // Compare schema constraints, excluding annotations. Top-level null admission already lives at each site;
@@ -370,7 +449,11 @@ public static partial class WorldSchema {
                     continue;
                 }
 
-                result[key] = RewriteSchemaKeyword(key: key, value: value, rewrite: CanonicalForComparison);
+                result[key] = RewriteSchemaKeyword(
+                    key: key,
+                    rewrite: CanonicalForComparison,
+                    value: value
+                );
             }
 
             return result;
@@ -437,7 +520,10 @@ public static partial class WorldSchema {
         // target with sibling keywords. Both the original target and those siblings must admit null.
         var rewritten = BuildReferenceSite(
             title: title,
-            nullable: AcceptsBundleNull(node: obj, referenceNullability: name => nullableDefs.GetValueOrDefault(key: name))
+            nullable: AcceptsBundleNull(
+                node: obj,
+                referenceNullability: name => nullableDefs.GetValueOrDefault(key: name)
+            )
         );
 
         // $ref siblings are conjunctive. Preserve an existing anyOf rather than overwriting our reference arm.
@@ -451,8 +537,22 @@ public static partial class WorldSchema {
                 b: "$ref",
                 comparisonType: StringComparison.Ordinal
             )) {
-                var child = RewriteSchemaKeyword(key: key, value: value, rewrite: schema => HoistBundleTitles(node: schema, defs: defs, defContentByTitle: defContentByTitle, nullableDefs: nullableDefs));
-                if ((key == "allOf") && (rewritten[key] is JsonArray existing) && (child is JsonArray additional)) {
+                var child = RewriteSchemaKeyword(
+                    key: key,
+                    value: value,
+                    rewrite: schema => HoistBundleTitles(
+                        node: schema,
+                        defs: defs,
+                        defContentByTitle: defContentByTitle,
+                        nullableDefs: nullableDefs
+                    )
+                );
+
+                if (
+                    (key == "allOf") &&
+                    (rewritten[key] is JsonArray existing) &&
+                    (child is JsonArray additional)
+                ) {
                     foreach (var arm in additional) {
                         existing.Add(item: arm?.DeepClone());
                     }
@@ -464,6 +564,7 @@ public static partial class WorldSchema {
 
         return rewritten;
     }
+
     /// <summary>Composes a <see cref="SplitSchema"/> into the single-file equivalent json-schema-to-typescript
     /// reads: every shared shape lives once under the bundle's own <c>$defs</c> (seeded from
     /// <see cref="SplitSchema.Common"/>, whose internal pointers already use the bare <c>#/$defs/X</c> form), a
@@ -493,14 +594,22 @@ public static partial class WorldSchema {
         // own turn in the loop below, and RewrapReferenceSiteSiblings needs every title's nullability resolved
         // the first time anything might ask for it, not just after its own def has been visited.
         var active = new HashSet<string>(comparer: StringComparer.Ordinal);
+
         bool ResolveNullability(string name) {
-            if (nullableDefs.TryGetValue(key: name, value: out var nullable)) {
+            if (nullableDefs.TryGetValue(
+                key: name,
+                value: out var nullable
+            )) {
                 return nullable;
             }
             if (!active.Add(item: name)) {
                 throw new InvalidOperationException(message: $"schema: unguarded reference cycle at '{name}'.");
             }
-            var result = AcceptsBundleNull(node: commonDefs[name]!, referenceNullability: ResolveNullability);
+            var result = AcceptsBundleNull(
+                node: commonDefs[name]!,
+                referenceNullability: ResolveNullability
+            );
+
             active.Remove(item: name);
             nullableDefs[name] = result;
             return result;
@@ -523,11 +632,11 @@ public static partial class WorldSchema {
             StripNullInPlace(obj: clone);
 
             var hoisted = ((JsonObject)HoistBundleTitles(
-                node: clone,
-                defs: defs,
                 defContentByTitle: defContentByTitle,
-                nullableDefs: nullableDefs,
-                hoistSelf: false
+                defs: defs,
+                hoistSelf: false,
+                node: clone,
+                nullableDefs: nullableDefs
             ));
             var canonical = CanonicalDefText(obj: hoisted);
 

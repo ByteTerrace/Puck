@@ -8,25 +8,53 @@ namespace Puck.State;
 /// <param name="last">Whether to read the last member rather than the first.</param>
 public sealed class ZoneEndKey(string row, StateHandle handle, LiveZone? rowFrom, bool last) : KeyFact {
     /// <inheritdoc/>
+    public override void CollectReads(List<RuleAccess> into) {
+        if (rowFrom is { } live) {
+            live.CollectReads(into: into);
+        } else {
+            into.Add(item: new RuleAccess(
+                Row: row,
+                Key: null
+            ));
+        }
+    }
+    /// <inheritdoc/>
     public override string Resolve(IRuleReader reader) {
         if (
-            !RuleEvaluation.TryResolveRow(reader: reader, handle: handle, rowFrom: rowFrom, resolved: out var zoneHandle) ||
-            !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: zoneHandle, key: null, tick: reader.Tick, row: out var zone, rawValue: out _, text: out _)
+            !RuleEvaluation.TryResolveRow(
+            handle: handle,
+            reader: reader,
+            resolved: out var zoneHandle,
+            rowFrom: rowFrom
+        ) ||
+            !StateReader.TryReadHandle(
+            store: reader.Store,
+            catalog: reader.Catalog,
+            handle: zoneHandle,
+            key: null,
+            tick: reader.Tick,
+            engineTick: reader.EngineTick,
+            row: out var zone,
+            rawValue: out _,
+            text: out _
+        )
         ) {
             return string.Empty;
         }
         var count = reader.Store.CellCount(row: zone);
 
-        return (((count > 0) && reader.Store.TryKeyAt(row: zone, index: (last ? (count - 1) : 0), key: out var key)) ? key.Value : string.Empty);
+        return (((count > 0) && reader.Store.TryKeyAt(
+            index: (last
+            ? (count - 1)
+            : 0),
+            key: out var key,
+            row: zone
+        ))
+            ? key.Value
+            : string.Empty
+        );
     }
-    /// <inheritdoc/>
-    public override void CollectReads(List<RuleAccess> into) {
-        if (rowFrom is { } live) {
-            live.CollectReads(into: into);
-        } else {
-            into.Add(item: new RuleAccess(Row: row, Key: null));
-        }
-    }
+
     /// <inheritdoc/>
     public override bool HostOnly => (rowFrom is { HostOnly: true });
 }

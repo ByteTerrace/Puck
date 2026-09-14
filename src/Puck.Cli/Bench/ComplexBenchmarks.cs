@@ -22,8 +22,14 @@ public class ComplexMulNarrow {
     public void Setup() {
         m_seed = FixedComplex.FromAngle(angle: FixedQ4816.FromDouble(value: 0.3));
         m_rot = FixedComplex.FromAngle(angle: FixedQ4816.FromDouble(value: 0.017));
-        m_eSeed = new QFixElem(U: m_seed.Real, V: m_seed.Imaginary);
-        m_eStep = new QFixElem(U: m_rot.Real, V: m_rot.Imaginary);
+        m_eSeed = new QFixElem(
+            U: m_seed.Real,
+            V: m_seed.Imaginary
+        );
+        m_eStep = new QFixElem(
+            U: m_rot.Real,
+            V: m_rot.Imaginary
+        );
     }
     [Benchmark(Baseline = true, OperationsPerInvoke = Ops)]
     public long Hand() {
@@ -43,7 +49,10 @@ public class ComplexMulNarrow {
         var sink = 0L;
 
         for (var n = 0; (n < Ops); ++n) {
-            accumulator = Operands.ComplexFused.Multiply(left: accumulator, right: m_eStep);
+            accumulator = Operands.ComplexFused.Multiply(
+                left: accumulator,
+                right: m_eStep
+            );
             sink ^= accumulator.U.Value;
         }
 
@@ -51,7 +60,11 @@ public class ComplexMulNarrow {
     }
     [Benchmark(OperationsPerInvoke = Ops)]
     public long GenericLocal() =>
-        Local(algebra: Operands.ComplexFused, seed: m_eSeed, step: m_eStep);
+        Local(
+            algebra: Operands.ComplexFused,
+            seed: m_eSeed,
+            step: m_eStep
+        );
 
     [MethodImpl(methodImplOptions: MethodImplOptions.NoInlining)]
     private static long Local(QuadraticAlgebra<FixedQ4816> algebra, QFixElem seed, QFixElem step) {
@@ -59,7 +72,10 @@ public class ComplexMulNarrow {
         var sink = 0L;
 
         for (var n = 0; (n < Ops); ++n) {
-            accumulator = algebra.Multiply(left: accumulator, right: step);
+            accumulator = algebra.Multiply(
+                left: accumulator,
+                right: step
+            );
             sink ^= accumulator.U.Value;
         }
 
@@ -85,13 +101,25 @@ public class ComplexMulWide {
         m_genB = new QFixElem[Operands.WidePairCount];
 
         for (var i = 0; (i < Operands.WidePairCount); ++i) {
-            var a = new FixedComplex(Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)));
-            var b = new FixedComplex(Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)));
+            var a = new FixedComplex(
+                Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)),
+                Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng))
+            );
+            var b = new FixedComplex(
+                Real: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng)),
+                Imaginary: FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng))
+            );
 
             m_handA[i] = a;
             m_handB[i] = b;
-            m_genA[i] = new QFixElem(U: a.Real, V: a.Imaginary);
-            m_genB[i] = new QFixElem(U: b.Real, V: b.Imaginary);
+            m_genA[i] = new QFixElem(
+                U: a.Real,
+                V: a.Imaginary
+            );
+            m_genB[i] = new QFixElem(
+                U: b.Real,
+                V: b.Imaginary
+            );
         }
     }
     [Benchmark(Baseline = true, OperationsPerInvoke = Operands.WidePairCount)]
@@ -109,21 +137,31 @@ public class ComplexMulWide {
         var sink = 0L;
 
         for (var i = 0; (i < m_genA.Length); ++i) {
-            sink ^= Operands.ComplexFused.Multiply(left: m_genA[i], right: m_genB[i]).U.Value;
+            sink ^= Operands.ComplexFused.Multiply(
+                left: m_genA[i],
+                right: m_genB[i]
+            ).U.Value;
         }
 
         return sink;
     }
     [Benchmark(OperationsPerInvoke = Operands.WidePairCount)]
     public long GenericLocal() =>
-        Local(a: m_genA, algebra: Operands.ComplexFused, b: m_genB);
+        Local(
+            a: m_genA,
+            algebra: Operands.ComplexFused,
+            b: m_genB
+        );
 
     [MethodImpl(methodImplOptions: MethodImplOptions.NoInlining)]
     private static long Local(QuadraticAlgebra<FixedQ4816> algebra, QFixElem[] a, QFixElem[] b) {
         var sink = 0L;
 
         for (var i = 0; (i < a.Length); ++i) {
-            sink ^= algebra.Multiply(left: a[i], right: b[i]).U.Value;
+            sink ^= algebra.Multiply(
+                left: a[i],
+                right: b[i]
+            ).U.Value;
         }
 
         return sink;

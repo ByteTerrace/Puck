@@ -1,0 +1,16 @@
+description: Install libmsquic from Microsoft's checksum-pinned Ubuntu 24.04 package source.
+name: Install QUIC
+runs:
+  steps:
+    - name: Add Microsoft's package source and install libmsquic
+      run: |
+        set -euo pipefail
+        grep -q 'VERSION_ID="24.04"' /etc/os-release || { echo 'This repository pins its QUIC runner setup to Ubuntu 24.04.' >&2; exit 1; }
+        archive="$RUNNER_TEMP/packages-microsoft-prod.deb"
+        curl --fail --silent --show-error --location --output "$archive" https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb
+        echo "c13f01ac7c3001b51a9281d40dde666db5e037e05512840c319832f7852bfec4  $archive" | sha256sum --check --quiet
+        sudo -n dpkg -i "$archive"
+        sudo -n apt-get update
+        sudo -n apt-get install -y --no-install-recommends libmsquic
+      shell: bash
+  using: composite

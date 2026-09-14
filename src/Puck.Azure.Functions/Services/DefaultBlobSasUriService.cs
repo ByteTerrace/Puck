@@ -5,8 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace Puck.Azure.Functions.Services;
 
-public sealed class BlobSasUriOptions
-{
+public sealed class BlobSasUriOptions {
     public string[]? AllowedEndpointSuffixes { get; set; }
     public string? DefaultEndpoint { get; set; }
     public string? DefaultPreauthorizedAgentObjectId { get; set; }
@@ -21,9 +20,7 @@ public sealed class BlobSasUriOptions
         defaultPreauthorizedAgentObjectId = DefaultPreauthorizedAgentObjectId;
     }
 }
-
-public sealed class GenerateBlobSasUriRequest
-{
+public sealed class GenerateBlobSasUriRequest {
     public string? BlobName { get; set; }
     public string? BlobVersionId { get; set; }
     public string? ContainerName { get; set; }
@@ -61,7 +58,6 @@ public sealed class GenerateBlobSasUriRequest
         preauthorizedAgentObjectId = PreauthorizedAgentObjectId;
     }
 }
-
 public interface IBlobSasUriService {
     Task<Uri> GenerateAsync(
         GenerateBlobSasUriRequest request,
@@ -69,12 +65,10 @@ public interface IBlobSasUriService {
         CancellationToken cancellationToken
     );
 }
-
 public sealed class DefaultBlobSasUriService(
     IOptionsMonitor<BlobSasUriOptions> blobSasUriOptions,
     IUserStorageLocationService userStorageLocationService
-) : IBlobSasUriService
-{
+) : IBlobSasUriService {
     public async Task<Uri> GenerateAsync(
         GenerateBlobSasUriRequest request,
         TokenCredential tokenCredential,
@@ -106,12 +100,16 @@ public sealed class DefaultBlobSasUriService(
         var endpointIsResolverDerived = false;
 
         if (string.IsNullOrWhiteSpace(value: endpoint)) {
-            endpoint = Guid.TryParse(input: containerName, result: out var containerObjectId)
+            endpoint = (Guid.TryParse(
+                input: containerName,
+                result: out var containerObjectId
+            )
                 ? (await userStorageLocationService.GetAsync(
                     cancellationToken: cancellationToken,
                     userObjectId: containerObjectId.ToString(format: "D")
                 )).BlobEndpoint
-                : defaultEndpoint;
+                : defaultEndpoint
+            );
             endpointIsResolverDerived = (endpoint is not null);
         }
 
@@ -125,24 +123,27 @@ public sealed class DefaultBlobSasUriService(
             expiresOn = maximumExpiresOn;
         }
 
-        if (string.IsNullOrWhiteSpace(value: containerName) ||
+        if (
+            string.IsNullOrWhiteSpace(value: containerName) ||
             !Uri.TryCreate(
-                result: out var endpointUri,
-                uriKind: UriKind.Absolute,
-                uriString: endpoint
-            ) ||
+            result: out var endpointUri,
+            uriKind: UriKind.Absolute,
+            uriString: endpoint
+        ) ||
             (Uri.UriSchemeHttps != endpointUri.Scheme) ||
             (!endpointIsResolverDerived && (
                 (allowedEndpointSuffixes is null) ||
                 !allowedEndpointSuffixes.Any(predicate: s => (
                     endpointUri.Host.Equals(
-                        comparisonType: StringComparison.OrdinalIgnoreCase,
-                        value: s
-                    ) ||
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: s
+        ) ||
                     endpointUri.Host.EndsWith(
-                        comparisonType: StringComparison.OrdinalIgnoreCase,
-                        value: $".{(s.StartsWith(value: '.') ? s[1..] : s)}"
-                    )
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: $".{(s.StartsWith(value: '.')
+            ? s[1..]
+            : s)}"
+        )
                 ))
             ))
         ) {
@@ -192,28 +193,28 @@ public sealed class DefaultBlobSasUriService(
             ? blobServiceClient
                .GetBlobContainerClient(blobContainerName: containerName)
                .GenerateUserDelegationSasUri(
-                   builder: blobSasBuilder,
-                   userDelegationKey: (await blobServiceClient
+                builder: blobSasBuilder,
+                userDelegationKey: (await blobServiceClient
                        .GetUserDelegationKeyAsync(
-                           cancellationToken: cancellationToken,
-                           expiresOn: expiresOn,
-                           startsOn: default
-                       ))
+                    cancellationToken: cancellationToken,
+                    expiresOn: expiresOn,
+                    startsOn: default
+                ))
                        .Value
-               )
+            )
             : blobServiceClient
                .GetBlobContainerClient(blobContainerName: containerName)
                .GetBlobClient(blobName: blobName)
                .GenerateUserDelegationSasUri(
-                   builder: blobSasBuilder,
-                   userDelegationKey: (await blobServiceClient
+                builder: blobSasBuilder,
+                userDelegationKey: (await blobServiceClient
                        .GetUserDelegationKeyAsync(
-                           cancellationToken: cancellationToken,
-                           expiresOn: expiresOn,
-                           startsOn: default
-                       ))
+                    cancellationToken: cancellationToken,
+                    expiresOn: expiresOn,
+                    startsOn: default
+                ))
                        .Value
-               )
+            )
         );
     }
 }

@@ -43,12 +43,15 @@ public sealed class WorldNeighbourComposeReuseLawTests {
         var shard = ShardPath(name: "quilt-nw.world.json");
 
         Assert.False(condition: WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: IslandPath));
-        Assert.True(condition: WorldDefinitionLoader.TryLoadFile(
-            definition: out _,
-            neighbours: ResolverBesideShards(),
-            path: shard,
-            reason: out var reason
-        ), userMessage: reason);
+        Assert.True(
+            condition: WorldDefinitionLoader.TryLoadFile(
+                definition: out _,
+                neighbours: ResolverBesideShards(),
+                path: shard,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
 
         // The shard names the island as its own basis, again as a bare adjacency neighbour, and once more through
         // every derived corner the adjacency proof walks — so a merge per reach would be several merges of one
@@ -72,10 +75,22 @@ public sealed class WorldNeighbourComposeReuseLawTests {
         var first = resolver.Resolve(document: "../puck.world.json");
         var second = resolver.Resolve(document: "../puck.world.json");
 
-        Assert.Equal(expected: WorldNeighbourResolutionKind.Resolved, actual: first.Kind);
-        Assert.Equal(expected: WorldNeighbourResolutionKind.Resolved, actual: second.Kind);
-        Assert.False(condition: first.Shared, userMessage: "the first resolution of a document this process has not composed merged it itself");
-        Assert.True(condition: second.Shared, userMessage: "the second resolution of the same document came from the image the first one left");
+        Assert.Equal(
+            expected: WorldNeighbourResolutionKind.Resolved,
+            actual: first.Kind
+        );
+        Assert.Equal(
+            expected: WorldNeighbourResolutionKind.Resolved,
+            actual: second.Kind
+        );
+        Assert.False(
+            condition: first.Shared,
+            userMessage: "the first resolution of a document this process has not composed merged it itself"
+        );
+        Assert.True(
+            condition: second.Shared,
+            userMessage: "the second resolution of the same document came from the image the first one left"
+        );
     }
     [Fact]
     public void AReusedCompose_SerializesIdenticallyToAFreshOne() {
@@ -83,19 +98,25 @@ public sealed class WorldNeighbourComposeReuseLawTests {
 
         var shard = ShardPath(name: "quilt-ne.world.json");
 
-        Assert.True(condition: WorldDefinitionLoader.TryLoadFile(
-            definition: out var fresh,
-            neighbours: ResolverBesideShards(),
-            path: shard,
-            reason: out var freshReason
-        ), userMessage: freshReason);
+        Assert.True(
+            condition: WorldDefinitionLoader.TryLoadFile(
+                definition: out var fresh,
+                neighbours: ResolverBesideShards(),
+                path: shard,
+                reason: out var freshReason
+            ),
+            userMessage: freshReason
+        );
         Assert.True(condition: WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: Path.GetFullPath(path: shard)));
-        Assert.True(condition: WorldDefinitionLoader.TryLoadFile(
-            definition: out var reused,
-            neighbours: ResolverBesideShards(),
-            path: shard,
-            reason: out var reusedReason
-        ), userMessage: reusedReason);
+        Assert.True(
+            condition: WorldDefinitionLoader.TryLoadFile(
+                definition: out var reused,
+                neighbours: ResolverBesideShards(),
+                path: shard,
+                reason: out var reusedReason
+            ),
+            userMessage: reusedReason
+        );
 
         // The composed definition is the same value either way, so every hash taken over it — a content pin, a
         // state hash, a neighbour proof — reads the same whether the document was merged here or reused.
@@ -115,14 +136,17 @@ public sealed class WorldNeighbourComposeReuseLawTests {
 
         _ = files.WriteText(
             name: "basis.world.json",
-            text: /*lang=json*/ """{ "schema": "puck.world.def.v1", "name": "first" }"""
+            text: /*lang=json*/ """{ "schema": "puck.world.definition.v1", "name": "first" }"""
         );
 
-        Assert.True(condition: WorldDefinitionFileSource.TryComposeDocumentTree(
-            path: root,
-            reason: out var firstReason,
-            tree: out var first
-        ), userMessage: firstReason);
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
+                path: root,
+                reason: out var firstReason,
+                tree: out var first
+            ),
+            userMessage: firstReason
+        );
         Assert.Equal(
             actual: ((string?)first!["name"]),
             expected: "first"
@@ -132,14 +156,17 @@ public sealed class WorldNeighbourComposeReuseLawTests {
         // keyed on the named document's own bytes alone would answer with the stale merge.
         _ = files.WriteText(
             name: "basis.world.json",
-            text: /*lang=json*/ """{ "schema": "puck.world.def.v1", "name": "second" }"""
+            text: /*lang=json*/ """{ "schema": "puck.world.definition.v1", "name": "second" }"""
         );
 
-        Assert.True(condition: WorldDefinitionFileSource.TryComposeDocumentTree(
-            path: root,
-            reason: out var secondReason,
-            tree: out var second
-        ), userMessage: secondReason);
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
+                path: root,
+                reason: out var secondReason,
+                tree: out var second
+            ),
+            userMessage: secondReason
+        );
         Assert.Equal(
             actual: ((string?)second!["name"]),
             expected: "second"
@@ -159,7 +186,7 @@ public sealed class WorldNeighbourComposeReuseLawTests {
 
         _ = files.WriteText(
             name: $"link{(WorldDocumentBasis.MaxChainDepth - 1)}.world.json",
-            text: /*lang=json*/ """{ "schema": "puck.world.def.v1", "name": "tail" }"""
+            text: /*lang=json*/ """{ "schema": "puck.world.definition.v1", "name": "tail" }"""
         );
 
         var head = Path.Combine(
@@ -167,11 +194,14 @@ public sealed class WorldNeighbourComposeReuseLawTests {
             path2: "link0.world.json"
         );
 
-        Assert.True(condition: WorldDefinitionFileSource.TryComposeDocumentTree(
-            path: head,
-            reason: out var headReason,
-            tree: out _
-        ), userMessage: headReason);
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
+                path: head,
+                reason: out var headReason,
+                tree: out _
+            ),
+            userMessage: headReason
+        );
 
         // One document above the head pushes the same subtree one link past the rule. The image the head left
         // behind carries how far it reaches, so it declines to answer here and the walk refuses by name — a reuse

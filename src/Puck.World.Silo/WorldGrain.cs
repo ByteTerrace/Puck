@@ -27,7 +27,10 @@ internal sealed class WorldGrain(WorldSiloHost host) : Grain, IWorldGrain {
     public Task<bool> ActivateAsync() {
         var identity = Identity();
         // Root and neighbour reads are asynchronous; admission still crosses the simulation mailbox.
-        return host.ActivateAsync(ct: CancellationToken.None, identity: identity);
+        return host.ActivateAsync(
+            ct: CancellationToken.None,
+            identity: identity
+        );
     }
     /// <inheritdoc/>
     public Task<bool> CheckpointNowAsync() => host.CheckpointNowAsync(

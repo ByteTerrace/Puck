@@ -45,16 +45,85 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
     /// <summary>Gets the resolved operational configuration this service checks against.</summary>
     public UpdateOptions Options => m_options;
 
-    /// <summary>Fetches and verifies the current channel manifest, and evaluates the rollout bucket. Performs no
-    /// download or staging, and never commits the manifest's sequence to the durable replay high-water mark — a
-    /// read-only inspection that can be repeated without permanently consuming the one sequence number an
-    /// <see cref="ApplyAsync"/> still needs to commit.</summary>
-    /// <param name="now">The check instant, captured once by the caller.</param>
-    /// <param name="cancellationToken">Cancels the fetch.</param>
-    public Task<UpdateCheckResult> CheckAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
-        FetchAndVerifyAsync(advanceSequence: false, cancellationToken: cancellationToken, now: now);
-    /// <summary>Resolves the current process's .NET runtime identifier — the payload key <see cref="IUpdateStager"/> stages.</summary>
-    public static string CurrentRid() => RuntimeInformation.RuntimeIdentifier;
+    private async Task<UpdateCheckResult> FetchAndVerifyAsync(bool advanceSequence, CancellationToken cancellationToken, DateTimeOffset now) {
+        var fetch = await m_source.TryGetLatestManifestAsync(
+            channel: m_options.Channel,
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (!fetch.Found) {
+            return new UpdateCheckResult(
+                Detail: (fetch.RefusalReason ?? "no manifest found"),
+                Manifest: null,
+                Outcome: UpdateCheckOutcome.UpToDate
+            );
+        }
+
+        ReleaseManifest manifest;
+
+        try {
+            manifest = (JsonSerializer.Deserialize<ReleaseManifest>(
+                utf8Json: fetch.ManifestBytes,
+                options: DocumentJsonOptions.Shared
+            )
+                ?? throw new JsonException(message: "manifest deserialized to null"));
+        } catch (JsonException exception) {
+            return new UpdateCheckResult(
+                Detail: $"manifest did not parse: {exception.Message}",
+                Manifest: null,
+                Outcome: UpdateCheckOutcome.Refused
+            );
+        }
+
+        if (!string.Equals(
+            a: manifest.App,
+            b: m_options.App,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return new UpdateCheckResult(
+                Detail: $"manifest names app '{manifest.App}', expected '{m_options.App}'",
+                Manifest: null,
+                Outcome: UpdateCheckOutcome.Refused
+            );
+        }
+
+        var verified = m_verifier.Verify(
+            advanceSequence: advanceSequence,
+            installedVersion: m_options.InstalledVersion,
+            manifest: manifest,
+            now: now
+        );
+
+        if (!verified.Accepted) {
+            return new UpdateCheckResult(
+                Detail: (verified.RefusalReason ?? "refused"),
+                Manifest: null,
+                Outcome: UpdateCheckOutcome.Refused
+            );
+        }
+
+        var installId = (m_options.InstallId ?? ReleaseRolloutBucket.MintOrLoad(cacheRoot: m_options.CacheRoot));
+
+        if (!ReleaseRolloutBucket.IsIncluded(
+            installId: installId,
+            percent: manifest.Rollout.Percent
+        )) {
+            return new UpdateCheckResult(
+                Detail: $"version {manifest.Version} verified but outside the {manifest.Rollout.Percent}% rollout",
+                Manifest: manifest,
+                Outcome: UpdateCheckOutcome.OutsideRollout
+            );
+        }
+
+        var fileCount = manifest.Payloads.Sum(selector: payload => payload.Files.Count);
+
+        return new UpdateCheckResult(
+            Detail: $"version {manifest.Version} verified, {manifest.Payloads.Count} rid(s), {fileCount} file(s) total",
+            Manifest: manifest,
+            Outcome: UpdateCheckOutcome.Available
+        );
+    }
+
     /// <summary>Re-verifies the tracked channel — committing the manifest's sequence to the durable replay
     /// high-water mark this time, unlike <see cref="CheckAsync"/> — and, only when a verified, in-rollout newer
     /// version is found, stages and applies this process's runtime identifier's payload. Refuses without staging,
@@ -63,63 +132,64 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
     /// <param name="now">The check instant, captured once by the caller.</param>
     /// <param name="cancellationToken">Cancels the fetch/stage.</param>
     public async Task<UpdateApplyOutcome> ApplyAsync(DateTimeOffset now, CancellationToken cancellationToken) {
-        var check = await FetchAndVerifyAsync(advanceSequence: true, cancellationToken: cancellationToken, now: now).ConfigureAwait(continueOnCapturedContext: false);
+        var check = await FetchAndVerifyAsync(
+            advanceSequence: true,
+            cancellationToken: cancellationToken,
+            now: now
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
         if (check.Outcome != UpdateCheckOutcome.Available) {
-            return new UpdateApplyOutcome(Applied: false, Detail: $"re-verification reported {check.Outcome}: {check.Detail}");
+            return new UpdateApplyOutcome(
+                Applied: false,
+                Detail: $"re-verification reported {check.Outcome}: {check.Detail}"
+            );
         }
 
         var manifest = check.Manifest!;
         var rid = CurrentRid();
-        var staged = await m_stager.StageAsync(cancellationToken: cancellationToken, manifest: manifest, rid: rid).ConfigureAwait(continueOnCapturedContext: false);
+        var staged = await m_stager.StageAsync(
+            cancellationToken: cancellationToken,
+            manifest: manifest,
+            rid: rid
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
         if (!staged.Staged) {
-            return new UpdateApplyOutcome(Applied: false, Detail: (staged.RefusalReason ?? "staging refused"));
+            return new UpdateApplyOutcome(
+                Applied: false,
+                Detail: (staged.RefusalReason ?? "staging refused")
+            );
         }
 
-        var applied = m_applier.Apply(cacheRoot: m_options.CacheRoot, manifest: manifest, rid: rid);
+        var applied = m_applier.Apply(
+            cacheRoot: m_options.CacheRoot,
+            manifest: manifest,
+            rid: rid
+        );
 
         if (!applied.Applied) {
-            return new UpdateApplyOutcome(Applied: false, Detail: (applied.RefusalReason ?? "apply refused"));
+            return new UpdateApplyOutcome(
+                Applied: false,
+                Detail: (applied.RefusalReason ?? "apply refused")
+            );
         }
 
-        return new UpdateApplyOutcome(Applied: true, Detail: $"version {manifest.Version} applied, replacing {(applied.PreviousVersion ?? "(first install)")} — takes effect at the stub's next launch");
+        return new UpdateApplyOutcome(
+            Applied: true,
+            Detail: $"version {manifest.Version} applied, replacing {(applied.PreviousVersion ?? "(first install)")} — takes effect at the stub's next launch"
+        );
     }
-
-    private async Task<UpdateCheckResult> FetchAndVerifyAsync(bool advanceSequence, CancellationToken cancellationToken, DateTimeOffset now) {
-        var fetch = await m_source.TryGetLatestManifestAsync(channel: m_options.Channel, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (!fetch.Found) {
-            return new UpdateCheckResult(Detail: (fetch.RefusalReason ?? "no manifest found"), Manifest: null, Outcome: UpdateCheckOutcome.UpToDate);
-        }
-
-        ReleaseManifest manifest;
-
-        try {
-            manifest = (JsonSerializer.Deserialize<ReleaseManifest>(utf8Json: fetch.ManifestBytes, options: DocumentJsonOptions.Shared)
-                ?? throw new JsonException(message: "manifest deserialized to null"));
-        } catch (JsonException exception) {
-            return new UpdateCheckResult(Detail: $"manifest did not parse: {exception.Message}", Manifest: null, Outcome: UpdateCheckOutcome.Refused);
-        }
-
-        if (!string.Equals(a: manifest.App, b: m_options.App, comparisonType: StringComparison.Ordinal)) {
-            return new UpdateCheckResult(Detail: $"manifest names app '{manifest.App}', expected '{m_options.App}'", Manifest: null, Outcome: UpdateCheckOutcome.Refused);
-        }
-
-        var verified = m_verifier.Verify(advanceSequence: advanceSequence, installedVersion: m_options.InstalledVersion, manifest: manifest, now: now);
-
-        if (!verified.Accepted) {
-            return new UpdateCheckResult(Detail: (verified.RefusalReason ?? "refused"), Manifest: null, Outcome: UpdateCheckOutcome.Refused);
-        }
-
-        var installId = (m_options.InstallId ?? ReleaseRolloutBucket.MintOrLoad(cacheRoot: m_options.CacheRoot));
-
-        if (!ReleaseRolloutBucket.IsIncluded(installId: installId, percent: manifest.Rollout.Percent)) {
-            return new UpdateCheckResult(Detail: $"version {manifest.Version} verified but outside the {manifest.Rollout.Percent}% rollout", Manifest: manifest, Outcome: UpdateCheckOutcome.OutsideRollout);
-        }
-
-        var fileCount = manifest.Payloads.Sum(selector: payload => payload.Files.Count);
-
-        return new UpdateCheckResult(Detail: $"version {manifest.Version} verified, {manifest.Payloads.Count} rid(s), {fileCount} file(s) total", Manifest: manifest, Outcome: UpdateCheckOutcome.Available);
-    }
+    /// <summary>Fetches and verifies the current channel manifest, and evaluates the rollout bucket. Performs no
+    /// download or staging, and never commits the manifest's sequence to the durable replay high-water mark — a
+    /// read-only inspection that can be repeated without permanently consuming the one sequence number an
+    /// <see cref="ApplyAsync"/> still needs to commit.</summary>
+    /// <param name="now">The check instant, captured once by the caller.</param>
+    /// <param name="cancellationToken">Cancels the fetch.</param>
+    public Task<UpdateCheckResult> CheckAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
+        FetchAndVerifyAsync(
+            advanceSequence: false,
+            cancellationToken: cancellationToken,
+            now: now
+        );
+    /// <summary>Resolves the current process's .NET runtime identifier — the payload key <see cref="IUpdateStager"/> stages.</summary>
+    public static string CurrentRid() => RuntimeInformation.RuntimeIdentifier;
 }

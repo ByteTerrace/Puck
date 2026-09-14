@@ -1,4 +1,4 @@
-# Microsoft Agent Harness for Puck
+# Puck.World.AgentHarness
 
 This project composes Microsoft's Agent Framework Harness around the
 provider-neutral `WorldAgentBridge`. The Harness supplies model/tool loops,
@@ -118,3 +118,7 @@ dotnet build src/Puck.World.AgentHarness/Puck.World.AgentHarness.csproj -c Relea
 The focused test uses a recording `IChatClient` to inspect the real options sent
 through Harness. It proves that reads are ordinary functions, mutations are
 `ApprovalRequiredAIFunction` values, and hosted web search is absent.
+
+## Documentation
+
+📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

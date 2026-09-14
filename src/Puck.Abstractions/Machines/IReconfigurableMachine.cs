@@ -1,10 +1,10 @@
 namespace Puck.Abstractions.Machines;
 
 /// <summary>
-/// Optional live-reconfiguration capability for an <see cref="IScreenMachine"/> — retargeting a running machine across
+/// Optional live-reconfiguration capability for an <see cref="IMachineRuntime"/> — retargeting a running machine across
 /// the engine's own options vocabulary with no reboot and no lost progress, mirroring <see cref="IAudioMachine"/>'s and
-/// <see cref="IQueuedScreenMachine"/>'s optional-capability precedent. The world never names a concrete hardware model:
-/// it forwards the same opaque options string the engine parsed at <see cref="IScreenMachineEngine.Create"/>, so the
+/// <see cref="IQueuedMachineRuntime"/>'s optional-capability precedent. The world never names a concrete hardware model:
+/// it forwards the same opaque options string the engine parsed at <see cref="IMachineEngine.Create"/>, so the
 /// dmg↔cgb↔agb device swap is nothing but passing <c>cgb</c> to a machine whose engine's vocabulary contains it, and a
 /// future engine gets region/BIOS/overclock retargeting for free with zero world changes.
 /// <para>

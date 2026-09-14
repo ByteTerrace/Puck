@@ -106,13 +106,13 @@ internal sealed partial class PlayerCommandModule {
         if (
             (args.Count == 2) &&
             WorldArgs.TryParseIndex(
-                args: args,
-                at: 1,
-                fallback: null,
-                max: PlayerRoster.MaxSlots,
-                min: 1,
-                value: out var readSeat
-            )
+            args: args,
+            at: 1,
+            fallback: null,
+            max: PlayerRoster.MaxSlots,
+            min: 1,
+            value: out var readSeat
+        )
         ) {
             return ReadMode(
                 family: family,

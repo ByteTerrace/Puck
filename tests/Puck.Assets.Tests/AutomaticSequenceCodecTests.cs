@@ -47,6 +47,21 @@ public sealed class AutomaticSequenceCodecTests {
         }
     }
     [Fact]
+    public void DecoderRejectsTrailingBytesAndCeilingBreaches() {
+        var encoded = AutomaticIntegerSequenceCodec.Encode(sequence: BinaryParitySequence());
+        var withTrailingByte = new byte[(encoded.Length + 1)];
+
+        encoded.CopyTo(
+            array: withTrailingByte,
+            index: 0
+        );
+        Assert.Throws<InvalidDataException>(testCode: () => AutomaticIntegerSequenceCodec.Decode(content: withTrailingByte));
+        Assert.Throws<InvalidDataException>(testCode: () => AutomaticIntegerSequenceCodec.Decode(
+            content: encoded,
+            limits: new AutomaticSequenceDecodeLimits(maximumArtifactBytes: (encoded.Length - 1))
+        ));
+    }
+    [Fact]
     public void QuadraticOstrowskiSequenceRoundTrips() {
         var numeration = IntegerNumerationSystem.QuadraticOstrowski(basis: RealQuadratic.Create(
             denominator: 1,
@@ -63,27 +78,16 @@ public sealed class AutomaticSequenceCodecTests {
             numeration: numeration,
             outputAlphabet: [BigInteger.Zero, BigInteger.One]
         );
-        var decoded = AutomaticIntegerSequenceCodec.Decode(
-            content: AutomaticIntegerSequenceCodec.Encode(sequence: original)
-        );
+        var decoded = AutomaticIntegerSequenceCodec.Decode(content: AutomaticIntegerSequenceCodec.Encode(sequence: original));
 
-        foreach (var index in new BigInteger[] { 0, 1, 2, 3, 55, 65_535, BigInteger.Pow(exponent: 80, value: 10) }) {
+        foreach (var index in new BigInteger[] { 0, 1, 2, 3, 55, 65_535, BigInteger.Pow(
+            exponent: 80,
+            value: 10
+        ) }) {
             Assert.Equal(
                 expected: original.ValueAt(index: index),
                 actual: decoded.ValueAt(index: index)
             );
         }
-    }
-    [Fact]
-    public void DecoderRejectsTrailingBytesAndCeilingBreaches() {
-        var encoded = AutomaticIntegerSequenceCodec.Encode(sequence: BinaryParitySequence());
-        var withTrailingByte = new byte[(encoded.Length + 1)];
-
-        encoded.CopyTo(array: withTrailingByte, index: 0);
-        Assert.Throws<InvalidDataException>(testCode: () => AutomaticIntegerSequenceCodec.Decode(content: withTrailingByte));
-        Assert.Throws<InvalidDataException>(testCode: () => AutomaticIntegerSequenceCodec.Decode(
-            content: encoded,
-            limits: new AutomaticSequenceDecodeLimits(maximumArtifactBytes: (encoded.Length - 1))
-        ));
     }
 }

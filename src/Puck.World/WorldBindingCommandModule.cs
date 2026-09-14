@@ -633,94 +633,6 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         RefreshSeatsBoundTo(profileId: profile.Id);
         return new CommandResult(Output: $"[identity.bindings.save: seat {PlayerRoster.DisplayNumber(slot: slot)} → world:{profile.Id}]");
     }
-    // The mouse half of player.signal: a mouse source is synthesized as the RAW WindowInputEvent the native window
-    // would have emitted, so it can take the physical mouse's own door (see SignalHandler). Returns false for a
-    // source outside the mouse vocabulary; a mouse source whose sample shape does not fit its control is a refusal.
-    private static bool TryMouseEvent(string source, CommandPhase phase, in CommandValue value, out WindowInputEvent inputEvent, out CommandResult? refusal) {
-        inputEvent = default;
-        refusal = null;
-
-        if (!source.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "mouse."
-        )) {
-            return false;
-        }
-
-        if (string.Equals(
-            a: source,
-            b: InputSources.Mouse.Motion,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            if (phase != CommandPhase.Active) {
-                refusal = CommandResult.Error(output: $"[player.signal: {InputSources.Mouse.Motion} takes <x> <y> — a relative delta in device units]");
-
-                return true;
-            }
-
-            inputEvent = WindowInputEvent.PointerDelta(delta: value.AsAxis2D);
-
-            return true;
-        }
-
-        if (string.Equals(
-            a: source,
-            b: InputSources.Mouse.Wheel,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            if (phase != CommandPhase.Active) {
-                refusal = CommandResult.Error(output: $"[player.signal: {InputSources.Mouse.Wheel} takes <x> <y> (or one vertical value) in notches]");
-
-                return true;
-            }
-
-            inputEvent = WindowInputEvent.PointerWheel(notches: ((value.Kind == CommandValueKind.Axis2D)
-                ? value.AsAxis2D
-                : new System.Numerics.Vector2(
-                    x: 0f,
-                    y: value.AsAxis1D
-                )
-            ));
-
-            return true;
-        }
-
-        const string ButtonPrefix = "mouse.button";
-
-        if (
-            source.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: ButtonPrefix
-        ) &&
-            int.TryParse(
-            s: source.AsSpan(start: ButtonPrefix.Length),
-            style: NumberStyles.None,
-            provider: CultureInfo.InvariantCulture,
-            result: out var button
-        ) &&
-            (button >= 1) &&
-            (button < ushort.MaxValue)
-        ) {
-            if (phase is not (CommandPhase.Started or CommandPhase.Completed)) {
-                refusal = CommandResult.Error(output: $"[player.signal: {source} takes press or release]");
-
-                return true;
-            }
-
-            // The window's button index is zero-based; the mouse vocabulary's is one-based (WindowInputMapper's
-            // projection adds the one back).
-            inputEvent = WindowInputEvent.PointerButton(
-                button: (button - 1),
-                phase: phase
-            );
-
-            return true;
-        }
-
-        refusal = CommandResult.Error(output: $"[player.signal: {source} is not a mouse control — {InputSources.Mouse.Motion}, {InputSources.Mouse.Wheel}, or mouse.button<n>]");
-
-        return true;
-    }
     private CommandResult SignalHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (2 or 3)) {
             return CommandResult.Error(output: "[player.signal: expected <source> <press|release|value> or <source> <x> <y>]");
@@ -771,8 +683,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                         min: -1f,
                         value: y
                     )
-                )
-            ));
+                )));
         } else if (args.Is(
             index: 1,
             value: "press"
@@ -833,6 +744,93 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         );
 
         return new CommandResult(Output: $"[player.signal: {source} {describedSample}]");
+    }
+    // The mouse half of player.signal: a mouse source is synthesized as the RAW WindowInputEvent the native window
+    // would have emitted, so it can take the physical mouse's own door (see SignalHandler). Returns false for a
+    // source outside the mouse vocabulary; a mouse source whose sample shape does not fit its control is a refusal.
+    private static bool TryMouseEvent(string source, CommandPhase phase, in CommandValue value, out WindowInputEvent inputEvent, out CommandResult? refusal) {
+        inputEvent = default;
+        refusal = null;
+
+        if (!source.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "mouse."
+        )) {
+            return false;
+        }
+
+        if (string.Equals(
+            a: source,
+            b: InputSources.Mouse.Motion,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            if (phase != CommandPhase.Active) {
+                refusal = CommandResult.Error(output: $"[player.signal: {InputSources.Mouse.Motion} takes <x> <y> — a relative delta in device units]");
+
+                return true;
+            }
+
+            inputEvent = WindowInputEvent.PointerDelta(delta: value.AsAxis2D);
+
+            return true;
+        }
+
+        if (string.Equals(
+            a: source,
+            b: InputSources.Mouse.Wheel,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            if (phase != CommandPhase.Active) {
+                refusal = CommandResult.Error(output: $"[player.signal: {InputSources.Mouse.Wheel} takes <x> <y> (or one vertical value) in notches]");
+
+                return true;
+            }
+
+            inputEvent = WindowInputEvent.PointerWheel(notches: ((value.Kind == CommandValueKind.Axis2D)
+                ? value.AsAxis2D
+                : new System.Numerics.Vector2(
+                    x: 0f,
+                    y: value.AsAxis1D
+                )));
+
+            return true;
+        }
+
+        const string ButtonPrefix = "mouse.button";
+
+        if (
+            source.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: ButtonPrefix
+        ) &&
+            int.TryParse(
+            s: source.AsSpan(start: ButtonPrefix.Length),
+            style: NumberStyles.None,
+            provider: CultureInfo.InvariantCulture,
+            result: out var button
+        ) &&
+            (button >= 1) &&
+            (button < ushort.MaxValue)
+        ) {
+            if (phase is not (CommandPhase.Started or CommandPhase.Completed)) {
+                refusal = CommandResult.Error(output: $"[player.signal: {source} takes press or release]");
+
+                return true;
+            }
+
+            // The window's button index is zero-based; the mouse vocabulary's is one-based (WindowInputMapper's
+            // projection adds the one back).
+            inputEvent = WindowInputEvent.PointerButton(
+                button: (button - 1),
+                phase: phase
+            );
+
+            return true;
+        }
+
+        refusal = CommandResult.Error(output: $"[player.signal: {source} is not a mouse control — {InputSources.Mouse.Motion}, {InputSources.Mouse.Wheel}, or mouse.button<n>]");
+
+        return true;
     }
     // Parse a chord token: chord:<m1>+<m2>[+...] (the seat's active group) or chord:<group>:<m1>+<m2>.
     private static bool TryParseChordToken(string token, string activeGroup, out string group, out string[] members) {
@@ -1014,7 +1012,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             bindability: CommandBindability.Unbindable,
             name: "world.affordances",
             description: "Echoes the affordance manifest — every dispatchable command with its declared value kind, routing, and BINDABILITY — as one compact JSON array sorted by name: world.affordances. This is the SINGLE machine-readable vocabulary binding documents are validated against: a binding entry naming a command absent from this list, sending it the wrong value kind, or naming one whose \\\"bindable\\\" is false (an authority verb — the world grant/mutation surface, the editor apply paths, profile administration) is refused loudly at player.bind, at world.row.set bindingOverlays, at every recompose, and by the document validators, instead of resolving to a silently dead key or a reachable escalation. Immediate.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.affordances") is { } refusal)
+            handler: (_, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.affordances"
+            ) is { } refusal)
             ? refusal
             : new CommandResult(Output: DescribeAffordances()))
         );

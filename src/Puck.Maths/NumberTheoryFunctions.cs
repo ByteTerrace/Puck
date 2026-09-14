@@ -274,7 +274,10 @@ public static class NumberTheoryFunctions {
                 for (var word = 0; (word < words); ++word) {
                     var candidates = (~bitmap[word]);
 
-                    if ((word == (words - 1)) && (0UL != (bits & 63UL))) {
+                    if (
+                        (word == (words - 1)) &&
+                        (0UL != (bits & 63UL))
+                    ) {
                         candidates &= ((1UL << ((int)(bits & 63UL))) - 1UL);
                     }
 

@@ -11,17 +11,38 @@ public sealed class GamepadCoalescerTests {
 
         coalescer.Update(state: in neutral);
         coalescer.Update(state: in held);
-        _ = coalescer.Drain(gyro: out _, latest: out _, pressEdges: out _, pressed: out var pressed, released: out _);
-        Assert.Equal(actual: pressed, expected: GamepadButtons.ButtonSouth);
+        _ = coalescer.Drain(
+            gyro: out _,
+            latest: out _,
+            pressEdges: out _,
+            pressed: out var pressed,
+            released: out _
+        );
+        Assert.Equal(
+            actual: pressed,
+            expected: GamepadButtons.ButtonSouth
+        );
 
         coalescer.Reset();
 
         // The next controller's first report primes the baseline; the same drain must still deliver the
         // previous controller's let-go, or the command dispatched from its press stays held forever.
         coalescer.Update(state: in neutral);
-        Assert.True(condition: coalescer.Drain(gyro: out _, latest: out _, pressEdges: out _, pressed: out pressed, released: out var released));
-        Assert.Equal(actual: pressed, expected: GamepadButtons.None);
-        Assert.Equal(actual: released & GamepadButtons.ButtonSouth, expected: GamepadButtons.ButtonSouth);
+        Assert.True(condition: coalescer.Drain(
+            gyro: out _,
+            latest: out _,
+            pressEdges: out _,
+            pressed: out pressed,
+            released: out var released
+        ));
+        Assert.Equal(
+            actual: pressed,
+            expected: GamepadButtons.None
+        );
+        Assert.Equal(
+            actual: released & GamepadButtons.ButtonSouth,
+            expected: GamepadButtons.ButtonSouth
+        );
     }
     [Fact]
     public void Reset_promotes_an_undrained_press_to_a_release_edge() {
@@ -34,7 +55,16 @@ public sealed class GamepadCoalescerTests {
         coalescer.Reset();
         coalescer.Update(state: in neutral);
 
-        Assert.True(condition: coalescer.Drain(gyro: out _, latest: out _, pressEdges: out _, pressed: out _, released: out var released));
-        Assert.Equal(actual: released & GamepadButtons.ButtonEast, expected: GamepadButtons.ButtonEast);
+        Assert.True(condition: coalescer.Drain(
+            gyro: out _,
+            latest: out _,
+            pressEdges: out _,
+            pressed: out _,
+            released: out var released
+        ));
+        Assert.Equal(
+            actual: released & GamepadButtons.ButtonEast,
+            expected: GamepadButtons.ButtonEast
+        );
     }
 }

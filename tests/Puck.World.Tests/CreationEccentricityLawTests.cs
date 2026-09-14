@@ -22,23 +22,6 @@ public sealed class CreationEccentricityLawTests {
         z: 0.125f
     );
 
-    private static ShapeDocument Sphere(int id, Vector3 scale, int group = 0) =>
-        new(
-            Id: id,
-            Name: null,
-            Type: SdfSolidPrimitive.Sphere,
-            Position: new Vector3(
-                x: (0.5f * id),
-                y: 0f,
-                z: 0f
-            ),
-            Rotation: Quaternion.Identity,
-            Scale: scale,
-            Material: 0,
-            Blend: SdfBlendOp.Union,
-            Smooth: 0f,
-            Group: group
-        );
     private static CreationDocument Document(Vector3 scale) =>
         new(
             Schema: CreationDocument.CurrentSchema,
@@ -65,44 +48,10 @@ public sealed class CreationEccentricityLawTests {
             Frames: null,
             Noise: null
         );
-    private static SdfProgram EmitStatic(Vector3 scale, bool inScope) {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = builder.BeginInstance(
-            boundCenter: Vector3.Zero,
-            boundRadius: 8f
-        );
-
-        if (inScope) {
-            _ = builder.PushField(compose: SdfBlendOp.Union);
-        }
-
-        CreationStampEmitter.Emit(
-            builder: builder,
-            document: Document(scale: scale),
-            inScope: inScope,
-            materialFor: _ => material,
-            transform: new CreationStampTransform(
-                Origin: Vector3.Zero,
-                Rotation: Quaternion.Identity,
-                Scale: 1f,
-                ReflectionNormal: null
-            )
-        );
-
-        if (inScope) {
-            _ = builder.PopField();
-        }
-
-        _ = builder.EndInstance();
-
-        return builder.Build(buildInstanceGrid: false);
-    }
     // The dynamic emission path a body-stamped creation renders through (the shipped avatars' path).
-    private static SdfProgram EmitPool(Vector3 scale) {
+    private static SdfProgram EmitPool(Vector3 scale, CreationDocument? document = null) {
         var canonical = CreationCanonicalizer.Canonicalize(
-            document: Document(scale: scale),
+            document: (document ?? Document(scale: scale)),
             source: PrototypeId
         );
         var creation = new WorldPrototype(
@@ -114,11 +63,11 @@ public sealed class CreationEccentricityLawTests {
             CreationsRaw = [creation],
             LookRowsRaw = [
                 new WorldLook(
-                    Name: "rig",
-                    Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
-                    Scale: 1f,
-                    Motion: WorldLookMotion.Default
-                ),
+                Name: "rig",
+                Source: new WorldLookSource.Creation(PrototypeId: PrototypeId),
+                Scale: 1f,
+                Motion: WorldLookMotion.Default
+            ),
             ],
         });
         var pool = new WorldStampPool();
@@ -149,35 +98,60 @@ public sealed class CreationEccentricityLawTests {
 
         return builder.Build(buildInstanceGrid: false);
     }
+    private static SdfProgram EmitStatic(Vector3 scale, bool inScope, CreationDocument? document = null) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.BeginInstance(
+            boundCenter: Vector3.Zero,
+            boundRadius: 8f
+        );
+
+        if (inScope) {
+            _ = builder.PushField(compose: SdfBlendOp.Union);
+        }
+
+        CreationStampEmitter.Emit(
+            builder: builder,
+            document: (document ?? Document(scale: scale)),
+            inScope: inScope,
+            materialFor: _ => material,
+            transform: new CreationStampTransform(
+                Origin: Vector3.Zero,
+                Rotation: Quaternion.Identity,
+                Scale: 1f,
+                ReflectionNormal: null
+            )
+        );
+
+        if (inScope) {
+            _ = builder.PopField();
+        }
+
+        _ = builder.EndInstance();
+
+        return builder.Build(buildInstanceGrid: false);
+    }
     private static int ScopeCount(SdfProgram program) =>
         program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField));
+    private static ShapeDocument Sphere(int id, Vector3 scale, int group = 0) =>
+        new(
+            Id: id,
+            Name: null,
+            Type: SdfSolidPrimitive.Sphere,
+            Position: new Vector3(
+                x: (0.5f * id),
+                y: 0f,
+                z: 0f
+            ),
+            Rotation: Quaternion.Identity,
+            Scale: scale,
+            Material: 0,
+            Blend: SdfBlendOp.Union,
+            Smooth: 0f,
+            Group: group
+        );
 
-    [Fact]
-    public void TheStaticStampScopesEachEccentricShape() {
-        var eccentric = EmitStatic(
-            inScope: false,
-            scale: EccentricScale
-        );
-        var round = EmitStatic(
-            inScope: false,
-            scale: Vector3.One
-        );
-
-        Assert.Equal(
-            expected: 1f,
-            actual: eccentric.StepScale
-        );
-        Assert.Null(eccentric.StepScaleBinder);
-        // Two eccentric shapes, two scopes; the round control opens none.
-        Assert.Equal(
-            expected: 2,
-            actual: ScopeCount(program: eccentric)
-        );
-        Assert.Equal(
-            expected: 0,
-            actual: ScopeCount(program: round)
-        );
-    }
     [Fact]
     public void InsideTheCallersScopeTheStampOpensNoneOfItsOwn() {
         var program = EmitStatic(
@@ -195,6 +169,57 @@ public sealed class CreationEccentricityLawTests {
             actual: program.StepScale
         );
     }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void SharedFlareClampIsVisibleWhenTheGlobalScaleIsOne(bool pooled) {
+        var plain = Document(scale: Vector3.One);
+        var document = plain with {
+            Shapes = [
+                plain.Shapes![0] with { Group = 1, Flare = new ShapeFlareDocument(
+                2f,
+                0f,
+                1f
+            ) },
+                plain.Shapes[1] with { Group = 1 },
+                plain.Shapes[2] with { Group = 1, Blend = SdfBlendOp.Subtraction },
+            ],
+        };
+
+        Assert.True(condition: (CreationCanonicalizer.Validate(document: document).Count == 0));
+        var program = (pooled
+            ? EmitPool(
+                Vector3.One,
+                document
+            )
+            : EmitStatic(
+                Vector3.One,
+                inScope: true,
+                document
+            )
+        );
+
+        Assert.Equal(
+            1f,
+            program.StepScale
+        );
+        Assert.Null(value: program.StepScaleBinder);
+        var clamp = Assert.Single(collection: program.FieldScopeClamps);
+
+        Assert.Equal(
+            3,
+            clamp.ShapeCount
+        );
+        Assert.InRange(
+            clamp.StepScale,
+            float.Epsilon,
+            .99f
+        );
+        Assert.Equal(
+            program.Instructions[clamp.PopInstructionIndex].Data1.Y,
+            clamp.StepScale
+        );
+    }
     [Fact]
     public void TheDynamicPoolScopesTheUngroupedShapeAndTheGroup() {
         var eccentric = EmitPool(scale: EccentricScale);
@@ -204,7 +229,7 @@ public sealed class CreationEccentricityLawTests {
             expected: 1f,
             actual: eccentric.StepScale
         );
-        Assert.Null(eccentric.StepScaleBinder);
+        Assert.Null(value: eccentric.StepScaleBinder);
         // Pass 1 scopes the ungrouped eccentric shape; pass 2 scopes the group once for both members.
         Assert.Equal(
             expected: (ScopeCount(program: round) + 2),
@@ -213,6 +238,32 @@ public sealed class CreationEccentricityLawTests {
         Assert.Equal(
             expected: 1f,
             actual: round.StepScale
+        );
+    }
+    [Fact]
+    public void TheStaticStampScopesEachEccentricShape() {
+        var eccentric = EmitStatic(
+            inScope: false,
+            scale: EccentricScale
+        );
+        var round = EmitStatic(
+            inScope: false,
+            scale: Vector3.One
+        );
+
+        Assert.Equal(
+            expected: 1f,
+            actual: eccentric.StepScale
+        );
+        Assert.Null(value: eccentric.StepScaleBinder);
+        // Two eccentric shapes, two scopes; the round control opens none.
+        Assert.Equal(
+            expected: 2,
+            actual: ScopeCount(program: eccentric)
+        );
+        Assert.Equal(
+            expected: 0,
+            actual: ScopeCount(program: round)
         );
     }
 }

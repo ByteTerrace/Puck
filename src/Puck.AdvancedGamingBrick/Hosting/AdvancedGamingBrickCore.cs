@@ -4,12 +4,12 @@ namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
 /// The native ARM7TDMI AdvancedGamingBrick core adapted to the machine-neutral <see cref="IQueuedMachineCore"/>: it builds
-/// and direct-boots the machine, loads any battery save, and exposes the run/framebuffer/input/save surface a
+/// and starts the machine in its configured boot mode, loads any battery save, and exposes the run/framebuffer/input/save surface a
 /// <see cref="QueuedMachineWorker"/> or a caller's own update loop drives. All machine-facing calls must run on one owning thread.
 /// Restoring state requests a battery flush independently of the emulated dirty flag. Saves are flushed to a
 /// temporary file beside their destination and then replace it; write failures retain the previous save for retry.
 /// </summary>
-public sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
+public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
     private const ulong MachineCyclesPerSecond = 16_777_216UL;
 
     private readonly AgbMachineInstance m_instance;
@@ -17,34 +17,60 @@ public sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
     private readonly AgbCartridge m_cartridge;
     private readonly StateWriter m_timeTravelWriter = new(capacity: 4096);
     private readonly string? m_savePath;
+
     // Host persistence state: the disk cannot rewind with an emulated snapshot's SaveDirty flag.
     private bool m_saveNeedsFlush;
 
+    /// <summary>Builds a native machine with bundled Puck firmware, without a renderer or background worker.</summary>
+    /// <param name="cartridgeRom">The native AGB cartridge image.</param>
+    /// <param name="bootMode">Cold startup by default; fast startup skips presentation while retaining BIOS services.</param>
+    /// <param name="savePath">The optional battery-save path.</param>
+    public AdvancedGamingBrickCore(byte[] cartridgeRom, MachineBootMode bootMode = MachineBootMode.Cold, string? savePath = null)
+        : this(
+        configuration: AgbFirmware.CreateConfiguration(
+            cartridgeRom: cartridgeRom,
+            bootMode: bootMode
+        ),
+        savePath: savePath
+    ) { }
     /// <summary>Builds, save-loads, and direct-boots the native machine.</summary>
     /// <param name="bios">An explicit 16 KiB BIOS image. Zeroed images support only BIOS-independent diagnostics.</param>
     /// <param name="cartridgeRom">The native AGB cartridge image.</param>
     /// <param name="savePath">The optional battery-save path.</param>
     public AdvancedGamingBrickCore(byte[] bios, byte[] cartridgeRom, string? savePath = null)
-        : this(configuration: new AgbMachineConfiguration(bios: bios, rom: cartridgeRom), savePath: savePath) { }
-
+        : this(
+        configuration: new AgbMachineConfiguration(
+            bios: bios,
+            rom: cartridgeRom
+        ),
+        savePath: savePath
+    ) { }
     /// <summary>Builds a core for an external host's own update loop. No renderer, worker thread or disk save is
     /// required. The host supplies cycle budgets and input, drains output, and disposes the core on its owning thread.</summary>
-    /// <param name="configuration">Explicit BIOS, cartridge and per-machine options.</param>
+    /// <param name="configuration">Explicit BIOS, cartridge, startup mode and per-machine options.</param>
     /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
     public AdvancedGamingBrickCore(AgbMachineConfiguration configuration, string? savePath = null) {
+        CheckpointIdentity = MachineCheckpointIdentity.Compute(
+            FormattableString.Invariant(formattable: $"puck.agb.core.v1/{AgbMachineIdentity.CurrentVersion}/{configuration.Options.DisablePrefetch}/{configuration.Options.DisableRtc}"),
+            configuration.Bios.Span,
+            configuration.Rom
+        );
         m_savePath = savePath;
         m_instance = AgbMachineFactory.Create(configuration: configuration);
         m_machine = m_instance.Machine;
         m_cartridge = m_instance.GetRequiredService<AgbCartridge>();
 
         LoadBatterySave();
-        m_machine.DirectBoot();
+        if (configuration.BootMode == MachineBootMode.Fast) {
+            m_machine.DirectBoot();
+        }
     }
 
     /// <summary>Gets the owned machine instance for peripheral, cartridge and link access. Use it only on the
     /// core's owning thread; the core retains responsibility for disposal.</summary>
     public AgbMachineInstance Instance => m_instance;
-
+    /// <inheritdoc/>
+    public string CheckpointIdentity { get; }
     /// <inheritdoc/>
     public ulong CyclesPerSecond =>
         MachineCyclesPerSecond;
@@ -82,10 +108,10 @@ public sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     public void RestoreState(byte[] buffer, int length) {
         m_machine.RestoreState(reader: new StateReader(
-        buffer: buffer,
-        length: length,
-        start: 0
-    ));
+            buffer: buffer,
+            length: length,
+            start: 0
+        ));
         m_saveNeedsFlush = true;
     }
     /// <inheritdoc/>
@@ -113,7 +139,10 @@ public sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
         }
 
         try {
-            WriteBatterySave(path: savePath, data: cartridge.SaveData);
+            WriteBatterySave(
+                path: savePath,
+                data: cartridge.SaveData
+            );
             cartridge.MarkSaveClean();
             m_saveNeedsFlush = false;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
@@ -129,24 +158,36 @@ public sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
 
     private static void WriteBatterySave(string path, ReadOnlySpan<byte> data) {
         var destination = Path.GetFullPath(path: path);
-        var temporary = Path.Combine(path1: Path.GetDirectoryName(path: destination)!, path2: $".agb-save-{Guid.NewGuid():N}.tmp");
+        var temporary = Path.Combine(
+            path1: Path.GetDirectoryName(path: destination)!,
+            path2: $".agb-save-{Guid.NewGuid():N}.tmp"
+        );
+
         try {
             // The temporary lives on the destination filesystem. Finish and flush it before the rename so a
             // failed write leaves the previous save intact. Only a successful replacement clears dirty state.
-            using (var stream = new FileStream(path: temporary, mode: FileMode.CreateNew, access: FileAccess.Write, share: FileShare.None)) {
+            using (var stream = new FileStream(
+                access: FileAccess.Write,
+                mode: FileMode.CreateNew,
+                path: temporary,
+                share: FileShare.None
+            )) {
                 stream.Write(buffer: data);
                 stream.Flush(flushToDisk: true);
             }
-            File.Move(sourceFileName: temporary, destFileName: destination, overwrite: true);
+            File.Move(
+                destFileName: destination,
+                overwrite: true,
+                sourceFileName: temporary
+            );
         } finally {
             try {
                 File.Delete(path: temporary);
-            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 Console.Error.WriteLine(value: $"[advanced-machine-host] temporary save cleanup failed ({exception.Message}).");
             }
         }
     }
-
     private void LoadBatterySave() {
         if (
             (m_savePath is not { } savePath) ||

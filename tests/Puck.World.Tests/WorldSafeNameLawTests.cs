@@ -17,21 +17,60 @@ namespace Puck.World.Tests;
 public sealed class WorldSafeNameLawTests {
     [Fact]
     public void TryParse_PastMaxLength_RefusesByName_AtMaxLengthParsesClean() {
-        var atLimit = new string(c: 'a', count: SafeName.MaxLength);
-        var pastLimit = new string(c: 'a', count: (SafeName.MaxLength + 1));
+        var atLimit = new string(
+            c: 'a',
+            count: SafeName.MaxLength
+        );
+        var pastLimit = new string(
+            c: 'a',
+            count: (SafeName.MaxLength + 1)
+        );
 
-        Assert.False(condition: SafeName.TryParse(candidate: pastLimit, name: out _, reason: out var reason));
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: $"{SafeName.MaxLength}-character limit");
+        Assert.False(condition: SafeName.TryParse(
+            candidate: pastLimit,
+            name: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"{SafeName.MaxLength}-character limit"
+        );
 
-        Assert.True(condition: SafeName.TryParse(candidate: atLimit, name: out var parsed, reason: out var atLimitReason), userMessage: atLimitReason);
-        Assert.Equal(expected: atLimit, actual: parsed.Value);
+        Assert.True(
+            condition: SafeName.TryParse(
+                candidate: atLimit,
+                name: out var parsed,
+                reason: out var atLimitReason
+            ),
+            userMessage: atLimitReason
+        );
+        Assert.Equal(
+            expected: atLimit,
+            actual: parsed.Value
+        );
     }
     [Fact]
     public void TryParse_PastMaxLength_RefusesByName_ControlAtMaxLengthParsesClean() {
         Laws.RefusalWithControl(
             lawId: "world-safe-name.max-length",
-            deniedOutcome: static () => SafeName.TryParse(candidate: new string(c: 'z', count: (SafeName.MaxLength + 1)), name: out _, reason: out _),
-            controlOutcome: static () => SafeName.TryParse(candidate: new string(c: 'z', count: SafeName.MaxLength), name: out _, reason: out _));
+            deniedOutcome: static () => SafeName.TryParse(
+                candidate: new string(
+                    c: 'z',
+                    count: (SafeName.MaxLength + 1)
+                ),
+                name: out _,
+                reason: out _
+            ),
+            controlOutcome: static () => SafeName.TryParse(
+                candidate: new string(
+                    c: 'z',
+                    count: SafeName.MaxLength
+                ),
+                name: out _,
+                reason: out _
+            )
+        );
     }
     // The "impossible case" made real: MintInstanceName's own remarks call the SafeName.TryParse re-check
     // "defensive, not load-bearing ... this can never actually fire", because every component it composes from was
@@ -43,13 +82,37 @@ public sealed class WorldSafeNameLawTests {
     [Fact]
     public void TryResolve_ComposedNameExceedsMaxLength_RefusesByName() {
         var resolver = new WorldSessionResolver();
-        var longName = new string(c: 'd', count: 150);
-        var longGroupId = new string(c: 'g', count: 150);
-        var kind = new WorldGroupKind(Name: "party", Roles: [], OwnershipPolicy: WorldGroupOwnershipPolicy.None, Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
+        var longName = new string(
+            c: 'd',
+            count: 150
+        );
+        var longGroupId = new string(
+            c: 'g',
+            count: 150
+        );
+        var kind = new WorldGroupKind(
+            Capacity: 8,
+            EvictionPolicy: WorldGroupEvictionPolicy.Remove,
+            Lifetime: WorldGroupLifetime.Persistent,
+            Name: "party",
+            Roles: []
+        );
         var groups = new WorldGroup[] {
-            new(Id: SafeName.Parse(candidate: longGroupId), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
+            new(
+            Id: SafeName.Parse(candidate: longGroupId),
+            KindName: "party",
+            Members: [new WorldGroupMember(
+                    WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)),
+                    null,
+                    0
+                )]
+        ),
         };
-        var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
+        var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(
+            Groups: groups,
+            Kinds: [kind],
+            Ownership: []
+        ) };
         var destination = new WorldDestination(
             Name: SafeName.Parse(candidate: longName),
             Reference: "ref",
@@ -57,24 +120,60 @@ public sealed class WorldSafeNameLawTests {
             Scope: WorldDestinationScope.Group,
             Selector: new WorldGroupSelector.Named(Group: longGroupId)
         );
-        var cohort = new[] { new WorldSessionResolver.CohortMember(Principal: WorldPrincipal.Seat(slot: 1), IdentityId: null) };
+        var cohort = new[] { new WorldSessionResolver.CohortMember(
+            Principal: WorldPrincipal.Seat(slot: 1),
+            IdentityId: null
+        ) };
 
-        var resolved = resolver.TryResolve(cohort: cohort, destination: destination, reason: out var reason, referencedDocument: "worlds/fixture.world.json", resolved: out _, sourceDefinition: definition);
+        var resolved = resolver.TryResolve(
+            cohort: cohort,
+            destination: destination,
+            reason: out var reason,
+            referencedDocument: "worlds/fixture.world.json",
+            resolved: out _,
+            sourceDefinition: definition
+        );
 
         Assert.False(condition: resolved);
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "is not a safe name");
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "character limit");
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "is not a safe name"
+        );
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "character limit"
+        );
     }
     [Fact]
     public void TryResolve_ComposedNameExceedsMaxLength_RefusesByName_ControlWithShortNamesResolves() {
-        var kind = new WorldGroupKind(Name: "party", Roles: [], OwnershipPolicy: WorldGroupOwnershipPolicy.None, Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
+        var kind = new WorldGroupKind(
+            Capacity: 8,
+            EvictionPolicy: WorldGroupEvictionPolicy.Remove,
+            Lifetime: WorldGroupLifetime.Persistent,
+            Name: "party",
+            Roles: []
+        );
 
         bool Resolve(string name, string groupId) {
             var resolver = new WorldSessionResolver();
             var groups = new WorldGroup[] {
-                new(Id: SafeName.Parse(candidate: groupId), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
+                new(
+                Id: SafeName.Parse(candidate: groupId),
+                KindName: "party",
+                Members: [new WorldGroupMember(
+                        WorldMemberRef.Local(principal: WorldPrincipal.Seat(slot: 1)),
+                        null,
+                        0
+                    )]
+            ),
             };
-            var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
+            var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(
+                Groups: groups,
+                Kinds: [kind],
+                Ownership: []
+            ) };
             var destination = new WorldDestination(
                 Name: SafeName.Parse(candidate: name),
                 Reference: "ref",
@@ -82,14 +181,37 @@ public sealed class WorldSafeNameLawTests {
                 Scope: WorldDestinationScope.Group,
                 Selector: new WorldGroupSelector.Named(Group: groupId)
             );
-            var cohort = new[] { new WorldSessionResolver.CohortMember(Principal: WorldPrincipal.Seat(slot: 1), IdentityId: null) };
+            var cohort = new[] { new WorldSessionResolver.CohortMember(
+                Principal: WorldPrincipal.Seat(slot: 1),
+                IdentityId: null
+            ) };
 
-            return resolver.TryResolve(cohort: cohort, destination: destination, reason: out _, referencedDocument: "worlds/fixture.world.json", resolved: out _, sourceDefinition: definition);
+            return resolver.TryResolve(
+                cohort: cohort,
+                destination: destination,
+                reason: out _,
+                referencedDocument: "worlds/fixture.world.json",
+                resolved: out _,
+                sourceDefinition: definition
+            );
         }
 
         Laws.RefusalWithControl(
             lawId: "resolver.composed-instance-name-too-long-refused",
-            deniedOutcome: () => Resolve(name: new string(c: 'd', count: 150), groupId: new string(c: 'g', count: 150)),
-            controlOutcome: () => Resolve(groupId: "alpha", name: "hall"));
+            deniedOutcome: () => Resolve(
+                name: new string(
+                    c: 'd',
+                    count: 150
+                ),
+                groupId: new string(
+                    c: 'g',
+                    count: 150
+                )
+            ),
+            controlOutcome: () => Resolve(
+                groupId: "alpha",
+                name: "hall"
+            )
+        );
     }
 }

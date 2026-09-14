@@ -32,7 +32,7 @@ namespace Puck.World;
 /// <see cref="IServerLink"/> and <see cref="WorldViewComposer"/> are core, so <c>view.override</c> and
 /// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
 /// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent.</para></remarks>
-internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldCursorFeed? cursorFeed = null) : ICommandModule {
+internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>
@@ -87,10 +87,14 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
 
         for (var index = 0; (index < composer.Slots.Count); index++) {
             var slot = composer.Slots[index];
-            var occupant = ((slot.Camera is { } camera)
-                ? $"cam:{camera}"
-                : $"seat{slot.SeatOrder}"
-            );
+            var occupant = ((slot.Pipeline is { } pipeline)
+                ? (((renderProbe?.Node is { } node) && !node.HasChild(name: pipeline))
+                    ? $"pipeline:{pipeline}:missing"
+                    : $"pipeline:{pipeline}")
+                : ((slot.Camera is { } camera)
+                    ? $"cam:{camera}"
+                    : $"seat{slot.SeatOrder}"
+            ));
 
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
@@ -172,8 +176,11 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.state",
-            description: "Echoes the live window composition: world.view.state — the active layout name, selection reason (override|authored|builtin), transition progress, and each slot's rect + occupant (seat<order> | cam:<name>). A query (always echoes) — the pipe-assertable composition read.",
-            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.view.state") is { } refusal)
+            description: "Echoes the live window composition: world.view.state — the active layout name, selection reason (override|authored|builtin), transition progress, and each slot's rect + occupant (seat<order> | cam:<name> | pipeline:<name>, appended :missing when a pipeline slot names a views.pipelines row the render engine has not registered). A query (always echoes) — the pipe-assertable composition read.",
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.view.state"
+            ) is { } refusal)
             ? refusal
             : new CommandResult(Output: DescribeState())),
             routing: CommandRouting.Immediate
@@ -182,7 +189,10 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             bindability: CommandBindability.Unbindable,
             name: "world.view.pointer",
             description: "Echoes the drawn cursor's last composed frame: world.view.pointer — the seat the pointer rides (1-based; the keyboard's seat, the one WorldPointerSink resolves the mouse onto), the cursor position in CLIENT pixels (position=), the same position mapped into the fixed FRAME extent the overlay draws in (frame= — the two diverge when the OS window is resized; WorldCursorFeed.Decide owns the mapping) and normalized within the seat's viewport (local=), the viewport rect, the visibility verdict (visible | no-position | no-view | outside-viewport | orbit-drag — WorldCursorFeed's one visibility rule), the held pointer buttons (buttons=, L/R/M in that order or '-' — the live store state, so an injected press is assertable before anything acts on it), the live hover target (hover=none, or the hovered panel/world row's label), and the seat's SYSTEM-RELEASE generation (syscount= — WorldPointer.SystemReleaseCount: how many times the store has force-cleared this seat's held buttons without a genuine release event; an edge-deriving consumer compares this against the value it captured at press time to tell a synthetic release from a real one). A query (always echoes) — the pipe-assertable pointer read, the world.view.camera sibling: live per-seat presentation state nothing else can echo.",
-            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.view.pointer") is { } refusal)
+            handler: (context, args) => ((CommandResult.RequireNoArguments(
+                args: args,
+                verb: "world.view.pointer"
+            ) is { } refusal)
             ? refusal
             : DescribePointer()),
             routing: CommandRouting.Immediate

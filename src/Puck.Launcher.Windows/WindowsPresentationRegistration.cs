@@ -30,7 +30,11 @@ public static class WindowsPresentationRegistration {
         services.AddPuckAllocator();
 
         if (hostsOnDirectX) {
-            if (!OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)) {
+            if (!OperatingSystem.IsWindowsVersionAtLeast(
+                major: 10,
+                minor: 0,
+                build: 10240
+            )) {
                 throw new PlatformNotSupportedException(message: "The Direct3D 12 host requires Windows 10 or newer.");
             }
 
@@ -39,9 +43,13 @@ public static class WindowsPresentationRegistration {
                 Name: "directx",
                 // The outer IsWindowsVersionAtLeast throw above already refused this path on an older OS; the
                 // analyzer cannot see across this lambda into that guard, so it is restated here for CA1416.
-                Presenter: (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)
-                    ? sp.GetRequiredService<DirectXSurfacePresenter>()
-                    : throw new PlatformNotSupportedException(message: "The Direct3D 12 host requires Windows 10 or newer."))
+                Presenter: (OperatingSystem.IsWindowsVersionAtLeast(
+                    major: 10,
+                    minor: 0,
+                    build: 10240
+                )
+                ? sp.GetRequiredService<DirectXSurfacePresenter>()
+                : throw new PlatformNotSupportedException(message: "The Direct3D 12 host requires Windows 10 or newer."))
             ));
         } else {
             services.AddVulkanHostedPresentation();

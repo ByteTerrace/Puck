@@ -10,21 +10,18 @@ using Microsoft.Build.Utilities;
 
 /// <summary>
 /// The architecture gate. Runs in every in-scope project's build, immediately before <c>CoreCompile</c>,
-/// against the RESOLVED reference set — so an edge that arrives transitively is checked exactly like a
-/// declared one. Policy comes from <c>build/Architecture.props</c> as evaluated MSBuild items; per-project
-/// layer and kind declarations are read from the csproj files themselves.
+/// against the resolved reference set, so a transitive edge is checked exactly like a declared one. Policy
+/// comes from <c>build/Architecture.props</c> as evaluated MSBuild items; per-project layer and kind
+/// declarations are read from the csproj files themselves.
 /// </summary>
 /// <remarks>
-/// <para>The hook point is load-bearing and was chosen by measurement, not by reading. The obvious hook —
-/// <c>AfterTargets="ResolveReferences"</c> — is WRONG: <c>@(ReferencePathWithRefAssemblies)</c> is empty
-/// there (measured: count=0 on every project), because it is populated later by
-/// <c>FindReferenceAssembliesForReferences</c> on the way into the compile. A gate hooked there would
-/// examine nothing and pass everything, forever, and nobody would find out by running it — running it is
-/// exactly what would not complain. <c>BeforeTargets="CoreCompile"</c> is populated (measured: 201 items on
-/// Puck.Launcher, four of them Puck projects) and still fires on a fully up-to-date incremental build.</para>
-/// <para>This task is compiled by <c>RoslynCodeTaskFactory</c>, whose host resolves
-/// <c>System.Xml.Linq</c> but NOT <c>System.Text.Json</c>. That is why the ledger is an MSBuild props file.
-/// It also means this file is outside the repository's analyzer and nullable context — keep it plain.</para>
+/// <para>The hook point is load-bearing: <c>@(ReferencePathWithRefAssemblies)</c> is empty after
+/// <c>ResolveReferences</c> and populated by <c>FindReferenceAssembliesForReferences</c> on the way into the
+/// compile, so a gate hooked earlier examines nothing and passes everything. <c>BeforeTargets="CoreCompile"</c>
+/// also fires on a fully up-to-date incremental build.</para>
+/// <para>Compiled by <c>RoslynCodeTaskFactory</c>, whose host resolves <c>System.Xml.Linq</c> but not
+/// <c>System.Text.Json</c>; that is why the ledger is an MSBuild props file. The file is outside the
+/// repository's analyzer and nullable context.</para>
 /// </remarks>
 public sealed class PuckArchitectureGate : Task {
     private const string BackendsLayer = "Backends";
@@ -37,17 +34,10 @@ public sealed class PuckArchitectureGate : Task {
     public ITaskItem[] BackendExceptions { get; set; } = Array.Empty<ITaskItem>();
 
     /// <summary>
-    /// This project's <c>@(ProjectReference)</c> as MSBUILD evaluated it — which is what makes it usable
-    /// where reading the csproj text is not.
+    /// This project's <c>@(ProjectReference)</c> as MSBuild evaluated it, which includes an edge contributed by
+    /// an <c>&lt;Import&gt;</c> that reading the csproj text would miss. Semantics come from MSBuild; the csproj
+    /// text is read only for provenance, where being incomplete degrades a message rather than a verdict.
     /// </summary>
-    /// <remarks>
-    /// The "does this project introduce a backend itself" test used to read <c>&lt;ProjectReference&gt;</c>
-    /// elements out of the csproj. An <c>&lt;Import&gt;</c> carrying a ProjectReference is invisible to that
-    /// reading and visible to this one, and the unit-1 review proved the gap by importing a reference to a
-    /// backend into a terminal-kind project, which built green and shipped the backend assembly. Semantics
-    /// come from MSBuild; the csproj text is read only for PROVENANCE, where being incomplete degrades a
-    /// message rather than a verdict.
-    /// </remarks>
     public ITaskItem[] DeclaredReferences { get; set; } = Array.Empty<ITaskItem>();
 
     /// <summary>The kind taxonomy: <c>Include</c> is the kind, <c>Ranked</c> is "true" or "false".</summary>
@@ -100,8 +90,6 @@ public sealed class PuckArchitectureGate : Task {
         return ok;
     }
 
-    // ---- rules -------------------------------------------------------------------------------------
-
     private bool CheckBackendQuarantine(List<ProjectFacts> closure, Dictionary<string, bool> kinds) {
         var backends = closure.Where(predicate: f => f.Layer == BackendsLayer).ToArray();
 
@@ -119,10 +107,9 @@ public sealed class PuckArchitectureGate : Task {
             return true;
         }
 
-        // Clause (b): a TERMINAL consumer inherits the closure of whatever it composes and never introduces
-        // a backend. Safe by composition rather than by trust — every ranked project in this closure has
-        // passed this same gate in its own build, so a backend arriving through one arrived legally. What is
-        // checked here is only that this project does not NAME a backend itself.
+        // A terminal consumer inherits the closure of whatever it composes and never introduces a backend: every
+        // ranked project in its closure passed this gate in its own build, so only an edge this project names
+        // itself is checked.
         var terminal = kinds.TryGetValue(key: Kind, value: out var ranked) && !ranked;
         var declared = EvaluatedReferenceNames();
         var introduced = backends.Where(predicate: b => declared.Contains(item: b.Name)).ToArray();
@@ -296,12 +283,9 @@ public sealed class PuckArchitectureGate : Task {
         return true;
     }
 
-    // ---- reading -----------------------------------------------------------------------------------
-
     /// <summary>
-    /// The names this project references directly, taken from MSBuild's EVALUATED <c>@(ProjectReference)</c>
-    /// rather than from the csproj's text — so an edge contributed by an <c>&lt;Import&gt;</c> counts, which
-    /// is the gap the unit-1 review used to walk a backend into a terminal-kind project.
+    /// The names this project references directly, from MSBuild's evaluated <c>@(ProjectReference)</c> rather
+    /// than the csproj text, so an edge contributed by an <c>&lt;Import&gt;</c> counts.
     /// </summary>
     private HashSet<string> EvaluatedReferenceNames() {
         var names = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -464,12 +448,9 @@ public sealed class PuckArchitectureGate : Task {
         return ranks.TryGetValue(key: layer, value: out var rank) ? rank : int.MaxValue;
     }
 
-    // ---- provenance --------------------------------------------------------------------------------
-
     /// <summary>
-    /// The shortest DECLARED path from this project to <paramref name="target"/>, each hop carrying the
-    /// csproj and line that declares it. The resolved set proves an edge EXISTS; only this says where
-    /// someone has to go to change it, which is the half of a diagnostic that costs nothing to act on.
+    /// The shortest declared path from this project to <paramref name="target"/>, each hop carrying the csproj
+    /// and line that declares it: the resolved set proves an edge exists, only this says where to change it.
     /// </summary>
     private string DescribePath(string target) {
         var queue = new Queue<List<Edge>>();
@@ -501,8 +482,6 @@ public sealed class PuckArchitectureGate : Task {
         return $"{ProjectName} -> ... -> {target} (no declared path found — the reference resolves but no csproj in the walk declares it, which is itself worth understanding before anything else here is believed)";
     }
 
-    // ---- diagnostics -------------------------------------------------------------------------------
-
     private string Describe() {
         return string.IsNullOrEmpty(value: Layer) ? $"{ProjectName} ({Kind})" : $"{ProjectName} ({Layer})";
     }
@@ -519,8 +498,6 @@ public sealed class PuckArchitectureGate : Task {
             endColumnNumber: 0,
             message: message);
     }
-
-    // ---- shapes ------------------------------------------------------------------------------------
 
     private sealed class Edge {
         public string DeclaredIn = "";

@@ -17,14 +17,21 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">The Media Foundation frame-source group scan failed.</exception>
     public IReadOnlyList<CameraDeviceInfo> EnumerateDevices() {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 14393)) {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(
+            10,
+            0,
+            14393
+        )) {
             return [];
         }
 
         try {
             return Win32CameraDeviceGroups.Enumerate();
         } catch (Exception exception) {
-            throw new InvalidOperationException(message: $"camera device enumeration failed: {exception.Message}", innerException: exception);
+            throw new InvalidOperationException(
+                message: $"camera device enumeration failed: {exception.Message}",
+                innerException: exception
+            );
         }
     }
     /// <inheritdoc/>
@@ -35,9 +42,22 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
 
         try {
             if (streams is [var single]) {
-                graph = new Win32SourceReaderPixelGraph(deviceId: deviceId, request: single);
-            } else if (IsFaceAuthenticationPair(streams: streams) && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) {
-                graph = new Win32FaceAuthenticationPixelGraph(deviceId: deviceId, requests: streams);
+                graph = new Win32SourceReaderPixelGraph(
+                    deviceId: deviceId,
+                    request: single
+                );
+            } else if (
+                IsFaceAuthenticationPair(streams: streams) &&
+                OperatingSystem.IsWindowsVersionAtLeast(
+                10,
+                0,
+                19041
+            )
+            ) {
+                graph = new Win32FaceAuthenticationPixelGraph(
+                    deviceId: deviceId,
+                    requests: streams
+                );
             } else {
                 throw new NotSupportedException(message: Unsupported(streams: streams));
             }
@@ -56,14 +76,33 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
         graph = null;
 
         try {
-            if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240)) {
+            if (!OperatingSystem.IsWindowsVersionAtLeast(
+                10,
+                0,
+                10240
+            )) {
                 return false;
             }
 
             if (streams is [var single]) {
-                graph = new Win32SourceReaderSharedGraph(adapterLuid: adapterLuid, deviceId: deviceId, request: single);
-            } else if (IsFaceAuthenticationPair(streams: streams) && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) {
-                graph = new Win32FaceAuthenticationSharedGraph(adapterLuid: adapterLuid, deviceId: deviceId, requests: streams);
+                graph = new Win32SourceReaderSharedGraph(
+                    adapterLuid: adapterLuid,
+                    deviceId: deviceId,
+                    request: single
+                );
+            } else if (
+                IsFaceAuthenticationPair(streams: streams) &&
+                OperatingSystem.IsWindowsVersionAtLeast(
+                10,
+                0,
+                19041
+            )
+            ) {
+                graph = new Win32FaceAuthenticationSharedGraph(
+                    adapterLuid: adapterLuid,
+                    deviceId: deviceId,
+                    requests: streams
+                );
             } else {
                 throw new NotSupportedException(message: Unsupported(streams: streams));
             }
@@ -90,6 +129,9 @@ public sealed class Win32MediaFoundationCameraService : ICameraCaptureService {
             sensors[index] = streams[index].Sensor.ToString();
         }
 
-        return $"no Windows camera graph carries the sensor set [{string.Join(separator: ", ", value: sensors)}]";
+        return $"no Windows camera graph carries the sensor set [{string.Join(
+            separator: ", ",
+            value: sensors
+        )}]";
     }
 }

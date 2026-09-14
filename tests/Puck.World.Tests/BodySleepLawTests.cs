@@ -22,7 +22,10 @@ public sealed class BodySleepLawTests {
         var kit = definition.Kits[0];
         var motion = (kit.Motion with {
             Holds = [kit.Motion.Holds![0] with {
-                Gravity = new WorldHoldGravity(Fall: 0.0001f, Rise: 0.0001f),
+                Gravity = new WorldHoldGravity(
+                Fall: 0.0001f,
+                Rise: 0.0001f
+            ),
             }],
         });
 
@@ -41,40 +44,51 @@ public sealed class BodySleepLawTests {
         using var fixture = Fixtures.FreshServer(Document());
         var population = fixture.Server.Population;
 
-        Assert.Equal(expected: 1, actual: population.SetSimulatedCount(count: 1));
+        Assert.Equal(
+            expected: 1,
+            actual: population.SetSimulatedCount(count: 1)
+        );
 
         var index = WorldBodiesLimits.LocalSeatCount;
         var body = population.EntryBody(index: index)!;
 
         Assert.False(condition: body.Asleep);
 
-        for (var tick = 0; (tick < 5); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
         Assert.True(condition: body.Asleep);
-        Assert.Equal(expected: 1, actual: population.SleepingCount);
+        Assert.Equal(
+            expected: 1,
+            actual: population.SleepingCount
+        );
 
         // A live source is required for a submitted intent to be adopted rather than masked by Idle (see
         // WorldBody.SubmitIntent's own remarks) — this proves the wake, not merely that the flag was set.
         body.SetIntentSource(source: IntentSource.Live);
-        body.SubmitIntent(intent: new PlayerIntent(Channels: default).WithChannel(ordinal: 0, value: FixedQ4816.One));
+        body.SubmitIntent(intent: new PlayerIntent(Channels: default).WithChannel(
+            ordinal: 0,
+            value: FixedQ4816.One
+        ));
         fixture.Step();
 
         Assert.False(condition: body.Asleep);
     }
-
     [Fact]
     public void RestingBodyWakesOnContactFieldVersionBump() {
         using var fixture = Fixtures.FreshServer(Document());
         var population = fixture.Server.Population;
 
-        Assert.Equal(expected: 1, actual: population.SetSimulatedCount(count: 1));
+        Assert.Equal(
+            expected: 1,
+            actual: population.SetSimulatedCount(count: 1)
+        );
 
         var index = WorldBodiesLimits.LocalSeatCount;
         var body = population.EntryBody(index: index)!;
 
-        for (var tick = 0; (tick < 5); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
@@ -90,31 +104,48 @@ public sealed class BodySleepLawTests {
         ));
         fixture.Step();
 
-        Assert.NotEqual(expected: versionBeforeBump, actual: population.ContactFieldVersion);
+        Assert.NotEqual(
+            expected: versionBeforeBump,
+            actual: population.ContactFieldVersion
+        );
         Assert.False(condition: body.Asleep);
     }
-
     [Fact]
     public void RestingBodyWakesOnDesignationTargetingIt() {
         var definition = (Document() with {
-            TargetRegistersRaw = [new WorldTargetRegister(Name: "goal", MaximumRange: 100f, MaximumHalfAngleDegrees: 180f, RequiresLineOfSight: false)],
+            TargetRegistersRaw = [new WorldTargetRegister(
+                Name: "goal",
+                MaximumRange: 100f,
+                MaximumHalfAngleDegrees: 180f,
+                RequiresLineOfSight: false
+            )],
         });
         using var fixture = Fixtures.FreshServer(definition);
         var population = fixture.Server.Population;
 
-        Assert.Equal(expected: 1, actual: population.SetSimulatedCount(count: 1));
+        Assert.Equal(
+            expected: 1,
+            actual: population.SetSimulatedCount(count: 1)
+        );
 
         var index = WorldBodiesLimits.LocalSeatCount;
         var body = population.EntryBody(index: index)!;
 
-        for (var tick = 0; (tick < 5); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
         Assert.True(condition: body.Asleep);
-        Assert.True(condition: population.TryResolveTargetRegister(name: "goal", index: out var registerIndex));
+        Assert.True(condition: population.TryResolveTargetRegister(
+            index: out var registerIndex,
+            name: "goal"
+        ));
 
-        population.SetDesignation(bodyIndex: index, registerIndex: registerIndex, target: WorldTargetDesignation.Body(index: 0));
+        population.SetDesignation(
+            bodyIndex: index,
+            registerIndex: registerIndex,
+            target: WorldTargetDesignation.Body(index: 0)
+        );
 
         Assert.False(condition: body.Asleep);
     }

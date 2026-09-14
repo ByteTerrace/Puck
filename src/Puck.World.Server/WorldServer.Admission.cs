@@ -79,6 +79,7 @@ public sealed partial class WorldServer {
             RosterEcho: string.Empty
         );
     }
+
     /// <summary>Disconnects one remote-human peer connection: revokes every grant that generation held and drops the
     /// body, through the same <see cref="WorldServerEvent.PeerDisconnected"/> ordered-domain path a census shrink
     /// uses. <c>Server.WorldPeerHost</c> calls this from the tick thread on socket teardown (graceful or dead).</summary>
@@ -90,6 +91,7 @@ public sealed partial class WorldServer {
             ordered: true
         );
     }
+
     /// <summary>Removes a peer admitted by a transfer whose multi-member commit is rolling back, including every
     /// generation-scoped grant minted with it.</summary>
     internal void RollbackTransferredEntity(int slot) {
@@ -109,6 +111,7 @@ public sealed partial class WorldServer {
             slot: slot
         );
     }
+
     /// <summary>Admits one remote-human peer connection through the population door and dispatches the
     /// <see cref="WorldServerEvent.PeerAdmitted"/> event through the same ordered domain every other lifecycle event
     /// drains through. Trusted QUIC and OAuth host adapters call this only from the
@@ -151,6 +154,7 @@ public sealed partial class WorldServer {
             refusal: out refusal
         );
     }
+
     /// <summary>Admits one verified participant onto a population body and mints exactly what the admission door's
     /// verdict authorizes — the single entry every authority-materializing ingress crosses.</summary>
     /// <remarks>There is no arm that accepts grant rows. A caller with no verdict is refused by name rather than
@@ -184,10 +188,10 @@ public sealed partial class WorldServer {
         if (
             (reservedSlot is null) &&
             m_population.TryResumeParkedPeer(
-                identityDomain: decision.IdentityDomain,
-                identitySubject: decision.IdentitySubject,
-                admitted: out admitted
-            )
+            identityDomain: decision.IdentityDomain,
+            identitySubject: decision.IdentitySubject,
+            admitted: out admitted
+        )
         ) {
             ApplyLifecycleEvents(
                 admitted: [admitted],

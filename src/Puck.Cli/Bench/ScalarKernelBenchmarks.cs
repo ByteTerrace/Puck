@@ -39,11 +39,23 @@ public class ScalarKernels {
             m_narrowRight[i] = FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng));
             m_wideLeft[i] = FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng));
             m_wideRight[i] = FixedQ4816.FromRawBits(value: Operands.WideRaw(rng: rng));
-            m_positive[i] = FixedQ4816.FromRawBits(value: rng.NextInt64(maxValue: (1L << 40), minValue: 1L));
+            m_positive[i] = FixedQ4816.FromRawBits(value: rng.NextInt64(
+                maxValue: (1L << 40),
+                minValue: 1L
+            ));
             // Fractional exponents inside the band |y·log2 x| < 16 so the exponential path runs rather than saturating.
-            m_exponents[i] = FixedQ4816.FromRawBits(value: (rng.NextInt64(maxValue: (3L << 16), minValue: -(3L << 16)) | 1L));
-            m_complexLeft[i] = new(Real: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)), Imaginary: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)));
-            m_complexRight[i] = new(Real: FixedQ4816.FromRawBits(value: (Operands.NarrowRaw(rng: rng) | 1L)), Imaginary: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)));
+            m_exponents[i] = FixedQ4816.FromRawBits(value: rng.NextInt64(
+                maxValue: (3L << 16),
+                minValue: -(3L << 16)
+            ) | 1L);
+            m_complexLeft[i] = new(
+                Real: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)),
+                Imaginary: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng))
+            );
+            m_complexRight[i] = new(
+                Real: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng) | 1L),
+                Imaginary: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng))
+            );
         }
     }
     [Benchmark(Baseline = true)]
@@ -74,7 +86,14 @@ public class ScalarKernels {
     public long PowFractional() {
         var sink = 0L;
 
-        for (var i = 0; (i < Count); ++i) { sink ^= FixedQ4816.Pow(x: m_narrowRight[i].Value < 0L ? -m_narrowRight[i] : m_narrowRight[i], y: m_exponents[i]).Value; }
+        for (var i = 0; (i < Count); ++i) {
+            sink ^= FixedQ4816.Pow(
+                x: ((m_narrowRight[i].Value < 0L)
+                ? -m_narrowRight[i]
+                : m_narrowRight[i]),
+                y: m_exponents[i]
+            ).Value;
+        }
 
         return sink;
     }
@@ -123,7 +142,12 @@ public class RateAccumulation {
     public long IntegrateOneTick() {
         var sink = 0L;
 
-        for (var i = 0; (i < Count); ++i) { sink ^= m_accumulators[i].Integrate(elapsedTicks: 1UL, ratePerSecond: m_rates[i]).Value; }
+        for (var i = 0; (i < Count); ++i) {
+            sink ^= m_accumulators[i].Integrate(
+                elapsedTicks: 1UL,
+                ratePerSecond: m_rates[i]
+            ).Value;
+        }
 
         return sink;
     }

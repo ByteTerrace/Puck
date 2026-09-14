@@ -92,7 +92,7 @@ public sealed class HandshakeRefusedFrameTests {
     }
 
     [Fact]
-    public Task Dialer_ReceivingAHelloRefusedWithATrailingByte_IsRefusedHandshakeMalformed_AndSendsThatName() => AssertMalformedHelloRefusedIsAnsweredAsync(body: [((byte)PeerRefusal.ChannelUnbound), 0]);
-    [Fact]
     public Task Dialer_ReceivingAHelloRefusedNamingAnUnknownRefusal_IsRefusedHandshakeMalformed_AndSendsThatName() => AssertMalformedHelloRefusedIsAnsweredAsync(body: [0x7f]);
+    [Fact]
+    public Task Dialer_ReceivingAHelloRefusedWithATrailingByte_IsRefusedHandshakeMalformed_AndSendsThatName() => AssertMalformedHelloRefusedIsAnsweredAsync(body: [((byte)PeerRefusal.ChannelUnbound), 0]);
 }

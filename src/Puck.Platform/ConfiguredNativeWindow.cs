@@ -6,10 +6,9 @@ namespace Puck.Platform;
 
 internal sealed class ConfiguredNativeWindow(IOptions<NativeWindowOptions> options) : INativeWindow, IWindowInputSource {
     private bool m_disposed;
+    private bool m_visible;
 
     private readonly NativeWindowOptions m_options = options.Value;
-
-    private bool m_visible;
 
     public NativeDisplayKind DisplayKind { get; } = NativeDisplayKind.Headless;
 

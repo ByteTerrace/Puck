@@ -1,5 +1,5 @@
 {
-  "schema": "puck.recording.v1",
+  "schema": "puck.recording.configuration.v1",
   "output": null,
   "clock": "Wall",
   "video": {

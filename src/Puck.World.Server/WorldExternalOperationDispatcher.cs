@@ -8,9 +8,9 @@ namespace Puck.World.Server;
 /// Results remain durable even when the originating extension is unloaded. Publishing a result into gameplay is a
 /// separate, normally phase-guarded mutation through <see cref="WorldRecordedExtension.Submit"/>.</remarks>
 public sealed class WorldExternalOperationDispatcher {
+    private readonly FrozenDictionary<string, IWorldExternalOperationProvider> m_bindings;
     private readonly WorldRecordedExtension m_extension;
     private readonly WorldExternalOperationJournal m_journal;
-    private readonly FrozenDictionary<string, IWorldExternalOperationProvider> m_bindings;
 
     /// <summary>Creates an optional dispatcher. Bindings carry credentials and resource scope supplied by the host.</summary>
     /// <param name="extension">The live runtime capability.</param>
@@ -25,12 +25,113 @@ public sealed class WorldExternalOperationDispatcher {
         ArgumentNullException.ThrowIfNull(bindings);
         m_extension = extension;
         m_journal = journal;
-        m_bindings = bindings.ToFrozenDictionary(StringComparer.Ordinal);
+        m_bindings = bindings.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         foreach (var (name, provider) in m_bindings) {
             ArgumentException.ThrowIfNullOrWhiteSpace(name);
             ArgumentNullException.ThrowIfNull(provider);
             ArgumentException.ThrowIfNullOrWhiteSpace(provider.Identity);
         }
+    }
+
+    private IWorldExternalOperationProvider Binding(WorldExternalOperation operation) {
+        if (!m_bindings.TryGetValue(
+            key: operation.Binding,
+            value: out var provider
+        )) {
+            throw new InvalidOperationException(message: $"No external operation binding named '{operation.Binding}' is registered.");
+        }
+        if (!string.Equals(
+            a: operation.BindingIdentity,
+            b: provider.Identity,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            throw new InvalidOperationException(message: "The external operation binding identity changed; the request must not be redirected.");
+        }
+        return provider;
+    }
+    private async ValueTask<WorldExternalOperationEntry> FindAsync(string id, CancellationToken cancellationToken) =>
+        ((await m_journal.ReadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false)).FirstOrDefault(predicate: entry => (entry.Operation.Id == id))
+        ?? throw new InvalidOperationException(message: $"No committed external operation named '{id}' exists."));
+    private async ValueTask<WorldExternalOperationEntry> ProcessAsync(string id, bool reconcile, CancellationToken cancellationToken) {
+        using var lease = m_extension.BeginDispatch();
+        var entry = await FindAsync(
+            cancellationToken: cancellationToken,
+            id: id
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (entry.Status is WorldExternalOperationStatus.Succeeded or WorldExternalOperationStatus.Failed) { return entry; }
+        var provider = Binding(operation: entry.Operation);
+
+        if (reconcile) {
+            if (entry.Status == WorldExternalOperationStatus.Pending) { return entry; }
+        } else {
+            if (entry.Status != WorldExternalOperationStatus.Pending) { return entry; }
+            var claimed = new WorldExternalOperationResult(
+                Result: "",
+                Status: WorldExternalOperationStatus.Dispatching
+            );
+
+            if (!await m_journal.TryTransitionAsync(
+                cancellationToken: cancellationToken,
+                expected: entry,
+                result: claimed
+            ).ConfigureAwait(continueOnCapturedContext: false)) {
+                return await FindAsync(
+                    cancellationToken: cancellationToken,
+                    id: id
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            }
+            entry = entry with { Status = claimed.Status, Result = claimed.Result };
+        }
+
+        WorldExternalOperationResult result;
+
+        try {
+            result = (reconcile
+                ? await provider.ReconcileAsync(
+                    entry.Operation,
+                    new(
+                        entry.Status,
+                        entry.Result
+                    ),
+                    cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false)
+                : await provider.ExecuteAsync(
+                    entry.Operation,
+                    cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false)
+            );
+            if (
+                (result is null) ||
+                (result.Result is null) ||
+                (result.Status is not (
+                WorldExternalOperationStatus.Running or WorldExternalOperationStatus.Succeeded or
+                WorldExternalOperationStatus.Failed or WorldExternalOperationStatus.Unknown))
+            ) {
+                throw new InvalidDataException(message: "The provider returned an invalid operation outcome.");
+            }
+        } catch (Exception exception) {
+            // A timeout, cancellation, or provider fault does not prove the effect did not happen. Do not persist
+            // arbitrary exception messages: SDK errors can contain URLs, request bodies, or credentials.
+            // A failed status query must retain the receipt needed by the next query after a restart.
+            result = new WorldExternalOperationResult(
+                WorldExternalOperationStatus.Unknown,
+                (reconcile
+                ? entry.Result
+                : exception.GetType().Name)
+            );
+        }
+        // If shutdown cancels this write, Dispatching remains durable and recovery reconciles it. A store failure
+        // is never confused with provider failure and must never cause ExecuteAsync to run again.
+        _ = await m_journal.TryTransitionAsync(
+            cancellationToken: cancellationToken,
+            expected: entry,
+            result: result
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        return await FindAsync(
+            cancellationToken: cancellationToken,
+            id: id
+        ).ConfigureAwait(continueOnCapturedContext: false);
     }
 
     /// <summary>Durably commits an operation and its causal image. This does not call the external service.</summary>
@@ -44,10 +145,14 @@ public sealed class WorldExternalOperationDispatcher {
         CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(operation);
         using var lease = m_extension.BeginDispatch();
-        _ = Binding(operation);
-        return await m_journal.CommitAsync(operation, cause, cancellationToken).ConfigureAwait(false);
-    }
 
+        _ = Binding(operation: operation);
+        return await m_journal.CommitAsync(
+            cancellationToken: cancellationToken,
+            cause: cause,
+            operation: operation
+        ).ConfigureAwait(continueOnCapturedContext: false);
+    }
     /// <summary>Claims a pending operation durably before executing it. A duplicate or recovered request is only
     /// read back; call <see cref="ReconcileAsync"/> to resolve a nonterminal request that has already been claimed.</summary>
     /// <param name="id">The committed operation id.</param>
@@ -56,8 +161,11 @@ public sealed class WorldExternalOperationDispatcher {
     /// <exception cref="InvalidOperationException">The request or binding is absent, or the timeline is suppressed.</exception>
     /// <exception cref="ObjectDisposedException">The originating runtime has been retired.</exception>
     public ValueTask<WorldExternalOperationEntry> DispatchAsync(string id, CancellationToken cancellationToken = default) =>
-        ProcessAsync(id, reconcile: false, cancellationToken);
-
+        ProcessAsync(
+            id,
+            reconcile: false,
+            cancellationToken
+        );
     /// <summary>Observes an already-claimed operation without repeating its side effect. Unknown remains a valid
     /// outcome when the provider offers no reliable status query.</summary>
     /// <param name="id">The committed operation id.</param>
@@ -66,58 +174,9 @@ public sealed class WorldExternalOperationDispatcher {
     /// <exception cref="InvalidOperationException">The request or binding is absent, or the timeline is suppressed.</exception>
     /// <exception cref="ObjectDisposedException">The originating runtime has been retired.</exception>
     public ValueTask<WorldExternalOperationEntry> ReconcileAsync(string id, CancellationToken cancellationToken = default) =>
-        ProcessAsync(id, reconcile: true, cancellationToken);
-
-    private async ValueTask<WorldExternalOperationEntry> ProcessAsync(string id, bool reconcile, CancellationToken cancellationToken) {
-        using var lease = m_extension.BeginDispatch();
-        var entry = await FindAsync(id, cancellationToken).ConfigureAwait(false);
-        if (entry.Status is WorldExternalOperationStatus.Succeeded or WorldExternalOperationStatus.Failed) { return entry; }
-        var provider = Binding(entry.Operation);
-        if (reconcile) {
-            if (entry.Status == WorldExternalOperationStatus.Pending) { return entry; }
-        } else {
-            if (entry.Status != WorldExternalOperationStatus.Pending) { return entry; }
-            var claimed = new WorldExternalOperationResult(WorldExternalOperationStatus.Dispatching, "");
-            if (!await m_journal.TryTransitionAsync(entry, claimed, cancellationToken).ConfigureAwait(false)) {
-                return await FindAsync(id, cancellationToken).ConfigureAwait(false);
-            }
-            entry = entry with { Status = claimed.Status, Result = claimed.Result };
-        }
-
-        WorldExternalOperationResult result;
-        try {
-            result = reconcile
-                ? await provider.ReconcileAsync(entry.Operation, new(entry.Status, entry.Result), cancellationToken).ConfigureAwait(false)
-                : await provider.ExecuteAsync(entry.Operation, cancellationToken).ConfigureAwait(false);
-            if (result is null || result.Result is null || result.Status is not (
-                WorldExternalOperationStatus.Running or WorldExternalOperationStatus.Succeeded or
-                WorldExternalOperationStatus.Failed or WorldExternalOperationStatus.Unknown)) {
-                throw new InvalidDataException("The provider returned an invalid operation outcome.");
-            }
-        } catch (Exception exception) {
-            // A timeout, cancellation, or provider fault does not prove the effect did not happen. Do not persist
-            // arbitrary exception messages: SDK errors can contain URLs, request bodies, or credentials.
-            // A failed status query must retain the receipt needed by the next query after a restart.
-            result = new WorldExternalOperationResult(WorldExternalOperationStatus.Unknown,
-                reconcile ? entry.Result : exception.GetType().Name);
-        }
-        // If shutdown cancels this write, Dispatching remains durable and recovery reconciles it. A store failure
-        // is never confused with provider failure and must never cause ExecuteAsync to run again.
-        _ = await m_journal.TryTransitionAsync(entry, result, cancellationToken).ConfigureAwait(false);
-        return await FindAsync(id, cancellationToken).ConfigureAwait(false);
-    }
-
-    private IWorldExternalOperationProvider Binding(WorldExternalOperation operation) {
-        if (!m_bindings.TryGetValue(operation.Binding, out var provider)) {
-            throw new InvalidOperationException($"No external operation binding named '{operation.Binding}' is registered.");
-        }
-        if (!string.Equals(operation.BindingIdentity, provider.Identity, StringComparison.Ordinal)) {
-            throw new InvalidOperationException("The external operation binding identity changed; the request must not be redirected.");
-        }
-        return provider;
-    }
-
-    private async ValueTask<WorldExternalOperationEntry> FindAsync(string id, CancellationToken cancellationToken) =>
-        (await m_journal.ReadAsync(cancellationToken).ConfigureAwait(false)).FirstOrDefault(entry => entry.Operation.Id == id)
-        ?? throw new InvalidOperationException($"No committed external operation named '{id}' exists.");
+        ProcessAsync(
+            id,
+            reconcile: true,
+            cancellationToken
+        );
 }

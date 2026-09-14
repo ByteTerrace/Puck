@@ -12,9 +12,7 @@ public sealed record class FeatureCheckResponse(
     bool IsAuthenticated,
     string ObjectId
 );
-
-public sealed class FeatureCheck(IFeatureManagerSnapshot featureManagerSnapshot)
-{
+public sealed class FeatureCheck(IFeatureManagerSnapshot featureManagerSnapshot) {
     [FeatureGate(features: nameof(FeatureCheck))]
     [Function(name: nameof(FeatureCheck))]
     public async Task<IActionResult> Run(

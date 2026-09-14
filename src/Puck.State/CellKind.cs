@@ -6,11 +6,11 @@ namespace Puck.State;
 /// <summary>The closed set of cell value kinds a state row declares, shared by every cell the row
 /// carries. Carries no float kind: simulation state is float-free by the determinism contract (see
 /// <see cref="Fixed"/> for how a fractional value still rides here). A counter is represented as
-/// <see cref="Fixed"/>; a timer is <see cref="Int"/> with <c>NonNegative</c> set.</summary>
+/// <see cref="Fixed"/>; a timer is <see cref="Int"/> declaring <c>min</c> zero.</summary>
 [JsonConverter(typeof(StrictEnumConverter<CellKind>))]
 public enum CellKind : byte {
-    /// <summary>A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or — with
-    /// <c>NonNegative</c> set — a tick-count timer).</summary>
+    /// <summary>A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or — declaring
+    /// <c>min</c> zero — a tick-count timer).</summary>
     Int,
 
     /// <summary>A fixed-point cell holding raw <c>FixedQ4816</c> bits — the deterministic replacement for a float in

@@ -336,7 +336,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "this is the exactness seam owner ruling 2026-08-08 (authored-duration engine-tick storage) added: Puck.World.Data's WorldRuleCompiler.ResolveWrite calls this member for every world-rule 'valueSeconds' countdown/cooldown, refusing (WorldRuleRefusal.DurationNotExactEngineTicks) rather than silently rounding when it returns false — the law's coverage of the member is what keeps that refusal decision, and the nearest-exact-bounds arithmetic the refusal message itself performs with the SAME TicksPerSecond constant, honest as the member changes",
+        "Subject": "this is the exactness seam for authored-duration engine-tick storage: Puck.World.Data's WorldRuleCompiler.ResolveWrite calls this member for every world-rule 'valueSeconds' countdown/cooldown, refusing (WorldRuleRefusal.DurationNotExactEngineTicks) rather than silently rounding when it returns false — the law's coverage of the member is what keeps that refusal decision, and the nearest-exact-bounds arithmetic the refusal message itself performs with the SAME TicksPerSecond constant, honest as the member changes",
         "Against": "",
         "Shared": "",
         "Citation": "",

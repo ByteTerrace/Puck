@@ -199,7 +199,7 @@
   "bodyMotionPrograms": [
     {
       "name": "grounded",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",
@@ -215,7 +215,7 @@
     },
     {
       "name": "roam",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Producer",
       "operations": [
         "ProduceSteeringIntent"
@@ -369,7 +369,7 @@
   "views": {
     "seatRig": {
       "name": "seatChase",
-      "version": "puck.camera.v1",
+      "version": "puck.camera.program.v1",
       "operations": [
         {
           "$type": "orbit",
@@ -398,7 +398,7 @@
           "opcode": "lookAt"
         },
         {
-          "$type": "fov",
+          "$type": "fieldOfView",
           "fieldOfViewRadians": 0.9599311,
           "opcode": "fov"
         },
@@ -2777,7 +2777,7 @@
               "value": null,
               "target": "Self",
               "key": "score",
-              "expression": "max(0, solitaireKlondike[score] + ((solitaireKlondike[to] >= 10) ? 10 : ((solitaireKlondike[from] >= 10) ? -15 : ((solitaireKlondike[from] == 1) ? 5 : 0))))"
+              "expression": "maximum(0, solitaireKlondike[score] + ((solitaireKlondike[to] >= 10) ? 10 : ((solitaireKlondike[from] >= 10) ? -15 : ((solitaireKlondike[from] == 1) ? 5 : 0))))"
             },
             {
               "$type": "setState",
@@ -2904,7 +2904,7 @@
               "value": null,
               "target": "Self",
               "key": "drawLeft",
-              "expression": "min(solitaireKlondike[activeOption], $reduce:count:solitaireKlondikePile0)"
+              "expression": "minimum(solitaireKlondike[activeOption], $reduce:count:solitaireKlondikePile0)"
             },
             {
               "$type": "setState",
@@ -3561,7 +3561,7 @@
           "value": null,
           "target": "Self",
           "key": "gatherStep",
-          "expression": "solitaireKlondike[stage] == 0 ? 0 : min(11, solitaireKlondike[gatherStep] + 1)"
+          "expression": "solitaireKlondike[stage] == 0 ? 0 : minimum(11, solitaireKlondike[gatherStep] + 1)"
         }
       ],
       "gate": {
@@ -3786,5 +3786,5 @@
     }
   ],
   "documentId": null,
-  "schema": "puck.world.def.v1"
+  "schema": "puck.world.definition.v1"
 }

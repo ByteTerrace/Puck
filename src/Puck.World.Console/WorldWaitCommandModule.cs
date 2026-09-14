@@ -75,11 +75,14 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                     return CommandResult.Error(output: "[world.wait: requires an originating text session]");
                 }
 
-                if (ticks > ulong.MaxValue - gate.Tick) {
+                if (ticks > (ulong.MaxValue - gate.Tick)) {
                     return CommandResult.Error(output: "[world.wait: release tick would overflow the host clock]");
                 }
 
-                var release = gate.Arm(session: session, ticks: ticks);
+                var release = gate.Arm(
+                    session: session,
+                    ticks: ticks
+                );
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,

@@ -10,6 +10,34 @@ namespace Puck.Cli.Landing;
 /// differences are real differences here, because the question is whether a byte of somebody's landing is
 /// disappearing, not whether the code means the same thing.</remarks>
 internal static class LandingDiff {
+    /// <summary>The commits that touched <paramref name="path"/> between the author's base and the landing tip —
+    /// exactly the landings the author never worked from, and therefore whose content an unaccounted deletion is
+    /// dropping.</summary>
+    /// <param name="from">The author's base.</param>
+    /// <param name="to">The landing tip.</param>
+    /// <param name="path">The repository-relative path.</param>
+    public static IReadOnlyList<string> CommitsBetween(string from, string to, string path) {
+        var output = Git.Capture(
+            "log",
+            "--no-color",
+            "--oneline",
+            "--no-decorate",
+            $"{from}..{to}",
+            "--",
+            path
+        );
+        var commits = new List<string>();
+
+        foreach (var line in output.Split(separator: '\n')) {
+            var text = line.TrimEnd(trimChar: '\r');
+
+            if (text.Length > 0) {
+                commits.Add(item: text);
+            }
+        }
+
+        return commits;
+    }
     /// <summary>Every line <paramref name="to"/> deletes relative to <paramref name="from"/>, keyed by the path the
     /// deletion happened in.</summary>
     /// <param name="from">The revision to compare from.</param>
@@ -18,38 +46,69 @@ internal static class LandingDiff {
         // -U0: no context lines, so every '-' line in the output is a genuine deletion rather than shared context.
         // --no-renames: a rename detected as such would hide the deletion side; this check wants the raw removal.
         // --no-color and -M0 keep the stream machine-readable and stable across a user's git config.
-        var output = Git.Capture("diff", "--no-color", "--no-renames", "-U0", $"{from}..{to}");
+        var output = Git.Capture(
+            "diff",
+            "--no-color",
+            "--no-renames",
+            "-U0",
+            $"{from}..{to}"
+        );
         var deletions = new Dictionary<string, List<string>>(comparer: StringComparer.Ordinal);
         var path = string.Empty;
 
         foreach (var line in output.Split(separator: '\n')) {
             var text = line.TrimEnd(trimChar: '\r');
 
-            if (text.StartsWith(comparisonType: StringComparison.Ordinal, value: "+++ b/")) {
+            if (text.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "+++ b/"
+            )) {
                 path = text[6..];
 
                 continue;
             }
 
             // A whole-file deletion writes "+++ /dev/null", so the path has to come from the '---' side instead.
-            if (text.StartsWith(comparisonType: StringComparison.Ordinal, value: "+++ /dev/null")) {
+            if (text.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "+++ /dev/null"
+            )) {
                 continue;
             }
 
-            if (text.StartsWith(comparisonType: StringComparison.Ordinal, value: "--- a/")) {
+            if (text.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "--- a/"
+            )) {
                 path = text[6..];
 
                 continue;
             }
 
             // '---' and '-' are both prefixed with '-', so the header check above must run first.
-            if ((path.Length == 0) || !text.StartsWith(comparisonType: StringComparison.Ordinal, value: "-") || text.StartsWith(comparisonType: StringComparison.Ordinal, value: "---")) {
+            if (
+                (path.Length == 0) ||
+                !text.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "-"
+            ) ||
+                text.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "---"
+            )
+            ) {
                 continue;
             }
 
-            if (!deletions.TryGetValue(key: path, value: out var lines)) {
+            if (!deletions.TryGetValue(
+                key: path,
+                value: out var lines
+            )) {
                 lines = [];
-                deletions.Add(key: path, value: lines);
+                deletions.Add(
+                    key: path,
+                    value: lines
+                );
             }
 
             lines.Add(item: text[1..]);
@@ -67,16 +126,31 @@ internal static class LandingDiff {
         foreach (var (path, lines) in left) {
             var remaining = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
-            if (right.TryGetValue(key: path, value: out var accountedLines)) {
+            if (right.TryGetValue(
+                key: path,
+                value: out var accountedLines
+            )) {
                 foreach (var line in accountedLines) {
-                    remaining[line] = (remaining.TryGetValue(key: line, value: out var count) ? (count + 1) : 1);
+                    remaining[line] = (remaining.TryGetValue(
+                        key: line,
+                        value: out var count
+                    )
+                        ? (count + 1)
+                        : 1
+                    );
                 }
             }
 
             var surplus = new List<string>();
 
             foreach (var line in lines) {
-                if (remaining.TryGetValue(key: line, value: out var count) && (count > 0)) {
+                if (
+                    remaining.TryGetValue(
+                    key: line,
+                    value: out var count
+                ) &&
+                    (count > 0)
+                ) {
                     remaining[line] = (count - 1);
 
                     continue;
@@ -91,30 +165,13 @@ internal static class LandingDiff {
             }
 
             if (surplus.Count > 0) {
-                unaccounted.Add(key: path, value: surplus);
+                unaccounted.Add(
+                    key: path,
+                    value: surplus
+                );
             }
         }
 
         return unaccounted;
-    }
-    /// <summary>The commits that touched <paramref name="path"/> between the author's base and the landing tip —
-    /// exactly the landings the author never worked from, and therefore whose content an unaccounted deletion is
-    /// dropping.</summary>
-    /// <param name="from">The author's base.</param>
-    /// <param name="to">The landing tip.</param>
-    /// <param name="path">The repository-relative path.</param>
-    public static IReadOnlyList<string> CommitsBetween(string from, string to, string path) {
-        var output = Git.Capture("log", "--no-color", "--oneline", "--no-decorate", $"{from}..{to}", "--", path);
-        var commits = new List<string>();
-
-        foreach (var line in output.Split(separator: '\n')) {
-            var text = line.TrimEnd(trimChar: '\r');
-
-            if (text.Length > 0) {
-                commits.Add(item: text);
-            }
-        }
-
-        return commits;
     }
 }

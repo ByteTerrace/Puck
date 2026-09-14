@@ -12,28 +12,78 @@ public static unsafe class VulkanNativeBufferSupport {
     private const uint StructureTypeBufferCreateInfo = 12;
     private const uint StructureTypeMemoryAllocateInfo = 5;
 
-    /// <summary>Validates that the device, instance, and physical-device handles required to create a buffer are all non-zero.</summary>
+    /// <summary>Allocates device memory sized and typed for a buffer and binds it, freeing the allocation if the bind fails.</summary>
+    /// <param name="allocateMemory">A pointer to the native <c>vkAllocateMemory</c> entry point.</param>
+    /// <param name="bindBufferMemory">A pointer to the native <c>vkBindBufferMemory</c> entry point.</param>
+    /// <param name="freeMemory">A pointer to the native <c>vkFreeMemory</c> entry point.</param>
+    /// <param name="getBufferMemoryRequirements">A pointer to the native <c>vkGetBufferMemoryRequirements</c> entry point.</param>
+    /// <param name="getPhysicalDeviceMemoryProperties">A pointer to the native <c>vkGetPhysicalDeviceMemoryProperties</c> entry point.</param>
     /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
-    /// <param name="instanceHandle">The native <c>VkInstance</c> handle.</param>
-    /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>
-    /// <param name="argumentName">The parameter name reported by a thrown exception.</param>
-    /// <exception cref="ArgumentException">Any of the supplied handles is zero.</exception>
-    public static void ValidateBufferHandles(nint deviceHandle, nint instanceHandle, nint physicalDeviceHandle, string argumentName) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: argumentName
+    /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle whose memory types are queried.</param>
+    /// <param name="bufferHandle">The native <c>VkBuffer</c> handle the allocation is bound to.</param>
+    /// <param name="preferredProperties">A bitmask of <c>VkMemoryPropertyFlagBits</c> the allocation's memory type should carry.</param>
+    /// <param name="requireProperties"><see langword="true"/> to fail rather than fall back when no type carries the preferred properties.</param>
+    /// <param name="resourceDescription">A short noun phrase naming the resource, used in the memory-type failure message.</param>
+    /// <returns>The bound native <c>VkDeviceMemory</c> handle.</returns>
+    /// <exception cref="VulkanException">A native allocation or bind call failed.</exception>
+    /// <exception cref="InvalidOperationException">No compatible memory type was found.</exception>
+    public static nint AllocateAndBindMemory(
+        delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult> allocateMemory,
+        delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult> bindBufferMemory,
+        delegate* unmanaged[Cdecl]<nint, nint, nint, void> freeMemory,
+        delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void> getBufferMemoryRequirements,
+        delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void> getPhysicalDeviceMemoryProperties,
+        nint deviceHandle,
+        nint physicalDeviceHandle,
+        nint bufferHandle,
+        uint preferredProperties,
+        bool requireProperties,
+        string resourceDescription
+    ) {
+        getBufferMemoryRequirements(
+            deviceHandle,
+            bufferHandle,
+            out var memoryRequirements
         );
-        VulkanArgument.RequireHandle(
-            handle: instanceHandle,
-            handleDescription: "instance",
-            paramName: argumentName
+        getPhysicalDeviceMemoryProperties(
+            physicalDeviceHandle,
+            out var memoryProperties
         );
-        VulkanArgument.RequireHandle(
-            handle: physicalDeviceHandle,
-            handleDescription: "physical-device",
-            paramName: argumentName
-        );
+        var allocateInfo = new VkMemoryAllocateInfo {
+            AllocationSize = memoryRequirements.Size,
+            MemoryTypeIndex = FindMemoryTypeIndex(
+            memoryProperties: in memoryProperties,
+            memoryTypeBits: memoryRequirements.MemoryTypeBits,
+            preferredProperties: preferredProperties,
+            requireProperties: requireProperties,
+            resourceDescription: resourceDescription
+        ),
+            SType = StructureTypeMemoryAllocateInfo,
+        };
+
+        allocateMemory(
+            deviceHandle,
+            in allocateInfo,
+            0,
+            out var memoryHandle
+        ).ThrowIfFailed(operation: "vkAllocateMemory");
+
+        try {
+            bindBufferMemory(
+                deviceHandle,
+                bufferHandle,
+                memoryHandle,
+                0
+            ).ThrowIfFailed(operation: "vkBindBufferMemory");
+            return memoryHandle;
+        } catch {
+            freeMemory(
+                deviceHandle,
+                memoryHandle,
+                0
+            );
+            throw;
+        }
     }
     /// <summary>Creates a buffer with exclusive sharing mode using the supplied native <c>vkCreateBuffer</c> entry point.</summary>
     /// <param name="createBuffer">A pointer to the native <c>vkCreateBuffer</c> entry point.</param>
@@ -99,79 +149,6 @@ public static unsafe class VulkanNativeBufferSupport {
 
         return ((uint)fallbackIndex);
     }
-    /// <summary>Allocates device memory sized and typed for a buffer and binds it, freeing the allocation if the bind fails.</summary>
-    /// <param name="allocateMemory">A pointer to the native <c>vkAllocateMemory</c> entry point.</param>
-    /// <param name="bindBufferMemory">A pointer to the native <c>vkBindBufferMemory</c> entry point.</param>
-    /// <param name="freeMemory">A pointer to the native <c>vkFreeMemory</c> entry point.</param>
-    /// <param name="getBufferMemoryRequirements">A pointer to the native <c>vkGetBufferMemoryRequirements</c> entry point.</param>
-    /// <param name="getPhysicalDeviceMemoryProperties">A pointer to the native <c>vkGetPhysicalDeviceMemoryProperties</c> entry point.</param>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
-    /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle whose memory types are queried.</param>
-    /// <param name="bufferHandle">The native <c>VkBuffer</c> handle the allocation is bound to.</param>
-    /// <param name="preferredProperties">A bitmask of <c>VkMemoryPropertyFlagBits</c> the allocation's memory type should carry.</param>
-    /// <param name="requireProperties"><see langword="true"/> to fail rather than fall back when no type carries the preferred properties.</param>
-    /// <param name="resourceDescription">A short noun phrase naming the resource, used in the memory-type failure message.</param>
-    /// <returns>The bound native <c>VkDeviceMemory</c> handle.</returns>
-    /// <exception cref="VulkanException">A native allocation or bind call failed.</exception>
-    /// <exception cref="InvalidOperationException">No compatible memory type was found.</exception>
-    public static nint AllocateAndBindMemory(
-        delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult> allocateMemory,
-        delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult> bindBufferMemory,
-        delegate* unmanaged[Cdecl]<nint, nint, nint, void> freeMemory,
-        delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void> getBufferMemoryRequirements,
-        delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void> getPhysicalDeviceMemoryProperties,
-        nint deviceHandle,
-        nint physicalDeviceHandle,
-        nint bufferHandle,
-        uint preferredProperties,
-        bool requireProperties,
-        string resourceDescription
-    ) {
-        getBufferMemoryRequirements(
-            deviceHandle,
-            bufferHandle,
-            out var memoryRequirements
-        );
-        getPhysicalDeviceMemoryProperties(
-            physicalDeviceHandle,
-            out var memoryProperties
-        );
-        var allocateInfo = new VkMemoryAllocateInfo {
-            AllocationSize = memoryRequirements.Size,
-            MemoryTypeIndex = FindMemoryTypeIndex(
-                memoryProperties: in memoryProperties,
-                memoryTypeBits: memoryRequirements.MemoryTypeBits,
-                preferredProperties: preferredProperties,
-                requireProperties: requireProperties,
-                resourceDescription: resourceDescription
-            ),
-            SType = StructureTypeMemoryAllocateInfo,
-        };
-
-        allocateMemory(
-            deviceHandle,
-            in allocateInfo,
-            0,
-            out var memoryHandle
-        ).ThrowIfFailed(operation: "vkAllocateMemory");
-
-        try {
-            bindBufferMemory(
-                deviceHandle,
-                bufferHandle,
-                memoryHandle,
-                0
-            ).ThrowIfFailed(operation: "vkBindBufferMemory");
-            return memoryHandle;
-        } catch {
-            freeMemory(
-                deviceHandle,
-                memoryHandle,
-                0
-            );
-            throw;
-        }
-    }
     /// <summary>Uploads data into host-visible device memory by mapping it, copying the bytes, and unmapping it, using the supplied native entry points.</summary>
     /// <param name="mapMemory">A pointer to the native <c>vkMapMemory</c> entry point.</param>
     /// <param name="unmapMemory">A pointer to the native <c>vkUnmapMemory</c> entry point.</param>
@@ -210,5 +187,28 @@ public static unsafe class VulkanNativeBufferSupport {
                 memoryHandle
             );
         }
+    }
+    /// <summary>Validates that the device, instance, and physical-device handles required to create a buffer are all non-zero.</summary>
+    /// <param name="deviceHandle">The native <c>VkDevice</c> handle.</param>
+    /// <param name="instanceHandle">The native <c>VkInstance</c> handle.</param>
+    /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>
+    /// <param name="argumentName">The parameter name reported by a thrown exception.</param>
+    /// <exception cref="ArgumentException">Any of the supplied handles is zero.</exception>
+    public static void ValidateBufferHandles(nint deviceHandle, nint instanceHandle, nint physicalDeviceHandle, string argumentName) {
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: argumentName
+        );
+        VulkanArgument.RequireHandle(
+            handle: instanceHandle,
+            handleDescription: "instance",
+            paramName: argumentName
+        );
+        VulkanArgument.RequireHandle(
+            handle: physicalDeviceHandle,
+            handleDescription: "physical-device",
+            paramName: argumentName
+        );
     }
 }

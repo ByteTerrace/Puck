@@ -70,8 +70,18 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
             // Preserve the profile's native pair. Asking either reader for BGRA changes the admitted topology and
             // makes cameras such as the BRIO reject the infrared reader as OutputFormatNotSupported.
             var captureMode = ConfigureFaceAuthentication(controller: infraredSource.Controller);
-            var color = Describe(capture: capture, mode: captureMode, reader: out colorReader, source: colorSource);
-            var infrared = Describe(capture: capture, mode: captureMode, reader: out infraredReader, source: infraredSource);
+            var color = Describe(
+                capture: capture,
+                mode: captureMode,
+                reader: out colorReader,
+                source: colorSource
+            );
+            var infrared = Describe(
+                capture: capture,
+                mode: captureMode,
+                reader: out infraredReader,
+                source: infraredSource
+            );
 
             var starts = Task.WhenAll(
                 colorReader.StartAsync().AsTask(),
@@ -107,7 +117,10 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
         }
     }
     public void Dispose() {
-        if (0 != Interlocked.Exchange(location1: ref m_disposed, value: 1)) {
+        if (0 != Interlocked.Exchange(
+            location1: ref m_disposed,
+            value: 1
+        )) {
             return;
         }
 
@@ -121,7 +134,10 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
         var width = checked((int)format.VideoFormat.Width);
         var height = checked((int)format.VideoFormat.Height);
 
-        if ((width <= 0) || (height <= 0)) {
+        if (
+            (width <= 0) ||
+            (height <= 0)
+        ) {
             throw new InvalidOperationException(message: $"the {source.Info.SourceKind} stream reported an invalid frame size ({width}x{height})");
         }
 
@@ -151,11 +167,19 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
         );
     }
     private static Win32FaceAuthenticationSelection FindPair(string deviceId) {
-        if (!Win32CameraDeviceGroups.TryFind(color: out var color, deviceId: deviceId, group: out var group, infrared: out var infrared)) {
+        if (!Win32CameraDeviceGroups.TryFind(
+            color: out var color,
+            deviceId: deviceId,
+            group: out var group,
+            infrared: out var infrared
+        )) {
             throw new NotSupportedException(message: $"camera device '{deviceId}' is no longer attached");
         }
 
-        if ((color is null) || (infrared is null)) {
+        if (
+            (color is null) ||
+            (infrared is null)
+        ) {
             throw new NotSupportedException(message: $"camera device '{deviceId}' carries no color/infrared pair");
         }
 
@@ -183,7 +207,10 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
             }
 
             foreach (var profile in MediaCapture.FindAllVideoProfiles(videoDeviceId: videoDeviceId)) {
-                if (!profile.Id.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: FaceAuthenticationProfileId)) {
+                if (!profile.Id.Contains(
+                    comparisonType: StringComparison.OrdinalIgnoreCase,
+                    value: FaceAuthenticationProfileId
+                )) {
                     continue;
                 }
 
@@ -198,7 +225,10 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
                     }
                 }
 
-                if ((color is not null) && (infrared is not null)) {
+                if (
+                    (color is not null) &&
+                    (infrared is not null)
+                ) {
                     return new Win32FaceAuthenticationProfile(
                         Color: color,
                         Infrared: infrared,
@@ -218,10 +248,19 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
         var property = new byte[24];
 
         _ = ExtendedCameraControlPropertySet.TryWriteBytes(destination: property);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: property.AsSpan(start: 16), value: KsPropertyCameraControlExtendedFaceAuthenticationMode);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: property.AsSpan(start: 20), value: 1u); // KSPROPERTY_TYPE_GET
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: property.AsSpan(start: 16),
+            value: KsPropertyCameraControlExtendedFaceAuthenticationMode
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: property.AsSpan(start: 20),
+            value: 1u
+        ); // KSPROPERTY_TYPE_GET
 
-        var get = controller.GetPropertyByExtendedIdAsync(extendedPropertyId: property, maxPropertyValueSize: 128u).AsTask().GetAwaiter().GetResult();
+        var get = controller.GetPropertyByExtendedIdAsync(
+            extendedPropertyId: property,
+            maxPropertyValueSize: 128u
+        ).AsTask().GetAwaiter().GetResult();
 
         if (
             (MediaFrameSourceGetPropertyStatus.Success != get.Status) ||
@@ -239,8 +278,7 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
             : (((capability & FaceAuthenticationBackgroundSubtraction) != 0)
                 ? FaceAuthenticationBackgroundSubtraction
                 : 0UL
-            )
-        );
+        ));
 
         if (0 == mode) {
             Console.Out.WriteLine(value: $"[camera] face-authentication mode: unsupported capabilities 0x{capability:X}.");
@@ -248,11 +286,23 @@ internal sealed class Win32FaceAuthenticationCapture : IDisposable {
             return ProfileName;
         }
 
-        BinaryPrimitives.WriteUInt64LittleEndian(destination: payload.AsSpan(start: 16), value: mode);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: property.AsSpan(start: 20), value: 2u); // KSPROPERTY_TYPE_SET
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            destination: payload.AsSpan(start: 16),
+            value: mode
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: property.AsSpan(start: 20),
+            value: 2u
+        ); // KSPROPERTY_TYPE_SET
 
-        var status = controller.SetPropertyByExtendedIdAsync(extendedPropertyId: property, propertyValue: payload).AsTask().GetAwaiter().GetResult();
-        var modeName = ((FaceAuthenticationAlternativeFrameIllumination == mode) ? "alternating-frame illumination" : "background subtraction");
+        var status = controller.SetPropertyByExtendedIdAsync(
+            extendedPropertyId: property,
+            propertyValue: payload
+        ).AsTask().GetAwaiter().GetResult();
+        var modeName = ((FaceAuthenticationAlternativeFrameIllumination == mode)
+            ? "alternating-frame illumination"
+            : "background subtraction"
+        );
 
         Console.Out.WriteLine(value: $"[camera] face-authentication mode: {modeName} ({status}).");
 
@@ -319,13 +369,16 @@ internal readonly record struct Win32FaceAuthenticationStream(
 /// </summary>
 [SupportedOSPlatform("windows10.0.14393")]
 internal static class Win32CameraDeviceGroups {
-    private static Win32CameraDeviceGroup[] s_groups = [];
+    private static Win32CameraDeviceGroup[] Groups = [];
 
     /// <summary>Enumerates every attached physical camera.</summary>
     public static IReadOnlyList<CameraDeviceInfo> Enumerate() {
         var groups = Scan();
 
-        Volatile.Write(location: ref s_groups, value: groups);
+        Volatile.Write(
+            location: ref Groups,
+            value: groups
+        );
 
         var devices = new CameraDeviceInfo[groups.Length];
 
@@ -337,16 +390,31 @@ internal static class Win32CameraDeviceGroups {
     }
     /// <summary>Finds the attached group matching <paramref name="deviceId"/> and its color/infrared source infos.</summary>
     public static bool TryFind(string deviceId, out MediaFrameSourceGroup group, out MediaFrameSourceInfo? color, out MediaFrameSourceInfo? infrared) {
-        var groups = Volatile.Read(location: ref s_groups);
+        var groups = Volatile.Read(location: ref Groups);
 
-        if (TryFind(color: out color, deviceId: deviceId, group: out group, groups: groups, infrared: out infrared)) {
+        if (TryFind(
+            color: out color,
+            deviceId: deviceId,
+            group: out group,
+            groups: groups,
+            infrared: out infrared
+        )) {
             return true;
         }
 
         groups = Scan();
-        Volatile.Write(location: ref s_groups, value: groups);
+        Volatile.Write(
+            location: ref Groups,
+            value: groups
+        );
 
-        return TryFind(color: out color, deviceId: deviceId, group: out group, groups: groups, infrared: out infrared);
+        return TryFind(
+            color: out color,
+            deviceId: deviceId,
+            group: out group,
+            groups: groups,
+            infrared: out infrared
+        );
     }
 
     private static Win32CameraDeviceGroup[] Scan() {
@@ -355,7 +423,10 @@ internal static class Win32CameraDeviceGroups {
         foreach (var group in MediaFrameSourceGroup.FindAllAsync().AsTask().GetAwaiter().GetResult()) {
             var (color, infrared) = Sources(group: group);
 
-            if ((color is null) && (infrared is null)) {
+            if (
+                (color is null) &&
+                (infrared is null)
+            ) {
                 continue;
             }
 
@@ -372,18 +443,29 @@ internal static class Win32CameraDeviceGroups {
             groups.Add(item: new Win32CameraDeviceGroup(
                 Color: color,
                 Group: group,
-                Info: new CameraDeviceInfo(Id: group.Id, Name: group.DisplayName, Sensors: sensors),
+                Info: new CameraDeviceInfo(
+                    Id: group.Id,
+                    Name: group.DisplayName,
+                    Sensors: sensors
+                ),
                 Infrared: infrared
             ));
         }
 
-        groups.Sort(comparison: static (left, right) => StringComparer.Ordinal.Compare(x: left.Info.Id, y: right.Info.Id));
+        groups.Sort(comparison: static (left, right) => StringComparer.Ordinal.Compare(
+            x: left.Info.Id,
+            y: right.Info.Id
+        ));
 
         return [.. groups];
     }
     private static bool TryFind(Win32CameraDeviceGroup[] groups, string deviceId, out MediaFrameSourceGroup group, out MediaFrameSourceInfo? color, out MediaFrameSourceInfo? infrared) {
         foreach (var candidate in groups) {
-            if (!string.Equals(a: candidate.Info.Id, b: deviceId, comparisonType: StringComparison.Ordinal)) {
+            if (!string.Equals(
+                a: candidate.Info.Id,
+                b: deviceId,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 continue;
             }
 

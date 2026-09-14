@@ -25,7 +25,7 @@ namespace Puck.World;
 /// <remarks>
 /// This type is a pure reader of <see cref="Server.WorldMachineHost"/>'s outputs
 /// (<see cref="Server.WorldMachineHost.Handle"/>/<see cref="Server.WorldMachineHost.Light"/> for the room), and
-/// <see cref="Publish"/> calls <see cref="IScreenMachine.PublishFrame"/> on the host's live instance — the one
+/// <see cref="Publish"/> calls <see cref="IMachineVideoOutput.PublishFrame"/> on the host's optional output — the one
 /// GPU call this project makes on a machine's behalf, since <c>Puck.World.Server</c> cannot reach a GPU device
 /// context. It also facades several read-only <see cref="WorldMachineHost"/> members (<c>HasMachine</c>,
 /// <c>HasEngine</c>, <c>TryReadMachineInsert</c>, <c>TryMagazine</c>, <c>AudioMachine</c>, <c>TryPeek</c>,
@@ -82,7 +82,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // The process's running world instances. Its observation resolver door owns destination lookup, origin adoption,
     // generation resolution and start/reuse, so a screen and a crossing cannot grow independent routing rules.
     private readonly WorldInstanceHost m_instanceHost;
-    // The authoritative screen-machine host — owns every booted IScreenMachine; this binder reads its outputs
+    // The authoritative screen-machine host — owns every booted IMachineRuntime; this binder reads its outputs
     // (Handle/Light/MachineAt) and facades several of its read-only members. Never mutated through here — see this
     // type's own remarks.
     private readonly WorldMachineHost m_machines;
@@ -127,6 +127,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private Dictionary<int, WorldCameraControls?> m_seatCameraControls = new();
 
     private readonly CameraDeviceScanner m_cameraDeviceScanner;
+
     // Narrates a scan failure once per failure episode (ServiceCameraDevices) rather than every ~2s retry; cleared
     // the moment a scan succeeds again.
     private bool m_cameraDeviceScanFailed;
@@ -158,6 +159,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly HashSet<int> m_bootScreenIndices = new();
     private readonly Dictionary<int, Func<SdfScreenSourceFrame>> m_sources = new();
     private readonly Dictionary<int, Func<Vector3>> m_lights = new();
+    // One publication per named producer output, even when several screens fan out from it.
+    private readonly HashSet<(string Instance, string Output)> m_publishedMachineOutputs = new();
     // SdfEngineNode copies m_sources/m_lights into its own dictionary once, at construction, and never re-reads
     // these dictionaries again — writing a new delegate into m_sources[index] after boot is invisible to the
     // renderer. Each boot index's cell is instead a stable, never-replaced delegate target; only the cell's own
@@ -218,7 +221,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         m_machines = machines;
         m_cameraCapture = cameraCapture;
-        m_cameraDeviceScanner = new CameraDeviceScanner(cameraCapture, TimeSpan.FromSeconds(2));
+        m_cameraDeviceScanner = new CameraDeviceScanner(
+            cameraCapture,
+            TimeSpan.FromSeconds(seconds: 2)
+        );
         m_surfaceTransfers = surfaceTransfers;
         m_windowCapture = windowCapture;
         m_cameras = cameras;
@@ -244,7 +250,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         foreach (var screen in screens) {
             _ = m_bootScreenIndices.Add(item: screen.Index);
 
-            var slot = new ScreenSlot { Binder = this, DeclaredSource = screen.Source, Index = screen.Index, Machines = m_machines };
+            var slot = new ScreenSlot { Binder = this, DeclaredSource = screen.Source, Index = screen.Index, MachineSource = (screen.Source as WorldScreenSource.Machine), Machines = m_machines };
 
             switch (screen.Source) {
                 case WorldScreenSource.TestPattern pattern:
@@ -388,6 +394,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // when no surviving slot films it; a View->View re-point releases the previously-registered camera inside
     // TryView. A slot that no longer names a QR drops the rasterized one the same way.
     private (bool Ok, string Message) ApplySource(int index, ScreenSlot slot, WorldScreenSource source) {
+        slot.MachineSource = (source as WorldScreenSource.Machine);
+
         var outcome = source switch {
             WorldScreenSource.None => (slot.HasLive
             ? TryEject(index: index)
@@ -598,8 +606,18 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             return;
         }
 
+        m_publishedMachineOutputs.Clear();
         foreach (var slot in m_slots.Values) {
-            m_machines.MachineAt(index: slot.Index)?.NotifyDeviceLost();
+            if (
+                (slot.MachineSource is { } machine) &&
+                (m_machines.VideoOutput(
+                instance: machine.Instance,
+                output: machine.Output
+            ) is { } output) &&
+                m_publishedMachineOutputs.Add(item: (machine.Instance, machine.Output))
+            ) {
+                output.NotifyDeviceLost();
+            }
             slot.Pattern?.Surface.NotifyDeviceLost();
 
             if (slot.Qr is { } qr) {
@@ -824,13 +842,15 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // (Server.WorldMachineHost owns it); Handle()/Light() check Machines first. A mutable class so the producer
     // references flip in place with no engine rebuild.
     private sealed class ScreenSlot {
+        // The owning binder — resolves this slot's (CameraSeat, CameraSensorKind) demand to a live frame every call,
+        // since a camera consumer's binding names a SEAT, never a device.
+        public required WorldScreenBinder Binder { get; init; }
         // The bound (seat, sensor) demand — the slot's camera resolves through Binder every frame rather than
         // caching a CameraFeed directly, since the seat's device (and even the seat itself) can change live with no
         // notification to this slot (see WorldScreenBinder.TryResolveCamera).
         public int? CameraSeat { get; set; }
         public WorldCameraSensor? CameraSensorKind { get; set; }
         public CaptureFeed? Capture { get; set; }
-        public ProbeFeed? Probe { get; set; }
         // The ctor-time fault (an absent camera, an unopenable window capture, an unknown view camera); a live feed's
         // own fault is read from the feed instead (see CurrentFault). Machine faults are Machines.State's concern.
         public string? DeclaredFault { get; set; }
@@ -841,13 +861,12 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         // machine is never local state on this slot).
         public bool HasLive => ((CameraSeat is not null) || (Capture is not null) || (Probe is not null));
         public required int Index { get; init; }
-        // The owning binder — resolves this slot's (CameraSeat, CameraSensorKind) demand to a live frame every call,
-        // since a camera consumer's binding names a SEAT, never a device.
-        public required WorldScreenBinder Binder { get; init; }
+        public WorldScreenSource.Machine? MachineSource { get; set; }
         // The authoritative screen-machine host — consulted FIRST by Handle()/Light()/CurrentFault() for this slot's
         // index, before any locally-owned producer.
         public required WorldMachineHost Machines { get; init; }
         public PatternFeed? Pattern { get; set; }
+        public ProbeFeed? Probe { get; set; }
         // The authored QR code (declared row or live screen.source <index> qr). Sits ABOVE Pattern and BELOW View in precedence, so a
         // a QR authoring onto a test-pattern screen is visible and the View/Qr pair follows last-author-wins (each setter
         // clears the other).
@@ -858,6 +877,36 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         public WorldScreenSource.Text? Text { get; set; }
         public ViewFeed? View { get; set; }
 
+        private IMachineVideoOutput? MachineOutput() => ((MachineSource is { } source)
+            ? Machines.VideoOutput(
+                instance: source.Instance,
+                output: source.Output
+            )
+            : null
+        );
+
+        // The current source for one submitted frame: the host's machine (if this index has one), else the highest-
+        // precedence local producer's, else the declared jumbotron view's, authored QR, declared test pattern, or 0.
+        // Only the shared-camera branch carries a retirement callback; every engine-owned/stable source is handle-only.
+        public SdfScreenSourceFrame AcquireFrame() => ((MachineOutput() is { } machine)
+            ? machine.NativeImageViewHandle
+            : ((CameraSeat is { } cameraSeat)
+                ? Binder.AcquireCameraFrame(
+                    seat: cameraSeat,
+                    sensor: CameraSensorKind!.Value
+                )
+                : ((Probe is { } probe)
+                    ? probe.AcquireFrame()
+                    : ((Capture is { } capture)
+                        ? capture.Handle()
+                        : ((View is { } view)
+                            ? view.Handle()
+                            : ((Session is { } session)
+                                ? session.Handle()
+                                : ((Qr is { } qr)
+                                    ? qr.Surface.CurrentHandle
+                                    : (Pattern?.Surface.CurrentHandle ?? 0)
+        )))))));
         // Clears the live LOCAL producer (webcam/window) and reverts to the declared pattern or to unbound. The
         // shared webcam feed is NOT disposed here (other camera screens may still sample it — the binder owns its
         // lifetime); a window capture is per-slot and disposed.
@@ -875,7 +924,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         public string? CurrentFault() {
             if (
                 (CameraSeat is { } cameraSeat) &&
-                (Binder.CameraFaultFor(seat: cameraSeat, sensor: CameraSensorKind!.Value) is { } cameraFault)
+                (Binder.CameraFaultFor(
+                seat: cameraSeat,
+                sensor: CameraSensorKind!.Value
+            ) is { } cameraFault)
             ) {
                 return cameraFault;
             }
@@ -911,60 +963,35 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             Probe = null;
             View = null;
         }
-        // The current source for one submitted frame: the host's machine (if this index has one), else the highest-
-        // precedence local producer's, else the declared jumbotron view's, authored QR, declared test pattern, or 0.
-        // Only the shared-camera branch carries a retirement callback; every engine-owned/stable source is handle-only.
-        public SdfScreenSourceFrame AcquireFrame() => (Machines.HasMachine(index: Index)
-            ? Machines.Handle(index: Index)
-            : ((CameraSeat is { } cameraSeat)
-                ? Binder.AcquireCameraFrame(seat: cameraSeat, sensor: CameraSensorKind!.Value)
-                : ((Probe is { } probe)
-                    ? probe.AcquireFrame()
-                    : ((Capture is { } capture)
-                        ? capture.Handle()
-                        : ((View is { } view)
-                            ? view.Handle()
-                            : ((Session is { } session)
-                                ? session.Handle()
-                                : ((Qr is { } qr)
-                                    ? qr.Surface.CurrentHandle
-                                    : (Pattern?.Surface.CurrentHandle ?? 0)
-        )))))));
         // Diagnostic handle lookup only; unlike AcquireFrame it never submits GPU work and therefore does not acquire
         // an asynchronously-written camera slot.
-        public nint Handle() => (Machines.HasMachine(index: Index)
-            ? Machines.Handle(index: Index)
-            : ((CameraSeat is { } cameraSeat)
-                ? Binder.CameraHandleFor(seat: cameraSeat, sensor: CameraSensorKind!.Value)
-                : ((Probe is { } probe)
-                    ? probe.Handle()
-                    : ((Capture is { } capture)
-                        ? capture.Handle()
-                        : ((View is { } view)
-                            ? view.Handle()
-                            : ((Session is { } session)
-                                ? session.Handle()
-                                : ((Qr is { } qr)
-                                    ? qr.Surface.CurrentHandle
-                                    : (Pattern?.Surface.CurrentHandle ?? 0)
-        )))))));
+        public nint Handle() {
+            if (MachineOutput() is { } machine) { return machine.NativeImageViewHandle; }
+            if (CameraSeat is { } cameraSeat) { return Binder.CameraHandleFor(
+                seat: cameraSeat,
+                sensor: CameraSensorKind!.Value
+            ); }
+            if (Probe is { } probe) { return probe.Handle(); }
+            if (Capture is { } capture) { return capture.Handle(); }
+            if (View is { } view) { return view.Handle(); }
+            if (Session is { } session) { return session.Handle(); }
+            if (Qr is { } qr) { return qr.Surface.CurrentHandle; }
+            return (Pattern?.Surface.CurrentHandle ?? 0);
+        }
         // The current emitted light, in the same precedence as Handle.
-        public Vector3 Light() => (Machines.HasMachine(index: Index)
-            ? Machines.Light(index: Index)
-            : ((CameraSeat is { } cameraSeat)
-                ? Binder.CameraLightFor(seat: cameraSeat, sensor: CameraSensorKind!.Value)
-                : ((Probe is { } probe)
-                    ? probe.Light
-                    : ((Capture is { } capture)
-                        ? capture.Light
-                        : ((View is { } view)
-                            ? view.Light()
-                            : ((Session is { } session)
-                                ? session.Light()
-                                : ((Qr is { } qr)
-                                    ? qr.Light
-                                    : (Pattern?.Light ?? Vector3.Zero)
-        )))))));
+        public Vector3 Light() {
+            if (MachineOutput() is { } machine) { return machine.EmittedLight; }
+            if (CameraSeat is { } cameraSeat) { return Binder.CameraLightFor(
+                seat: cameraSeat,
+                sensor: CameraSensorKind!.Value
+            ); }
+            if (Probe is { } probe) { return probe.Light; }
+            if (Capture is { } capture) { return capture.Light; }
+            if (View is { } view) { return view.Light(); }
+            if (Session is { } session) { return session.Light(); }
+            if (Qr is { } qr) { return qr.Light; }
+            return (Pattern?.Light ?? Vector3.Zero);
+        }
         // Drops the authored QR and disposes the upload surface it owns — the symmetric half of TryQr's acquire, run
         // whenever the slot stops showing that code (a re-author, or a declared source that no longer names one).
         public void ReleaseQr() {

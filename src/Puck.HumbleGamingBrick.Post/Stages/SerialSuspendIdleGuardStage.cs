@@ -12,19 +12,19 @@ namespace Puck.HumbleGamingBrick.Post;
 /// still suspends cleanly once the transfer completes (both ports idle).
 /// </summary>
 internal sealed class SerialSuspendIdleGuardStage : IPostStage<PostContext> {
-    private const ushort SerialControlAddress = 0xFF02;
     // TransferActive (bit 7) | ClockSelect (bit 0): an internal-clock transfer, armed and not yet shifted.
     private const byte ArmInternalTransfer = 0x81;
+    private const ushort SerialControlAddress = 0xFF02;
 
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
     /// <inheritdoc/>
     public string Name =>
         "serial-suspend-idle-guard";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {

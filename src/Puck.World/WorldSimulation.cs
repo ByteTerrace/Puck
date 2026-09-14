@@ -29,7 +29,6 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         server: server,
         waitGate: waitGate
     );
-    private Action? m_afterInstances;
 
     /// <summary>The mounted addon runtime this shell holds — never called from here: the addon principals tick INSIDE
     /// <see cref="WorldServer.Step"/>, at its own three pinned points. It is a CONSTRUCTOR DEPENDENCY so that DI
@@ -38,18 +37,14 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     /// world silently addon-less.</summary>
     public WorldAddonRuntime Addons { get; } = addons;
 
+    private Action? m_afterInstances;
+
     /// <inheritdoc/>
     public ulong ElapsedTicks => m_step.ElapsedTicks;
     /// <inheritdoc/>
     public uint RatePerSecond => m_step.RatePerSecond;
     /// <inheritdoc/>
     public ulong Tick => m_step.Tick;
-
-    /// <inheritdoc/>
-    public void Step(in FixedStepContext context, in CommandSnapshot commands) => m_step.Step(
-        context: in context,
-        afterInstances: (m_afterInstances ??= PublishSeats)
-    );
 
     // Reflect any applied world-binding-overlay mutation into the per-seat resolvers, then publish the seats'
     // context-family states and the perception anchor so a state change this tick applied (an engage, a possession,
@@ -63,6 +58,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
                 m_seatBindings.SyncSeat(
                     slot: slot,
                     definition: route.Endpoint.Definition,
+                    engineTick: route.Endpoint.EngineTick,
                     entityIndex: route.EntityIndex,
                     nextInputTick: route.Endpoint.NextInputTick
                 );
@@ -77,4 +73,10 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
             activeLayout: m_composer.ActiveLayoutName
         );
     }
+
+    /// <inheritdoc/>
+    public void Step(in FixedStepContext context, in CommandSnapshot commands) => m_step.Step(
+        context: in context,
+        afterInstances: (m_afterInstances ??= PublishSeats)
+    );
 }

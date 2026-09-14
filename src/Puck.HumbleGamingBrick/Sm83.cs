@@ -11,7 +11,6 @@ public interface ICpuTraceSink {
     /// address the CPU is about to fetch from, and every register reflects the state left by the PRIOR instruction.</summary>
     void OnInstructionBoundary(ushort pc, byte a, byte f, byte b, byte c, byte d, byte e, byte h, byte l, ushort sp);
 }
-
 /// <summary>
 /// The SM83 core (the LR35902's CPU), the machine's bus master. It executes one instruction per
 /// <see cref="StepInstruction"/>; running the program is what drives the machine's timeline forward. Memory is reached
@@ -30,9 +29,11 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
     private readonly ISystemBus m_bus;
     private readonly ComponentClock m_componentClock;
+
     // Dormant co-simulation trace seam: null on every battery run and every ordinary boot, so the fetch/dispatch path
     // pays one predicted-not-taken field test (see the guarded call in StepInstruction) and nothing else.
     private ICpuTraceSink? m_traceSink;
+
     // Concrete-typed like SystemBus's own collaborators: each interface below has exactly one production
     // implementation, and only ISystemBus is ever substituted (Sm83SstHarness's SST bus), so these calls devirtualize.
     private readonly HdmaController m_hdma;
@@ -97,7 +98,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
         // With a boot ROM the CPU powers on cold — every register zero and PC at 0x0000, the overlay's reset vector —
         // and the boot program itself produces the handoff state. Without one, the documented handoff is seeded.
-        if (configuration.BootRom is null) {
+        if (!configuration.ExecutesBootRom) {
             SeedPostBootState(
                 model: configuration.Model,
                 header: header
@@ -198,6 +199,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         // samples the CPU, and where a snapshot can be taken.
         FlushBusCycles();
     }
+
     private void StepInstructionCore() {
         // M-06: the debug watchpoint PC witness. A cheap unconditional field write on the bus side (SystemBus.cs); the
         // bus itself decides whether anything downstream cares (a watch hit latches this, otherwise it is never read).
@@ -317,11 +319,13 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
         Execute(opcode: opcode);
     }
+
     /// <inheritdoc/>
     public void ApplyModel(ConsoleModel model) {
         m_supportsColor = model.SupportsColor();
         m_hasOamCorruptionBug = model.HasOamCorruptionBug();
     }
+
     // Reports a 16-bit register's pre-operation value to the bus for the OAM corruption bug's register-bump trigger,
     // but only on a revision that has it — the single guarded call site every INC/DEC rr, the stack pointer's implicit
     // move opening PUSH/CALL/RST/interrupt dispatch, and LD SP,HL funnel through, so a Color machine pays one field
@@ -338,6 +342,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
             m_bus.NoteRegisterAddressBus(address: preValue);
         }
     }
+
     /// <summary>Arms or clears the co-simulation trace sink. Host-side debug state — never snapshotted, never touched
     /// by the battery.</summary>
     public void SetTraceSink(ICpuTraceSink? sink) =>
@@ -445,7 +450,8 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
         var checksum = (header.IsFirstPartyGame
             ? header.TitleChecksum
-            : (byte)0x00);
+            : (byte)0x00
+        );
         var copyLogo = ((checksum == 0x43) || (checksum == 0x58));
 
         m_b = checksum;
@@ -453,10 +459,12 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         m_e = 0x08;
         m_h = (copyLogo
             ? (byte)0x99
-            : (byte)0x00);
+            : (byte)0x00
+        );
         m_l = (copyLogo
             ? (byte)0x1A
-            : (byte)0x7C);
+            : (byte)0x7C
+        );
     }
     private void SeedMonochromeHandoff(ConsoleModel model) {
         if (model.HasRearrangedMonochromeBootRom()) {
@@ -474,7 +482,8 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
         m_a = (model.HasRevisedBootIdentity()
             ? (byte)0xFF
-            : (byte)0x01);
+            : (byte)0x01
+        );
         m_f = 0xB0;
         m_b = 0x00;
         m_c = 0x13;
@@ -486,7 +495,8 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     private void SeedSuperHandoff(ConsoleModel model) {
         m_a = (model.HasRevisedBootIdentity()
             ? (byte)0xFF
-            : (byte)0x01);
+            : (byte)0x01
+        );
         m_f = 0x00;
         m_b = 0x00;
         m_c = 0x14;

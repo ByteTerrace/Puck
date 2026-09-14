@@ -3,6 +3,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Graph;
 using System.Net;
 using Puck.Azure.Functions.Services;
+using Puck.Azure.Functions.Utilities;
 
 namespace Puck.Azure.Functions.HttpTriggers;
 
@@ -10,29 +11,8 @@ public sealed class Shares(
     IBlobSasUriService blobSasUriService,
     GraphServiceClient graphServiceClient,
     IUserCredentialContext userCredentialContext
-)
-{
-    private static string? GetDelegatedUserObjectId(FunctionContext functionContext) {
-        var user = functionContext
-            .GetHttpContext()!
-            .User;
-        var hasScopes = user
-            .Claims
-            .Any(predicate: static claim =>
-                ("scp" == claim.Type) ||
-                ("http://schemas.microsoft.com/identity/claims/scope" == claim.Type)
-            );
-
-        return hasScopes
-            ? user
-                .Identity
-                ?.Name
-                ?.ToLowerInvariant()
-            : null;
-    }
-
-    public sealed class CreateShareRequest
-    {
+) {
+    public sealed class CreateShareRequest {
         public string? BlobName { get; set; }
         public DateTimeOffset? ExpiresOn { get; set; }
         public string? RecipientIdentifier { get; set; }
@@ -51,7 +31,7 @@ public sealed class Shares(
         FunctionContext functionContext
     ) {
         var cancellationToken = functionContext.CancellationToken;
-        var sharerObjectId = GetDelegatedUserObjectId(functionContext: functionContext);
+        var sharerObjectId = functionContext.GetDelegatedUserObjectId();
 
         if (sharerObjectId is null) {
             return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);
@@ -61,7 +41,8 @@ public sealed class Shares(
         var blobName = request?.BlobName?.Trim();
         var recipientIdentifier = request?.RecipientIdentifier?.Trim();
 
-        if (string.IsNullOrWhiteSpace(value: blobName) ||
+        if (
+            string.IsNullOrWhiteSpace(value: blobName) ||
             string.IsNullOrWhiteSpace(value: recipientIdentifier) ||
             recipientIdentifier.Contains(value: '\'')
         ) {
@@ -71,14 +52,14 @@ public sealed class Shares(
         var matches = await graphServiceClient
             .Users
             .GetAsync(
-                cancellationToken: cancellationToken,
-                requestConfiguration: requestConfiguration => {
-                    requestConfiguration.QueryParameters.Filter =
-                        $"mail eq '{recipientIdentifier}' or userPrincipalName eq '{recipientIdentifier}'";
-                    requestConfiguration.QueryParameters.Select = ["displayName", "id"];
-                    requestConfiguration.QueryParameters.Top = 1;
-                }
-            );
+            cancellationToken: cancellationToken,
+            requestConfiguration: requestConfiguration => {
+                requestConfiguration.QueryParameters.Filter =
+                    $"mail eq '{recipientIdentifier}' or userPrincipalName eq '{recipientIdentifier}'";
+                requestConfiguration.QueryParameters.Select = ["displayName", "id"];
+                requestConfiguration.QueryParameters.Top = 1;
+            }
+        );
         var recipient = matches?.Value?.FirstOrDefault();
 
         if (recipient?.Id is null) {

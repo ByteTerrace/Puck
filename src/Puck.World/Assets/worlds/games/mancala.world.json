@@ -1047,14 +1047,14 @@
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "mancalaMoveRequest",
-        "nonNegative": true,
         "value": 0
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "mancalaMoveApplied",
-        "nonNegative": true,
         "value": 0
       },
       {
@@ -1066,8 +1066,8 @@
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "mancalaPitSeeds",
-        "nonNegative": true,
         "value": 0
       },
       {

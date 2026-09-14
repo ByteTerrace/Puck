@@ -8,7 +8,7 @@ using Puck.World.Server;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The session projection's client-side mirror — the "minimal client-side pose/state mirror" docs/vision.md's
+/// The session projection's client-side mirror — the "minimal client-side pose/state mirror" docs/architecture/worlds.md's
 /// "Observation and display" names, attached to a destination instance's <c>WorldServer</c> under a
 /// <c>WorldServer.AttachSink(IClientSink)</c> lease exactly like any other client. It is deliberately not
 /// <c>WorldClient</c>: that type also carries a <c>PlayerRoster</c>/seat table this observation-only mirror
@@ -65,6 +65,7 @@ public sealed class WorldSessionMirror : IClientSink {
     private int m_stepSecondsBits;
     private long m_stepTicksBits;
     private long m_tickBits;
+    private long m_engineTickBits;
 
     private readonly Vector3[] m_previousPosition = new Vector3[EntityCapacity];
     private readonly Quaternion[] m_previousOrientation = new Quaternion[EntityCapacity];
@@ -137,79 +138,16 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <c>WorldSessionSceneEmitter</c>'s self-derived render alpha divides real elapsed time by.</summary>
     public float StepSeconds => BitConverter.Int32BitsToSingle(value: Volatile.Read(location: ref m_stepSecondsBits));
     /// <summary>The destination's own step width (engine ticks per its authored simulation step) at the latest
-    /// delivered snapshot — the destination presentation clock docs/vision.md's "Observation and display"
+    /// delivered snapshot — the destination presentation clock docs/architecture/worlds.md's "Observation and display"
     /// names.</summary>
     public ulong StepTicks => unchecked((ulong)Interlocked.Read(location: ref m_stepTicksBits));
     /// <summary>The destination's latest completed simulation tick — read-back (<c>world.faces</c>'s session echo)
     /// AND the presentation clock <c>WorldSessionSceneEmitter</c> resolves its render alpha against (via
     /// <see cref="StepSeconds"/>/<see cref="SnapshotArrivalTimestamp"/>).</summary>
     public ulong Tick => unchecked((ulong)Interlocked.Read(location: ref m_tickBits));
-
-    /// <summary>Copies one coherent delivered entity record for simulation pinning. If a socket delivery overlaps
-    /// the copy, the seqlock retries rather than exposing a mixture of two remote ticks.</summary>
-    public void CopySnapshotTo(
-        bool[] active,
-        WorldEntityAddress[] addresses,
-        Vector3[] previousPositions,
-        Quaternion[] previousOrientations,
-        Vector3[] currentPositions,
-        Quaternion[] currentOrientations,
-        Vector3[] colors,
-        WorldLook[] looks,
-        byte[] catalogRigs,
-        FixedWorldCollider?[] colliders,
-        WorldBodyContactMode[] bodyContacts,
-        out ulong tick,
-        out int revision,
-        out float stepSeconds,
-        out long arrivalTimestamp
-    ) {
-        for (; ; ) {
-            var sequence = Volatile.Read(location: ref m_snapshotSequence);
-
-            if ((sequence & 1) != 0) {
-                Thread.SpinWait(iterations: 1);
-                continue;
-            }
-
-            for (var index = 0; (index < EntityCapacity); index++) {
-                active[index] = IsActive(index: index);
-                addresses[index] = Address(index: index);
-                previousPositions[index] = PreviousPosition(index: index);
-                previousOrientations[index] = PreviousOrientation(index: index);
-                currentPositions[index] = CurrentPosition(index: index);
-                currentOrientations[index] = CurrentOrientation(index: index);
-                colors[index] = BodyColor(index: index);
-                looks[index] = Look(index: index);
-                catalogRigs[index] = CatalogRig(index: index);
-                colliders[index] = Collider(index: index);
-                bodyContacts[index] = BodyContact(index: index);
-            }
-
-            tick = Tick;
-            revision = SnapshotRevision;
-            stepSeconds = StepSeconds;
-            arrivalTimestamp = SnapshotArrivalTimestamp;
-            if (sequence == Volatile.Read(location: ref m_snapshotSequence)) {
-                return;
-            }
-        }
-    }
-    /// <summary>Computes the honest presentation fraction through a delivered snapshot interval from its own step
-    /// width and arrival time.</summary>
-    public static float ResolveInterpolationAlpha(float stepSeconds, long arrivalTimestamp) {
-        if (stepSeconds <= 0f) {
-            return 1f;
-        }
-
-        var elapsedSeconds = ((float)Stopwatch.GetElapsedTime(startingTimestamp: arrivalTimestamp).TotalSeconds);
-
-        return Math.Clamp(
-            max: 1f,
-            min: 0f,
-            value: (elapsedSeconds / stepSeconds)
-        );
-    }
+    /// <summary>The destination's latest delivered engine-tick coordinate — what a <c>StateAdvance</c> row's live
+    /// value is computed at; never derived from <see cref="Tick"/> at a simulation rate.</summary>
+    public ulong EngineTick => unchecked((ulong)Interlocked.Read(location: ref m_engineTickBits));
 
     private static WorldBodyContactMode[] CompileBodyContacts(WorldDefinition definition) =>
         definition.Kits.Select(selector: static kit => kit.BodyContact).ToArray();
@@ -275,16 +213,59 @@ public sealed class WorldSessionMirror : IClientSink {
             : null
         );
     }
+    /// <summary>Copies one coherent delivered entity record for simulation pinning. If a socket delivery overlaps
+    /// the copy, the seqlock retries rather than exposing a mixture of two remote ticks.</summary>
+    public void CopySnapshotTo(
+        bool[] active,
+        WorldEntityAddress[] addresses,
+        Vector3[] previousPositions,
+        Quaternion[] previousOrientations,
+        Vector3[] currentPositions,
+        Quaternion[] currentOrientations,
+        Vector3[] colors,
+        WorldLook[] looks,
+        byte[] catalogRigs,
+        FixedWorldCollider?[] colliders,
+        WorldBodyContactMode[] bodyContacts,
+        out ulong tick,
+        out int revision,
+        out float stepSeconds,
+        out long arrivalTimestamp
+    ) {
+        for (; ; ) {
+            var sequence = Volatile.Read(location: ref m_snapshotSequence);
+
+            if ((sequence & 1) != 0) {
+                Thread.SpinWait(iterations: 1);
+                continue;
+            }
+
+            for (var index = 0; (index < EntityCapacity); index++) {
+                active[index] = IsActive(index: index);
+                addresses[index] = Address(index: index);
+                previousPositions[index] = PreviousPosition(index: index);
+                previousOrientations[index] = PreviousOrientation(index: index);
+                currentPositions[index] = CurrentPosition(index: index);
+                currentOrientations[index] = CurrentOrientation(index: index);
+                colors[index] = BodyColor(index: index);
+                looks[index] = Look(index: index);
+                catalogRigs[index] = CatalogRig(index: index);
+                colliders[index] = Collider(index: index);
+                bodyContacts[index] = BodyContact(index: index);
+            }
+
+            tick = Tick;
+            revision = SnapshotRevision;
+            stepSeconds = StepSeconds;
+            arrivalTimestamp = SnapshotArrivalTimestamp;
+            if (sequence == Volatile.Read(location: ref m_snapshotSequence)) {
+                return;
+            }
+        }
+    }
     /// <summary>The entity's latest-tick render attitude (the other interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Quaternion CurrentOrientation(int index) => m_currentOrientation[index];
-    /// <summary>Gets an entity's latest authoritative heading in radians about world up (<see cref="EntitySnapshot.Heading"/>)
-    /// — not interpolated; the composition seam that reads it wants the authority's current value.</summary>
-    public float Heading(int index) => m_heading[index];
-    /// <summary>Gets an entity's latest authoritative fact mask (<see cref="EntitySnapshot.Facts"/>) — not
-    /// interpolated; the facts are discrete authority answers.</summary>
-    /// <param name="index">The 0-based entity index.</param>
-    public BodyFacts Facts(int index) => m_facts[index];
     /// <summary>The entity's latest-tick render position (the other interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 CurrentPosition(int index) => m_currentPosition[index];
@@ -313,17 +294,6 @@ public sealed class WorldSessionMirror : IClientSink {
             value: definition
         );
         _ = Interlocked.Increment(location: ref m_definitionRevision);
-    }
-    /// <inheritdoc/>
-    public void DeliverState(WorldDefinition definition) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        // A value-only mutation cannot have changed a kit's collider or body-contact mode: publish the fresh
-        // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
-        Volatile.Write(
-            location: ref m_definition,
-            value: definition
-        );
     }
     /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
@@ -425,6 +395,10 @@ public sealed class WorldSessionMirror : IClientSink {
                 : 0UL)
                 ))
             );
+            _ = Interlocked.Exchange(
+                location1: ref m_engineTickBits,
+                value: unchecked((long)snapshot.EngineTick)
+            );
             if (!preserveSeed) {
                 Volatile.Write(
                     location: ref m_authority,
@@ -450,6 +424,24 @@ public sealed class WorldSessionMirror : IClientSink {
             _ = Interlocked.Increment(location: ref m_snapshotSequence);
         }
     }
+    /// <inheritdoc/>
+    public void DeliverState(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        // A value-only mutation cannot have changed a kit's collider or body-contact mode: publish the fresh
+        // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
+        Volatile.Write(
+            location: ref m_definition,
+            value: definition
+        );
+    }
+    /// <summary>Gets an entity's latest authoritative fact mask (<see cref="EntitySnapshot.Facts"/>) — not
+    /// interpolated; the facts are discrete authority answers.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public BodyFacts Facts(int index) => m_facts[index];
+    /// <summary>Gets an entity's latest authoritative heading in radians about world up (<see cref="EntitySnapshot.Heading"/>)
+    /// — not interpolated; the composition seam that reads it wants the authority's current value.</summary>
+    public float Heading(int index) => m_heading[index];
     /// <summary>Whether the entity at <paramref name="index"/> was active (drawn) in the latest snapshot.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public bool IsActive(int index) => Volatile.Read(location: ref m_active[index]);
@@ -469,6 +461,21 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>The entity's previous-tick render position (one interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 PreviousPosition(int index) => m_previousPosition[index];
+    /// <summary>Computes the honest presentation fraction through a delivered snapshot interval from its own step
+    /// width and arrival time.</summary>
+    public static float ResolveInterpolationAlpha(float stepSeconds, long arrivalTimestamp) {
+        if (stepSeconds <= 0f) {
+            return 1f;
+        }
+
+        var elapsedSeconds = ((float)Stopwatch.GetElapsedTime(startingTimestamp: arrivalTimestamp).TotalSeconds);
+
+        return Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: (elapsedSeconds / stepSeconds)
+        );
+    }
     /// <summary>Publishes the exact committed head of a traveler route before its observation socket can deliver the
     /// destination's first ordinary snapshot. This is not prediction: the route answer was read under the final
     /// authority's operation gate after commit. The subsequent snapshot replaces the seed normally.</summary>
@@ -494,7 +501,11 @@ public sealed class WorldSessionMirror : IClientSink {
             m_currentOrientation[index] = orientation;
             // A route carries one attitude; its yaw is the heading (facing (-sin yaw, -cos yaw), the sim's convention).
             var facing = Vector3.Transform(
-                value: new Vector3(x: 0f, y: 0f, z: -1f),
+                value: new Vector3(
+                    x: 0f,
+                    y: 0f,
+                    z: -1f
+                ),
                 rotation: orientation
             );
 

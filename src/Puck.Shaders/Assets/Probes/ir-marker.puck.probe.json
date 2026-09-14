@@ -1,5 +1,5 @@
 {
-  "$schema": "puck.probe.v1",
+  "$schema": "puck.probe.manifest.v1",
   "name": "ir-marker",
   "class": "kernel",
   "description": "Oriented rectangle over the strobe response's bright mass: lit-minus-unlit infrared above threshold gives zeroth/first/second moments, whose principal axes and eigenvalue half extents produce four corners assuming a uniform rectangular reflector — retroreflective tape on a real wall becomes a tracked painting frame another probe's sockets can bind.",

@@ -33,6 +33,7 @@ internal sealed class AgsStage : IPostStage<PostContext> {
 
         return ((failed == 0)
             ? PostStageOutcome.Pass(detail: "all captured AGS cells passed (measurement — accuracy frontier, not a gate)")
-            : PostStageOutcome.Pass(detail: $"{failed} AGS cell(s) failed (measurement — includes the multiplayer-SIO cell that needs a link partner; not a gate)"));
+            : PostStageOutcome.Pass(detail: $"{failed} AGS cell(s) failed (measurement — includes the multiplayer-SIO cell that needs a link partner; not a gate)")
+        );
     }
 }

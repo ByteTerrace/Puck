@@ -29,7 +29,8 @@ internal sealed class PostContext {
         Ledger = (ledger ?? new Dictionary<(string, string, string), LedgerEntry>());
         Parallelism = ((parallelism > 0)
             ? parallelism
-            : Environment.ProcessorCount);
+            : Environment.ProcessorCount
+        );
         RequireAssets = requireAssets;
         SstRoot = sstRoot;
         TestRomRoot = testRomRoot;

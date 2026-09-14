@@ -1,5 +1,5 @@
 {
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "basis": "../../../src/Puck.World/Assets/worlds/standard.basis.json",
   "documentId": "jump-trophy-canary",
   "simulation": {
@@ -103,7 +103,7 @@
   "views": {
     "seatRig": {
       "name": "jump-chase",
-      "version": "puck.camera.v1",
+      "version": "puck.camera.program.v1",
       "operations": [
         {
           "$type": "orbit",
@@ -124,7 +124,7 @@
           "worldAxes": false
         },
         {
-          "$type": "fov",
+          "$type": "fieldOfView",
           "fieldOfViewRadians": 0.95
         }
       ]

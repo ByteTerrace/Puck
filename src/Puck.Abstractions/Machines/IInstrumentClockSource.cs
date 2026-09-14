@@ -1,7 +1,7 @@
 namespace Puck.Abstractions.Machines;
 
 /// <summary>
-/// Optional capability on an <see cref="IScreenMachine"/> whose loaded content carries its own deterministic tempo —
+/// Optional capability on an <see cref="IMachineRuntime"/> whose loaded content carries its own deterministic tempo —
 /// the diegetic-instrument counterpart to <see cref="IAudioMachine"/>'s audio-output capability, following the same
 /// optional-capability precedent <see cref="IFeedbackMachine"/>/<see cref="IReconfigurableMachine"/>/
 /// <see cref="ITimeTravelMachine"/> already set. A host that recognizes this on an engaged machine may fold

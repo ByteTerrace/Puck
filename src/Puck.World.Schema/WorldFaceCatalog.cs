@@ -217,7 +217,10 @@ public sealed class WorldFaceCatalog {
     // on planes that disagree by the pitch angle, with nothing to notice it. A yaw-only face is unaffected bit for
     // bit — rotating (0,1,0) about +Y leaves it unchanged exactly (both cross products vanish).
     private static WorldFaceFrame DeriveFrame(WorldDefinition definition, WorldPlacement placement, ShapeDocument? shape) {
-        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+        var frame = WorldDefinitionRows.ResolvedFrame(
+            definition: definition,
+            placement: placement
+        );
         var origin = FixedVector3.FromVector3(value: frame.Position);
         var scale = FixedQ4816.FromDouble(value: placement.Scale);
         var yawDegrees = FixedQ4816.FromDouble(value: frame.YawDegrees);

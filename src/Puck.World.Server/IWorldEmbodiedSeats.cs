@@ -55,17 +55,17 @@ public static class WorldEmbodiedSeats {
     private sealed class NoneSeats : IWorldEmbodiedSeats {
         public int SeatCount => 0;
 
+        public void AdvanceSeatViews(float deltaSeconds) { }
+        public void ClearAnalog() { }
+        public void ClearHeld(int slot) { }
+        public void ConfigureLeave(Func<int, WorldPrincipal, bool> leave) { }
+        public bool IsOccupied(int slot) => false;
+        public bool OccupySeat(int slot, WorldIdentity? profile) => false;
+        public void PublishRoute(int slot, WorldAuthorityEndpoint endpoint, in WorldEntityAddress entity) { }
         public WorldAuthorityEndpoint? RoutedEndpoint(int slot) => null;
         public WorldEntityAddress RoutedEntity(int slot) => default;
-        public bool IsOccupied(int slot) => false;
-        public void PublishRoute(int slot, WorldAuthorityEndpoint endpoint, in WorldEntityAddress entity) { }
+        public void SubmitAuthorityIntents(WorldAuthorityEndpoint endpoint, ulong tick) { }
         public bool TryUpdateRoutedEntity(int slot, WorldAuthorityEndpoint expectedEndpoint, in WorldEntityAddress replacement) => false;
         public bool VacateSeat(int slot) => false;
-        public bool OccupySeat(int slot, WorldIdentity? profile) => false;
-        public void ClearHeld(int slot) { }
-        public void ClearAnalog() { }
-        public void AdvanceSeatViews(float deltaSeconds) { }
-        public void SubmitAuthorityIntents(WorldAuthorityEndpoint endpoint, ulong tick) { }
-        public void ConfigureLeave(Func<int, WorldPrincipal, bool> leave) { }
     }
 }

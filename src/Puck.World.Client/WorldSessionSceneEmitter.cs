@@ -301,14 +301,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             WarpAmount: 0f
         ) {
             DynamicTransforms = transforms,
-            // A budgeted 160x144-class panel image: re-marching full soft shadows/AO/far-bound/shadow-escape/
-            // shadow-accumulation here costs real GPU time for a tiny screen-space result no player is closely
-            // scrutinizing — the same cost posture SdfCameraView's own jumbotron rig already takes.
+            // A budgeted 160x144-class panel image: re-marching full soft shadows/AO/far-bound here costs real GPU
+            // time for a tiny screen-space result no player is closely scrutinizing — the same cost posture
+            // SdfCameraView's own jumbotron rig already takes.
             DisableAmbientOcclusion = true,
             DisableSoftShadows = true,
             DisableFarBound = true,
-            DisableShadowEscapeExit = true,
-            DisableShadowAccumulation = true,
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render),

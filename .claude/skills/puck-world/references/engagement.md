@@ -5,7 +5,8 @@ saying where its resolved intent goes and what the channels MEAN when they get
 there. That set is the whole of engagement: there is no route row, no capture
 flag, and no latch beside it to disagree with. Files:
 `src/Puck.World.Server/WorldEngagement.cs`, `WorldGrants.cs` (application
-storage), `WorldMachineHost.cs`,
+storage), `src/Puck.World.Machines/WorldMachineHost.cs` (plus its
+`.Bindings.cs`/`.Instances.cs` partials — pad/instance resolution),
 `src/Puck.World.Schema/ControlApplication.cs`,
 `src/Puck.World.Protocol/Protocol/WorldCommand.cs`, `WorldScreen.cs`
 (`WorldScreenRoute`), `WorldKit.cs` (the pad map),
@@ -85,7 +86,8 @@ only: their faces render their resolved sources, nothing engages them.
 ## The command kinds
 
 `WorldCommand(WorldPrincipal Principal, int EntityIndex)` — the closed
-drive-a-body hierarchy, 10 sealed cases; `ComposeControl(Target: GrantSubject,
+drive-a-body sealed hierarchy (read `WorldCommand.cs` for the cases);
+`ComposeControl(Target: GrantSubject,
 Exclusive: bool, TargetPrincipal)` and `DissolveControl(TargetPrincipal)` branch
 out of the generic `Drive`-over-body gate first and run their own check. The kit
 and reach are NEVER carried on the wire — they are resolved SERVER-SIDE,
@@ -274,8 +276,8 @@ body at that index. The player defaults to 1 and is bounded to 1..128.
 
 ## Machines: server-authoritative
 
-A booted `IScreenMachine` is CORE state, not presentation-fed. Machine engines are
-engine-neutral (`Puck.Abstractions.Machines`): `IScreenMachineEngine` is a factory
+A booted `IMachineRuntime` is CORE state, not presentation-fed. Machine engines are
+engine-neutral (`Puck.Abstractions.Machines`): `IMachineEngine` is a factory
 keyed by a kebab-case id, DI-collected into `Server.WorldMachineHost` (a peer
 singleton `WorldServer` takes as a constructor parameter — `WorldBootComposition`
 registers `gaming-brick` (SM83 family) and `advanced-gaming-brick` (ARM7TDMI)).

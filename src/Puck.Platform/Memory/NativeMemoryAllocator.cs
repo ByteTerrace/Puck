@@ -6,7 +6,8 @@ public unsafe sealed class NativeMemoryAllocator : IAllocator {
     public void* Allocate(nuint size, nuint alignment = 0) {
         var align = ((alignment == 0)
             ? 16
-            : alignment);
+            : alignment
+        );
         var headerSize = align;
 
         while (headerSize < ((nuint)sizeof(Header))) {
@@ -60,7 +61,8 @@ public unsafe sealed class NativeMemoryAllocator : IAllocator {
 
         var copySize = ((oldSize < newSize)
             ? oldSize
-            : newSize);
+            : newSize
+        );
 
         if (copySize > 0) {
             Buffer.MemoryCopy(

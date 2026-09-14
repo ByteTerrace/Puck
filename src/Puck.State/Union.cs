@@ -1,6 +1,6 @@
 namespace Puck.State;
 
-// The hand-written C# 15 basic union pattern (docs/campaign.md, "Compiled rule operands are a closed union"),
+// The hand-written C# 15 basic union pattern (docs/game/design.md, "Compiled rule operands are a closed union"),
 // polyfilled internally until .NET 11 supplies the real attribute/interface pair. The day the toolchain moves, the
 // flip is deleting these two markers and switching on the carrier's Value directly wherever a case-type dispatch
 // exists today; nothing else moves.
@@ -18,7 +18,6 @@ namespace Puck.State;
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
 public sealed class UnionAttribute : Attribute;
-
 /// <summary>The polyfilled stand-in for the future C# union pattern's own marker interface: a union carrier STRUCT
 /// (never the class/record form of <see cref="UnionAttribute"/>, which needs no boxed indirection) exposes its one
 /// boxed case through <see cref="Value"/>, untyped, for reflection or generic tooling that does not know the concrete

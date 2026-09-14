@@ -24,8 +24,8 @@ public sealed partial class SdfWorldEngine {
 
         m_timingPools = timingPools;
     }
-    // sky → barrier → mask → barrier → beam → barrier → cull-args → barrier + indirect-args transition → views
-    // (INDIRECT) → barrier → composite (INDIRECT), with the output handed off in its consumer layout.
+    // upload → sky → mask → beam → cull-args → primary → surface → ambient → views → composite.
+    // The hit passes share the indirect bbox and have barriers between consumers; output uses its consumer layout.
     private void Record(uint viewportCount) {
         var recorder = m_gpu.ComputeRecorder;
         var commandBuffer = m_commandPools[m_currentSlot].CommandBufferHandle;
@@ -102,7 +102,7 @@ public sealed partial class SdfWorldEngine {
         }
 
         // FRAME-RING cross-frame gate: the GPU-written device-local scratch (tile / instance-mask / indirect-args /
-        // cull-bounds buffers, the per-view source textures) is SHARED across ring slots, so with FrameRingSize
+        // cull-bounds / primary-hit buffers, the per-view source textures) is SHARED across ring slots, so with FrameRingSize
         // frames in flight this frame's first write must order after the PREVIOUS frame's last read of that scratch —
         // an execution dependency on all prior compute (and the indirect-args fetch), queue-scoped like every Vulkan
         // barrier. This serializes GPU frames against each other (the natural order anyway — the ring overlaps CPU
@@ -183,11 +183,11 @@ public sealed partial class SdfWorldEngine {
         );
 
         // Cadence gate: when this frame's inputs are byte-identical to the last RENDERED frame's
-        // (DecideCadenceSkip proved it), SKIP the four render passes and fall straight through to the composite below —
+        // (DecideCadenceSkip proved it), SKIP sky through views and fall straight through to the composite below —
         // which re-reads the RETAINED (single, ring-shared) views source textures + tile buffer the previous frame wrote
         // and re-composites them into the swapchain-bound output. Pixel-identical to a full re-render of these inputs;
         // the top-of-frame cross-frame barrier already orders this read after that previous frame's writes. Honest
-        // timing: the skipped passes' closing marks are written back-to-back (queries 1..4), so each reports ~0 ms.
+        // timing: the skipped passes' closing marks are written back-to-back (queries 2..9), so each reports ~0 ms.
         if (!m_skipThisFrame) {
             // Sky pre-pass FIRST, before any tile is culled: fills every pixel of every non-child viewport's
             // render-dims source texture with the authored sky. Direct (not indirect) over a fixed
@@ -424,7 +424,29 @@ public sealed partial class SdfWorldEngine {
                 sourceStageMask: GpuComputeStage.ComputeShader
             );
 
-            // Stage 1: render each viewport's SDF camera into its own source texture — dispatched INDIRECTLY from the
+            RecordHitPass(
+                commandBuffer: commandBuffer,
+                label: "primary",
+                pipeline: m_primaryPipeline,
+                timingMark: 6,
+                timingPool: timingPool
+            );
+            RecordHitPass(
+                commandBuffer: commandBuffer,
+                label: "surface",
+                pipeline: m_surfacePipeline,
+                timingMark: 7,
+                timingPool: timingPool
+            );
+            RecordHitPass(
+                commandBuffer: commandBuffer,
+                label: "ambient",
+                pipeline: m_ambientPipeline,
+                timingMark: 8,
+                timingPool: timingPool
+            );
+
+            // Stage 1: shade each viewport's primary hits into its own source texture — dispatched INDIRECTLY from the
             // GPU-computed surviving-tile bbox; the all-empty margins are never dispatched; the kernel offsets each
             // invocation by the bbox origin (binding 8). The pipeline is the variant UploadProgram selected for the LIVE
             // program (full ISA vs core-ops — the stripped cases are unreachable under core, so the field is the same;
@@ -473,7 +495,7 @@ public sealed partial class SdfWorldEngine {
 
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 6,
+                queryIndex: 9,
                 timingPool: timingPool
             ); // close: Stage 1 views
 
@@ -487,7 +509,7 @@ public sealed partial class SdfWorldEngine {
                 sourceStageMask: GpuComputeStage.ComputeShader
             );
         } else {
-            // SKIPPED FRAME: no render passes ran, so close their five timing marks (queries 2..6) back-to-back — each
+            // SKIPPED FRAME: no render passes ran, so close their timing marks (queries 2..9) back-to-back — each
             // reports ~0 ms, the honest cost of a skipped pass — and fall through to the composite. The retained tile
             // buffer + source textures (single, ring-shared, left in General by the previous rendered frame) are ordered
             // for this frame's composite reads by the top-of-frame cross-frame barrier, so no extra barrier is needed.
@@ -517,7 +539,22 @@ public sealed partial class SdfWorldEngine {
                 commandBuffer: commandBuffer,
                 queryIndex: 6,
                 timingPool: timingPool
-            ); // close: Stage 1 views (skipped)
+            ); // close: primary traversal (skipped)
+            WriteTimingMark(
+                commandBuffer: commandBuffer,
+                queryIndex: 7,
+                timingPool: timingPool
+            ); // close: surface evaluation (skipped)
+            WriteTimingMark(
+                commandBuffer: commandBuffer,
+                queryIndex: 8,
+                timingPool: timingPool
+            ); // ambient (skipped)
+            WriteTimingMark(
+                commandBuffer: commandBuffer,
+                queryIndex: 9,
+                timingPool: timingPool
+            ); // views (skipped)
         }
 
         recorder.TransitionImageLayout(
@@ -570,7 +607,7 @@ public sealed partial class SdfWorldEngine {
 
         WriteTimingMark(
             commandBuffer: commandBuffer,
-            queryIndex: 7,
+            queryIndex: 10,
             timingPool: timingPool
         ); // close: Stage 2 composite
 

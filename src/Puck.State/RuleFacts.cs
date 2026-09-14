@@ -10,25 +10,25 @@ namespace Puck.State;
 /// spell, so a reserved channel can never be shadowed by (or mistaken for) a real row — the validator refuses such a
 /// row before a rule could ever resolve ambiguously.</remarks>
 public static class RuleFacts {
-    /// <summary>The prefix; <c>$match:&lt;pattern&gt;:&lt;row&gt;[:&lt;direction&gt;]</c> runs a <c>patterns</c> row
-    /// over a word: a board ray from the operand key's origin (exclusive) in the direction (or every direction under
-    /// <c>any</c>), an ordered zone's attribute values in pile order, a history ring in push order, or a keyed row's
-    /// own cells. Reads acceptance 1 or 0, or under a facet the longest accepted prefix or the accepting
-    /// directions.</summary>
-    public const string MatchPrefix = "$match:";
-    /// <summary>The prefix; <c>$history:&lt;row&gt;:&lt;age&gt;</c> reads the value pushed <c>age</c> pushes ago into a
-    /// history row (0 is the latest), or the ring's empty value past what it holds; age is 0..capacity-1.</summary>
-    public const string HistoryPrefix = "$history:";
+    /// <summary>The prefix of a rule-scoped bound value: <c>$bind:&lt;name&gt;</c> reads the value the enclosing
+    /// rule's same-named binding computed for this evaluation.</summary>
+    public const string BindPrefix = "$bind:";
     /// <summary>The prefix a cell KEY may carry in place of a literal: <c>$cell:&lt;row&gt;:&lt;key&gt;</c> resolves, at
     /// every read and every firing, to the integer value of that cell spelled as a key — so an effect or operand
     /// addresses "the cell named by another cell" (the target a body's <c>target</c> cell currently names). Admitted
     /// on a <c>compareState</c> <c>key</c>/<c>comparandKey</c> and on a world-scope effect's <c>key</c>/<c>fromKey</c>;
     /// a body-reference token spells the same indirection as <c>cell:&lt;row&gt;:&lt;key&gt;</c>.</summary>
     public const string CellKeyPrefix = "$cell:";
-    /// <summary>The dynamic key prefix; <c>$zone:&lt;row&gt;:first|last</c> returns the endpoint member's
-    /// original string key from an ordered zone in the active store. An empty zone resolves to the empty key,
-    /// which reads absent and cannot address a write. The zone may be a live <c>$zones[&lt;index&gt;]</c>.</summary>
-    public const string ZoneKeyPrefix = "$zone:";
+    /// <summary>The prefix of a key computed by an expression — <c>row[from + 1]</c> in the infix spelling — which
+    /// compiles to an implicit rule binding evaluated before the gate and read back as the cell key; the text after
+    /// the prefix is the expression's canonical infix spelling.</summary>
+    public const string ExpressionKeyPrefix = "$expr:";
+    /// <summary>The <see cref="Rule.ForEach"/> spelling that iterates the rule's own zone table rather than a row:
+    /// each non-empty index in turn, bound to <c>$each</c>, so <c>$zones[$each]</c> visits every zone.</summary>
+    public const string ForEachZones = "$zones";
+    /// <summary>The prefix; <c>$history:&lt;row&gt;:&lt;age&gt;</c> reads the value pushed <c>age</c> pushes ago into a
+    /// history row (0 is the latest), or the ring's empty value past what it holds; age is 0..capacity-1.</summary>
+    public const string HistoryPrefix = "$history:";
     /// <summary>The prefix a row position may carry in place of a literal row name: <c>$zones[&lt;index&gt;]</c>
     /// selects, before each read or firing, the entry of the enclosing rule's <see cref="Rule.Zones"/> table the
     /// index names. The index is an infix cell key — <c>game[from]</c>, <c>$each</c>, <c>$bind:&lt;name&gt;</c>, or
@@ -38,19 +38,12 @@ public static class RuleFacts {
     /// the table or at an empty entry selects no zone, and the rule's evaluation is not for it: the gate reads closed
     /// before any conjunct is consulted, and the rule trace names what each spelling selected.</summary>
     public const string LiveZonePrefix = "$zones[";
-    /// <summary>The <see cref="Rule.ForEach"/> spelling that iterates the rule's own zone table rather than a row:
-    /// each non-empty index in turn, bound to <c>$each</c>, so <c>$zones[$each]</c> visits every zone.</summary>
-    public const string ForEachZones = "$zones";
-    /// <summary>The prefix of a key computed by an expression — <c>row[from + 1]</c> in the infix spelling — which
-    /// compiles to an implicit rule binding evaluated before the gate and read back as the cell key; the text after
-    /// the prefix is the expression's canonical infix spelling.</summary>
-    public const string ExpressionKeyPrefix = "$expr:";
-    /// <summary>The prefix of a rule-scoped bound value: <c>$bind:&lt;name&gt;</c> reads the value the enclosing
-    /// rule's same-named binding computed for this evaluation.</summary>
-    public const string BindPrefix = "$bind:";
-    /// <summary>The prefix of a static table read: <c>$table:&lt;name&gt;:&lt;key&gt;</c>, where the key is an
-    /// integer literal, a <c>$cell:&lt;row&gt;:&lt;key&gt;</c> indirection, or the bound <c>$each</c> key.</summary>
-    public const string TablePrefix = "$table:";
+    /// <summary>The prefix; <c>$match:&lt;pattern&gt;:&lt;row&gt;[:&lt;direction&gt;]</c> runs a <c>patterns</c> row
+    /// over a word: a board ray from the operand key's origin (exclusive) in the direction (or every direction under
+    /// <c>any</c>), an ordered zone's attribute values in pile order, a history ring in push order, or a keyed row's
+    /// own cells. Reads acceptance 1 or 0, or under a facet the longest accepted prefix or the accepting
+    /// directions.</summary>
+    public const string MatchPrefix = "$match:";
     /// <summary>The prefix; <c>$reduce:&lt;op&gt;:&lt;row&gt;</c> aggregates every cell a keyed (or slot) row
     /// declares — <c>max</c>/<c>min</c>/<c>sum</c> read the row's own <c>CellKind</c>, <c>count</c> is always
     /// integer (the number of cells present, regardless of what they hold), and <c>arrangementRank</c> is an ordered
@@ -81,9 +74,16 @@ public static class RuleFacts {
     /// on the ring a walk has reached, reflect one player's arrangement onto another's, or test two placements for
     /// orthogonality — the lattice's whole symmetry group, reached through <c>compareState</c>/<c>fromState</c>.</summary>
     public const string SymmetryPrefix = "$symmetry:";
+    /// <summary>The prefix of a static table read: <c>$table:&lt;name&gt;:&lt;key&gt;</c>, where the key is an
+    /// integer literal, a <c>$cell:&lt;row&gt;:&lt;key&gt;</c> indirection, or the bound <c>$each</c> key.</summary>
+    public const string TablePrefix = "$table:";
     /// <summary>Compares the server's own completed-tick counter — <c>compareState("$tick", greaterOrEqual, 600)</c>
     /// is "at 2.5 seconds", with no clock read anywhere.</summary>
     public const string Tick = "$tick";
+    /// <summary>The dynamic key prefix; <c>$zone:&lt;row&gt;:first|last</c> returns the endpoint member's
+    /// original string key from an ordered zone in the active store. An empty zone resolves to the empty key,
+    /// which reads absent and cannot address a write. The zone may be a live <c>$zones[&lt;index&gt;]</c>.</summary>
+    public const string ZoneKeyPrefix = "$zone:";
 
     /// <summary>Splits a reserved channel on its colons, keeping a bracketed live-zone index
     /// (<see cref="LiveZonePrefix"/>) whole — <c>$match:run:$zones[game[from]]:prefix</c> is four tokens, however
@@ -100,7 +100,7 @@ public static class RuleFacts {
         var depth = 0;
         var start = 0;
 
-        for (var index = 0; index < name.Length; index++) {
+        for (var index = 0; (index < name.Length); index++) {
             switch (name[index]) {
                 case '[':
                     depth++;

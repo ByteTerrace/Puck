@@ -76,84 +76,6 @@ public sealed class TextLayout {
 
         return blockWidth;
     }
-
-    // The plain-string Layout overloads' fast path: every glyph carries TextEffect.None (there is no enrichment tier
-    // to carry here), so this wraps the framework's own rune decoder (StringRuneEnumerator, itself a struct) instead
-    // of routing through the enrichment-aware IEnumerable<TextEffectRune> shape. Because this type is a genuine
-    // value type implementing IEnumerator<TextEffectRune> directly (not via a compiler-generated iterator class),
-    // LayoutRunes's generic instantiation over it dispatches MoveNext/Current through a devirtualized constrained
-    // call, so laying out a plain string allocates neither an iterator object nor a boxed enumerator.
-    private struct PlainRuneEnumerator(string text) : IEnumerator<TextEffectRune> {
-        private StringRuneEnumerator m_runes = text.EnumerateRunes();
-
-        public readonly TextEffectRune Current => new(
-            Effect: TextEffect.None,
-            Rune: m_runes.Current
-        );
-
-        readonly object IEnumerator.Current => Current;
-
-        public bool MoveNext() => m_runes.MoveNext();
-        public readonly void Reset() => throw new NotSupportedException();
-        public readonly void Dispose() { }
-    }
-
-    // Generic over the enumerator type rather than IEnumerable<TextEffectRune> so the plain-string fast path
-    // (PlainRuneEnumerator, a value type) gets its own devirtualized instantiation while the enrichment-aware
-    // overloads (an interface-typed IEnumerator<TextEffectRune>) share the ordinary interface-dispatch instantiation
-    // exactly as a plain foreach over IEnumerable<TextEffectRune> would — MoveNext/Current/Dispose called manually
-    // here reproduce foreach's own desugaring (including disposing the enumerator in a finally) bit for bit.
-    // placementCapacity seeds the placements list; 0 reproduces List<T>'s own default (lazy, grow-from-empty)
-    // behavior for a caller with no cheap upper bound to offer.
-    // The argument gate every public Layout overload runs before acquiring any rune enumerator: an invalid scale or
-    // option must throw before a caller-supplied IEnumerable's GetEnumerator can run (or leak undisposed).
-    private static void ValidateArguments(TextLayoutOptions options, float scale) {
-        if (
-            !float.IsFinite(f: scale) ||
-            (scale <= 0.0f)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                message: "Text scale must be greater than zero.",
-                paramName: nameof(scale)
-            );
-        }
-
-        var maxLineWidth = options.MaxLineWidth;
-
-        if (
-            (maxLineWidth is float lineWidth) &&
-            (!float.IsFinite(f: lineWidth) || (lineWidth <= 0.0f))
-        ) {
-            throw new ArgumentOutOfRangeException(
-                message: "Text max line width must be greater than zero when provided.",
-                paramName: nameof(options)
-            );
-        }
-
-        if (!float.IsFinite(f: options.Tracking)) {
-            throw new ArgumentOutOfRangeException(
-                message: "Text tracking must be finite.",
-                paramName: nameof(options)
-            );
-        }
-
-        if (
-            !float.IsFinite(f: options.LineHeightScale) ||
-            (options.LineHeightScale <= 0.0f)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                message: "Text line-height scale must be greater than zero.",
-                paramName: nameof(options)
-            );
-        }
-
-        if (!Enum.IsDefined(value: options.Alignment)) {
-            throw new ArgumentOutOfRangeException(
-                message: "Text alignment must be a defined alignment value.",
-                paramName: nameof(options)
-            );
-        }
-    }
     private static TextLayoutResult LayoutRunes<TEnumerator>(FontAtlas atlas, TEnumerator runes, float scale, TextLayoutOptions options, int placementCapacity) where TEnumerator : IEnumerator<TextEffectRune> {
         // Arguments are validated by ValidateArguments in every public entry point before an enumerator is
         // acquired, so an invalid argument can never leak a caller-supplied enumerator.
@@ -319,6 +241,62 @@ public sealed class TextLayout {
 
         return (right > width);
     }
+    // Generic over the enumerator type rather than IEnumerable<TextEffectRune> so the plain-string fast path
+    // (PlainRuneEnumerator, a value type) gets its own devirtualized instantiation while the enrichment-aware
+    // overloads (an interface-typed IEnumerator<TextEffectRune>) share the ordinary interface-dispatch instantiation
+    // exactly as a plain foreach over IEnumerable<TextEffectRune> would — MoveNext/Current/Dispose called manually
+    // here reproduce foreach's own desugaring (including disposing the enumerator in a finally) bit for bit.
+    // placementCapacity seeds the placements list; 0 reproduces List<T>'s own default (lazy, grow-from-empty)
+    // behavior for a caller with no cheap upper bound to offer.
+    // The argument gate every public Layout overload runs before acquiring any rune enumerator: an invalid scale or
+    // option must throw before a caller-supplied IEnumerable's GetEnumerator can run (or leak undisposed).
+    private static void ValidateArguments(TextLayoutOptions options, float scale) {
+        if (
+            !float.IsFinite(f: scale) ||
+            (scale <= 0.0f)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                message: "Text scale must be greater than zero.",
+                paramName: nameof(scale)
+            );
+        }
+
+        var maxLineWidth = options.MaxLineWidth;
+
+        if (
+            (maxLineWidth is float lineWidth) &&
+            (!float.IsFinite(f: lineWidth) || (lineWidth <= 0.0f))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                message: "Text max line width must be greater than zero when provided.",
+                paramName: nameof(options)
+            );
+        }
+
+        if (!float.IsFinite(f: options.Tracking)) {
+            throw new ArgumentOutOfRangeException(
+                message: "Text tracking must be finite.",
+                paramName: nameof(options)
+            );
+        }
+
+        if (
+            !float.IsFinite(f: options.LineHeightScale) ||
+            (options.LineHeightScale <= 0.0f)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                message: "Text line-height scale must be greater than zero.",
+                paramName: nameof(options)
+            );
+        }
+
+        if (!Enum.IsDefined(value: options.Alignment)) {
+            throw new ArgumentOutOfRangeException(
+                message: "Text alignment must be a defined alignment value.",
+                paramName: nameof(options)
+            );
+        }
+    }
 
     /// <summary>Lays out <paramref name="text"/> against <paramref name="atlas"/> at the given scale.</summary>
     /// <param name="atlas">The atlas providing glyph geometry, metrics, and kerning.</param>
@@ -341,7 +319,8 @@ public sealed class TextLayout {
 
         var resolvedOptions = ((maxLineWidth is null)
             ? TextLayoutOptions.Default
-            : new TextLayoutOptions(MaxLineWidth: maxLineWidth));
+            : new TextLayoutOptions(MaxLineWidth: maxLineWidth)
+        );
 
         ValidateArguments(
             options: resolvedOptions,
@@ -399,7 +378,8 @@ public sealed class TextLayout {
 
         var resolvedOptions = ((maxLineWidth is null)
             ? TextLayoutOptions.Default
-            : new TextLayoutOptions(MaxLineWidth: maxLineWidth));
+            : new TextLayoutOptions(MaxLineWidth: maxLineWidth)
+        );
 
         ValidateArguments(
             options: resolvedOptions,
@@ -441,5 +421,26 @@ public sealed class TextLayout {
             runes: runes.GetEnumerator(),
             scale: scale
         );
+    }
+
+    // The plain-string Layout overloads' fast path: every glyph carries TextEffect.None (there is no enrichment tier
+    // to carry here), so this wraps the framework's own rune decoder (StringRuneEnumerator, itself a struct) instead
+    // of routing through the enrichment-aware IEnumerable<TextEffectRune> shape. Because this type is a genuine
+    // value type implementing IEnumerator<TextEffectRune> directly (not via a compiler-generated iterator class),
+    // LayoutRunes's generic instantiation over it dispatches MoveNext/Current through a devirtualized constrained
+    // call, so laying out a plain string allocates neither an iterator object nor a boxed enumerator.
+    private struct PlainRuneEnumerator(string text) : IEnumerator<TextEffectRune> {
+        private StringRuneEnumerator m_runes = text.EnumerateRunes();
+
+        readonly object IEnumerator.Current => Current;
+
+        public readonly TextEffectRune Current => new(
+            Effect: TextEffect.None,
+            Rune: m_runes.Current
+        );
+
+        public readonly void Dispose() { }
+        public bool MoveNext() => m_runes.MoveNext();
+        public readonly void Reset() => throw new NotSupportedException();
     }
 }

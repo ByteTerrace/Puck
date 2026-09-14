@@ -17,23 +17,15 @@ public sealed class CameraDeviceScanReconcilerLawTests {
     private static readonly InputDeviceId C920 = InputDeviceId.FromKey(key: "camera:c920");
 
     [Fact]
-    public void Success_AddsNewIds_AndRetiresMissingIds() {
-        var known = new HashSet<InputDeviceId> { Brio };
-        var outcome = new CameraDeviceScanOutcome.Success(Ids: new HashSet<InputDeviceId> { C920 });
-
-        var decision = CameraDeviceScanReconciler.Reconcile(knownIds: known, outcome: outcome, wasFailing: false);
-
-        Assert.Equal(expected: [C920], actual: decision.ToAdd);
-        Assert.Equal(expected: [Brio], actual: decision.ToRetire);
-        Assert.False(condition: decision.Narrate);
-        Assert.False(condition: decision.IsFailing);
-    }
-    [Fact]
     public void FailureAfterASuccess_RetiresNothing_AndNarratesOnce() {
         var known = new HashSet<InputDeviceId> { Brio, C920 };
         var outcome = new CameraDeviceScanOutcome.Failure(Message: "enumeration refused");
 
-        var decision = CameraDeviceScanReconciler.Reconcile(knownIds: known, outcome: outcome, wasFailing: false);
+        var decision = CameraDeviceScanReconciler.Reconcile(
+            knownIds: known,
+            outcome: outcome,
+            wasFailing: false
+        );
 
         Assert.Empty(collection: decision.ToAdd);
         Assert.Empty(collection: decision.ToRetire);
@@ -45,7 +37,11 @@ public sealed class CameraDeviceScanReconcilerLawTests {
         var known = new HashSet<InputDeviceId> { Brio, C920 };
         var outcome = new CameraDeviceScanOutcome.Failure(Message: "enumeration refused");
 
-        var decision = CameraDeviceScanReconciler.Reconcile(knownIds: known, outcome: outcome, wasFailing: true);
+        var decision = CameraDeviceScanReconciler.Reconcile(
+            knownIds: known,
+            outcome: outcome,
+            wasFailing: true
+        );
 
         Assert.Empty(collection: decision.ToAdd);
         Assert.Empty(collection: decision.ToRetire);
@@ -57,10 +53,39 @@ public sealed class CameraDeviceScanReconcilerLawTests {
         var known = new HashSet<InputDeviceId> { Brio, C920 };
         var outcome = new CameraDeviceScanOutcome.Success(Ids: new HashSet<InputDeviceId> { Brio });
 
-        var decision = CameraDeviceScanReconciler.Reconcile(knownIds: known, outcome: outcome, wasFailing: true);
+        var decision = CameraDeviceScanReconciler.Reconcile(
+            knownIds: known,
+            outcome: outcome,
+            wasFailing: true
+        );
 
         Assert.Empty(collection: decision.ToAdd);
-        Assert.Equal(expected: [C920], actual: decision.ToRetire);
+        Assert.Equal(
+            expected: [C920],
+            actual: decision.ToRetire
+        );
+        Assert.False(condition: decision.Narrate);
+        Assert.False(condition: decision.IsFailing);
+    }
+    [Fact]
+    public void Success_AddsNewIds_AndRetiresMissingIds() {
+        var known = new HashSet<InputDeviceId> { Brio };
+        var outcome = new CameraDeviceScanOutcome.Success(Ids: new HashSet<InputDeviceId> { C920 });
+
+        var decision = CameraDeviceScanReconciler.Reconcile(
+            knownIds: known,
+            outcome: outcome,
+            wasFailing: false
+        );
+
+        Assert.Equal(
+            expected: [C920],
+            actual: decision.ToAdd
+        );
+        Assert.Equal(
+            expected: [Brio],
+            actual: decision.ToRetire
+        );
         Assert.False(condition: decision.Narrate);
         Assert.False(condition: decision.IsFailing);
     }

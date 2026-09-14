@@ -7,7 +7,10 @@ namespace Puck.World.Schema.Tests;
 public sealed class WorldSafeNameSuffixLawTests {
     [Fact]
     public void TheOwnedWorldSuffixFitsTheReservedCeiling() {
-        Assert.True(WorldOwnedWorldFileName.Suffix.Length <= SafeName.MaxSuffixLength);
-        Assert.Equal(255 - SafeName.MaxSuffixLength, SafeName.MaxLength);
+        Assert.True(condition: (WorldOwnedWorldFileName.Suffix.Length <= SafeName.MaxSuffixLength));
+        Assert.Equal(
+            actual: SafeName.MaxLength,
+            expected: (255 - SafeName.MaxSuffixLength)
+        );
     }
 }

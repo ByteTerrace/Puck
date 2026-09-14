@@ -12,7 +12,6 @@ public readonly record struct WorldNarration(string Channel, string Text, WorldN
     /// <summary>Returns <see cref="Text"/>.</summary>
     public override string ToString() => Text;
 }
-
 /// <summary>The console stream a <see cref="WorldNarration"/> belongs on.</summary>
 public enum WorldNarrationStream {
     /// <summary>Standard error.</summary>
@@ -20,7 +19,6 @@ public enum WorldNarrationStream {
     /// <summary>Standard output.</summary>
     Output,
 }
-
 /// <summary>A sink that receives every <see cref="WorldNarration"/> a <see cref="WorldOutputHub"/> delivers while
 /// attached (<see cref="WorldOutputHub.AttachNarrationSink"/>). A sink that throws is detached — see
 /// <see cref="WorldOutputHub"/>'s own remarks on delivery isolation.</summary>

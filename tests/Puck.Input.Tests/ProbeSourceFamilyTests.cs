@@ -6,8 +6,39 @@ namespace Puck.Input.Tests;
 /// minted by a world document's own axis binding row rather than a fixed constant set.</summary>
 public sealed class ProbeSourceFamilyTests {
     [Fact]
+    public void ANameLongerThanSixtyFourCharactersDoesNotResolve() {
+        var sourceId = ("probe." + new string(
+            c: 'a',
+            count: 65
+        ));
+
+        Assert.False(condition: InputSourceVocabulary.TryResolveDeclaredKind(
+            kind: out _,
+            sourceId: sourceId
+        ));
+    }
+    [Fact]
+    public void ASixtyFourCharacterNameResolves() {
+        var sourceId = ("probe." + new string(
+            c: 'a',
+            count: 64
+        ));
+
+        Assert.True(condition: InputSourceVocabulary.TryResolveDeclaredKind(
+            kind: out var kind,
+            sourceId: sourceId
+        ));
+        Assert.Equal(
+            actual: kind,
+            expected: CommandValueKind.Axis1D
+        );
+    }
+    [Fact]
     public void FactoryMintsTheDottedSourceId() {
-        Assert.Equal(expected: "probe.head-x", actual: InputSources.Probe.Axis(name: "head-x"));
+        Assert.Equal(
+            expected: "probe.head-x",
+            actual: InputSources.Probe.Axis(name: "head-x")
+        );
         _ = Assert.Throws<ArgumentException>(testCode: () => InputSources.Probe.Axis(name: ""));
     }
     [InlineData("probe.head-x")]
@@ -17,8 +48,14 @@ public sealed class ProbeSourceFamilyTests {
     [InlineData("probe.Head-X")]
     [Theory]
     public void KebabNamesResolveToNonRelativeAxis1D(string sourceId) {
-        Assert.True(condition: InputSourceVocabulary.TryResolveDeclaredKind(kind: out var kind, sourceId: sourceId));
-        Assert.Equal(actual: kind, expected: CommandValueKind.Axis1D);
+        Assert.True(condition: InputSourceVocabulary.TryResolveDeclaredKind(
+            kind: out var kind,
+            sourceId: sourceId
+        ));
+        Assert.Equal(
+            actual: kind,
+            expected: CommandValueKind.Axis1D
+        );
         Assert.True(condition: InputSourceVocabulary.IsKnownSourceId(sourceId: sourceId));
         Assert.False(condition: InputSourceVocabulary.IsRelative(sourceId: sourceId));
     }
@@ -27,19 +64,9 @@ public sealed class ProbeSourceFamilyTests {
     [InlineData("probe.head x")]
     [Theory]
     public void MalformedNamesDoNotResolve(string sourceId) {
-        Assert.False(condition: InputSourceVocabulary.TryResolveDeclaredKind(kind: out _, sourceId: sourceId));
-    }
-    [Fact]
-    public void ANameLongerThanSixtyFourCharactersDoesNotResolve() {
-        var sourceId = ("probe." + new string(c: 'a', count: 65));
-
-        Assert.False(condition: InputSourceVocabulary.TryResolveDeclaredKind(kind: out _, sourceId: sourceId));
-    }
-    [Fact]
-    public void ASixtyFourCharacterNameResolves() {
-        var sourceId = ("probe." + new string(c: 'a', count: 64));
-
-        Assert.True(condition: InputSourceVocabulary.TryResolveDeclaredKind(kind: out var kind, sourceId: sourceId));
-        Assert.Equal(actual: kind, expected: CommandValueKind.Axis1D);
+        Assert.False(condition: InputSourceVocabulary.TryResolveDeclaredKind(
+            kind: out _,
+            sourceId: sourceId
+        ));
     }
 }

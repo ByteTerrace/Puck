@@ -66,7 +66,7 @@ public sealed record OverlayRow(
     OverlayClock Clock = OverlayClock.Session
 );
 /// <summary>
-/// The recording graph document (<c>puck.recording.v1</c>): a versioned, data-defined description of one capture
+/// The recording graph document (<c>puck.recording.configuration.v1</c>): a versioned, data-defined description of one capture
 /// — the output path, the clock model, the video lane, the audio rows, and the capture-only overlays. It is the
 /// primitive that lives above any one game; World, the demo, or a headless render all drive the same document.
 /// </summary>
@@ -85,7 +85,7 @@ public sealed record RecordingDocument(
     IReadOnlyList<OverlayRow>? Overlays = null
 ) {
     /// <summary>The only accepted schema tag.</summary>
-    public const string SchemaVersion = "puck.recording.v1";
+    public const string SchemaVersion = "puck.recording.configuration.v1";
 
     /// <summary>Gets or sets the unrecognized top-level members preserved verbatim across a load/save round trip. A
     /// settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization, and an

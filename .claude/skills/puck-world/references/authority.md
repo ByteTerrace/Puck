@@ -3,7 +3,7 @@
 ONE server-side table authorizes every write: `WorldGrants`
 (`src/Puck.World.Server/WorldGrants.cs`). Protocol vocabulary:
 `src/Puck.World.Schema/WorldGrant.cs`, `WorldPrincipal.cs`,
-`ChannelPolicy.cs`, `WorldPrincipalMapping.cs`. The capability-channels campaign that designed this model was retired 2026-08-10 and its rulings moved into the code above — read the CODE for current rulings, and `docs/campaign.md` for what remains as work.
+`ChannelPolicy.cs`, `WorldPrincipalMapping.cs`. The capability-channels model is implemented directly in the code above — read the CODE for current rulings, and `docs/game/design.md` for what remains as work.
 
 ## Contents
 
@@ -54,8 +54,7 @@ ONE server-side table authorizes every write: `WorldGrants`
   lives — `world.grant.set`/`world.grant.remove` edit the VISITED world's own
   `grants`. But the cross-document write-back channel reads the RECIPIENT
   identity's OWN document `grants` (a separate owned-world file), which
-  `identity.create` seeds `grants: []` and does not itself author. **CLOSED
-  (2026-08-06, C-CHAT core lane):** `Puck.World`'s `ChatCommandModule`
+  `identity.create` seeds `grants: []` and does not itself author. **CLOSED (C-CHAT core lane):** `Puck.World`'s `ChatCommandModule`
   (`chat.inbox` declares a recipient's own bounded, evicting `chat-log`/
   `chat-inbox` state rows; `chat.allow`/`chat.block` grant/revoke a sender
   `document:<id>` Mutate+`state:chat-inbox`, Set-only) is the in-session door —
@@ -144,14 +143,15 @@ exclusivity, so an actor can always revoke an exclusive hold it authorized).
 ## ONE admission predicate decides a mutation
 
 `WorldServer.TryAdmitMutation(principal, section, kindOrdinal,
-rowScopedEditSubject, meter, out admission)` owns the WHOLE authority decision
+rowScopedEditSubject, rowScopedMutateSubject, meter, out admission)` owns the WHOLE authority decision
 for a document write. ONE structural exemption runs first — a `World` principal
 is admitted (`WorldMutationAdmissionRule.Structural`) without any lookup; there
 is no bypass parameter and nothing else may exempt. Then four gates, in order:
 
 1. `Allows(Mutate, section:<name>)` — the coarse section hold — OR, when
    the mutation names one concrete creations/placements row and the section
-   check missed, `Allows(Mutate, creation:<id>|placement:<id>)`. A
+   check missed, `Allows(Mutate, creation:<id>|placement:<id>)` against
+   `rowScopedMutateSubject`. A
    DISJUNCTION, unlike gate 3: a section grant admits every row, a row grant
    admits only its own. That scoping is also the whole cure for the compose
    arms' replace-by-key — a row grantee cannot name another row to collide
@@ -334,9 +334,12 @@ principal immediately after it drops, with no tick in between — and stays
 with whoever took it (the template's re-mint refuses loudly). A census/inhabitant activation, which
 verifies no identity at all, still mints the `Control/all` seed
 (`BuildDefaultPeerControlGrants`) — population housekeeping, not an admission.
-A world document's `grants` section applies in the `WorldServer`
-constructor, in document order, under the Console actor, through the same
-`Grant` path `world.grant` uses — same loud accept/reject lines.
+In `.puck` source, `grants` is an ordinary array-of-objects property like any
+other document section — no dedicated sugar (grammar belongs to the
+`puck-dsl` skill). A world document's `grants` section applies in the
+`WorldServer` constructor, in document order, under the Console actor,
+through the same `Grant` path `world.grant` uses — same loud accept/reject
+lines.
 `WithoutAuthoredConsent` strips `Reach`/`Consent`/`Ceiling` from any
 document row carrying a ceiling, prints the withholding loudly, and applies
 the row with no pool: consent is authored LIVE by the seated human, never
@@ -440,12 +443,11 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   the row), `[world.mutation rejected: …]`, contention
   `[world.grant: body:<n> driven by both … this tick — …]`.
 - `world.refusals [door]` prints the DECLARED refusal catalog
-  (`RefusalTaxonomy.cs` + `RefusalCatalog.cs`): 97 declarations across eight
-  doors today: `addon.mutate` (11), `grant.authority` (3), `hud.validate`
-  (11), `replay.tape` (9), `sdf.decode` (34), `world.rule.compile` (27),
-  `world.interaction.compile` (1), `world.rule.effect` (1) — re-run the count
-  (`puck search "\[Refusal\(" src -M 0`) rather than trusting this list once
-  the surface moves again. It does NOT cover console-tier text refusals (parse
+  (`RefusalTaxonomy.cs` + `RefusalCatalog.cs`) across the doors: `addon.mutate`,
+  `grant.authority`, `hud.validate`, `replay.tape`, `sdf.decode`,
+  `world.rule.compile`, `world.interaction.compile`, `world.rule.effect` — run
+  `puck search "\[Refusal\(" src -M 0` for the current declaration count per
+  door rather than trusting a written-down number. It does NOT cover console-tier text refusals (parse
   errors, `Conflicts` reasons, module refusals) — never claim that
   coverage. Tagging is one-directional: it proves a door cannot refuse with
   an unlisted reason, not that every listed reason has a live call site.

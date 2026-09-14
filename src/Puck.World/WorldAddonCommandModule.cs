@@ -33,7 +33,10 @@ internal sealed class WorldAddonCommandModule(WorldAddonRuntime runtime, WorldSe
         }
 
         var report = runtime.DescribeCost();
-        var byName = new Dictionary<string, AddonCostReport>(capacity: report.Count, comparer: StringComparer.Ordinal);
+        var byName = new Dictionary<string, AddonCostReport>(
+            capacity: report.Count,
+            comparer: StringComparer.Ordinal
+        );
 
         for (var index = 0; (index < report.Count); index++) {
             byName[report[index].Name] = report[index];

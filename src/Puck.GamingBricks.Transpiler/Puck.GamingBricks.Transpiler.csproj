@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
+        <Description>Authors puck.cartridge.v1 cartridge documents in the Puck DSL: a source file with named constants, parametric templates, branches, counted loops and infix conditions compiles to the canonical cartridge JSON both GamingBrick forges consume, and decompiles back the other way. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <IsAotCompatible>true</IsAotCompatible>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.GamingBricks.Transpiler</PackageId>
+        <PackageTags>dsl;cartridge;gameboy;authoring</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.GamingBricks.Transpiler</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The language core, and the forge that owns the document this vocabulary speaks. Neither names a world
+             schema, so this package stays as narrow as the brick forge it sits beside. -->
+        <ProjectReference Include="..\Puck.GamingBricks.Forge\Puck.GamingBricks.Forge.csproj" />
+        <ProjectReference Include="..\Puck.Transpiler\Puck.Transpiler.csproj" />
+    </ItemGroup>
+</Project>

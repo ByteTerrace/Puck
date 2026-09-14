@@ -1,4 +1,4 @@
-# Azure resource extension
+# Puck.World.Azure
 
 This optional extension lets Puck request changes to Azure resources through
 Azure Resource Manager (ARM), Azure's management API. A creature's death can
@@ -42,7 +42,7 @@ provider-neutral `IWorldHostRetirementObserver` contract. It ignores temporary
 freezes, never acknowledges events on behalf of other processes, and propagates
 retirement failures. No metadata access occurs unless this observer is selected.
 The [silo lifecycle](../Puck.World.Silo/README.md#hosted-test-world) owns drain behavior;
-[deployment](../../docs/ci.md) owns VMSS policy and Spot qualification.
+[deployment](../../docs/development/ci.md) owns VMSS policy and Spot qualification.
 
 `AzureApplicationHealth` formats the v2 Application Health extension's rich
 health JSON. The silo serves it at `/livez/azure` with HTTP 200 for both
@@ -179,7 +179,7 @@ pin `resourceId` (an absolute ARM resource ID, not a resource group), `apiVersio
 and `interval` (one of the closed Azure Monitor grains, `PT1M` through `P1D`).
 Each item is keyed by metric name with one `value` field: the aggregated value as
 an invariant decimal string, read from the newest bucket that still carries the
-requested aggregation — a still-filling trailing bucket is skipped rather than
+requested aggregation—a still-filling trailing bucket is skipped rather than
 read as zero. A response missing a requested metric, carrying more than one
 timeseries for it, or never completing a bucket refuses the whole read.
 
@@ -319,3 +319,7 @@ extension supplies metadata to the shared client's operation catalog. The shared
 configuration layer connects ordinary state request/status tables; it introduces
 no Azure-specific gameplay rules. MCP transports and additional installed adapter
 types remain separate from this provider.
+
+## Documentation
+
+📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

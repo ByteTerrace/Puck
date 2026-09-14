@@ -124,15 +124,26 @@ public sealed class DirectXSurfacePresenter : ISurfacePresenter, IPresentSurface
             // The device could not be recreated — almost always because the adapter has not come back yet (a real
             // removal leaves no capable device for seconds; D3D12CreateDevice fails until it returns). Surface it as the
             // neutral recoverable signal so the host pump waits and retries rather than aborting the run.
-            throw new DeviceLostException(message: "The Direct3D 12 device could not be recreated yet (the adapter is unavailable).", reasonCode: exception.Result, innerException: exception);
+            throw new DeviceLostException(
+                message: "The Direct3D 12 device could not be recreated yet (the adapter is unavailable).",
+                reasonCode: exception.Result,
+                innerException: exception
+            );
         }
     }
 
     /// <inheritdoc/>
     public PresentTimingSample LastPresentTiming =>
-        (m_compositor.TryGetPresentTiming(presentCount: out var presentCount, presentQpcTicks: out var presentQpcTicks)
-            ? new PresentTimingSample(PresentCount: presentCount, PresentTimestampTicks: presentQpcTicks)
-            : PresentTimingSample.Unavailable);
+        (m_compositor.TryGetPresentTiming(
+            presentCount: out var presentCount,
+            presentQpcTicks: out var presentQpcTicks
+        )
+            ? new PresentTimingSample(
+                PresentCount: presentCount,
+                PresentTimestampTicks: presentQpcTicks
+            )
+            : PresentTimingSample.Unavailable
+        );
 
     /// <inheritdoc/>
     public void Dispose() {

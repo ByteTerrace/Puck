@@ -9,7 +9,10 @@ internal static class CliScratchDirectories {
         var temp = Path.GetTempPath();
 
         for (var attempt = 0; (attempt < 8); attempt++) {
-            var path = Path.Combine(path1: temp, path2: $"{scratchPrefix}{Guid.NewGuid():N}");
+            var path = Path.Combine(
+                path1: temp,
+                path2: $"{scratchPrefix}{Guid.NewGuid():N}"
+            );
 
             if (Directory.Exists(path: path)) {
                 continue;
@@ -26,10 +29,17 @@ internal static class CliScratchDirectories {
         var threshold = DateTime.UtcNow.AddHours(value: -6);
 
         try {
-            foreach (var directory in Directory.EnumerateDirectories(path: Path.GetTempPath(), searchPattern: $"{scratchPrefix}*", searchOption: SearchOption.TopDirectoryOnly)) {
+            foreach (var directory in Directory.EnumerateDirectories(
+                path: Path.GetTempPath(),
+                searchPattern: $"{scratchPrefix}*",
+                searchOption: SearchOption.TopDirectoryOnly
+            )) {
                 try {
                     if (Directory.GetCreationTimeUtc(path: directory) < threshold) {
-                        Directory.Delete(path: directory, recursive: true);
+                        Directory.Delete(
+                            path: directory,
+                            recursive: true
+                        );
                     }
                 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                     // A best-effort age-bounded sweep never makes this run fail or touches a fresh sibling run.

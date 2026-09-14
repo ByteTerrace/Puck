@@ -23,39 +23,66 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
     /// <param name="targetCount">The ring size. At least two slots are required so the published slot is never also
     /// the write target.</param>
     public void Configure(int targetCount) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(targetCount, 2);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            targetCount,
+            2
+        );
 
         var readers = new int[targetCount];
-        var existing = Interlocked.CompareExchange(comparand: null, location1: ref m_readers, value: readers);
+        var existing = Interlocked.CompareExchange(
+            comparand: null,
+            location1: ref m_readers,
+            value: readers
+        );
 
-        if ((existing is not null) && (existing.Length != targetCount)) {
+        if (
+            (existing is not null) &&
+            (existing.Length != targetCount)
+        ) {
             throw new InvalidOperationException(message: $"the slot publication is already configured for {existing.Length} targets");
         }
     }
-    /// <summary>Tries to reserve the next unleased slot for the single producer, round-robin after the latest. The
-    /// current published slot is never returned, even when it has no readers, because a consumer may acquire it until
-    /// the next publication.</summary>
-    /// <param name="slot">When this returns <see langword="true"/>, the slot the producer may write.</param>
-    /// <returns>Whether a writable slot was available. A false result drops this producer frame rather than racing a
-    /// consumer that still samples every other target.</returns>
-    public bool TryReserveWriteSlot(out int slot) {
+    /// <summary>Publishes a completed slot (called from the producer thread).</summary>
+    /// <param name="slot">The slot whose copy has completed.</param>
+    public void Publish(int slot) {
         var readers = (Volatile.Read(location: ref m_readers) ?? throw new InvalidOperationException(message: "the slot publication has not been configured"));
-        var latest = m_latestSlot;
-        var candidateCount = ((latest < 0) ? readers.Length : (readers.Length - 1));
 
-        for (var offset = 1; (offset <= candidateCount); offset++) {
-            var candidate = ((latest + offset) % readers.Length);
+        ArgumentOutOfRangeException.ThrowIfNegative(slot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            slot,
+            readers.Length
+        );
 
-            if (0 == Volatile.Read(location: ref readers[candidate])) {
-                slot = candidate;
-
-                return true;
-            }
+        if (
+            (slot == m_latestSlot) ||
+            (0 != Volatile.Read(location: ref readers[slot]))
+        ) {
+            throw new InvalidOperationException(message: $"slot {slot} is not writable");
         }
 
-        slot = -1;
+        m_latestSlot = slot;
+        _ = Interlocked.Exchange(
+            location1: ref m_timestamp,
+            value: Stopwatch.GetTimestamp()
+        );
+        _ = Interlocked.Increment(location: ref m_version);
+    }
+    /// <summary>Releases a slot acquired with <see cref="TryAcquireLatest"/>.</summary>
+    /// <param name="slot">The acquired slot.</param>
+    public void Release(int slot) {
+        var readers = (Volatile.Read(location: ref m_readers) ?? throw new InvalidOperationException(message: "the slot publication has not been configured"));
 
-        return false;
+        ArgumentOutOfRangeException.ThrowIfNegative(slot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            slot,
+            readers.Length
+        );
+
+        if (Interlocked.Decrement(location: ref readers[slot]) < 0) {
+            _ = Interlocked.Increment(location: ref readers[slot]);
+
+            throw new InvalidOperationException(message: $"slot {slot} has no outstanding acquisition");
+        }
     }
     /// <summary>Acquires the latest completed slot for asynchronous consumption. The caller must pair a successful
     /// acquisition with <see cref="Release"/> after the GPU work that samples the slot has retired.</summary>
@@ -90,34 +117,32 @@ public sealed class LatestSlotPublication : ISharedSlotRing {
             _ = Interlocked.Decrement(location: ref readers[latest]);
         }
     }
-    /// <summary>Releases a slot acquired with <see cref="TryAcquireLatest"/>.</summary>
-    /// <param name="slot">The acquired slot.</param>
-    public void Release(int slot) {
+    /// <summary>Tries to reserve the next unleased slot for the single producer, round-robin after the latest. The
+    /// current published slot is never returned, even when it has no readers, because a consumer may acquire it until
+    /// the next publication.</summary>
+    /// <param name="slot">When this returns <see langword="true"/>, the slot the producer may write.</param>
+    /// <returns>Whether a writable slot was available. A false result drops this producer frame rather than racing a
+    /// consumer that still samples every other target.</returns>
+    public bool TryReserveWriteSlot(out int slot) {
         var readers = (Volatile.Read(location: ref m_readers) ?? throw new InvalidOperationException(message: "the slot publication has not been configured"));
+        var latest = m_latestSlot;
+        var candidateCount = ((latest < 0)
+            ? readers.Length
+            : (readers.Length - 1)
+        );
 
-        ArgumentOutOfRangeException.ThrowIfNegative(slot);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(slot, readers.Length);
+        for (var offset = 1; (offset <= candidateCount); offset++) {
+            var candidate = ((latest + offset) % readers.Length);
 
-        if (Interlocked.Decrement(location: ref readers[slot]) < 0) {
-            _ = Interlocked.Increment(location: ref readers[slot]);
+            if (0 == Volatile.Read(location: ref readers[candidate])) {
+                slot = candidate;
 
-            throw new InvalidOperationException(message: $"slot {slot} has no outstanding acquisition");
-        }
-    }
-    /// <summary>Publishes a completed slot (called from the producer thread).</summary>
-    /// <param name="slot">The slot whose copy has completed.</param>
-    public void Publish(int slot) {
-        var readers = (Volatile.Read(location: ref m_readers) ?? throw new InvalidOperationException(message: "the slot publication has not been configured"));
-
-        ArgumentOutOfRangeException.ThrowIfNegative(slot);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(slot, readers.Length);
-
-        if ((slot == m_latestSlot) || (0 != Volatile.Read(location: ref readers[slot]))) {
-            throw new InvalidOperationException(message: $"slot {slot} is not writable");
+                return true;
+            }
         }
 
-        m_latestSlot = slot;
-        _ = Interlocked.Exchange(location1: ref m_timestamp, value: Stopwatch.GetTimestamp());
-        _ = Interlocked.Increment(location: ref m_version);
+        slot = -1;
+
+        return false;
     }
 }

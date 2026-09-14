@@ -17,15 +17,15 @@ public sealed class OverlayFrameSlots {
     /// <see cref="Bind"/> can hand back is <c>SlotCount - 1</c>.</summary>
     public const int SlotCount = 8;
 
-    private readonly int[] m_keys = new int[SlotCount];
-    private readonly OverlayFrameLease[] m_leases = new OverlayFrameLease[SlotCount];
-    private readonly OverlayFrameLease[] m_pendingRetireLeases = new OverlayFrameLease[SlotCount];
-
     private readonly IOverlayFrameSources m_sources;
 
     private int m_boundCount;
-    private int m_pendingRetireCount;
     private bool m_capacityExceeded;
+    private int m_pendingRetireCount;
+
+    private readonly int[] m_keys = new int[SlotCount];
+    private readonly OverlayFrameLease[] m_leases = new OverlayFrameLease[SlotCount];
+    private readonly OverlayFrameLease[] m_pendingRetireLeases = new OverlayFrameLease[SlotCount];
 
     /// <summary>Initializes a new instance of the <see cref="OverlayFrameSlots"/> class.</summary>
     /// <param name="sources">The host seam leases are acquired through.</param>
@@ -43,10 +43,21 @@ public sealed class OverlayFrameSlots {
     /// availability.</summary>
     public bool CapacityExceeded => m_capacityExceeded;
 
-    /// <summary>Gets the lease bound at <paramref name="slot"/> this frame.</summary>
-    /// <param name="slot">The slot index, <c>0..</c><see cref="BoundCount"/><c>-1</c>.</param>
-    /// <returns>The slot's acquired lease.</returns>
-    public OverlayFrameLease LeaseAt(int slot) => m_leases[slot];
+    /// <summary>Starts a new produced frame: moves the leases bound over the frame just finished into the
+    /// retire-pending set (<see cref="RetirePending"/> releases them once the fence proves that frame's pass
+    /// retired) and clears the slot table for this frame's binds.</summary>
+    public void BeginFrame() {
+        Array.Copy(
+            destinationArray: m_pendingRetireLeases,
+            destinationIndex: 0,
+            length: m_boundCount,
+            sourceArray: m_leases,
+            sourceIndex: 0
+        );
+        m_pendingRetireCount = m_boundCount;
+        m_boundCount = 0;
+        m_capacityExceeded = false;
+    }
     /// <summary>Binds <paramref name="key"/> to a slot for this frame: the first bind of a key acquires its lease
     /// through <see cref="IOverlayFrameSources.TryAcquire"/> and takes the next free slot; a repeated key within the
     /// same frame returns the same slot without acquiring again.</summary>
@@ -68,9 +79,9 @@ public sealed class OverlayFrameSlots {
 
         if (
             !m_sources.TryAcquire(
-                key: key,
-                lease: out var lease
-            )
+            key: key,
+            lease: out var lease
+        )
         ) {
             return -1;
         }
@@ -83,21 +94,10 @@ public sealed class OverlayFrameSlots {
 
         return slot;
     }
-    /// <summary>Starts a new produced frame: moves the leases bound over the frame just finished into the
-    /// retire-pending set (<see cref="RetirePending"/> releases them once the fence proves that frame's pass
-    /// retired) and clears the slot table for this frame's binds.</summary>
-    public void BeginFrame() {
-        Array.Copy(
-            destinationArray: m_pendingRetireLeases,
-            destinationIndex: 0,
-            length: m_boundCount,
-            sourceArray: m_leases,
-            sourceIndex: 0
-        );
-        m_pendingRetireCount = m_boundCount;
-        m_boundCount = 0;
-        m_capacityExceeded = false;
-    }
+    /// <summary>Gets the lease bound at <paramref name="slot"/> this frame.</summary>
+    /// <param name="slot">The slot index, <c>0..</c><see cref="BoundCount"/><c>-1</c>.</param>
+    /// <returns>The slot's acquired lease.</returns>
+    public OverlayFrameLease LeaseAt(int slot) => m_leases[slot];
     /// <summary>Retires every lease this table currently holds, bound or still pending retirement — the caller's
     /// responsibility to call only after a final fence wait proves no pass can still be sampling them, or after
     /// device loss invalidates every such pass.</summary>

@@ -1,3 +1,4 @@
+using System.CommandLine;
 using Puck.Assets;
 
 namespace Puck.Cli.Parity;
@@ -12,23 +13,42 @@ internal static class ParityCompareCommand {
     private const string ManifestFileName = "manifest.json";
     private const string ScratchPrefix = "puck-parity-compare-";
 
-    public static int Run(string[] args) {
-        if ((Array.IndexOf(array: args, value: "-h") >= 0) || (Array.IndexOf(array: args, value: "--help") >= 0)) {
-            return Usage();
-        }
-        if (!TryParse(args: args, contractPath: out var contractPath, error: out var parseError, leftDir: out var leftDir, outDir: out var outDir, rightDir: out var rightDir)) {
-            Console.Error.WriteLine(value: $"ERROR: {parseError}");
+    // Exit 3 covers every malformed input — argument, manifest, or contract — and is deliberately distinct
+    // from the 2 a real parity failure reports.
+    internal static int Run(string contractPath, string leftDir, string? outDir, string rightDir) {
+        if (!File.Exists(path: contractPath)) {
+            Console.Error.WriteLine(value: $"ERROR: --contract file '{contractPath}' does not exist.");
 
             return 3;
         }
-        if (!ParityManifestLoader.TryLoadContract(contract: out var contract, error: out var contractError, path: contractPath)) {
+        if (!Directory.Exists(path: leftDir)) {
+            Console.Error.WriteLine(value: $"ERROR: left directory '{leftDir}' does not exist.");
+
+            return 3;
+        }
+        if (!Directory.Exists(path: rightDir)) {
+            Console.Error.WriteLine(value: $"ERROR: right directory '{rightDir}' does not exist.");
+
+            return 3;
+        }
+        if (!ParityManifestLoader.TryLoadContract(
+            contract: out var contract,
+            error: out var contractError,
+            path: contractPath
+        )) {
             Console.Error.WriteLine(value: $"ERROR: {contractError}");
 
             return 3;
         }
 
-        var leftManifestPath = Path.Combine(path1: leftDir, path2: ManifestFileName);
-        var rightManifestPath = Path.Combine(path1: rightDir, path2: ManifestFileName);
+        var leftManifestPath = Path.Combine(
+            path1: leftDir,
+            path2: ManifestFileName
+        );
+        var rightManifestPath = Path.Combine(
+            path1: rightDir,
+            path2: ManifestFileName
+        );
 
         if (!File.Exists(path: leftManifestPath)) {
             Console.Error.WriteLine(value: $"ERROR: left manifest '{leftManifestPath}' does not exist.");
@@ -40,17 +60,33 @@ internal static class ParityCompareCommand {
 
             return 3;
         }
-        if (!ParityManifestLoader.TryLoadManifest(error: out var leftError, manifest: out var leftManifest, path: leftManifestPath)) {
+        if (!ParityManifestLoader.TryLoadManifest(
+            error: out var leftError,
+            manifest: out var leftManifest,
+            path: leftManifestPath
+        )) {
             Console.Error.WriteLine(value: $"ERROR: {leftError}");
 
             return 3;
         }
-        if (!ParityManifestLoader.TryLoadManifest(error: out var rightError, manifest: out var rightManifest, path: rightManifestPath)) {
+        if (!ParityManifestLoader.TryLoadManifest(
+            error: out var rightError,
+            manifest: out var rightManifest,
+            path: rightManifestPath
+        )) {
             Console.Error.WriteLine(value: $"ERROR: {rightError}");
 
             return 3;
         }
-        if (!ParityComparator.TryCompare(contract: contract, error: out var compareError, left: leftManifest, leftDir: leftDir, outcomes: out var outcomes, right: rightManifest, rightDir: rightDir)) {
+        if (!ParityComparator.TryCompare(
+            contract: contract,
+            error: out var compareError,
+            left: leftManifest,
+            leftDir: leftDir,
+            outcomes: out var outcomes,
+            right: rightManifest,
+            rightDir: rightDir
+        )) {
             Console.Error.WriteLine(value: $"ERROR: {compareError}");
 
             return 3;
@@ -73,7 +109,10 @@ internal static class ParityCompareCommand {
             if (outcome.Failed) {
                 failedCount++;
 
-                WriteEvidence(outDir: resolvedOutDir, outcome: outcome);
+                WriteEvidence(
+                    outDir: resolvedOutDir,
+                    outcome: outcome
+                );
             }
         }
 
@@ -89,102 +128,87 @@ internal static class ParityCompareCommand {
     }
 
     private static void WriteEvidence(ParityCaptureOutcome outcome, string outDir) {
-        var captureDirectory = Path.Combine(path1: outDir, path2: $"{outcome.Station}-{outcome.Tick}");
+        var captureDirectory = Path.Combine(
+            path1: outDir,
+            path2: $"{outcome.Station}-{outcome.Tick}"
+        );
 
         Directory.CreateDirectory(path: captureDirectory);
 
         if (outcome.LeftFrame is { } leftFrame) {
-            PngEncoder.Write(height: leftFrame.Height, path: Path.Combine(path1: captureDirectory, path2: "left.png"), rgba: leftFrame.RgbaPixels, width: leftFrame.Width);
+            PngEncoder.Write(
+                height: leftFrame.Height,
+                path: Path.Combine(
+                    path1: captureDirectory,
+                    path2: "left.png"
+                ),
+                rgba: leftFrame.RgbaPixels,
+                width: leftFrame.Width
+            );
         }
         if (outcome.RightFrame is { } rightFrame) {
-            PngEncoder.Write(height: rightFrame.Height, path: Path.Combine(path1: captureDirectory, path2: "right.png"), rgba: rightFrame.RgbaPixels, width: rightFrame.Width);
+            PngEncoder.Write(
+                height: rightFrame.Height,
+                path: Path.Combine(
+                    path1: captureDirectory,
+                    path2: "right.png"
+                ),
+                rgba: rightFrame.RgbaPixels,
+                width: rightFrame.Width
+            );
         }
-        if ((outcome.HeatmapRgba is { } heatmap) && (outcome.LeftFrame is { } extent)) {
-            PngEncoder.Write(height: extent.Height, path: Path.Combine(path1: captureDirectory, path2: "delta-heatmap.png"), rgba: heatmap, width: extent.Width);
+        if (
+            (outcome.HeatmapRgba is { } heatmap) &&
+            (outcome.LeftFrame is { } extent)
+        ) {
+            PngEncoder.Write(
+                height: extent.Height,
+                path: Path.Combine(
+                    path1: captureDirectory,
+                    path2: "delta-heatmap.png"
+                ),
+                rgba: heatmap,
+                width: extent.Width
+            );
         }
 
         File.WriteAllLines(
             contents: outcome.Verdicts.Select(selector: verdict => $"{outcome.Station} tick={outcome.Tick} {verdict.Name} {verdict.Detail}"),
-            path: Path.Combine(path1: captureDirectory, path2: "summary.txt")
+            path: Path.Combine(
+                path1: captureDirectory,
+                path2: "summary.txt"
+            )
         );
     }
-    private static bool TryParse(string[] args, out string leftDir, out string rightDir, out string contractPath, out string? outDir, out string error) {
-        leftDir = string.Empty;
-        rightDir = string.Empty;
-        contractPath = string.Empty;
-        outDir = null;
-        error = string.Empty;
 
-        var scanner = new ArgScanner();
+    public static Command Create() {
+        var contractOption = new Option<string>(name: "--contract") { Description = "puck.parity.contract.v1: tile size, per-station census floors, per-station per-tile mean/max pixel thresholds.", Required = true };
+        var leftArgument = new Argument<string>(name: "leftDir") { Description = "A directory holding one puck.parity.manifest.v1 (manifest.json) plus the PNG frames it names." };
+        var outOption = new Option<string>(name: "--out") { Description = "Where failed-capture evidence is written; a fresh temp directory if omitted." };
+        var rightArgument = new Argument<string>(name: "rightDir") { Description = "The second such directory, compared capture-for-capture against the first." };
+        var command = new Command(
+            description: """
+            Gate/state/pixel-verdict comparison of two already-captured manifest runs.
 
-        scanner.Value(name: "contract");
-        scanner.Value(name: "out");
+            Per capture, in order: a content gate (cameraInside, a missing frame, or a census below its
+            station's floor refuses the capture before any pixel comparison), an exact stateHash check, and
+            a per-tile pixel check (any tile exceeding its station's mean or max threshold fails the
+            capture). The gate, state, and pixel checks are independent verdicts — a gate failure skips the
+            other two; state and pixel are always both computed and both printed once the gate holds. Every
+            verdict prints one line naming its station, tick, and outcome.
 
-        if (!scanner.Parse(args: args)) {
-            error = scanner.Error!;
+            Exit codes: 0 every capture held every verdict, 2 at least one verdict failed or a usage error,
+            3 a malformed manifest or contract file (distinct from a parity failure).
+            """,
+            name: "compare"
+        ) { leftArgument, rightArgument, contractOption, outOption };
 
-            return false;
-        }
-        if (scanner.Positionals.Count != 2) {
-            error = "the only accepted form is: parity compare <leftDir> <rightDir> --contract <file> [--out <dir>]";
-
-            return false;
-        }
-
-        contractPath = (scanner.Get(name: "contract") ?? string.Empty);
-
-        if (contractPath.Length == 0) {
-            error = "--contract <file> is required.";
-
-            return false;
-        }
-        if (!File.Exists(path: contractPath)) {
-            error = $"--contract file '{contractPath}' does not exist.";
-
-            return false;
-        }
-
-        leftDir = scanner.Positionals[0];
-        rightDir = scanner.Positionals[1];
-
-        if (!Directory.Exists(path: leftDir)) {
-            error = $"left directory '{leftDir}' does not exist.";
-
-            return false;
-        }
-        if (!Directory.Exists(path: rightDir)) {
-            error = $"right directory '{rightDir}' does not exist.";
-
-            return false;
-        }
-
-        outDir = scanner.Get(name: "out");
-
-        return true;
-    }
-    private static int Usage() {
-        Console.Error.WriteLine(
-            value:
-                """
-                parity compare <leftDir> <rightDir> --contract <file> [--out <dir>]
-
-                  leftDir, rightDir   two directories each holding one puck.parity.manifest.v1 (manifest.json)
-                                      plus the PNG frames it names — the pinned output of a parity capture run
-                  --contract <file>   puck.parity.contract.v1: tile size, per-station census floors, per-station
-                                      per-tile mean/max pixel thresholds (see ParityContractModel.cs)
-                  --out <dir>         where failed-capture evidence is written; a fresh temp directory if omitted
-
-                Per capture, in order: a content gate (cameraInside, a missing frame, or a census below its
-                station's floor refuses the capture before any pixel comparison), an exact stateHash check, and
-                a per-tile pixel check (any tile exceeding its station's mean or max threshold fails the
-                capture). The gate, state, and pixel checks are independent verdicts — a gate failure skips the
-                other two; state and pixel are always both computed and both printed once the gate holds. Every
-                verdict prints one line naming its station, tick, and outcome.
-
-                Exit codes: 0 every capture held every verdict, 2 at least one verdict failed, 3 a malformed
-                manifest, contract, or argument (distinct from a parity failure).
-                """);
-
-        return 3;
+        command.SetAction(action: parseResult => Run(
+            contractPath: parseResult.GetRequiredValue(option: contractOption),
+            leftDir: parseResult.GetRequiredValue(argument: leftArgument),
+            outDir: parseResult.GetValue(option: outOption),
+            rightDir: parseResult.GetRequiredValue(argument: rightArgument)
+        ));
+        return command;
     }
 }

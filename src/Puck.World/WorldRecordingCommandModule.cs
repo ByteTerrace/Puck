@@ -4,14 +4,13 @@ using Puck.Abstractions.Recording;
 using Puck.Abstractions.Windowing;
 using Puck.Commands;
 using Puck.Hosting;
-using Puck.Platform.Recording;
 using Puck.Recording.Session;
 
 namespace Puck.World;
 
 /// <summary>
 /// The recording console surface — <c>capture.start</c> / <c>capture.stop</c> / <c>capture.status</c>, the native-capture
-/// control plane over the pipe. It resolves the boot recording document (<c>puck.recording.v1</c>, host-scope data) and
+/// control plane over the pipe. It resolves the boot recording document (<c>puck.recording.configuration.v1</c>, host-scope data) and
 /// the platform's Media Foundation encoder ladder + WASAPI audio sources against real hardware, opening only what this
 /// machine can encode and capture, and arms launcher-level frame capture. Every verb is Immediate (no simulation effect) and echoes
 /// honestly: the negotiated codec, frames captured/dropped, audio track count and drops, bytes, and the output path;
@@ -54,13 +53,14 @@ internal sealed class WorldRecordingCommandModule(
             document = document with { Output = args[0].ToString() };
         }
 
-        // B's coordination point: re-anchor the shared audio clock so the WASAPI sources stamp from the same instant the
-        // session's own video epoch is captured (the frozen factory has no per-session hook).
+        // Re-anchor the shared clock at capture start; the session stamps video against the same clock the WASAPI
+        // sources were handed (the frozen factory has no per-session hook).
         m_clock.ResetEpochToNow();
 
         var created = RecordingSession.TryCreate(
             options: new RecordingSessionOptions {
                 AudioSourceFactory = m_audioSources,
+                Clock = m_clock,
                 Document = document,
                 SourceHeight = ((int)m_window.Value.Height),
                 SourceWidth = ((int)m_window.Value.Width),
@@ -94,7 +94,10 @@ internal sealed class WorldRecordingCommandModule(
         return new CommandResult(Output: $"[capture.start: recording -> {session.OutputPath} | codec {session.CodecLanded} | audio tracks {status.AudioTrackCount} | {notes}]");
     }
     private CommandResult Status(WireArgs args) {
-        if (CommandResult.RequireNoArguments(args: args, verb: "capture.status") is { } refusal) {
+        if (CommandResult.RequireNoArguments(
+            args: args,
+            verb: "capture.status"
+        ) is { } refusal) {
             return refusal;
         }
 
@@ -113,7 +116,10 @@ internal sealed class WorldRecordingCommandModule(
         return new CommandResult(Output: ((string)$"[capture.status: recording -> {status.OutputPath} | codec {status.CodecLanded} | frames {status.FramesCaptured}/{status.FramesDropped} dropped | audio tracks {status.AudioTrackCount} drops {status.AudioSamplesDropped} | bytes {status.BytesWritten} | document {origin} | readback synchronous presenter readback per captured GPU frame{fault}]"));
     }
     private CommandResult Stop(WireArgs args) {
-        if (CommandResult.RequireNoArguments(args: args, verb: "capture.stop") is { } refusal) {
+        if (CommandResult.RequireNoArguments(
+            args: args,
+            verb: "capture.stop"
+        ) is { } refusal) {
             return refusal;
         }
 

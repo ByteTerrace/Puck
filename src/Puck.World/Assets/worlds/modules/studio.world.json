@@ -263,7 +263,7 @@
       "anchor": null,
       "rig": {
         "name": "studioStage",
-        "version": "puck.camera.v1",
+        "version": "puck.camera.program.v1",
         "operations": [
           {
             "$type": "anchor",
@@ -293,7 +293,7 @@
             ]
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.9
           }
         ]

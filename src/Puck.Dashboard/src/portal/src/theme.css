@@ -1,5 +1,7 @@
 /*
-  bds-theorem Design System Tokens & Typography
+  bds-theorem Design System Tokens & Typography. Palette values mirror the
+  shared branding tokens in branding/tokens.css; this adapter
+  keeps its own selectors because Mantine owns the dashboard's color scheme.
   Theme Palette: Three hue families and nothing else.
     ground:   H~275 violet neutral (low chroma, never clashes)
     accent:   H~350 rose-coral warm lead (links, emphasis, lead element, player 1)
@@ -9,22 +11,11 @@
     Monospace: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace
 */
 
-:root {
-  --paper:         #e7e4ed;
-  --paper-2:       #dbd7e4;
-  --ink:           #2b2736;
-  --ink-soft:      #5a5470;
-  --ink-faint:     #625a73;
-  --accent:        #ad3a53;
-  --accent-bright: #d15d78;
-  --accent-ink:    #fdf0f3;
-  --accent-2:      #0e7d6b;
-  --rule:          #d0cbdc;
-  --code-bg:       #221f2c;
-  --code-fg:       #e9e5f1;
-  --quote-bg:      #e0dce9;
+@import url("../../../../../branding/tokens.css");
 
-  /* Mantine CSS variable bindings */
+/* Mantine bindings and the dashboard's slightly softer faint-text variant. */
+:root {
+  --ink-faint: #625a73;
   --mantine-color-body: var(--paper);
   --mantine-color-text: var(--ink);
   --mantine-color-default-border: var(--rule);
@@ -34,84 +25,18 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --paper:         #1b1924;
-    --paper-2:       #262231;
-    --ink:           #ebe7f2;
-    --ink-soft:      #b5aec3;
-    --ink-faint:     #b1a9bf;
-    --accent:        #f2879a;
-    --accent-bright: #ffa3b3;
-    --accent-ink:    #2a0d14;
-    --accent-2:      #4fd0b4;
-    --rule:          #363145;
-    --code-bg:       #15131c;
-    --code-fg:       #e8e3f0;
-    --quote-bg:      #262231;
-
-    --mantine-color-body: var(--paper);
-    --mantine-color-text: var(--ink);
-    --mantine-color-default-border: var(--rule);
-    --mantine-color-default: var(--paper-2);
-    --mantine-color-default-hover: var(--quote-bg);
-    --mantine-color-default-color: var(--ink);
-  }
+  :root:not([data-mantine-color-scheme="light"]) { --ink-faint: #b1a9bf; }
 }
 
-:root[data-theme="light"],
-:root[data-mantine-color-scheme="light"] {
-  --paper:         #e7e4ed;
-  --paper-2:       #dbd7e4;
-  --ink:           #2b2736;
-  --ink-soft:      #5a5470;
-  --ink-faint:     #625a73;
-  --accent:        #ad3a53;
-  --accent-bright: #d15d78;
-  --accent-ink:    #fdf0f3;
-  --accent-2:      #0e7d6b;
-  --rule:          #d0cbdc;
-  --code-bg:       #221f2c;
-  --code-fg:       #e9e5f1;
-  --quote-bg:      #e0dce9;
-
-  --mantine-color-body: var(--paper);
-  --mantine-color-text: var(--ink);
-  --mantine-color-default-border: var(--rule);
-  --mantine-color-default: var(--paper-2);
-  --mantine-color-default-hover: var(--quote-bg);
-  --mantine-color-default-color: var(--ink);
-}
-
-:root[data-theme="dark"],
-:root[data-mantine-color-scheme="dark"] {
-  --paper:         #1b1924;
-  --paper-2:       #262231;
-  --ink:           #ebe7f2;
-  --ink-soft:      #b5aec3;
-  --ink-faint:     #b1a9bf;
-  --accent:        #f2879a;
-  --accent-bright: #ffa3b3;
-  --accent-ink:    #2a0d14;
-  --accent-2:      #4fd0b4;
-  --rule:          #363145;
-  --code-bg:       #15131c;
-  --code-fg:       #e8e3f0;
-  --quote-bg:      #262231;
-
-  --mantine-color-body: var(--paper);
-  --mantine-color-text: var(--ink);
-  --mantine-color-default-border: var(--rule);
-  --mantine-color-default: var(--paper-2);
-  --mantine-color-default-hover: var(--quote-bg);
-  --mantine-color-default-color: var(--ink);
-}
+:root[data-mantine-color-scheme="light"] { --ink-faint: #625a73; }
+:root[data-mantine-color-scheme="dark"] { --ink-faint: #b1a9bf; }
 
 /* Base typography */
 body {
   margin: 0;
   background-color: var(--paper) !important;
   color: var(--ink) !important;
-  font-family: "Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  font-family: var(--font-body);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }

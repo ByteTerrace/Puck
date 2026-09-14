@@ -34,7 +34,7 @@ public sealed record ReleaseRollout(int Percent);
 /// <param name="Chain">The base64-encoded key-binding attestations beneath the claim, in root-to-subject order — 0 or exactly 2 entries.</param>
 public sealed record ReleaseSignature(string Claim, IReadOnlyList<string> Chain);
 /// <summary>
-/// The <c>puck.release.v1</c> document: what one build of a Launcher-based program's release looks like — its
+/// The <c>puck.release.manifest.v1</c> document: what one build of a Launcher-based program's release looks like — its
 /// version, its per-RID file manifest, its staged-rollout fraction, and the signed claim that lets a client verify
 /// it without contacting the issuer. Code and content ride separate channels: this document names binaries only,
 /// never a world or library asset.
@@ -66,7 +66,7 @@ public sealed record ReleaseManifest(
     ReleaseSignature? Signature
 ) {
     /// <summary>The version tag every saved document carries.</summary>
-    public const string CurrentSchema = "puck.release.v1";
+    public const string CurrentSchema = "puck.release.manifest.v1";
 
     /// <summary>Gets or sets the unknown members preserved across a round-trip. Null when the document carries none.
     /// A settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>
@@ -83,72 +83,118 @@ public static class ReleaseCanonicalizer {
         "payloads", "rollout", "revoked", "notes", "signature",
     };
 
-    /// <summary>Validates a document's schema and structural invariants in one pass — every violation is collected
-    /// rather than throwing on the first. An absent or foreign <see cref="ReleaseManifest.Schema"/> short-circuits
-    /// to that one violation.</summary>
-    /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
-    /// <returns>Every violation found; empty when the document is a valid <c>puck.release.v1</c> value.</returns>
-    public static IReadOnlyList<DocumentValidationError> Validate(ReleaseManifest document) {
-        ArgumentNullException.ThrowIfNull(document);
+    private static bool IsWellFormedContentHash(string hash) {
+        const string Prefix = "sha256/";
 
-        if (DocumentCanonicalizer.SchemaViolationMessage(declared: document.Schema, recognized: ReleaseManifest.CurrentSchema) is { } schemaViolation) {
-            return [new DocumentValidationError(Message: schemaViolation, Path: "schema")];
+        return (
+            hash.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: Prefix
+        ) &&
+            (hash.Length == (Prefix.Length + 64)) &&
+            hash.AsSpan(start: Prefix.Length).ToArray().All(predicate: Uri.IsHexDigit)
+        );
+    }
+    private static void ValidateFile(List<DocumentValidationError> errors, ReleasePayloadFile file, string path, HashSet<string>? seenPaths) {
+        if (
+            string.IsNullOrWhiteSpace(value: file.Path) ||
+            file.Path.StartsWith(value: '/') ||
+            file.Path.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: ".."
+        )
+        ) {
+            errors.Add(item: new(
+                Message: "a file path must be a non-empty relative path with no '..' segment.",
+                Path: $"{path}.path"
+            ));
+        } else if (
+            (seenPaths is not null) &&
+            !seenPaths.Add(item: file.Path)
+        ) {
+            errors.Add(item: new(
+                Message: $"path '{file.Path}' is declared more than once.",
+                Path: $"{path}.path"
+            ));
         }
 
-        var errors = new List<DocumentValidationError>();
-
-        if (string.IsNullOrWhiteSpace(value: document.App)) {
-            errors.Add(item: new(Message: "an app id is required.", Path: "app"));
+        if (!IsWellFormedContentHash(hash: file.Hash)) {
+            errors.Add(item: new(
+                Message: $"'{file.Hash}' is not a well-formed sha256/<hex64> content hash.",
+                Path: $"{path}.hash"
+            ));
         }
 
-        if (string.IsNullOrWhiteSpace(value: document.Channel)) {
-            errors.Add(item: new(Message: "a channel is required.", Path: "channel"));
+        if (file.Size < 0) {
+            errors.Add(item: new(
+                Message: "must not be negative.",
+                Path: $"{path}.size"
+            ));
+        }
+    }
+    private static void ValidatePayload(List<DocumentValidationError> errors, int index, ReleasePayload payload, HashSet<string> seenRids) {
+        var path = $"payloads[{index}]";
+
+        if (string.IsNullOrWhiteSpace(value: payload.Rid)) {
+            errors.Add(item: new(
+                Message: "a rid is required.",
+                Path: $"{path}.rid"
+            ));
+        } else if (!seenRids.Add(item: payload.Rid)) {
+            errors.Add(item: new(
+                Message: $"rid '{payload.Rid}' is declared more than once.",
+                Path: $"{path}.rid"
+            ));
         }
 
-        if (string.IsNullOrWhiteSpace(value: document.Version)) {
-            errors.Add(item: new(Message: "a version is required.", Path: "version"));
+        if (
+            (payload.Files is null) ||
+            (payload.Files.Count == 0)
+        ) {
+            errors.Add(item: new(
+                Message: "at least one file is required.",
+                Path: $"{path}.files"
+            ));
+
+            return;
         }
 
-        if (document.StateGeneration < 0) {
-            errors.Add(item: new(Message: "must not be negative.", Path: "stateGeneration"));
+        var seenPaths = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var i = 0; (i < payload.Files.Count); i++) {
+            ValidateFile(
+                errors: errors,
+                file: payload.Files[i],
+                path: $"{path}.files[{i}]",
+                seenPaths: seenPaths
+            );
         }
 
-        if ((document.Payloads is null) || (document.Payloads.Count == 0)) {
-            errors.Add(item: new(Message: "at least one payload is required.", Path: "payloads"));
-        } else {
-            var seenRids = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-            for (var i = 0; (i < document.Payloads.Count); i++) {
-                ValidatePayload(errors: errors, index: i, payload: document.Payloads[i], seenRids: seenRids);
-            }
+        if (payload.Archive is { } archive) {
+            ValidateFile(
+                errors: errors,
+                file: archive,
+                path: $"{path}.archive",
+                seenPaths: null
+            );
         }
+    }
 
-        if (document.Rollout is null) {
-            errors.Add(item: new(Message: "a rollout is required.", Path: "rollout"));
-        } else if ((document.Rollout.Percent < 0) || (document.Rollout.Percent > 100)) {
-            errors.Add(item: new(Message: $"must be 0..100, was {document.Rollout.Percent}.", Path: "rollout.percent"));
-        }
-
-        for (var i = 0; (i < (document.Revoked?.Count ?? 0)); i++) {
-            if (string.IsNullOrWhiteSpace(value: document.Revoked![i])) {
-                errors.Add(item: new(Message: "a revoked version entry may not be empty.", Path: $"revoked[{i}]"));
-            }
-        }
-
-        DocumentCanonicalizer.ValidateExtensions(
-            addError: (path, message) => errors.Add(item: new(Message: message, Path: path)),
-            extensions: document.Extensions,
-            knownMemberNames: KnownMemberNames
+    /// <summary>THE full pipeline: validates schema + structural invariants (throwing on either), normalizes the
+    /// self-heal, then serializes to canonical UTF-8 bytes and hashes them through
+    /// <see cref="DocumentCanonicalizer.Canonicalize"/>.</summary>
+    /// <param name="document">The document to canonicalize.</param>
+    /// <param name="source">An optional source label for a validation-failure message.</param>
+    /// <returns>The validated, normalized document plus its canonical bytes and hash.</returns>
+    /// <exception cref="DocumentValidationException">The document declares an absent/foreign schema, or fails a structural invariant.</exception>
+    public static CanonicalDocument<ReleaseManifest> Canonicalize(ReleaseManifest document, string? source = null) {
+        ValidateOrThrow(
+            document: document,
+            source: source
         );
 
-        return errors;
+        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
     }
-    /// <summary>Runs <see cref="Validate"/> and throws when it finds anything.</summary>
-    /// <param name="document">The document to validate.</param>
-    /// <param name="source">An optional source label (a file path or save handle) for the exception message.</param>
-    /// <exception cref="DocumentValidationException">The document declares an absent/foreign schema, or fails a structural invariant.</exception>
-    public static void ValidateOrThrow(ReleaseManifest document, string? source = null) =>
-        DocumentCanonicalizer.ThrowIfInvalid(errors: Validate(document: document), source: source);
     /// <summary>Normalizes an already-schema-valid document: sorts payloads by RID and each payload's files by path
     /// (ordinal), sorts and dedupes <see cref="ReleaseManifest.Revoked"/>, and trims notes — so an authored document
     /// canonicalizes independent of authoring order. Idempotent. Does NOT itself validate; <see cref="Canonicalize"/>
@@ -160,85 +206,144 @@ public static class ReleaseCanonicalizer {
 
         var payloads = document.Payloads
             .Select(selector: payload => payload with {
-                Files = payload.Files.OrderBy(keySelector: file => file.Path, comparer: StringComparer.Ordinal).ToList(),
+                Files = payload.Files.OrderBy(
+            keySelector: file => file.Path,
+            comparer: StringComparer.Ordinal
+        ).ToList(),
             })
-            .OrderBy(keySelector: payload => payload.Rid, comparer: StringComparer.Ordinal)
+            .OrderBy(
+            keySelector: payload => payload.Rid,
+            comparer: StringComparer.Ordinal
+        )
             .ToList();
         var revoked = (document.Revoked ?? [])
             .Distinct()
-            .OrderBy(keySelector: version => version, comparer: StringComparer.Ordinal)
+            .OrderBy(
+            keySelector: version => version,
+            comparer: StringComparer.Ordinal
+        )
             .ToList();
 
         return (document with {
-            Notes = (string.IsNullOrWhiteSpace(value: document.Notes) ? null : document.Notes.Trim()),
+            Notes = (string.IsNullOrWhiteSpace(value: document.Notes)
+            ? null
+            : document.Notes.Trim()),
             Payloads = payloads,
             Revoked = revoked,
             Schema = ReleaseManifest.CurrentSchema,
         });
     }
-    /// <summary>THE full pipeline: validates schema + structural invariants (throwing on either), normalizes the
-    /// self-heal, then serializes to canonical UTF-8 bytes and hashes them through
-    /// <see cref="DocumentCanonicalizer.Canonicalize"/>.</summary>
-    /// <param name="document">The document to canonicalize.</param>
-    /// <param name="source">An optional source label for a validation-failure message.</param>
-    /// <returns>The validated, normalized document plus its canonical bytes and hash.</returns>
-    /// <exception cref="DocumentValidationException">The document declares an absent/foreign schema, or fails a structural invariant.</exception>
-    public static CanonicalDocument<ReleaseManifest> Canonicalize(ReleaseManifest document, string? source = null) {
-        ValidateOrThrow(document: document, source: source);
+    /// <summary>Validates a document's schema and structural invariants in one pass — every violation is collected
+    /// rather than throwing on the first. An absent or foreign <see cref="ReleaseManifest.Schema"/> short-circuits
+    /// to that one violation.</summary>
+    /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
+    /// <returns>Every violation found; empty when the document is a valid <c>puck.release.manifest.v1</c> value.</returns>
+    public static IReadOnlyList<DocumentValidationError> Validate(ReleaseManifest document) {
+        ArgumentNullException.ThrowIfNull(document);
 
-        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
-    }
-
-    private static void ValidatePayload(List<DocumentValidationError> errors, int index, ReleasePayload payload, HashSet<string> seenRids) {
-        var path = $"payloads[{index}]";
-
-        if (string.IsNullOrWhiteSpace(value: payload.Rid)) {
-            errors.Add(item: new(Message: "a rid is required.", Path: $"{path}.rid"));
-        } else if (!seenRids.Add(item: payload.Rid)) {
-            errors.Add(item: new(Message: $"rid '{payload.Rid}' is declared more than once.", Path: $"{path}.rid"));
+        if (DocumentCanonicalizer.SchemaViolationMessage(
+            declared: document.Schema,
+            recognized: ReleaseManifest.CurrentSchema
+        ) is { } schemaViolation) {
+            return [new DocumentValidationError(
+                    Message: schemaViolation,
+                    Path: "schema"
+                )];
         }
 
-        if ((payload.Files is null) || (payload.Files.Count == 0)) {
-            errors.Add(item: new(Message: "at least one file is required.", Path: $"{path}.files"));
+        var errors = new List<DocumentValidationError>();
 
-            return;
+        if (string.IsNullOrWhiteSpace(value: document.App)) {
+            errors.Add(item: new(
+                Message: "an app id is required.",
+                Path: "app"
+            ));
         }
 
-        var seenPaths = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        for (var i = 0; (i < payload.Files.Count); i++) {
-            ValidateFile(errors: errors, file: payload.Files[i], path: $"{path}.files[{i}]", seenPaths: seenPaths);
+        if (string.IsNullOrWhiteSpace(value: document.Channel)) {
+            errors.Add(item: new(
+                Message: "a channel is required.",
+                Path: "channel"
+            ));
         }
 
-        if (payload.Archive is { } archive) {
-            ValidateFile(errors: errors, file: archive, path: $"{path}.archive", seenPaths: null);
+        if (string.IsNullOrWhiteSpace(value: document.Version)) {
+            errors.Add(item: new(
+                Message: "a version is required.",
+                Path: "version"
+            ));
         }
-    }
-    private static void ValidateFile(List<DocumentValidationError> errors, ReleasePayloadFile file, string path, HashSet<string>? seenPaths) {
-        if (string.IsNullOrWhiteSpace(value: file.Path) ||
-            file.Path.StartsWith(value: '/') ||
-            file.Path.Contains(comparisonType: StringComparison.Ordinal, value: "..")
+
+        if (document.StateGeneration < 0) {
+            errors.Add(item: new(
+                Message: "must not be negative.",
+                Path: "stateGeneration"
+            ));
+        }
+
+        if (
+            (document.Payloads is null) ||
+            (document.Payloads.Count == 0)
         ) {
-            errors.Add(item: new(Message: "a file path must be a non-empty relative path with no '..' segment.", Path: $"{path}.path"));
-        } else if ((seenPaths is not null) && !seenPaths.Add(item: file.Path)) {
-            errors.Add(item: new(Message: $"path '{file.Path}' is declared more than once.", Path: $"{path}.path"));
+            errors.Add(item: new(
+                Message: "at least one payload is required.",
+                Path: "payloads"
+            ));
+        } else {
+            var seenRids = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            for (var i = 0; (i < document.Payloads.Count); i++) {
+                ValidatePayload(
+                    errors: errors,
+                    index: i,
+                    payload: document.Payloads[i],
+                    seenRids: seenRids
+                );
+            }
         }
 
-        if (!IsWellFormedContentHash(hash: file.Hash)) {
-            errors.Add(item: new(Message: $"'{file.Hash}' is not a well-formed sha256/<hex64> content hash.", Path: $"{path}.hash"));
+        if (document.Rollout is null) {
+            errors.Add(item: new(
+                Message: "a rollout is required.",
+                Path: "rollout"
+            ));
+        } else if (
+            (document.Rollout.Percent < 0) ||
+            (document.Rollout.Percent > 100)
+        ) {
+            errors.Add(item: new(
+                Message: $"must be 0..100, was {document.Rollout.Percent}.",
+                Path: "rollout.percent"
+            ));
         }
 
-        if (file.Size < 0) {
-            errors.Add(item: new(Message: "must not be negative.", Path: $"{path}.size"));
+        for (var i = 0; (i < (document.Revoked?.Count ?? 0)); i++) {
+            if (string.IsNullOrWhiteSpace(value: document.Revoked![i])) {
+                errors.Add(item: new(
+                    Message: "a revoked version entry may not be empty.",
+                    Path: $"revoked[{i}]"
+                ));
+            }
         }
-    }
-    private static bool IsWellFormedContentHash(string hash) {
-        const string Prefix = "sha256/";
 
-        return (
-            hash.StartsWith(comparisonType: StringComparison.Ordinal, value: Prefix) &&
-            (hash.Length == (Prefix.Length + 64)) &&
-            hash.AsSpan(start: Prefix.Length).ToArray().All(predicate: Uri.IsHexDigit)
+        DocumentCanonicalizer.ValidateExtensions(
+            addError: (path, message) => errors.Add(item: new(
+                Message: message,
+                Path: path
+            )),
+            extensions: document.Extensions,
+            knownMemberNames: KnownMemberNames
         );
+
+        return errors;
     }
+    /// <summary>Runs <see cref="Validate"/> and throws when it finds anything.</summary>
+    /// <param name="document">The document to validate.</param>
+    /// <param name="source">An optional source label (a file path or save handle) for the exception message.</param>
+    /// <exception cref="DocumentValidationException">The document declares an absent/foreign schema, or fails a structural invariant.</exception>
+    public static void ValidateOrThrow(ReleaseManifest document, string? source = null) =>
+        DocumentCanonicalizer.ThrowIfInvalid(
+            errors: Validate(document: document),
+            source: source
+        );
 }

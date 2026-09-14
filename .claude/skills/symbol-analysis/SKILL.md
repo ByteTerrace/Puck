@@ -16,6 +16,7 @@ re-run the relevant command against the current tree before relying on them.
 | Declarations, members, bases, attributes, documentation crefs | `declarations` |
 | Literal/config/non-C# content | Route to `content-search` |
 | Whether a refactor still compiles | Build the affected project |
+| `.puck` DSL name resolution (state/prototype/placement/camera names, imports) | Not `references`/`declarations` — route to `puck lint`'s `PUCK_LINT_00x` family and the DSL's own LSP; see `puck-dsl` |
 
 ## Start the CLI from a clean checkout
 
@@ -45,6 +46,9 @@ Never depend exclusively on ignored `publish/puck.exe`.
   when explicitly accepting and reporting incomplete evidence.
 - Inspect ambiguity and resolved-definition output before acting on a short
   symbol name.
+- `references`/`declarations` parse the C# project graph only; nothing in
+  `Puck.Cli`'s analysis verbs parses `.puck`. Treat a `.puck` name question as
+  out of scope rather than assuming a text search is the only fallback.
 
 ## Load the full reference selectively
 

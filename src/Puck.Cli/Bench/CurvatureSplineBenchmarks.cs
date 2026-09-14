@@ -22,19 +22,22 @@ public class CurvatureSplineKernels {
         m_knots = new CurvatureSplineKnot[KnotCount];
 
         for (var i = 0; (i < KnotCount); ++i) {
-            var angle = ((2.0 * Math.PI * i) / KnotCount);
+            var angle = (((2.0 * Math.PI) * i) / KnotCount);
             var radius = (40.0 + rng.NextDouble());
 
             m_knots[i] = new(
                 Curvature: FixedQ4816.FromDouble(value: (1.0 / radius)),
                 Elevation: FixedQ4816.FromDouble(value: rng.NextDouble()),
                 TangentYaw: FixedQ4816.FromDouble(value: (angle + (Math.PI / 2.0))),
-                X: FixedQ4816.FromDouble(value: (radius * Math.Cos(angle))),
-                Z: FixedQ4816.FromDouble(value: (radius * Math.Sin(angle)))
+                X: FixedQ4816.FromDouble(value: (radius * Math.Cos(d: angle))),
+                Z: FixedQ4816.FromDouble(value: (radius * Math.Sin(a: angle)))
             );
         }
 
-        m_spline = CurvatureSpline.Compile(closed: true, knots: m_knots);
+        m_spline = CurvatureSpline.Compile(
+            closed: true,
+            knots: m_knots
+        );
         m_stations = new FixedQ4816[SampleCount];
 
         var total = ((double)m_spline.TotalLength);
@@ -43,7 +46,10 @@ public class CurvatureSplineKernels {
     }
     [Benchmark]
     public int Compile() =>
-        CurvatureSpline.Compile(closed: true, knots: m_knots).SegmentCount;
+        CurvatureSpline.Compile(
+            closed: true,
+            knots: m_knots
+        ).SegmentCount;
     [Benchmark]
     public long Evaluate() {
         var sink = 0L;

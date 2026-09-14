@@ -44,6 +44,105 @@ internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
     public PostTier Tier =>
         PostTier.C;
 
+    // Builds a console and full-BIOS-boots it (Cpu.Reset), the real boot path a commercial game's link probe needs —
+    // NOT the HLE direct boot, on which the game mis-boots and never runs its link stack.
+    private static AgbMachineInstance CreateConsole(ReadOnlyMemory<byte> bios, byte[] rom) {
+        // Each console gets its own ROM copy: a shared array would let one console's cartridge writes corrupt the other.
+        var console = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
+            bios: bios,
+            rom: ((byte[])rom.Clone())
+        ));
+
+        console.Machine.Cpu.Reset();
+
+        return console;
+    }
+    private static ulong FrameHash(AdvancedGamingBrickMachine machine) {
+        var hash = Fnv1aHash.Create();
+
+        foreach (var pixel in machine.Framebuffer) {
+            hash.Add(value: pixel);
+        }
+
+        return hash.Value;
+    }
+    // One complete linked scenario from freshly built, full-booted consoles: connect on a cable, advance the fixed
+    // sub-frame schedule while sampling both consoles' SIO for link-probe evidence, then snapshot. Self-contained so the
+    // determinism leg repeats it identically.
+    private static LinkGameResult RunLinkedScenario(ReadOnlyMemory<byte> bios, byte[] rom) {
+        using var parent = CreateConsole(
+            bios: bios,
+            rom: rom
+        );
+        using var child = CreateConsole(
+            bios: bios,
+            rom: rom
+        );
+
+        var parentBus = ((AgbBus)parent.Machine.Bus);
+        var childBus = ((AgbBus)child.Machine.Bus);
+        var parentProbe = new ProbeEvidence();
+        var childProbe = new ProbeEvidence();
+
+        using var session = new AgbLinkSession(
+            parent,
+            child
+        );
+
+        var subSteps = ((Frames * PostMachine.CyclesPerFrame) / SubFrameBudget);
+
+        for (var step = 0L; (step < subSteps); ++step) {
+            session.Run(cycles: SubFrameBudget);
+
+            parentProbe.Sample(bus: parentBus);
+            childProbe.Sample(bus: childBus);
+        }
+
+        return new LinkGameResult(
+            ParentProbe: parentProbe,
+            ChildProbe: childProbe,
+            ParentFrameHash: FrameHash(machine: parent.Machine),
+            ParentState: parent.Machine.Snapshot(),
+            ChildState: child.Machine.Snapshot()
+        );
+    }
+    // A lone console (no cable) full-booted and advanced the same number of frames — the control the linked parent's
+    // screen is compared against to see whether the game reacted to the detected partner.
+    private static ulong RunSoloControl(ReadOnlyMemory<byte> bios, byte[] rom) {
+        using var console = CreateConsole(
+            bios: bios,
+            rom: rom
+        );
+
+        for (var frame = 0; (frame < Frames); ++frame) {
+            _ = console.Machine.RunFrame();
+        }
+
+        return FrameHash(machine: console.Machine);
+    }
+    // Both consoles must have engaged the game's link stack: Multiplayer-mode setup AND a real cable-completed normal
+    // transfer. Null means the evidence held.
+    private static string? Verify(LinkGameResult result) =>
+        (VerifySide(
+            probe: result.ParentProbe,
+            side: "parent"
+        )
+            ?? VerifySide(
+            probe: result.ChildProbe,
+            side: "child"
+        ));
+    private static string? VerifySide(ProbeEvidence probe, string side) {
+        if (!probe.SawMultiplayerMode) {
+            return $"the {side} console never entered SIO Multiplayer mode; the game's link probe did not run (wrong ROM, or a boot regression)";
+        }
+
+        if (probe.NormalTransfers == 0) {
+            return $"the {side} console clocked no normal-mode transfers over the cable; the link probe never exchanged a word";
+        }
+
+        return null;
+    }
+
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
@@ -114,118 +213,22 @@ internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
             : "not reached")})"));
     }
 
-    // One complete linked scenario from freshly built, full-booted consoles: connect on a cable, advance the fixed
-    // sub-frame schedule while sampling both consoles' SIO for link-probe evidence, then snapshot. Self-contained so the
-    // determinism leg repeats it identically.
-    private static LinkGameResult RunLinkedScenario(ReadOnlyMemory<byte> bios, byte[] rom) {
-        using var parent = CreateConsole(
-            bios: bios,
-            rom: rom
-        );
-        using var child = CreateConsole(
-            bios: bios,
-            rom: rom
-        );
-
-        var parentBus = ((AgbBus)parent.Machine.Bus);
-        var childBus = ((AgbBus)child.Machine.Bus);
-        var parentProbe = new ProbeEvidence();
-        var childProbe = new ProbeEvidence();
-
-        using var session = new AgbLinkSession(
-            parent,
-            child
-        );
-
-        var subSteps = ((Frames * PostMachine.CyclesPerFrame) / SubFrameBudget);
-
-        for (var step = 0L; (step < subSteps); ++step) {
-            session.Run(cycles: SubFrameBudget);
-
-            parentProbe.Sample(bus: parentBus);
-            childProbe.Sample(bus: childBus);
-        }
-
-        return new LinkGameResult(
-            ParentProbe: parentProbe,
-            ChildProbe: childProbe,
-            ParentFrameHash: FrameHash(machine: parent.Machine),
-            ParentState: parent.Machine.Snapshot(),
-            ChildState: child.Machine.Snapshot()
-        );
-    }
-    // A lone console (no cable) full-booted and advanced the same number of frames — the control the linked parent's
-    // screen is compared against to see whether the game reacted to the detected partner.
-    private static ulong RunSoloControl(ReadOnlyMemory<byte> bios, byte[] rom) {
-        using var console = CreateConsole(
-            bios: bios,
-            rom: rom
-        );
-
-        for (var frame = 0; (frame < Frames); ++frame) {
-            _ = console.Machine.RunFrame();
-        }
-
-        return FrameHash(machine: console.Machine);
-    }
-    // Builds a console and full-BIOS-boots it (Cpu.Reset), the real boot path a commercial game's link probe needs —
-    // NOT the HLE direct boot, on which the game mis-boots and never runs its link stack.
-    private static AgbMachineInstance CreateConsole(ReadOnlyMemory<byte> bios, byte[] rom) {
-        // Each console gets its own ROM copy: a shared array would let one console's cartridge writes corrupt the other.
-        var console = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
-            bios: bios,
-            rom: ((byte[])rom.Clone())
-        ));
-
-        console.Machine.Cpu.Reset();
-
-        return console;
-    }
-    // Both consoles must have engaged the game's link stack: Multiplayer-mode setup AND a real cable-completed normal
-    // transfer. Null means the evidence held.
-    private static string? Verify(LinkGameResult result) =>
-        (VerifySide(
-        probe: result.ParentProbe,
-        side: "parent"
-    )
-            ?? VerifySide(
-        probe: result.ChildProbe,
-        side: "child"
-    ));
-    private static string? VerifySide(ProbeEvidence probe, string side) {
-        if (!probe.SawMultiplayerMode) {
-            return $"the {side} console never entered SIO Multiplayer mode; the game's link probe did not run (wrong ROM, or a boot regression)";
-        }
-
-        if (probe.NormalTransfers == 0) {
-            return $"the {side} console clocked no normal-mode transfers over the cable; the link probe never exchanged a word";
-        }
-
-        return null;
-    }
-    private static ulong FrameHash(AdvancedGamingBrickMachine machine) {
-        var hash = Fnv1aHash.Create();
-
-        foreach (var pixel in machine.Framebuffer) {
-            hash.Add(value: pixel);
-        }
-
-        return hash.Value;
-    }
-
     // Accumulates link-probe evidence from repeated side-effect-free SIOCNT/SIOMULTI peeks across one console's run.
     private sealed class ProbeEvidence {
         private bool m_startArmed;
 
-        /// <summary>Whether the console entered SIO Multiplayer mode (SIOCNT bits 12-13 = 2) at any sample.</summary>
-        public bool SawMultiplayerMode { get; private set; }
         /// <summary>The count of normal-mode transfers observed completing (a start-bit set then cleared) — real
         /// cable-completed exchanges under the linked session (a lone console leaves an external-clock transfer
         /// pending).</summary>
         public int NormalTransfers { get; private set; }
+        /// <summary>Whether the console entered SIO Multiplayer mode (SIOCNT bits 12-13 = 2) at any sample.</summary>
+        public bool SawMultiplayerMode { get; private set; }
         /// <summary>Whether a Multiplayer round ever completed with an assigned player id or partner-slot data — the
         /// completed-handshake signal (observed to stay false: the game never clocks a round during detection).</summary>
         public bool SawMultiplayerRound { get; private set; }
+
+        private static bool IsRealData(ushort slot) =>
+            ((slot != 0xFFFF) && (slot != 0x0000));
 
         /// <summary>Samples one console's SIO via side-effect-free debug peeks (no clock movement, so sampling can never
         /// perturb the deterministic snapshots).</summary>
@@ -266,9 +269,6 @@ internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
                 m_startArmed = false;
             }
         }
-
-        private static bool IsRealData(ushort slot) =>
-            ((slot != 0xFFFF) && (slot != 0x0000));
     }
     private readonly record struct LinkGameResult(
         ProbeEvidence ParentProbe,

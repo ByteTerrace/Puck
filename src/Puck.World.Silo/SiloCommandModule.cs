@@ -18,7 +18,10 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
             continuationAction: task => {
                 if (task.IsFaulted) {
                     Console.Error.WriteLine(value: $"[{verb}: '{key}' failed — {(task.Exception!.InnerException?.Message ?? task.Exception.Message)}]");
-                } else if ((task is Task<bool> boolTask) && !boolTask.Result) {
+                } else if (
+                    (task is Task<bool> boolTask) &&
+                    !boolTask.Result
+                ) {
                     Console.Error.WriteLine(value: $"[{verb}: '{key}' did not complete]");
                 } else {
                     Console.Error.WriteLine(value: $"[{verb}: '{key}' completed]");
@@ -40,7 +43,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
             description: "Reads back this silo's own identity: master cadence (Hz), declared world count, store target, and clustering.",
             handler: (context, args) => new CommandResult(Output: string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"[silo.status: master={host.MasterRateHz}Hz worlds={host.Definition.Worlds.Count} pinned={host.Definition.Worlds.Count(predicate: static row => row.Pinned)} budget={host.Definition.Doors.Budget} store={host.Definition.Store.Type} clustering={host.Definition.Clustering.Kind} admitted={host.Instances.Names.Count} ready={host.Ready} draining={host.IsDraining} observer={host.Definition.Lifecycle?.Observer?.Type ?? "none"}]"
+                handler: $"[silo.status: master={host.MasterRateHz}Hz worlds={host.Definition.Worlds.Count} pinned={host.Definition.Worlds.Count(predicate: static row => row.Pinned)} budget={host.Definition.Doors.Budget} store={host.Definition.Store.Type} clustering={host.Definition.Clustering.Kind} admitted={host.Instances.Names.Count} ready={host.Ready} draining={host.IsDraining} observer={(host.Definition.Lifecycle?.Observer?.Type ?? "none")}]"
             ))
         );
         yield return CommandDefinition.WithWireArgs(
@@ -56,10 +59,17 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
 
                 var lines = rows.Select(selector: static row => string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"{row.Key} world={row.World} rateHz={row.RateHz} tick={row.Tick} elapsed={row.ElapsedEngineTicks} accumulator={row.ScheduleAccumulatorTicks} behindTicks={row.BehindTicks} awaitingMirrors={row.AwaitingMirrors} paused={row.Paused} door={(string.IsNullOrEmpty(value: row.DoorEndpoint) ? "unbound" : row.DoorEndpoint)} subject={row.FederationSubject} lastCheckpoint={((row.LastCheckpointOrdinal < 0) ? "none" : $"{row.LastCheckpointOrdinal}@{row.LastCheckpointTick}")} outcome={row.LastCheckpointOutcome} deferred={row.CheckpointDeferredCount} journalPending={row.PendingJournalAppends} journalOutcome={row.LastJournalOutcome}"
+                    handler: $"{row.Key} world={row.World} rateHz={row.RateHz} tick={row.Tick} elapsed={row.ElapsedEngineTicks} accumulator={row.ScheduleAccumulatorTicks} behindTicks={row.BehindTicks} awaitingMirrors={row.AwaitingMirrors} paused={row.Paused} door={(string.IsNullOrEmpty(value: row.DoorEndpoint)
+                    ? "unbound"
+                    : row.DoorEndpoint)} subject={row.FederationSubject} lastCheckpoint={((row.LastCheckpointOrdinal < 0)
+                    ? "none"
+                    : $"{row.LastCheckpointOrdinal}@{row.LastCheckpointTick}")} outcome={row.LastCheckpointOutcome} deferred={row.CheckpointDeferredCount} journalPending={row.PendingJournalAppends} journalOutcome={row.LastJournalOutcome}"
                 ));
 
-                return new CommandResult(Output: $"[silo.grains: {rows.Count} row(s)]{Environment.NewLine}{string.Join(separator: Environment.NewLine, values: lines)}");
+                return new CommandResult(Output: $"[silo.grains: {rows.Count} row(s)]{Environment.NewLine}{string.Join(
+                    separator: Environment.NewLine,
+                    values: lines
+                )}");
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -86,7 +96,11 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
                     return CommandResult.Error(output: $"[silo.publish: no file at '{args[1]}']");
                 }
 
-                var origin = new WorldFileOrigin(resolvedPath: resolvedPath);
+                var origin = new WorldFileOrigin(
+                    resolvedPath: resolvedPath,
+                    catalogFingerprint: host.MachineCatalogFingerprint,
+                    catalog: host.MachineCatalog
+                );
 
                 if (!origin.TryLoad(
                     definition: out var definition,

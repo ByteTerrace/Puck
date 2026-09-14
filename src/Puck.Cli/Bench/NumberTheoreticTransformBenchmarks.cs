@@ -44,7 +44,13 @@ public class NttConvolveVsNaive {
             for (var i = 0; (i < Length); ++i) {
                 var j = ((((k - i) % Length) + Length) % Length);
 
-                sum = field.Add(left: sum, right: field.Multiply(left: m_left[i], right: m_right[j]));
+                sum = field.Add(
+                    left: sum,
+                    right: field.Multiply(
+                        left: m_left[i],
+                        right: m_right[j]
+                    )
+                );
             }
 
             sink ^= sum;
@@ -54,9 +60,20 @@ public class NttConvolveVsNaive {
     }
     [Benchmark]
     public ulong Ntt() {
-        m_left.CopyTo(array: m_scratchLeft, index: 0);
-        m_right.CopyTo(array: m_scratchRight, index: 0);
-        NumberTheoreticTransform.Convolve(destination: m_destination, left: m_scratchLeft, plan: m_plan, right: m_scratchRight);
+        m_left.CopyTo(
+            array: m_scratchLeft,
+            index: 0
+        );
+        m_right.CopyTo(
+            array: m_scratchRight,
+            index: 0
+        );
+        NumberTheoreticTransform.Convolve(
+            destination: m_destination,
+            left: m_scratchLeft,
+            plan: m_plan,
+            right: m_scratchRight
+        );
 
         return m_destination[0];
     }
@@ -90,38 +107,68 @@ public class NttForwardInverse {
 
         m_smallInverseInput = ((ulong[])m_smallForwardInput.Clone());
         m_largeInverseInput = ((ulong[])m_largeForwardInput.Clone());
-        NumberTheoreticTransform.Forward(plan: m_smallPlan, values: m_smallInverseInput);
-        NumberTheoreticTransform.Forward(plan: m_largePlan, values: m_largeInverseInput);
+        NumberTheoreticTransform.Forward(
+            plan: m_smallPlan,
+            values: m_smallInverseInput
+        );
+        NumberTheoreticTransform.Forward(
+            plan: m_largePlan,
+            values: m_largeInverseInput
+        );
     }
     [IterationSetup(Target = nameof(ForwardSmall))]
-    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(array: m_smallValues, index: 0);
+    public void ResetForwardSmall() => m_smallForwardInput.CopyTo(
+        array: m_smallValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(InverseSmall))]
-    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(array: m_smallValues, index: 0);
+    public void ResetInverseSmall() => m_smallInverseInput.CopyTo(
+        array: m_smallValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(ForwardLarge))]
-    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(array: m_largeValues, index: 0);
+    public void ResetForwardLarge() => m_largeForwardInput.CopyTo(
+        array: m_largeValues,
+        index: 0
+    );
     [IterationSetup(Target = nameof(InverseLarge))]
-    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(array: m_largeValues, index: 0);
+    public void ResetInverseLarge() => m_largeInverseInput.CopyTo(
+        array: m_largeValues,
+        index: 0
+    );
     [Benchmark]
     public ulong ForwardSmall() {
-        NumberTheoreticTransform.Forward(plan: m_smallPlan, values: m_smallValues);
+        NumberTheoreticTransform.Forward(
+            plan: m_smallPlan,
+            values: m_smallValues
+        );
 
         return m_smallValues[0];
     }
     [Benchmark]
     public ulong InverseSmall() {
-        NumberTheoreticTransform.Inverse(plan: m_smallPlan, values: m_smallValues);
+        NumberTheoreticTransform.Inverse(
+            plan: m_smallPlan,
+            values: m_smallValues
+        );
 
         return m_smallValues[0];
     }
     [Benchmark]
     public ulong ForwardLarge() {
-        NumberTheoreticTransform.Forward(plan: m_largePlan, values: m_largeValues);
+        NumberTheoreticTransform.Forward(
+            plan: m_largePlan,
+            values: m_largeValues
+        );
 
         return m_largeValues[0];
     }
     [Benchmark]
     public ulong InverseLarge() {
-        NumberTheoreticTransform.Inverse(plan: m_largePlan, values: m_largeValues);
+        NumberTheoreticTransform.Inverse(
+            plan: m_largePlan,
+            values: m_largeValues
+        );
 
         return m_largeValues[0];
     }

@@ -41,57 +41,12 @@ namespace Puck.Input;
 /// </para>
 /// </remarks>
 public static class InputSourceVocabulary {
-    private static readonly Dictionary<string, CommandValueKind> KindsBySourceId;
     private static readonly HashSet<string> ExplicitlyUnaddressableSourceIds;
+    private static readonly Dictionary<string, CommandValueKind> KindsBySourceId;
     private static readonly HashSet<string> RelativeSourceIds;
 
     static InputSourceVocabulary() {
         (KindsBySourceId, ExplicitlyUnaddressableSourceIds, RelativeSourceIds) = BuildTables();
-    }
-
-    /// <summary>Indicates whether <paramref name="sourceId"/> declares <see cref="InputSourceValueAttribute.Relative"/>
-    /// — each sample a delta, not a deflection.</summary>
-    /// <param name="sourceId">The provider-neutral source id text.</param>
-    public static bool IsRelative(string sourceId) {
-        return RelativeSourceIds.Contains(item: sourceId);
-    }
-    /// <summary>Attempts to resolve <paramref name="sourceId"/> against the engine's canonical source-id surface
-    /// and report the full <see cref="CommandValueKind"/> it declares.</summary>
-    /// <param name="sourceId">The provider-neutral source id text (e.g. <c>"gamepad.buttonSouth"</c>).</param>
-    /// <param name="kind">When this returns <see langword="true"/>, the declared value kind.</param>
-    /// <returns><see langword="true"/> if <paramref name="sourceId"/> names a recognized source, whether from an
-    /// exact declared field or an open-ended parametric family (keyboard letters/digits, numbered mouse buttons);
-    /// otherwise <see langword="false"/>.</returns>
-    public static bool TryResolveDeclaredKind(string sourceId, out CommandValueKind kind) {
-        if (KindsBySourceId.TryGetValue(
-            key: sourceId,
-            value: out kind
-        )) {
-            return true;
-        }
-
-        return TryResolveParametricKind(
-            kind: out kind,
-            sourceId: sourceId
-        );
-    }
-    /// <summary>Indicates whether <paramref name="sourceId"/> names a recognized physical control — the name half of
-    /// <see cref="TryResolveDeclaredKind"/>, for a caller that admits every declared value kind.</summary>
-    /// <param name="sourceId">The provider-neutral source id text (e.g. <c>"gamepad.buttonSouth"</c>).</param>
-    public static bool IsKnownSourceId(string sourceId) {
-        return TryResolveDeclaredKind(
-            kind: out _,
-            sourceId: sourceId
-        );
-    }
-    /// <summary>Indicates whether <paramref name="sourceId"/> names a control explicitly marked
-    /// <see cref="InputSourceUnaddressableAttribute"/> — a control unaddressable for a reason its declared
-    /// <see cref="CommandValueKind"/> alone does not say (today only a text payload). A caller narrowing
-    /// <see cref="CommandValueKind"/> to its own addressable subset still owes that narrowing separately; this
-    /// answers only the explicit marker, never the declared-kind test.</summary>
-    /// <param name="sourceId">The provider-neutral source id text.</param>
-    public static bool IsExplicitlyUnaddressable(string sourceId) {
-        return ExplicitlyUnaddressableSourceIds.Contains(item: sourceId);
     }
 
     // Reads InputSourceValueAttribute/InputSourceUnaddressableAttribute off every const string field declared on
@@ -175,6 +130,37 @@ public static class InputSourceVocabulary {
             }
         }
     }
+    // Accepts exactly the canonical digit forms "1".."12" (or "1".."65535" for mouse buttons) — digits only, no
+    // sign, no leading/trailing whitespace, no leading zero, culture-invariant. int.TryParse's default
+    // NumberStyles.Integer permits AllowLeadingSign (so "keyboard.f+1" resolved) and is
+    // CultureInfo.CurrentCulture-dependent; a hand-rolled digit walk is the only way to accept the canonical range
+    // and nothing else regardless of the host's culture.
+    private static bool TryParseCanonicalPositiveNumber(ReadOnlySpan<char> digits, int maximum, out int number) {
+        number = 0;
+
+        if (
+            digits.IsEmpty ||
+            (digits[0] == '0')
+        ) {
+            return false;
+        }
+
+        foreach (var digit in digits) {
+            if (!char.IsAsciiDigit(c: digit)) {
+                return false;
+            }
+
+            var next = ((number * 10) + (digit - '0'));
+
+            if (next > maximum) {
+                return false;
+            }
+
+            number = next;
+        }
+
+        return (number > 0);
+    }
     // Open-ended families mint source ids rather than declaring one constant each: keyboard letters/functions and
     // numbered mouse buttons. Recognize exactly the same canonical range each public factory accepts. Every id
     // resolved here is CommandValueKind.Digital — none of the open-ended families mint an analog control, except the
@@ -188,7 +174,10 @@ public static class InputSourceVocabulary {
 
         const string ProbePrefix = "probe.";
 
-        if (sourceId.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ProbePrefix)) {
+        if (sourceId.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: ProbePrefix
+        )) {
             var name = sourceId.AsSpan(start: ProbePrefix.Length);
 
             if (
@@ -214,8 +203,15 @@ public static class InputSourceVocabulary {
 
         const string MouseButtonPrefix = "mouse.button";
 
-        if (sourceId.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: MouseButtonPrefix)) {
-            if (TryParseCanonicalPositiveNumber(digits: sourceId.AsSpan(start: MouseButtonPrefix.Length), maximum: ushort.MaxValue, number: out _)) {
+        if (sourceId.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: MouseButtonPrefix
+        )) {
+            if (TryParseCanonicalPositiveNumber(
+                digits: sourceId.AsSpan(start: MouseButtonPrefix.Length),
+                maximum: ushort.MaxValue,
+                number: out _
+            )) {
                 kind = CommandValueKind.Digital;
                 return true;
             }
@@ -253,7 +249,10 @@ public static class InputSourceVocabulary {
         const string NumpadPrefix = "numpad";
 
         if (
-            suffix.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: NumpadPrefix) &&
+            suffix.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: NumpadPrefix
+        ) &&
             (suffix.Length == (NumpadPrefix.Length + 1)) &&
             char.IsAsciiDigit(c: suffix[^1])
         ) {
@@ -277,35 +276,49 @@ public static class InputSourceVocabulary {
 
         return false;
     }
-    // Accepts exactly the canonical digit forms "1".."12" (or "1".."65535" for mouse buttons) — digits only, no
-    // sign, no leading/trailing whitespace, no leading zero, culture-invariant. int.TryParse's default
-    // NumberStyles.Integer permits AllowLeadingSign (so "keyboard.f+1" resolved) and is
-    // CultureInfo.CurrentCulture-dependent; a hand-rolled digit walk is the only way to accept the canonical range
-    // and nothing else regardless of the host's culture.
-    private static bool TryParseCanonicalPositiveNumber(ReadOnlySpan<char> digits, int maximum, out int number) {
-        number = 0;
 
-        if (
-            digits.IsEmpty ||
-            (digits[0] == '0')
-        ) {
-            return false;
+    /// <summary>Indicates whether <paramref name="sourceId"/> names a control explicitly marked
+    /// <see cref="InputSourceUnaddressableAttribute"/> — a control unaddressable for a reason its declared
+    /// <see cref="CommandValueKind"/> alone does not say (today only a text payload). A caller narrowing
+    /// <see cref="CommandValueKind"/> to its own addressable subset still owes that narrowing separately; this
+    /// answers only the explicit marker, never the declared-kind test.</summary>
+    /// <param name="sourceId">The provider-neutral source id text.</param>
+    public static bool IsExplicitlyUnaddressable(string sourceId) {
+        return ExplicitlyUnaddressableSourceIds.Contains(item: sourceId);
+    }
+    /// <summary>Indicates whether <paramref name="sourceId"/> names a recognized physical control — the name half of
+    /// <see cref="TryResolveDeclaredKind"/>, for a caller that admits every declared value kind.</summary>
+    /// <param name="sourceId">The provider-neutral source id text (e.g. <c>"gamepad.buttonSouth"</c>).</param>
+    public static bool IsKnownSourceId(string sourceId) {
+        return TryResolveDeclaredKind(
+            kind: out _,
+            sourceId: sourceId
+        );
+    }
+    /// <summary>Indicates whether <paramref name="sourceId"/> declares <see cref="InputSourceValueAttribute.Relative"/>
+    /// — each sample a delta, not a deflection.</summary>
+    /// <param name="sourceId">The provider-neutral source id text.</param>
+    public static bool IsRelative(string sourceId) {
+        return RelativeSourceIds.Contains(item: sourceId);
+    }
+    /// <summary>Attempts to resolve <paramref name="sourceId"/> against the engine's canonical source-id surface
+    /// and report the full <see cref="CommandValueKind"/> it declares.</summary>
+    /// <param name="sourceId">The provider-neutral source id text (e.g. <c>"gamepad.buttonSouth"</c>).</param>
+    /// <param name="kind">When this returns <see langword="true"/>, the declared value kind.</param>
+    /// <returns><see langword="true"/> if <paramref name="sourceId"/> names a recognized source, whether from an
+    /// exact declared field or an open-ended parametric family (keyboard letters/digits, numbered mouse buttons);
+    /// otherwise <see langword="false"/>.</returns>
+    public static bool TryResolveDeclaredKind(string sourceId, out CommandValueKind kind) {
+        if (KindsBySourceId.TryGetValue(
+            key: sourceId,
+            value: out kind
+        )) {
+            return true;
         }
 
-        foreach (var digit in digits) {
-            if (!char.IsAsciiDigit(c: digit)) {
-                return false;
-            }
-
-            var next = ((number * 10) + (digit - '0'));
-
-            if (next > maximum) {
-                return false;
-            }
-
-            number = next;
-        }
-
-        return (number > 0);
+        return TryResolveParametricKind(
+            kind: out kind,
+            sourceId: sourceId
+        );
     }
 }

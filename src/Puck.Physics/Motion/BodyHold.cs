@@ -167,9 +167,11 @@ public readonly record struct FixedBodyHold(
             : ((alignment < -FixedQ4816.One)
                 ? -FixedQ4816.One
                 : alignment
-            )
-        );
+        ));
 
-        return ((cosine <= ConeCosNear) && (cosine >= ConeCosFar));
+        return (
+            (cosine <= ConeCosNear) &&
+            (cosine >= ConeCosFar)
+        );
     }
 }

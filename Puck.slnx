@@ -9,6 +9,7 @@
         <Project Path="src/Puck.Assets/Puck.Assets.csproj" />
         <Project Path="src/Puck.Attestation/Puck.Attestation.csproj" />
         <Project Path="src/Puck.Audio/Puck.Audio.csproj" />
+        <Project Path="src/Puck.Azure/Puck.Azure.csproj" />
         <Project Path="src/Puck.Azure.Functions/Puck.Azure.Functions.csproj" />
         <Project Path="src/Puck.Cli/Puck.Cli.csproj" />
         <Project Path="src/Puck.Commands/Puck.Commands.csproj" />
@@ -53,10 +54,14 @@
         <Project Path="src/Puck.World.Client/Puck.World.Client.csproj" />
         <Project Path="src/Puck.World.Console/Puck.World.Console.csproj" />
         <Project Path="src/Puck.Mcp/Puck.Mcp.csproj" />
+        <Project Path="src/Puck.World.Machines/Puck.World.Machines.csproj" />
         <Project Path="src/Puck.World.Protocol/Puck.World.Protocol.csproj" />
         <Project Path="src/Puck.World.Schema/Puck.World.Schema.csproj" />
         <Project Path="src/Puck.World.Server/Puck.World.Server.csproj" />
         <Project Path="src/Puck.World.Silo/Puck.World.Silo.csproj" />
+        <Project Path="src/Puck.GamingBricks.Transpiler/Puck.GamingBricks.Transpiler.csproj" />
+        <Project Path="src/Puck.Transpiler/Puck.Transpiler.csproj" />
+        <Project Path="src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
         <Project Path="src/Puck.World/Puck.World.csproj" />
     </Folder>
     <Folder Name="/tests/">
@@ -91,5 +96,7 @@
         <Project Path="tests/Puck.World.Agents.Tests/Puck.World.Agents.Tests.csproj" />
         <Project Path="tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj" />
         <Project Path="tests/Puck.World.Tests/Puck.World.Tests.csproj" />
+        <Project Path="tests/Puck.GamingBricks.Transpiler.Tests/Puck.GamingBricks.Transpiler.Tests.csproj" />
+        <Project Path="tests/Puck.World.Transpiler.Tests/Puck.World.Transpiler.Tests.csproj" />
     </Folder>
 </Solution>

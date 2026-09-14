@@ -76,7 +76,9 @@ public sealed partial class WorldBody {
     // The half-angle rate SteerUp's rotor and its within-budget test both want, so accumulating it directly spares a
     // per-tick halving — see WorldBody.Step's SteerUp. Kit-authored (WorldMotion.UpTurn); see FixedUpTurnRates.
     private FixedQ4816 FieldUpTurnHalfRate => m_tuning.UpTurn.Field;
+
     private static readonly FixedQ4816 MinFieldUpMagnitude = FixedQ4816.One;
+
     private FixedQ4816 ContactUpTurnHalfRate => m_tuning.UpTurn.Contact;
 
     private IContactField? m_contactField;
@@ -232,8 +234,10 @@ public sealed partial class WorldBody {
     private static readonly FixedQ4816 Pi = FixedQ4816.FromDouble(value: Math.PI);
     // Above the yaw round-trip error of FromAxisAngle -> ExtractYaw, below any facing a snap can leave (radians).
     private static readonly FixedQ4816 FacingAdoptEpsilon = FixedQ4816.FromDouble(value: 0.001);
+
     // Kit-authored (WorldTurn.MaxPitch); see FixedTurn.
     private FixedQ4816 MaxDrivePitch => m_tuning.Turn.MaxPitch;
+
     private static readonly FixedQ4816 TwoPi = FixedQ4816.FromDouble(value: (2.0 * Math.PI));
     private static readonly FixedVector3 UnitX = new(
         X: FixedQ4816.One,
@@ -281,6 +285,7 @@ public sealed partial class WorldBody {
     private FixedQ4816 ObstructionLatchDisplacementSquared => m_tuning.Obstruction.DisplacementSquared;
     private FixedQ4816 ObstructionLatchIdleThreshold => m_tuning.Obstruction.IdleThreshold;
     private ulong ObstructionLatchGraceTicks => m_tuning.Obstruction.GraceTicks;
+
     // The per-channel action runtime: the compiled binding (null = unbound), its press latch, and one recency clock per
     // Recently-predicate instance. Named counters and timers live in the kit-wide action-state register file below.
     // A role ordinal never has a binding, so it is naturally inert here.
@@ -360,7 +365,10 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> for a kit that carries no rope.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
     public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null) {
-        SetTuning(holds: holds, tuning: tuning);
+        SetTuning(
+            holds: holds,
+            tuning: tuning
+        );
         m_bodyMotionProgram = (program ?? throw new ArgumentNullException(paramName: nameof(program)));
         m_bodyMotionPrograms = (programs ?? throw new ArgumentNullException(paramName: nameof(programs)));
         CopyChannelBindings(

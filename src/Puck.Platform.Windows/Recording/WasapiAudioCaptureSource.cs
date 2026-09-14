@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Recording;
-using Puck.Platform.Recording;
 
 namespace Puck.Platform.Windows.Recording;
 
@@ -45,7 +44,9 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
         m_deviceId = deviceId;
         m_thread = new Thread(start: CaptureThread) {
             IsBackground = true,
-            Name = (loopback ? "wasapi-loopback" : "wasapi-microphone"),
+            Name = (loopback
+            ? "wasapi-loopback"
+            : "wasapi-microphone"),
         };
         m_thread.SetApartmentState(state: ApartmentState.MTA);
         m_thread.Start();
@@ -56,7 +57,10 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
             m_startSignal.Set();
             m_thread.Join(millisecondsTimeout: 2000);
 
-            throw new COMException(errorCode: m_initHResult, message: (m_initError ?? "the audio device failed to initialize"));
+            throw new COMException(
+                errorCode: m_initHResult,
+                message: (m_initError ?? "the audio device failed to initialize")
+            );
         }
     }
 
@@ -81,7 +85,10 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
     public int Read(Span<float> interleaved, out long firstSampleTimestampNanoseconds) {
         firstSampleTimestampNanoseconds = 0;
 
-        if ((m_ring is null) || (m_channels == 0)) {
+        if (
+            (m_ring is null) ||
+            (m_channels == 0)
+        ) {
             return 0;
         }
 
@@ -123,7 +130,10 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
     }
 
     private void CaptureThread() {
-        _ = Wasapi.CoInitializeEx(dwCoInit: 0, pvReserved: 0); // COINIT_MULTITHREADED
+        _ = Wasapi.CoInitializeEx(
+            dwCoInit: 0,
+            pvReserved: 0
+        ); // COINIT_MULTITHREADED
 
         IAudioClient? audioClient = null;
         IAudioCaptureClient? captureClient = null;
@@ -143,7 +153,11 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
             m_initDone.Set();
         }
 
-        if (!m_initOk || (audioClient is null) || (captureClient is null)) {
+        if (
+            !m_initOk ||
+            (audioClient is null) ||
+            (captureClient is null)
+        ) {
             Wasapi.CoUninitialize();
 
             return;
@@ -152,7 +166,10 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
         m_startSignal.Wait();
 
         if (!m_stop) {
-            RunCaptureLoop(audioClient: audioClient, captureClient: captureClient);
+            RunCaptureLoop(
+                audioClient: audioClient,
+                captureClient: captureClient
+            );
         }
 
         _ = Marshal.ReleaseComObject(o: captureClient);
@@ -161,7 +178,12 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
     }
     private (IAudioClient AudioClient, IAudioCaptureClient CaptureClient) Initialize() {
         // Loopback captures the render endpoint; the microphone captures a capture endpoint (named or default).
-        var audioClient = Wasapi.ActivateAudioClient(dataFlow: (m_loopback ? Wasapi.DataFlowRender : Wasapi.DataFlowCapture), deviceId: m_deviceId);
+        var audioClient = Wasapi.ActivateAudioClient(
+            dataFlow: (m_loopback
+            ? Wasapi.DataFlowRender
+            : Wasapi.DataFlowCapture),
+            deviceId: m_deviceId
+        );
 
         Wasapi.Check(hr: audioClient.GetMixFormat(ppDeviceFormat: out var formatPointer));
 
@@ -170,23 +192,53 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
 
             m_sampleRate = ((int)format.nSamplesPerSec);
             m_channels = format.nChannels;
-            m_isFloat = DetermineIsFloat(format: format, formatPointer: formatPointer);
+            m_isFloat = DetermineIsFloat(
+                format: format,
+                formatPointer: formatPointer
+            );
 
-            if (!m_isFloat && (format.wBitsPerSample != 16)) {
-                throw new COMException(errorCode: unchecked((int)0x80004005), message: $"unsupported device format ({format.wBitsPerSample}-bit, tag {format.wFormatTag})");
+            if (
+                !m_isFloat &&
+                (format.wBitsPerSample != 16)
+            ) {
+                throw new COMException(
+                    errorCode: unchecked((int)0x80004005),
+                    message: $"unsupported device format ({format.wBitsPerSample}-bit, tag {format.wFormatTag})"
+                );
             }
 
-            var streamFlags = (m_loopback ? Wasapi.StreamFlagsLoopback : Wasapi.StreamFlagsEventCallback);
+            var streamFlags = (m_loopback
+                ? Wasapi.StreamFlagsLoopback
+                : Wasapi.StreamFlagsEventCallback
+            );
             // Loopback polls; the microphone is event-driven with a device-picked buffer (period 0).
-            var bufferDuration = (m_loopback ? 2_000_000L : 0L);
+            var bufferDuration = (m_loopback
+                ? 2_000_000L
+                : 0L
+            );
 
-            Wasapi.Check(hr: audioClient.Initialize(audioSessionGuid: 0, hnsBufferDuration: bufferDuration, hnsPeriodicity: 0, pFormat: formatPointer, shareMode: Wasapi.ShareModeShared, streamFlags: streamFlags));
+            Wasapi.Check(hr: audioClient.Initialize(
+                audioSessionGuid: 0,
+                hnsBufferDuration: bufferDuration,
+                hnsPeriodicity: 0,
+                pFormat: formatPointer,
+                shareMode: Wasapi.ShareModeShared,
+                streamFlags: streamFlags
+            ));
 
             if (!m_loopback) {
-                m_eventHandle = Wasapi.CreateEventW(bInitialState: false, bManualReset: false, lpEventAttributes: 0, lpName: null);
+                m_eventHandle = Wasapi.CreateEventW(
+                    bInitialState: false,
+                    bManualReset: false,
+                    lpEventAttributes: 0,
+                    lpName: null
+                );
 
                 if (m_eventHandle == 0) {
-                    throw new COMException(message: "failed to create the capture event", errorCode: Marshal.GetHRForLastWin32Error());
+                    throw new COMException(
+                        message: "failed to create the capture event",
+                        errorCode: Marshal.GetHRForLastWin32Error()
+                    );
                 }
 
                 Wasapi.Check(hr: audioClient.SetEventHandle(eventHandle: m_eventHandle));
@@ -195,11 +247,17 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
             Wasapi.Check(hr: audioClient.GetBufferSize(pNumBufferFrames: out var bufferFrames));
 
             // Ring holds ~1 s of audio so a briefly-stalled consumer drops oldest rather than the device thread blocking.
-            m_ring = new AudioSampleRing(capacity: Math.Max(val1: ((((int)bufferFrames) * m_channels) * 4), val2: (m_sampleRate * m_channels)));
+            m_ring = new AudioSampleRing(capacity: Math.Max(
+                val1: ((((int)bufferFrames) * m_channels) * 4),
+                val2: (m_sampleRate * m_channels)
+            ));
 
             var captureClientIid = Wasapi.IID_IAudioCaptureClient;
 
-            Wasapi.Check(hr: audioClient.GetService(ppv: out var captureClientObject, riid: ref captureClientIid));
+            Wasapi.Check(hr: audioClient.GetService(
+                ppv: out var captureClientObject,
+                riid: ref captureClientIid
+            ));
 
             return (audioClient, ((IAudioCaptureClient)captureClientObject));
         } finally {
@@ -230,10 +288,16 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
                 if (m_loopback) {
                     Thread.Sleep(millisecondsTimeout: PollIntervalMilliseconds);
                 } else {
-                    _ = Wasapi.WaitForSingleObject(dwMilliseconds: 100, hHandle: m_eventHandle);
+                    _ = Wasapi.WaitForSingleObject(
+                        dwMilliseconds: 100,
+                        hHandle: m_eventHandle
+                    );
                 }
 
-                DrainPackets(captureClient: captureClient, scratch: scratch);
+                DrainPackets(
+                    captureClient: captureClient,
+                    scratch: scratch
+                );
             }
         } finally {
             _ = audioClient.Stop();
@@ -245,7 +309,13 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
                 return;
             }
 
-            if (captureClient.GetBuffer(pNumFramesToRead: out var frames, pdwFlags: out var flags, ppData: out var data, pu64DevicePosition: out _, pu64QpcPosition: out var qpcPosition) < 0) {
+            if (captureClient.GetBuffer(
+                pNumFramesToRead: out var frames,
+                pdwFlags: out var flags,
+                ppData: out var data,
+                pu64DevicePosition: out _,
+                pu64QpcPosition: out var qpcPosition
+            ) < 0) {
                 return;
             }
 
@@ -256,14 +326,25 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
                     scratch = new float[sampleCount];
                 }
 
-                var span = scratch.AsSpan(length: sampleCount, start: 0);
+                var span = scratch.AsSpan(
+                    length: sampleCount,
+                    start: 0
+                );
 
                 if ((flags & Wasapi.BufferFlagsSilent) != 0) {
                     span.Clear();
                 } else if (m_isFloat) {
-                    Marshal.Copy(destination: scratch, length: sampleCount, source: data, startIndex: 0);
+                    Marshal.Copy(
+                        destination: scratch,
+                        length: sampleCount,
+                        source: data,
+                        startIndex: 0
+                    );
                 } else {
-                    ConvertInt16(destination: span, source: data);
+                    ConvertInt16(
+                        destination: span,
+                        source: data
+                    );
                 }
 
                 StampBaseIfNeeded(qpcPosition: qpcPosition);
@@ -282,9 +363,13 @@ internal sealed class WasapiAudioCaptureSource : IAudioCaptureSource {
         // reports zero.
         var baseNanoseconds = ((qpcPosition != 0)
             ? m_clock.NanosecondsFromHectonanoseconds(hectonanoseconds: ((long)qpcPosition))
-            : m_clock.NowNanoseconds());
+            : m_clock.NowNanoseconds()
+        );
 
-        Volatile.Write(location: ref m_baseSampleNanoseconds, value: baseNanoseconds);
+        Volatile.Write(
+            location: ref m_baseSampleNanoseconds,
+            value: baseNanoseconds
+        );
         m_baseStamped = true;
     }
     private static void ConvertInt16(nint source, Span<float> destination) {

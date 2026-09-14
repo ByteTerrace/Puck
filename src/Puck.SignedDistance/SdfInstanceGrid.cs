@@ -20,7 +20,8 @@ public readonly record struct SdfInstanceGridInput(Vector3 Center, float Radius,
 /// counting-sorted by center into a CSR cell directory — exactly one cell per instance (count → exclusive prefix-sum →
 /// scatter, all in instance-index order — deterministic by construction, no atomics, no wave intrinsics). The immutable
 /// program block keeps dynamic and unmaskable instances in an always-tested list; the live frame-grid rebuild resolves
-/// and bins maskable dynamic instances, leaving only unmaskable instances always-tested. The beam then tests only the
+/// and bins maskable dynamic instances. Bounds larger than eight times the median eligible radius also use the
+/// always-tested list, so one floor or building cannot inflate every fine-grid query. The beam then tests only the
 /// instances in the grid cells its cone footprint overlaps plus the always-list, so beam cost tracks instances near
 /// the tile's cone, not the total. The immutable program block provides the construction/reference representation;
 /// live rendering rebuilds the same layout in a reusable ring-local workspace only when an active maskable dynamic
@@ -75,6 +76,9 @@ public static class SdfInstanceGrid {
     /// past every rounding disagreement. 1e-3 of a cell edge dwarfs the ~1e-6 relative float error while staying
     /// cost-wise negligible and avoids a whole-cell over-cover ring that can multiply the walked cells by up to 27×.</summary>
     private const float FootprintEpsilonCells = 1.0e-3f;
+    // Separate exceptional scales before deriving either the grid extent or its query padding. This affects only
+    // where an instance is found: oversized instances still receive the same exact per-cone bound test once.
+    private const float MaxBinnedRadiusRatio = 8.0f;
     /// <summary>The per-axis cell-count cap. Bounds the beam's slab-march length (the ray∩grid interval spans at most
     /// ~√3·MaxDimension cells), so a degenerate near-1-D instance layout cannot make the beam walk thousands of slabs.
     /// Coarsening enforces it alongside <see cref="CellCapacityFactor"/>. KEEP IN SYNC with the slab-budget reasoning at
@@ -97,49 +101,29 @@ public static class SdfInstanceGrid {
     /// beam falls back to the flat per-instance loop over the same instances.</param>
     /// <returns>The grid block as a <see cref="uint"/> array whose length is a multiple of 4 (padded), ready to copy into
     /// the program word stream after the world-segment list.</returns>
-    internal static uint[] Build(IReadOnlyList<SdfInstanceGridInput> instances, int maxInstances, bool enabled = true) {
-        ArgumentNullException.ThrowIfNull(instances);
-
+    internal static uint[] Build(ReadOnlySpan<SdfInstanceGridInput> instances, int maxInstances, bool enabled = true) {
         if (!enabled) {
             return DisabledBlock();
         }
 
         // Pass 0: partition the instances. A binnable candidate carries its center/radius; everything else is either an
-        // always-list member (active but dynamic/unmaskable) or excluded (parked, negative radius). The grid AABB covers
+        // always-list member (active but dynamic/unmaskable/oversized) or excluded (parked, negative radius). The grid AABB covers
         // center ± radius, so every binnable CENTER is strictly inside it by construction.
-        var binnableIndices = new List<int>();
-        var minBounds = new Vector3(value: float.PositiveInfinity);
-        var maxBounds = new Vector3(value: float.NegativeInfinity);
-        var maxBinnedRadius = 0.0f;
-
-        for (var index = 0; (index < instances.Count); index++) {
-            var input = instances[index];
-
-            if (!input.Binnable) {
-                continue;
-            }
-
-            binnableIndices.Add(item: index);
-            maxBinnedRadius = MathF.Max(
-                x: maxBinnedRadius,
-                y: input.Radius
-            );
-
-            var radius = new Vector3(value: input.Radius);
-
-            minBounds = Vector3.Min(
-                value1: minBounds,
-                value2: (input.Center - radius)
-            );
-            maxBounds = Vector3.Max(
-                value1: maxBounds,
-                value2: (input.Center + radius)
-            );
-        }
+        var binnableIndices = new int[instances.Length];
+        var diameters = new float[instances.Length];
+        var binnableCount = SelectBinnable(
+            diameters: diameters,
+            indices: binnableIndices,
+            instances: instances,
+            maxBinnedRadius: out var maxBinnedRadius,
+            maxBounds: out var maxBounds,
+            minBounds: out var minBounds,
+            radiusLimit: out var radiusLimit
+        );
 
         // No binnable instance ⇒ a DISABLED block: the beam flat-fallbacks over every instance, so a dynamic-only or
         // flat program keeps working with no cells at all.
-        if (binnableIndices.Count == 0) {
+        if (binnableCount == 0) {
             return DisabledBlock();
         }
 
@@ -148,17 +132,11 @@ public static class SdfInstanceGrid {
             value1: (maxBounds - minBounds),
             value2: Vector3.Zero
         );
-        var diameters = new float[binnableIndices.Count];
-
-        for (var slot = 0; (slot < binnableIndices.Count); slot++) {
-            diameters[slot] = (2.0f * MathF.Max(
-                x: instances[binnableIndices[slot]].Radius,
-                y: 0.0f
-            ));
-        }
-
         var cellSize = DeriveCellSize(
-            diameters: diameters,
+            diameters: diameters.AsSpan(
+                length: binnableCount,
+                start: 0
+            ),
             dimensions: out var dimensions,
             extent: extent,
             maxInstances: maxInstances
@@ -177,9 +155,9 @@ public static class SdfInstanceGrid {
         // the type doc: the beam's footprintPad-inflated query is what reaches a bound whose center sits in a
         // neighboring cell).
         var cellStart = new int[(cellCount + 1)];
-        var homeCell = new int[binnableIndices.Count];
+        var homeCell = new int[binnableCount];
 
-        for (var slot = 0; (slot < binnableIndices.Count); slot++) {
+        for (var slot = 0; (slot < binnableCount); slot++) {
             var input = instances[binnableIndices[slot]];
             var cell = CellOf(
                 point: input.Center,
@@ -213,23 +191,23 @@ public static class SdfInstanceGrid {
             sourceArray: cellStart
         );
 
-        for (var slot = 0; (slot < binnableIndices.Count); slot++) {
+        for (var slot = 0; (slot < binnableCount); slot++) {
             var cell = homeCell[slot];
 
             entries[cursor[cell]] = binnableIndices[slot];
             cursor[cell]++;
         }
 
-        // The always-list: every ACTIVE non-binnable instance (dynamic or unmaskable — radius ≥ 0), in ascending
+        // The always-list: every ACTIVE non-binnable or oversized instance (radius ≥ 0), in ascending
         // instance-index order (the walk order). Parked instances (radius < 0) are omitted entirely — a parked pool
         // costs zero.
         var alwaysList = new List<int>();
 
-        for (var index = 0; (index < instances.Count); index++) {
+        for (var index = 0; (index < instances.Length); index++) {
             var input = instances[index];
 
             if (
-                !input.Binnable &&
+                (!input.Binnable || (input.Radius > radiusLimit)) &&
                 (input.Radius >= 0.0f)
             ) {
                 alwaysList.Add(item: index);
@@ -274,13 +252,8 @@ public static class SdfInstanceGrid {
 
         return ((((z * dimensions.Y) + y) * dimensions.X) + x);
     }
-    // Derives the cell edge from the median binned-bound diameter, then coarsens until the resolution honors both the
-    // total-cell cap and the per-axis cap. Returns the cell size and (via out) the resulting per-axis cell counts.
-    // The diameters scratch is caller-owned (sorted in place here) so the allocating and workspace paths share one
-    // derivation without the workspace giving up its zero-alloc rebuild.
+    // SelectBinnable supplies sorted diameters, so deriving the retained median needs no second sort.
     private static float DeriveCellSize(Span<float> diameters, Vector3 extent, int maxInstances, out (int X, int Y, int Z) dimensions) {
-        diameters.Sort();
-
         var medianDiameter = diameters[(diameters.Length / 2)];
         var cellSize = MathF.Max(
             x: (CellDiameterFactor * medianDiameter),
@@ -369,6 +342,70 @@ public static class SdfInstanceGrid {
 
         return block;
     }
+    // Derives the cell edge from the median binned-bound diameter, then coarsens until the resolution honors both the
+    // total-cell cap and the per-axis cap. Returns the cell size and (via out) the resulting per-axis cell counts.
+    // Both allocation paths use this partition. The median is taken over eligible active bounds; oversized bounds
+    // are removed before computing the fine grid's AABB and padding. They remain in the always-list. Sorting the
+    // diameters once also provides the retained population's sorted prefix for DeriveCellSize.
+    private static int SelectBinnable(ReadOnlySpan<SdfInstanceGridInput> instances, Span<int> indices, Span<float> diameters, out Vector3 minBounds, out Vector3 maxBounds, out float maxBinnedRadius, out float radiusLimit) {
+        minBounds = new Vector3(value: float.PositiveInfinity);
+        maxBounds = new Vector3(value: float.NegativeInfinity);
+        maxBinnedRadius = 0.0f;
+        radiusLimit = 0.0f;
+        var count = 0;
+
+        for (var index = 0; (index < instances.Length); index++) {
+            var input = instances[index];
+
+            if (
+                !input.Binnable ||
+                (input.Radius < 0.0f)
+            ) {
+                continue;
+            }
+
+            indices[count] = index;
+            diameters[count++] = (2.0f * input.Radius);
+        }
+
+        if (count == 0) {
+            return 0;
+        }
+
+        diameters[..count].Sort();
+        radiusLimit = MathF.Max(
+            x: ((0.5f * MaxBinnedRadiusRatio) * diameters[(count / 2)]),
+            y: MinCellSize
+        );
+        var retained = 0;
+
+        for (var slot = 0; (slot < count); slot++) {
+            var index = indices[slot];
+            var input = instances[index];
+
+            if (input.Radius > radiusLimit) {
+                continue;
+            }
+
+            indices[retained++] = index;
+            maxBinnedRadius = MathF.Max(
+                x: maxBinnedRadius,
+                y: input.Radius
+            );
+            var radius = new Vector3(value: input.Radius);
+
+            minBounds = Vector3.Min(
+                value1: minBounds,
+                value2: (input.Center - radius)
+            );
+            maxBounds = Vector3.Max(
+                value1: maxBounds,
+                value2: (input.Center + radius)
+            );
+        }
+
+        return retained;
+    }
 
     /// <summary>Returns the largest packed block <see cref="Build"/> can produce for an instance envelope. The
     /// frame-local grid buffers use this exact ceiling: header + at most 4N cells' N+1 prefix entries + N binned
@@ -451,40 +488,15 @@ public static class SdfInstanceGrid {
                 return DisabledWords();
             }
 
-            var binnableCount = 0;
-            var minBounds = new Vector3(value: float.PositiveInfinity);
-            var maxBounds = new Vector3(value: float.NegativeInfinity);
-            var maxBinnedRadius = 0.0f;
-
-            for (var index = 0; (index < instances.Length); index++) {
-                var input = instances[index];
-
-                if (!input.Binnable) {
-                    continue;
-                }
-
-                m_binnableIndices[binnableCount] = index;
-                m_diameters[binnableCount] = (2.0f * MathF.Max(
-                    x: input.Radius,
-                    y: 0.0f
-                ));
-                binnableCount++;
-                maxBinnedRadius = MathF.Max(
-                    x: maxBinnedRadius,
-                    y: input.Radius
-                );
-
-                var radius = new Vector3(value: input.Radius);
-
-                minBounds = Vector3.Min(
-                    value1: minBounds,
-                    value2: (input.Center - radius)
-                );
-                maxBounds = Vector3.Max(
-                    value1: maxBounds,
-                    value2: (input.Center + radius)
-                );
-            }
+            var binnableCount = SelectBinnable(
+                diameters: m_diameters,
+                indices: m_binnableIndices,
+                instances: instances,
+                maxBinnedRadius: out var maxBinnedRadius,
+                maxBounds: out var maxBounds,
+                minBounds: out var minBounds,
+                radiusLimit: out var radiusLimit
+            );
 
             if (binnableCount == 0) {
                 return DisabledWords();
@@ -555,7 +567,7 @@ public static class SdfInstanceGrid {
                 var input = instances[index];
 
                 if (
-                    !input.Binnable &&
+                    (!input.Binnable || (input.Radius > radiusLimit)) &&
                     (input.Radius >= 0.0f)
                 ) {
                     m_alwaysList[alwaysCount] = index;

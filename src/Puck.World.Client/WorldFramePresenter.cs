@@ -4,6 +4,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Overlays;
 using Puck.SdfVm;
+using Puck.Shaders;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
@@ -40,13 +41,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // The adjacency render half — neighbour solids and delivered bodies composed through the same isometry contact
     // and handoff use, with remote avatar transforms in its own frozen slot range.
     private readonly WorldAdjacencySceneEmitter m_adjacencies;
-    private readonly WorldFieldEmitter m_fields;
     // The per-seat perception anchor: every seat-relative derivation in this type (the camera anchor pose, the
     // seat-join cue site) resolves its body index through it — one resolution point, so a possession anchor swap
     // moves every derivation together.
     private readonly WorldPerceptionAnchor m_anchor;
-    private readonly WorldSpeechClock m_speech;
-    private readonly IOverlayPredicateEvaluator? m_overlayFacts;
     private readonly WorldStampPool m_animator;
     // The audio director: its emitter derivation reconciles at the delivery boundary (AFTER the screen binder —
     // the chiasmus ordering, speakers consume screen slots) and its snapshot publishes at the end of every dress.
@@ -68,30 +66,27 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // BOOT-CONSUMED: the reserved derived-face screen count (WorldPlacementPolicyDefaults.DerivedFaceScreens) — the binder's
     // frozen derived-face slot range, re-pointed live at each delivery.
     private readonly int m_derivedFaceScreens;
-    // The seat's published mode state — whether views.cameraRig frames it instead of views.seatRig, read during dress.
-    private readonly WorldSeatBindings m_seatBindings;
     // The room's content sources, and the host that composes them. The host owns the capacity probe, the
     // dynamic-transform buffer and its slot assignment, and the rebuild-on-revision-change predicate.
     private readonly WorldSceneEmitter m_emitter;
+    private readonly WorldFieldEmitter m_fields;
     private readonly FrameRateMonitor m_frameRate;
     // The marker channel's store and this frame's per-seat projected chips, plus the reusable scratch the
     // candidate list is composed into once per Dress call (not once per seat — every seat's cull reads the SAME
     // list). See ComposeMarkerCandidates/ComposeMarkerSeat.
     private readonly MarkerStore m_markers;
-
-    private readonly OverlayMarkerChip[][] m_markerChips = new OverlayMarkerChip[PlayerRoster.MaxSlots][];
-    private readonly OverlayMarkerSeat[] m_markerSeats = new OverlayMarkerSeat[PlayerRoster.MaxSlots];
-    private readonly List<MarkerCandidate> m_markerCandidates = [];
-
+    private readonly IOverlayPredicateEvaluator? m_overlayFacts;
+    // Null for a document/host with no live pipeline children (no views.pipelines row was registered at boot) — every
+    // pipeline slot then falls through to its degenerate camera fallback below, never a null-reference.
+    private readonly WorldPipelineRuntime? m_pipelines;
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
     private readonly PlayerRoster m_roster;
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
     // seam m_emitter already exercises, never a parallel composition point (see WorldSdfDocumentEmitter's remarks).
     private readonly WorldSdfDocumentEmitter m_sdfDocuments;
+    // The seat's published mode state — whether views.cameraRig frames it instead of views.seatRig, read during dress.
+    private readonly WorldSeatBindings m_seatBindings;
     private readonly WorldRenderSettings m_settings;
-
-    private readonly WorldRenderCycleTrack m_cycle = new();
-
     // The routed-definition registry supplies the structure half of each seat's live look policy while the
     // presentation clock integrates its latched stick Y. A traveling seat therefore uses the destination's clamp,
     // exactly like pointer drag and world.view.camera, rather than silently retaining the boot world's structure.
@@ -108,13 +103,13 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // WorldSeatCameraResolver.ResolveChase, the single shared path every traveling seat uses.
     // Slot-indexed, PlayerRoster.MaxSlots entries — one live rig per seat, never shared.
     private readonly IWorldSimulationClock m_simulation;
+    private readonly WorldSpeechClock m_speech;
     private readonly WorldTextCatalog m_text;
     // The per-seat viewport + camera publication (the cursor feed's unproject seam): republished every dressed
     // frame from the SAME resolved region/camera each seat view renders with.
     private readonly WorldSeatViewports m_viewports;
 
     private int m_builtDefinitionRevision;
-
     // This produced frame's dressed SdfFrame, kept from Dress so the LATER RenderViews call can hand it to every
     // offscreen view as the base each derives its own submission from. Null before the first Dress.
     private SdfFrame? m_dressedFrame;
@@ -130,6 +125,14 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // Advances exactly when the composed program is a NEW instance — the jumbotron engines' re-upload trigger.
     private int m_programRevision;
 
+    private readonly OverlayMarkerChip[][] m_markerChips = new OverlayMarkerChip[PlayerRoster.MaxSlots][];
+    private readonly OverlayMarkerSeat[] m_markerSeats = new OverlayMarkerSeat[PlayerRoster.MaxSlots];
+    private readonly List<MarkerCandidate> m_markerCandidates = [];
+    // This frame's bounded volumes: the static placements' baked ones, then the stamp pool's slot-riding ones, in
+    // that order up to the engine's ceiling (SdfProgramBuilder.MaxVolumes) — reused across frames.
+    private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
+    private readonly HashSet<string> m_fedPipelines = new(comparer: StringComparer.Ordinal);
+    private readonly WorldRenderCycleTrack m_cycle = new();
     // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
     private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
     private readonly Vector3[] m_lastSeatAnchorPosition = new Vector3[PlayerRoster.MaxSlots];
@@ -154,199 +157,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // index by (text, catalog) identity — SetScreenDecal change-detects, but the bake itself should not re-run per frame.
     private readonly Dictionary<int, Func<SdfScreenDecalFrame?>> m_screenDecals = new();
     private readonly Dictionary<int, (WorldScreenSource.Text Text, PackedFontAtlasCatalog Catalog, SdfScreenDecalFrame Frame)> m_screenDecalCache = new();
-
-    /// <summary>Initializes a new instance of the <see cref="WorldFramePresenter"/> class, composing the world scene
-    /// emitter over the snapshot-fed client view (the primer snapshot must already be delivered, so the capacity probe
-    /// and the first program declare the boot seats and census active).</summary>
-    /// <param name="frameRate">The frame-rate witness sampled once per captured frame (the <c>world.fps</c> verb reads it).</param>
-    /// <param name="client">The snapshot-fed entity view every pose, color, and active flag is read from.</param>
-    /// <param name="simulation">The host-ticked simulation whose completed tick drives presentation sources.</param>
-    /// <param name="settings">The live render settings read every captured frame (console-mutated in real time).</param>
-    /// <param name="binder">The screen binder owning the declared screens' CPU-fed GPU sources, published each frame.</param>
-    /// <param name="envelope">The render-capacity oracle configured here with the probed floors and the emitter's
-    /// candidate measurer, so the server can reject an over-envelope scene/screen mutation at apply time.</param>
-    /// <param name="seatBindings">The seat's published mode state — whether <c>views.cameraRig</c> frames it instead
-    /// of <c>views.seatRig</c>.</param>
-    /// <param name="animator">The animated-placement replay pool.</param>
-    /// <param name="audio">The narrow audio-director seam — the emitter derivation reconciled at the delivery
-    /// boundary and the per-frame snapshot publisher.</param>
-    /// <param name="anchor">The per-seat perception anchor — the one body index every seat-relative derivation here
-    /// (camera anchor pose, seat-join cue site, crowd soft-shadow centers) resolves through.</param>
-    /// <param name="composition">The shared live composition-override store (view.override layout/view.override camera) the composer reads.</param>
-    /// <param name="composer">The shared window composer (layout selection + eased transitions) the world.view.state read observes.</param>
-    /// <param name="viewports">The per-seat viewport + camera publication each dressed frame fills (the cursor
-    /// feed's unproject seam).</param>
-    /// <param name="sdfDocuments">The first-party puck.sdf.v1 document emitter (world.sdf.load composes into it) —
-    /// configured here with the SAME probed floors and the reciprocal composed measurer, so a document load is
-    /// checked against the live world definition exactly as a scene mutation is checked against the live document.</param>
-    /// <param name="continuum">The shared authority-to-presentation-frame pose resolver.</param>
-    /// <param name="text">The world-relative font catalog and packed GPU atlas.</param>
-    /// <param name="adjacencies">The injected adjacency resolver shared by rendering and collision.</param>
-    /// <param name="markers">The marker channel's store — published unconditionally every dressed frame (an empty
-    /// authored <c>markers</c> section, or none, clears the chips).</param>
-    /// <param name="resolveIcon">The boot document's icon-name resolver (badges and bound-action icons alike) — a
-    /// marker row's <c>icon</c> name resolves through it, same as every other icon reference. Threaded in as a
-    /// delegate (never a direct <c>WorldIconTable</c> reference) because <c>Puck.World.Client</c> cannot reference
-    /// <c>Puck.World</c>, which owns the table.</param>
-    /// <param name="speech">The speech clock a <see cref="WorldAnchor.RecentSpeaker"/> camera anchor reads.</param>
-    /// <param name="overlayFacts">The predicate evaluator a ranked camera anchor list selects through, or
-    /// <see langword="null"/> (every candidate condition then holds).</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null) {
-        ArgumentNullException.ThrowIfNull(argument: frameRate);
-        ArgumentNullException.ThrowIfNull(argument: client);
-        ArgumentNullException.ThrowIfNull(argument: anchor);
-        ArgumentNullException.ThrowIfNull(argument: speech);
-        ArgumentNullException.ThrowIfNull(argument: continuum);
-        ArgumentNullException.ThrowIfNull(argument: text);
-        ArgumentNullException.ThrowIfNull(argument: simulation);
-        ArgumentNullException.ThrowIfNull(argument: settings);
-        ArgumentNullException.ThrowIfNull(argument: binder);
-        ArgumentNullException.ThrowIfNull(argument: envelope);
-        ArgumentNullException.ThrowIfNull(argument: seatBindings);
-        ArgumentNullException.ThrowIfNull(argument: animator);
-        ArgumentNullException.ThrowIfNull(argument: audio);
-        ArgumentNullException.ThrowIfNull(argument: composition);
-        ArgumentNullException.ThrowIfNull(argument: composer);
-        ArgumentNullException.ThrowIfNull(argument: sdfDocuments);
-        ArgumentNullException.ThrowIfNull(argument: viewports);
-        ArgumentNullException.ThrowIfNull(argument: adjacencies);
-        ArgumentNullException.ThrowIfNull(argument: markers);
-        ArgumentNullException.ThrowIfNull(argument: resolveIcon);
-
-        m_markers = markers;
-        m_resolveIcon = resolveIcon;
-
-        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-            m_markerChips[slot] = [];
-        }
-
-        m_viewports = viewports;
-        m_composition = composition;
-        m_composer = composer;
-        m_continuum = continuum;
-        m_text = text;
-
-        m_audio = audio;
-        // The machine-source resolver: the director diffs the binder's LIVE machines by
-        // reference each produced frame, so a boot/eject/live-swap rebinds the mixer source and a machine booting
-        // late into a referenced slot self-heals. Wired here — the produce path's composition point — and only ever
-        // invoked from the director's pump-thread Publish.
-        audio.MachineSourceResolver = binder.AudioMachine;
-        m_frameRate = frameRate;
-        m_client = client;
-        m_anchor = anchor;
-        m_speech = speech;
-        m_overlayFacts = overlayFacts;
-        m_roster = client.Roster;
-        m_simulation = simulation;
-        m_settings = settings;
-        m_binder = binder;
-        m_seatBindings = seatBindings;
-        m_animator = animator;
-        m_sdfDocuments = sdfDocuments;
-
-        // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before
-        // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.
-        m_client.UpdateRenderPoses(alpha: 0f);
-
-        var definition = m_client.Definition;
-
-        m_text.Reconcile(definition: definition);
-
-        m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
-        // The emitter freezes the boot authoring policy, seeds the stamp pool, and takes the shimmer baseline; the
-        // audio director's boot derivation follows (a booted world may already author speakers/facets/sounds).
-        m_emitter = new WorldSceneEmitter(
-            anchor: anchor,
-            animator: animator,
-            audio: audio,
-            client: client,
-            continuum: continuum,
-            settings: settings,
-            text: text
-        );
-        m_adjacencies = new WorldAdjacencySceneEmitter(
-            client: client,
-            source: adjacencies,
-            suppressEntity: entity => continuum.IsFollowed(entity: in entity)
-        );
-        m_audio.ReconcileSpeakers(definition: definition);
-        m_fields = new WorldFieldEmitter(client: client);
-        // Composing the emitter runs the ONE capacity probe (its worst-case branch: WorldRigCatalog.DetailedAvatarCapacity
-        // detailed avatars plus the remaining coarse crowd bodies, the reserved
-        // placement instances, the worst-case animated pool, and the authoring headroom), freezing the word, instance,
-        // and dynamic-transform envelopes every live rebuild fits inside by construction.
-        try {
-            // ParkPosition rides SdfCompositionFrameSource's own default (below the floor, outside the camera and
-            // tile-cull reach) — every emitter that hides a slot reads it back from SdfEmitContext.ParkPosition
-            // rather than carrying its own copy of the value.
-            m_composed = new SdfCompositionFrameSource(
-                dresser: this,
-                emitters: [m_emitter, m_sdfDocuments, m_adjacencies, m_fields]
-            );
-        } catch (SdfProgramCapacityException capacity) {
-            // The probe is the only place the WHOLE composed worst case exists, so it is the only place that can name
-            // what did not fit. Re-raise it as this world's own refusal so the composition root reports it the way it
-            // reports every other refused boot document, rather than letting an engine ceiling surface as an
-            // unhandled exception out of a service factory.
-            throw new WorldRenderCapacityRefusedException(
-                innerException: capacity,
-                message: (((((((string)$"the composed render scene exceeds the engine's {capacity.Limit}-{capacity.Capacity} ceiling — {definition.Placements.Count} placement row(s), {definition.Screens.Count} screen(s), ")
-                    + $"population {WorldBodiesLimits.CapacityCeiling} body slots, and ")
-                    + $"{WorldAdjacencyBands.ProjectionCapacity(definition: definition)} adjacency band(s) at ")
-                    + $"{WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid(s) + {WorldAdjacencyGeometry.MaximumEntitiesPerBand} ")
-                    + $"body(ies) each. Author fewer rows, or fewer adjacency edges (a band is reserved for every direct ")
-                    + $"edge plus every derivable corner pair).")
-            );
-        }
-        ProgramWordCapacity = m_composed.WorstCaseProgramWordCapacity;
-        InstanceCapacity = m_composed.WorstCaseInstanceCapacity;
-        DynamicTransformCapacity = m_composed.WorstCaseDynamicTransformCapacity;
-
-        // Publish the probed envelope + a JOINT candidate measurer so a scene/screen/placement mutation is
-        // capacity-checked at apply time against the SAME worst-case build (avatars and the animated pool are always at
-        // worst case; scene/screens/static placements measure AS AUTHORED, so authoring consumes the reserved room
-        // before the loud rejection) — and, composition-safely, against whatever puck.sdf.v1 document is CURRENTLY
-        // loaded (see MeasureComposed: measuring the world emitter alone would let a mutation spend capacity
-        // the loaded document already holds, since the packed tables the two share are computed over the COMPOSED
-        // program and are not additive).
-        _ = envelope.Configure(
-            programWordCapacity: ProgramWordCapacity,
-            instanceCapacity: InstanceCapacity,
-            measure: candidate => MeasureComposed(
-                worldDefinition: candidate,
-                documentProgram: m_sdfDocuments.CurrentProgram
-            )
-        );
-
-        // THE RECIPROCAL HALF (the asymmetric-join fix): a puck.sdf.v1 document load (world.sdf.load) commits OUTSIDE
-        // WorldRenderEnvelope's queued-mutation path entirely — it is a client-local Immediate door (see
-        // WorldSdfCommandModule), never a WorldMutation the server drains — so it needs its OWN composed-admission
-        // check against the SAME frozen floors, reusing the SAME MeasureComposed method with the roles swapped: the
-        // CANDIDATE is the incoming document, the CURRENT side is the live world definition (m_client.Definition, read
-        // fresh at call time so a document loaded after a scene mutation is checked against what that mutation left
-        // behind, never a stale snapshot). Without this, a scene mutation could spend capacity a document isn't
-        // currently using, and a subsequently loaded — individually valid — document would commit unchecked and
-        // overflow the composed program at the next rebuild.
-        m_sdfDocuments.Configure(
-            programWordCapacity: ProgramWordCapacity,
-            instanceCapacity: InstanceCapacity,
-            measureComposed: candidateProgram => MeasureComposed(
-                worldDefinition: m_client.Definition,
-                documentProgram: candidateProgram
-            )
-        );
-
-        // NEVER m_client.DefinitionRevision here: the client's primer delivery (LoopbackTransport.Bind, run
-        // synchronously inside the client's OWN DI factory, before this type is ever constructed) already bumped the
-        // revision once, so capturing it as the baseline would make ReconcileDelivery's very first call see "nothing
-        // moved" and skip forever absent a LATER live mutation — a fresh boot with zero mutations would leave every
-        // derived face (session/view/testPattern/camera/capture/qr) frozen at its reserved None placeholder forever.
-        // A sentinel outside the revision's real range (which only ever counts up from 0) guarantees the first
-        // ReconcileDelivery call always reconciles once, exactly like every later delivery.
-        m_builtDefinitionRevision = int.MinValue;
-    }
 
     // The BUILTIN viewport ladder for the player at slot-order position `index` of `count`, used only when the
     // world authors no `views.layouts` (WorldViewComposer.ResolveBuiltin's fallback). NormalizedRect convention:
@@ -397,6 +207,177 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         };
     }
 
+    // Builds this frame's candidate marker instances ONCE (not once per seat): every authored `markers` row
+    // resolves its look (icon, alpha, size, ring color/alpha) a single time, then fans out into one candidate per
+    // tracked source instance — every declared speaker row for a Speakers source, or the one authored point for a
+    // Point source. A speaker's pose is the SAME one the audio director hears (m_audio.TryResolveSpeakerPose), so a
+    // marker chip never disagrees with what the mix plays from. A ring's world-space radius reads a Bed speaker's
+    // own support radius; every other speaker kind (and every Point source) carries none.
+    private void ComposeMarkerCandidates(WorldDefinition definition) {
+        m_markerCandidates.Clear();
+
+        var markers = definition.Markers;
+        var tick = m_client.Tick;
+
+        for (var index = 0; (index < markers.Count); index++) {
+            var marker = markers[index];
+            var icon = m_resolveIcon(marker.Icon);
+            var chipAlpha = marker.Style.ChipAlpha.Resolve(
+                definition: definition,
+                fallback: 0f,
+                tick: tick
+            );
+            var wantsRing = (marker.Ring is not null);
+            var ringColor = (wantsRing
+                ? ResolveMarkerColor(
+                    color: marker.Style.RingColor,
+                    definition: definition,
+                    tick: tick
+                )
+                : default
+            );
+            var ringAlpha = ((wantsRing && (marker.Style.RingAlpha is { } authoredRingAlpha))
+                ? authoredRingAlpha.Resolve(
+                    definition: definition,
+                    fallback: 0f,
+                    tick: tick
+                )
+                : 0f
+            );
+
+            if (marker.Source is WorldMarkerSource.Speakers) {
+                var speakers = definition.Speakers;
+
+                for (var speakerIndex = 0; (speakerIndex < speakers.Count); speakerIndex++) {
+                    var speaker = speakers[speakerIndex];
+
+                    if (!m_audio.TryResolveSpeakerPose(
+                        position: out var position,
+                        speaker: speaker,
+                        transforms: m_transforms
+                    )) {
+                        continue;
+                    }
+
+                    var ringRadius = ((wantsRing && (speaker is WorldSpeaker.Bed bed))
+                        ? bed.Radius
+                        : 0f
+                    );
+
+                    m_markerCandidates.Add(item: new MarkerCandidate(
+                        ChipAlpha: chipAlpha,
+                        IconGlyph0: icon.Glyph0,
+                        IconGlyph1: icon.Glyph1,
+                        Position: position,
+                        RingAlpha: ringAlpha,
+                        RingColor: ringColor,
+                        RingRadiusWorld: ringRadius,
+                        Size: marker.Style.Size
+                    ));
+                }
+            } else if (marker.Source is WorldMarkerSource.Point point) {
+                m_markerCandidates.Add(item: new MarkerCandidate(
+                    ChipAlpha: chipAlpha,
+                    IconGlyph0: icon.Glyph0,
+                    IconGlyph1: icon.Glyph1,
+                    Position: point.Position,
+                    RingAlpha: ringAlpha,
+                    RingColor: ringColor,
+                    RingRadiusWorld: 0f,
+                    Size: marker.Style.Size
+                ));
+            }
+        }
+    }
+    // One seat's marker set: every candidate resolved to a world pose (ComposeMarkerCandidates), projected into
+    // the seat's viewport, then culled to WorldMarkerCapacity.MaxChipsPerSeat nearest the camera — the same
+    // bounded-admission shape the binding bar's own per-seat reservation uses. A dropped chip is off-screen
+    // priority (the farthest candidates), never a nearer one.
+    private OverlayMarkerSeat ComposeMarkerSeat(int slot, NormalizedRect region, in CameraSnapshot camera, uint width, uint height) {
+        var budget = Math.Min(
+            val1: m_markerCandidates.Count,
+            val2: WorldMarkerCapacity.MaxChipsPerSeat
+        );
+
+        if (budget == 0) {
+            return new OverlayMarkerSeat(
+                Chips: ReadOnlyMemory<OverlayMarkerChip>.Empty,
+                Viewport: region
+            );
+        }
+
+        if (m_markerChips[slot].Length < budget) {
+            m_markerChips[slot] = new OverlayMarkerChip[budget];
+        }
+
+        var chips = m_markerChips[slot];
+        var count = 0;
+        Span<float> depths = stackalloc float[WorldMarkerCapacity.MaxChipsPerSeat];
+
+        foreach (var candidate in m_markerCandidates) {
+            if (!TryProjectMarker(
+                camera: in camera,
+                height: height,
+                pixelsPerUnit: out var pixelsPerUnit,
+                px: out var px,
+                py: out var py,
+                region: in region,
+                width: width,
+                world: candidate.Position
+            )) {
+                continue;
+            }
+
+            var depth = Vector3.Dot(
+                vector1: (candidate.Position - camera.Position),
+                vector2: camera.Forward
+            );
+            int writeSlot;
+
+            if (count < budget) {
+                writeSlot = count++;
+            } else {
+                var farthest = 0;
+
+                for (var i = 1; (i < budget); i++) {
+                    if (depths[i] > depths[farthest]) {
+                        farthest = i;
+                    }
+                }
+
+                if (depth >= depths[farthest]) {
+                    continue;
+                }
+
+                writeSlot = farthest;
+            }
+
+            depths[writeSlot] = depth;
+            chips[writeSlot] = new OverlayMarkerChip(
+                CenterX: px,
+                CenterY: py,
+                ChipAlpha: candidate.ChipAlpha,
+                IconGlyph0: candidate.IconGlyph0,
+                IconGlyph1: candidate.IconGlyph1,
+                Pulse: false,
+                PlateHalf: candidate.Size,
+                RingAlpha: candidate.RingAlpha,
+                RingColor: candidate.RingColor,
+                RingRadiusPx: ((candidate.RingRadiusWorld > 0f)
+                ? (candidate.RingRadiusWorld * pixelsPerUnit)
+                : 0f),
+                Selected: false
+            );
+        }
+
+        return new OverlayMarkerSeat(
+            Chips: chips.AsMemory(
+                length: count,
+                start: 0
+            ),
+            Viewport: region
+        );
+    }
     // Concatenate two row lists into one (document rows + derived rows) for the binder reconcile — a small allocation at
     // the delivery boundary only, never per-frame.
     private static IReadOnlyList<T> Concat<T>(IReadOnlyList<T> first, IReadOnlyList<T> second) {
@@ -552,253 +533,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         );
         m_builtDefinitionRevision = definitionRevision;
     }
-
-    // One authored `markers` row instance's resolved look, cached once per Dress call (every seat's cull reads the
-    // SAME candidate list — see ComposeMarkerCandidates/ComposeMarkerSeat). RingRadiusWorld is 0 for an instance
-    // with no ring (no authored ring policy, or a tracked row that does not resolve the policy's field).
-    private readonly record struct MarkerCandidate(
-        Vector3 Position,
-        float RingRadiusWorld,
-        ushort IconGlyph0,
-        ushort IconGlyph1,
-        float ChipAlpha,
-        float Size,
-        RgbaColor RingColor,
-        float RingAlpha
-    );
-
-    // Resolves a color field that may be absent (a marker row's style.ringColor, meaningful only when a ring is
-    // authored) — Zero (transparent black) when absent, matching every other absence-is-meaning field.
-    private static RgbaColor ResolveMarkerColor(BindableColor? color, WorldDefinition definition, ulong tick) {
-        if (color is not { } bound) {
-            return default;
-        }
-
-        var resolved = bound.Resolve(
-            definition: definition,
-            fallback: default,
-            tick: tick
-        );
-
-        return new RgbaColor(
-            A: resolved.W,
-            B: resolved.Z,
-            G: resolved.Y,
-            R: resolved.X
-        );
-    }
-    // Builds this frame's candidate marker instances ONCE (not once per seat): every authored `markers` row
-    // resolves its look (icon, alpha, size, ring color/alpha) a single time, then fans out into one candidate per
-    // tracked source instance — every declared speaker row for a Speakers source, or the one authored point for a
-    // Point source. A speaker's pose is the SAME one the audio director hears (m_audio.TryResolveSpeakerPose), so a
-    // marker chip never disagrees with what the mix plays from. A ring's world-space radius reads a Bed speaker's
-    // own support radius; every other speaker kind (and every Point source) carries none.
-    private void ComposeMarkerCandidates(WorldDefinition definition) {
-        m_markerCandidates.Clear();
-
-        var markers = definition.Markers;
-        var tick = m_client.Tick;
-
-        for (var index = 0; (index < markers.Count); index++) {
-            var marker = markers[index];
-            var icon = m_resolveIcon(marker.Icon);
-            var chipAlpha = marker.Style.ChipAlpha.Resolve(
-                definition: definition,
-                fallback: 0f,
-                tick: tick
-            );
-            var wantsRing = (marker.Ring is not null);
-            var ringColor = (wantsRing
-                ? ResolveMarkerColor(
-                    color: marker.Style.RingColor,
-                    definition: definition,
-                    tick: tick
-                )
-                : default);
-            var ringAlpha = ((wantsRing && (marker.Style.RingAlpha is { } authoredRingAlpha))
-                ? authoredRingAlpha.Resolve(
-                    definition: definition,
-                    fallback: 0f,
-                    tick: tick
-                )
-                : 0f);
-
-            if (marker.Source is WorldMarkerSource.Speakers) {
-                var speakers = definition.Speakers;
-
-                for (var speakerIndex = 0; (speakerIndex < speakers.Count); speakerIndex++) {
-                    var speaker = speakers[speakerIndex];
-
-                    if (!m_audio.TryResolveSpeakerPose(
-                        position: out var position,
-                        speaker: speaker,
-                        transforms: m_transforms
-                    )) {
-                        continue;
-                    }
-
-                    var ringRadius = ((wantsRing && (speaker is WorldSpeaker.Bed bed))
-                        ? bed.Radius
-                        : 0f);
-
-                    m_markerCandidates.Add(item: new MarkerCandidate(
-                        ChipAlpha: chipAlpha,
-                        IconGlyph0: icon.Glyph0,
-                        IconGlyph1: icon.Glyph1,
-                        Position: position,
-                        RingAlpha: ringAlpha,
-                        RingColor: ringColor,
-                        RingRadiusWorld: ringRadius,
-                        Size: marker.Style.Size
-                    ));
-                }
-            } else if (marker.Source is WorldMarkerSource.Point point) {
-                m_markerCandidates.Add(item: new MarkerCandidate(
-                    ChipAlpha: chipAlpha,
-                    IconGlyph0: icon.Glyph0,
-                    IconGlyph1: icon.Glyph1,
-                    Position: point.Position,
-                    RingAlpha: ringAlpha,
-                    RingColor: ringColor,
-                    RingRadiusWorld: 0f,
-                    Size: marker.Style.Size
-                ));
-            }
-        }
-    }
-    // One seat's marker set: every candidate resolved to a world pose (ComposeMarkerCandidates), projected into
-    // the seat's viewport, then culled to WorldMarkerCapacity.MaxChipsPerSeat nearest the camera — the same
-    // bounded-admission shape the binding bar's own per-seat reservation uses. A dropped chip is off-screen
-    // priority (the farthest candidates), never a nearer one.
-    private OverlayMarkerSeat ComposeMarkerSeat(int slot, NormalizedRect region, in CameraSnapshot camera, uint width, uint height) {
-        var budget = Math.Min(
-            val1: m_markerCandidates.Count,
-            val2: WorldMarkerCapacity.MaxChipsPerSeat
-        );
-
-        if (budget == 0) {
-            return new OverlayMarkerSeat(
-                Chips: ReadOnlyMemory<OverlayMarkerChip>.Empty,
-                Viewport: region
-            );
-        }
-
-        if (m_markerChips[slot].Length < budget) {
-            m_markerChips[slot] = new OverlayMarkerChip[budget];
-        }
-
-        var chips = m_markerChips[slot];
-        var count = 0;
-        Span<float> depths = stackalloc float[WorldMarkerCapacity.MaxChipsPerSeat];
-
-        foreach (var candidate in m_markerCandidates) {
-            if (!TryProjectMarker(
-                camera: in camera,
-                height: height,
-                pixelsPerUnit: out var pixelsPerUnit,
-                px: out var px,
-                py: out var py,
-                region: in region,
-                width: width,
-                world: candidate.Position
-            )) {
-                continue;
-            }
-
-            var depth = Vector3.Dot(
-                vector1: (candidate.Position - camera.Position),
-                vector2: camera.Forward
-            );
-            int writeSlot;
-
-            if (count < budget) {
-                writeSlot = count++;
-            } else {
-                var farthest = 0;
-
-                for (var i = 1; (i < budget); i++) {
-                    if (depths[i] > depths[farthest]) {
-                        farthest = i;
-                    }
-                }
-
-                if (depth >= depths[farthest]) {
-                    continue;
-                }
-
-                writeSlot = farthest;
-            }
-
-            depths[writeSlot] = depth;
-            chips[writeSlot] = new OverlayMarkerChip(
-                CenterX: px,
-                CenterY: py,
-                ChipAlpha: candidate.ChipAlpha,
-                IconGlyph0: candidate.IconGlyph0,
-                IconGlyph1: candidate.IconGlyph1,
-                Pulse: false,
-                PlateHalf: candidate.Size,
-                RingAlpha: candidate.RingAlpha,
-                RingColor: candidate.RingColor,
-                RingRadiusPx: ((candidate.RingRadiusWorld > 0f)
-                    ? (candidate.RingRadiusWorld * pixelsPerUnit)
-                    : 0f),
-                Selected: false
-            );
-        }
-
-        return new OverlayMarkerSeat(
-            Chips: chips.AsMemory(
-                length: count,
-                start: 0
-            ),
-            Viewport: region
-        );
-    }
-    // Perspective-projects a world point into a seat viewport's pixel space through the seat's own CameraSnapshot
-    // frame. False behind the near plane or generously outside the view (the clip rect would discard the pixels
-    // anyway — this just skips the record). pixelsPerUnit is the on-screen scale at the point's DEPTH (a ring's
-    // world-radius -> px conversion; an approximation that reads as a radius indicator, not a perspective-correct
-    // 3D circle — deliberate).
-    private static bool TryProjectMarker(in CameraSnapshot camera, in NormalizedRect region, uint width, uint height, Vector3 world, out float px, out float py, out float pixelsPerUnit) {
-        px = 0f;
-        py = 0f;
-        pixelsPerUnit = 0f;
-
-        var delta = (world - camera.Position);
-        var depth = Vector3.Dot(
-            vector1: delta,
-            vector2: camera.Forward
-        );
-
-        if (depth < 0.05f) {
-            return false;
-        }
-
-        var ndcX = (Vector3.Dot(
-            vector1: delta,
-            vector2: camera.Right
-        ) / ((depth * camera.TanHalfFieldOfView) * camera.AspectRatio));
-        var ndcY = (Vector3.Dot(
-            vector1: delta,
-            vector2: camera.Up
-        ) / (depth * camera.TanHalfFieldOfView));
-
-        if (
-            (MathF.Abs(x: ndcX) > 1.5f) ||
-            (MathF.Abs(x: ndcY) > 1.5f)
-        ) {
-            return false;
-        }
-
-        var regionHeight = (region.Height * height);
-
-        px = ((region.X * width) + ((0.5f + (0.5f * ndcX)) * (region.Width * width)));
-        py = ((region.Y * height) + ((0.5f - (0.5f * ndcY)) * regionHeight));
-        pixelsPerUnit = ((regionHeight * 0.5f) / (depth * camera.TanHalfFieldOfView));
-
-        return true;
-    }
     // Frames the slot's view at the region's pixel size (region × window dims), so each split keeps its own aspect.
     // The rig is the seat's chase rig by default; while its camera control application is active, views.cameraRig
     // frames it instead. The anchor is the render pose (interpolated and error-eased,
@@ -895,7 +629,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 tick: m_simulation.Tick
             );
 
-            if ((liveScale > 0f) && (liveScale != 1f)) {
+            if (
+                (liveScale > 0f) &&
+                (liveScale != 1f)
+            ) {
                 var scaledTarget = (bodyPosition + ((target - bodyPosition) * liveScale));
 
                 eye = (scaledTarget + ((eye - target) * liveScale));
@@ -974,11 +711,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             )
         );
     }
-    private IWorldCameraProgramRig ResolveCameraModeRig(WorldCameraProgram cameraRig, WorldDefinition definition, int slot) =>
-        (m_cameraModeRigCache[slot] ??= new WorldCameraRigCompiler.Cache()).Resolve(
-            definition: definition,
-            program: cameraRig
-        );
     // The one shared anchor→pose resolver the camera path reads: entity/part ride the live snapshot pose, a
     // placement rides its stamped transform (WorldAnchorGeometry, the same math speakers read), a group rides its
     // smoothed centroid + spread, a seat-relative anchor rides the seat's perceived body (or the recent speaker),
@@ -1044,23 +776,38 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                 return (Vector3.Zero, Quaternion.Identity, 0f);
         }
     }
-    private IWorldCameraProgramRig ResolveNamedCameraRig(WorldDefinition definition, string name, WorldCameraProgram program) {
-        if (!m_namedCameraRigCache.TryGetValue(
-            key: name,
-            value: out var cache
-        )) {
-            cache = new WorldCameraRigCompiler.Cache();
-            m_namedCameraRigCache[name] = cache;
+    private IWorldCameraProgramRig ResolveCameraModeRig(WorldCameraProgram cameraRig, WorldDefinition definition, int slot) =>
+        (m_cameraModeRigCache[slot] ??= new WorldCameraRigCompiler.Cache()).Resolve(
+            definition: definition,
+            program: cameraRig
+        );
+    private SdfAnchor? ResolveLightAnchor(WorldAnchor anchor) =>
+        WorldLightAnchorResolver.Resolve(
+            anchor: anchor,
+            client: m_client,
+            stamps: m_animator,
+            transforms: m_transforms
+        );
+    // Resolves a color field that may be absent (a marker row's style.ringColor, meaningful only when a ring is
+    // authored) — Zero (transparent black) when absent, matching every other absence-is-meaning field.
+    private static RgbaColor ResolveMarkerColor(BindableColor? color, WorldDefinition definition, ulong tick) {
+        if (color is not { } bound) {
+            return default;
         }
 
-        return cache.Resolve(
+        var resolved = bound.Resolve(
             definition: definition,
-            program: program
+            fallback: default,
+            tick: tick
+        );
+
+        return new RgbaColor(
+            A: resolved.W,
+            B: resolved.Z,
+            G: resolved.Y,
+            R: resolved.X
         );
     }
-    // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/part/placement/
-    // group, or null = world), motion, aim, lens, and group spread. Returns
-    // false when the name resolves no camera row (a faulted layout slot renders nothing rather than a bogus view).
     private bool ResolveNamedCamera(string name, NormalizedRect region, uint width, uint height, float deltaSeconds, out CameraSnapshot camera) {
         camera = default;
 
@@ -1123,6 +870,81 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         );
 
         return true;
+    }
+    private IWorldCameraProgramRig ResolveNamedCameraRig(WorldDefinition definition, string name, WorldCameraProgram program) {
+        if (!m_namedCameraRigCache.TryGetValue(
+            key: name,
+            value: out var cache
+        )) {
+            cache = new WorldCameraRigCompiler.Cache();
+            m_namedCameraRigCache[name] = cache;
+        }
+
+        return cache.Resolve(
+            definition: definition,
+            program: program
+        );
+    }
+    // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/part/placement/
+    // group, or null = world), motion, aim, lens, and group spread. Returns
+    // false when the name resolves no camera row (a faulted layout slot renders nothing rather than a bogus view).
+    // A pipeline's iMouse this frame, Shadertoy's stateful convention in the slot's OWN pixel space (origin bottom-left,
+    // y up, matching the prelude's fragCoord flip): the pointer's CLIENT position maps to FRAME pixels by the same
+    // per-axis frame/client scale WorldCursorFeed.Decide applies (the presenters stretch the produced frame over the
+    // whole back buffer), then into the slot by its region's pixel origin. No pointer feed (an offscreen boot) or no
+    // reported position yet leaves the value untouched — zero until the first motion.
+    private Vector4 ResolvePipelineMouse(WorldPipelineRuntime.Entry entry, NormalizedRect region, uint width, uint height) {
+        if (m_pipelines?.ReadPointer is not { } readPointer) {
+            return Vector4.Zero;
+        }
+
+        var sample = readPointer();
+
+        if (!sample.HasPosition) {
+            return entry.Mouse;
+        }
+
+        var framePosition = sample.ClientPosition;
+        var clientWidth = m_viewports.ClientWidth;
+        var clientHeight = m_viewports.ClientHeight;
+
+        if (
+            (clientWidth > 0) &&
+            (clientHeight > 0)
+        ) {
+            framePosition = new Vector2(
+                x: (sample.ClientPosition.X * (width / ((float)clientWidth))),
+                y: (sample.ClientPosition.Y * (height / ((float)clientHeight)))
+            );
+        }
+
+        var slotX = (framePosition.X - (region.X * width));
+        var slotY = ((region.Height * height) - (framePosition.Y - (region.Y * height)));
+        var previous = entry.Mouse;
+        var pressFrame = (sample.Pressed && !entry.MouseWasPressed);
+        var mouse = (sample.Pressed
+            ? new Vector4(
+                x: slotX,
+                y: slotY,
+                z: (pressFrame
+                ? slotX
+                : MathF.Abs(x: previous.Z)),
+                w: (pressFrame
+                ? slotY
+                : (-MathF.Abs(x: previous.W)))
+            )
+            : new Vector4(
+                x: previous.X,
+                y: previous.Y,
+                z: (-MathF.Abs(x: previous.Z)),
+                w: (-MathF.Abs(x: previous.W))
+            )
+        );
+
+        entry.Mouse = mouse;
+        entry.MouseWasPressed = sample.Pressed;
+
+        return mouse;
     }
     private SdfScreenDecalFrame? ResolveScreenDecal(int index) {
         if (
@@ -1212,7 +1034,54 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             )
         );
     }
+    // Perspective-projects a world point into a seat viewport's pixel space through the seat's own CameraSnapshot
+    // frame. False behind the near plane or generously outside the view (the clip rect would discard the pixels
+    // anyway — this just skips the record). pixelsPerUnit is the on-screen scale at the point's DEPTH (a ring's
+    // world-radius -> px conversion; an approximation that reads as a radius indicator, not a perspective-correct
+    // 3D circle — deliberate).
+    private static bool TryProjectMarker(in CameraSnapshot camera, in NormalizedRect region, uint width, uint height, Vector3 world, out float px, out float py, out float pixelsPerUnit) {
+        px = 0f;
+        py = 0f;
+        pixelsPerUnit = 0f;
 
+        var delta = (world - camera.Position);
+        var depth = Vector3.Dot(
+            vector1: delta,
+            vector2: camera.Forward
+        );
+
+        if (depth < 0.05f) {
+            return false;
+        }
+
+        var ndcX = (Vector3.Dot(
+            vector1: delta,
+            vector2: camera.Right
+        ) / ((depth * camera.TanHalfFieldOfView) * camera.AspectRatio));
+        var ndcY = (Vector3.Dot(
+            vector1: delta,
+            vector2: camera.Up
+        ) / (depth * camera.TanHalfFieldOfView));
+
+        if (
+            (MathF.Abs(x: ndcX) > 1.5f) ||
+            (MathF.Abs(x: ndcY) > 1.5f)
+        ) {
+            return false;
+        }
+
+        var regionHeight = (region.Height * height);
+
+        px = ((region.X * width) + ((0.5f + (0.5f * ndcX)) * (region.Width * width)));
+        py = ((region.Y * height) + ((0.5f - (0.5f * ndcY)) * regionHeight));
+        pixelsPerUnit = ((regionHeight * 0.5f) / (depth * camera.TanHalfFieldOfView));
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    /// <inheritdoc/>
+    public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);
     /// <inheritdoc/>
     public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         // deltaSeconds is the launcher's clamped presentation interval, distinct from its whole-step simulation delta.
@@ -1323,11 +1192,107 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var markerSeatCount = 0;
         Span<bool> seatSlotBound = stackalloc bool[PlayerRoster.MaxSlots];
 
+        // Only accepted rows create instances. Completed whole-pipeline candidates swap before this frame renders.
+        m_pipelines?.Reconcile(rows: m_client.Definition.Views.Pipelines);
+        m_pipelines?.PumpWatches();
+        m_fedPipelines.Clear();
+
         foreach (var composed in m_composer.Slots) {
             var region = composed.Region;
 
+            if (composed.Pipeline is { } pipelineName) {
+                // A pipeline slot: the SDF engine skips its own camera march for this slot (see SdfEngineNode's
+                // per-frame child-mask derivation) and shows the named views.pipelines row's compiled render instead.
+                // The camera here is a degenerate placeholder used ONLY when that name never resolved in the
+                // engine's children map — never a live march (a near-zero field of view keeps it finite/valid
+                // rather than an invalid all-zero default).
+                if (
+                    (m_pipelines is { } pipelines) &&
+                    m_fedPipelines.Add(item: pipelineName) &&
+                    pipelines.TryGet(
+                    entry: out var entry,
+                    name: pipelineName
+                )
+                ) {
+                    entry.Node.Resize(
+                        height: Math.Max(
+                            val1: 1u,
+                            val2: ((uint)(region.Height * height))
+                        ),
+                        width: Math.Max(
+                            val1: 1u,
+                            val2: ((uint)(region.Width * width))
+                        )
+                    );
+
+                    var pipelineDeltaSeconds = entry.AdvanceClock(deltaSeconds: deltaSeconds);
+
+                    var pipelineRow = WorldDefinitionRows.FindPipeline(
+                        name: pipelineName,
+                        pipelines: m_client.Definition.Views.Pipelines
+                    );
+                    // The paired camera, or NONE: a row without a camera (or whose name fails to resolve) hands the
+                    // pipeline iCameraFov 0 with zero vectors — the documented "no paired camera" signal a pipeline
+                    // branches on to keep its own Shadertoy iMouse orbit — never a made-up default eye.
+                    var cameraPos = Vector3.Zero;
+                    var cameraTarget = Vector3.Zero;
+                    var cameraUp = Vector3.Zero;
+                    var cameraFov = 0f;
+
+                    if (
+                        (pipelineRow?.Camera is { } pipelineCameraName) &&
+                        ResolveNamedCamera(
+                        camera: out var pipelineCamera,
+                        deltaSeconds: deltaSeconds,
+                        height: height,
+                        name: pipelineCameraName,
+                        region: region,
+                        width: width
+                    )
+                    ) {
+                        cameraPos = pipelineCamera.Position;
+                        cameraTarget = (pipelineCamera.Position + pipelineCamera.Forward);
+                        cameraUp = pipelineCamera.Up;
+                        cameraFov = (2f * MathF.Atan(x: pipelineCamera.TanHalfFieldOfView));
+                    }
+
+                    entry.Node.Input = new ShaderFrameInput(
+                        Seconds: entry.ClockSeconds,
+                        DeltaSeconds: pipelineDeltaSeconds,
+                        Mouse: ResolvePipelineMouse(
+                            entry: entry,
+                            height: height,
+                            region: region,
+                            width: width
+                        ),
+                        Date: Vector4.Zero,
+                        CameraPos: cameraPos,
+                        CameraTarget: cameraTarget,
+                        CameraUp: cameraUp,
+                        CameraFov: cameraFov
+                    );
+                }
+
+                m_views.Add(item: new SdfViewSnapshot(
+                    Camera: CameraSnapshot.LookAt(
+                        position: Vector3.UnitY,
+                        target: Vector3.Zero,
+                        fieldOfViewRadians: 0.001f,
+                        viewportWidth: width,
+                        viewportHeight: height
+                    ),
+                    Region: region
+                ) {
+                    Child = pipelineName,
+                    RenderScale = transitionScale,
+                    UpscaleSharpness = m_settings.UpscaleSharpness,
+                });
+
+                continue;
+            }
+
             if (composed.Camera is { } cameraName) {
-                // A camera-bearing slot: render the named authored camera into the rect (no seat pose / gizmo).
+                // Named cameras share the live resolution setting with seat cameras, including layout transitions.
                 if (ResolveNamedCamera(
                     camera: out var namedCamera,
                     deltaSeconds: deltaSeconds,
@@ -1340,7 +1305,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
                         Camera: namedCamera,
                         Region: region
                     ) {
-                        RenderScale = transitionScale,
+                        RenderScale = (m_settings.RenderScale * transitionScale),
                         UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {
@@ -1475,8 +1440,24 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var lighting = m_cycle.Resolve(
             definition: m_client.Definition,
             revision: m_client.DefinitionRevision,
-            tick: m_client.Tick
+            tick: m_client.Tick,
+            engineTick: m_client.EngineTick,
+            resolveLightAnchor: ResolveLightAnchor
         );
+
+        m_volumes.Clear();
+
+        foreach (var volume in m_emitter.StaticVolumes) {
+            if (m_volumes.Count < SdfProgramBuilder.MaxVolumes) {
+                m_volumes.Add(item: volume);
+            }
+        }
+
+        foreach (var volume in m_animator.Volumes) {
+            if (m_volumes.Count < SdfProgramBuilder.MaxVolumes) {
+                m_volumes.Add(item: volume);
+            }
+        }
 
         // Stashed on the way out (see m_dressedFrame): RenderViews runs LATER in the same produced frame and hands
         // this exact instance to every offscreen view, which derives its own submission from it. Returning it without
@@ -1493,51 +1474,18 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             DisableAmbientOcclusion = !m_settings.AmbientOcclusion,
             DisableSoftShadows = (m_settings.ShadowReach <= 0f),
             // Ambient occlusion — the world.ao toggle rides the DisableAmbientOcclusion lane.
-            // Far-field isolators (world.far-field): both features ship ON, so the frame's flags are the negated
-            // "disable" side of each toggle.
+            // The far-field isolator (world.far-field) ships ON, so the frame's flag is the negated "disable" side.
             DisableFarBound = !m_settings.FarBound,
-            DisableShadowEscapeExit = !m_settings.ShadowFarExit,
-            // Temporal accumulation ships ON — the raw two-sample estimate is a three-level quantity and reads as
-            // stipple on its own. The flag is the negated "disable" side, exactly like the far-field isolators.
-            DisableShadowAccumulation = !m_settings.ShadowAccumulation,
             DynamicTransforms = transforms,
+            Volumes = m_volumes,
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
-            // Lighting/sky: the static render.lighting/render.sky values (WorldRenderSettings resolves every absent
-            // field to SdfFrame's own pinned default, so an unauthored world uploads exactly what the frame already
-            // defaulted to), or this frame's point along render.cycle when the world authors one.
-            SunDirection = lighting.SunDirection,
-            SunWeight = lighting.SunWeight,
-            SunColor = lighting.SunColor,
-            AmbientBase = lighting.AmbientBase,
-            AmbientHemisphere = lighting.AmbientHemisphere,
-            AmbientColor = lighting.AmbientColor,
-            SkyEnabled = lighting.SkyEnabled,
-            SkyZenithColor = lighting.SkyZenithColor,
-            SkyHorizonColor = lighting.SkyHorizonColor,
-            SkyGroundColor = lighting.SkyGroundColor,
-            SkyFogDensity = lighting.SkyFogDensity,
-            SkySunDiscRadians = lighting.SkySunDiscRadians,
-            SkySunDiscIntensity = lighting.SkySunDiscIntensity,
-            SkyStarDensity = lighting.SkyStarDensity,
-            SkyStarBrightness = lighting.SkyStarBrightness,
-            SkyStarSeed = lighting.SkyStarSeed,
-            SkyStarTwinkleShare = lighting.SkyStarTwinkleShare,
-            SkyStarTwinkleDepth = lighting.SkyStarTwinkleDepth,
-            SkyStarTwinkleRate = lighting.SkyStarTwinkleRate,
-            SkyCloudColor = lighting.SkyCloudColor,
-            SkyCloudCoverage = lighting.SkyCloudCoverage,
-            SkyCloudSoftness = lighting.SkyCloudSoftness,
-            SkyCloudScale = lighting.SkyCloudScale,
-            SkyCloudSeed = lighting.SkyCloudSeed,
-            SkyCloudDrift = lighting.SkyCloudDrift,
-            SkyCloudSpin = lighting.SkyCloudSpin,
-            SkyCloudCurl = lighting.SkyCloudCurl,
-            SkyCloudShear = lighting.SkyCloudShear,
-            // The area-light shadow estimator's net index, taken from the DETERMINISTIC 240 Hz tick counter and never
-            // from m_elapsedSeconds — the sampler is seekable so that a replay at tick N draws the identical sun-disc
-            // directions, which a wall-clock accumulation would destroy.
+            // The environment: the static render.lighting/render.sky lanes, or this frame's point along
+            // render.cycle when the world authors one (a world.row.set render lands on the next frame).
+            Environment = lighting,
+            // The sky's clock (twinkle, cloud motion), taken from the deterministic tick counter and never from
+            // m_elapsedSeconds so a replay at tick N draws the identical sky.
             SampleIndex = ((uint)m_simulation.ElapsedTicks),
             ShadowDistanceScale = ((m_settings.ShadowReach >= 1f)
             ? 0f
@@ -1567,9 +1515,6 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     public void NotifyDeviceLost() {
         m_binder.NotifyDeviceLost();
     }
-    /// <inheritdoc/>
-    /// <inheritdoc/>
-    public void AdvanceBricks(ISdfBrickBakeService bakes) => m_fields.AdvanceBricks(bakes: bakes);
     public void PrepareScreenSources(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
         // Render + upload every CPU-fed screen for this frame off the sim tick advanced during CaptureFrame, so the
         // provider polled just after this call returns a handle to THIS frame's image. The engine seam calls this
@@ -1614,6 +1559,216 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             hostFrame: hostFrame
         );
     }
+
+    /// <summary>Initializes a new instance of the <see cref="WorldFramePresenter"/> class, composing the world scene
+    /// emitter over the snapshot-fed client view (the primer snapshot must already be delivered, so the capacity probe
+    /// and the first program declare the boot seats and census active).</summary>
+    /// <param name="frameRate">The frame-rate witness sampled once per captured frame (the <c>world.fps</c> verb reads it).</param>
+    /// <param name="client">The snapshot-fed entity view every pose, color, and active flag is read from.</param>
+    /// <param name="simulation">The host-ticked simulation whose completed tick drives presentation sources.</param>
+    /// <param name="settings">The live render settings read every captured frame (console-mutated in real time).</param>
+    /// <param name="binder">The screen binder owning the declared screens' CPU-fed GPU sources, published each frame.</param>
+    /// <param name="envelope">The render-capacity oracle configured here with the probed floors and the emitter's
+    /// candidate measurer, so the server can reject an over-envelope scene/screen mutation at apply time.</param>
+    /// <param name="seatBindings">The seat's published mode state — whether <c>views.cameraRig</c> frames it instead
+    /// of <c>views.seatRig</c>.</param>
+    /// <param name="animator">The animated-placement replay pool.</param>
+    /// <param name="audio">The narrow audio-director seam — the emitter derivation reconciled at the delivery
+    /// boundary and the per-frame snapshot publisher.</param>
+    /// <param name="anchor">The per-seat perception anchor — the one body index every seat-relative derivation here
+    /// (camera anchor pose, seat-join cue site, crowd soft-shadow centers) resolves through.</param>
+    /// <param name="composition">The shared live composition-override store (view.override layout/view.override camera) the composer reads.</param>
+    /// <param name="composer">The shared window composer (layout selection + eased transitions) the world.view.state read observes.</param>
+    /// <param name="viewports">The per-seat viewport + camera publication each dressed frame fills (the cursor
+    /// feed's unproject seam).</param>
+    /// <param name="sdfDocuments">The first-party puck.sdf.v1 document emitter (world.sdf.load composes into it) —
+    /// configured here with the SAME probed floors and the reciprocal composed measurer, so a document load is
+    /// checked against the live world definition exactly as a scene mutation is checked against the live document.</param>
+    /// <param name="continuum">The shared authority-to-presentation-frame pose resolver.</param>
+    /// <param name="text">The world-relative font catalog and packed GPU atlas.</param>
+    /// <param name="adjacencies">The injected adjacency resolver shared by rendering and collision.</param>
+    /// <param name="markers">The marker channel's store — published unconditionally every dressed frame (an empty
+    /// authored <c>markers</c> section, or none, clears the chips).</param>
+    /// <param name="resolveIcon">The boot document's icon-name resolver (badges and bound-action icons alike) — a
+    /// marker row's <c>icon</c> name resolves through it, same as every other icon reference. Threaded in as a
+    /// delegate (never a direct <c>WorldIconTable</c> reference) because <c>Puck.World.Client</c> cannot reference
+    /// <c>Puck.World</c>, which owns the table.</param>
+    /// <param name="speech">The speech clock a <see cref="WorldAnchor.RecentSpeaker"/> camera anchor reads.</param>
+    /// <param name="overlayFacts">The predicate evaluator a ranked camera anchor list selects through, or
+    /// <see langword="null"/> (every candidate condition then holds).</param>
+    /// <param name="pipelines">The shared shader-pipeline runtime, or <see langword="null"/> for a document/host with no
+    /// live pipeline children — every pipeline slot then falls through to its degenerate camera fallback.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldPipelineRuntime? pipelines = null) {
+        ArgumentNullException.ThrowIfNull(argument: frameRate);
+        ArgumentNullException.ThrowIfNull(argument: client);
+        ArgumentNullException.ThrowIfNull(argument: anchor);
+        ArgumentNullException.ThrowIfNull(argument: speech);
+        ArgumentNullException.ThrowIfNull(argument: continuum);
+        ArgumentNullException.ThrowIfNull(argument: text);
+        ArgumentNullException.ThrowIfNull(argument: simulation);
+        ArgumentNullException.ThrowIfNull(argument: settings);
+        ArgumentNullException.ThrowIfNull(argument: binder);
+        ArgumentNullException.ThrowIfNull(argument: envelope);
+        ArgumentNullException.ThrowIfNull(argument: seatBindings);
+        ArgumentNullException.ThrowIfNull(argument: animator);
+        ArgumentNullException.ThrowIfNull(argument: audio);
+        ArgumentNullException.ThrowIfNull(argument: composition);
+        ArgumentNullException.ThrowIfNull(argument: composer);
+        ArgumentNullException.ThrowIfNull(argument: sdfDocuments);
+        ArgumentNullException.ThrowIfNull(argument: viewports);
+        ArgumentNullException.ThrowIfNull(argument: adjacencies);
+        ArgumentNullException.ThrowIfNull(argument: markers);
+        ArgumentNullException.ThrowIfNull(argument: resolveIcon);
+
+        m_markers = markers;
+        m_resolveIcon = resolveIcon;
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            m_markerChips[slot] = [];
+        }
+
+        m_viewports = viewports;
+        m_composition = composition;
+        m_composer = composer;
+        m_continuum = continuum;
+        m_text = text;
+
+        m_audio = audio;
+        // The machine-source resolver: the director diffs the binder's LIVE machines by
+        // reference each produced frame, so a boot/eject/live-swap rebinds the mixer source and a machine booting
+        // late into a referenced slot self-heals. Wired here — the produce path's composition point — and only ever
+        // invoked from the director's pump-thread Publish.
+        audio.MachineSourceResolver = binder.AudioOutput;
+        m_frameRate = frameRate;
+        m_client = client;
+        m_anchor = anchor;
+        m_speech = speech;
+        m_overlayFacts = overlayFacts;
+        m_roster = client.Roster;
+        m_simulation = simulation;
+        m_settings = settings;
+        m_binder = binder;
+        m_seatBindings = seatBindings;
+        m_animator = animator;
+        m_sdfDocuments = sdfDocuments;
+        m_pipelines = pipelines;
+
+        // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before
+        // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.
+        m_client.UpdateRenderPoses(alpha: 0f);
+
+        var definition = m_client.Definition;
+
+        m_text.Reconcile(definition: definition);
+
+        m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
+        // The emitter freezes the boot authoring policy, seeds the stamp pool, and takes the shimmer baseline; the
+        // audio director's boot derivation follows (a booted world may already author speakers/facets/sounds).
+        m_emitter = new WorldSceneEmitter(
+            anchor: anchor,
+            animator: animator,
+            audio: audio,
+            client: client,
+            continuum: continuum,
+            settings: settings,
+            text: text
+        );
+        m_adjacencies = new WorldAdjacencySceneEmitter(
+            client: client,
+            source: adjacencies,
+            suppressEntity: entity => continuum.IsFollowed(entity: in entity)
+        );
+        m_audio.ReconcileSpeakers(definition: definition);
+        m_fields = new WorldFieldEmitter(client: client);
+        // Composing the emitter runs the ONE capacity probe (its worst-case branch: WorldRigCatalog.DetailedAvatarCapacity
+        // detailed avatars plus the remaining coarse crowd bodies, the reserved
+        // placement instances, the worst-case animated pool, and the authoring headroom), freezing the word, instance,
+        // and dynamic-transform envelopes every live rebuild fits inside by construction.
+        try {
+            // ParkPosition rides SdfCompositionFrameSource's own default (below the floor, outside the camera and
+            // tile-cull reach) — every emitter that hides a slot reads it back from SdfEmitContext.ParkPosition
+            // rather than carrying its own copy of the value.
+            m_composed = new SdfCompositionFrameSource(
+                dresser: this,
+                emitters: [m_emitter, m_sdfDocuments, m_adjacencies, m_fields]
+            );
+        } catch (SdfProgramCapacityException capacity) {
+            // The probe is the only place the WHOLE composed worst case exists, so it is the only place that can name
+            // what did not fit. Re-raise it as this world's own refusal so the composition root reports it the way it
+            // reports every other refused boot document, rather than letting an engine ceiling surface as an
+            // unhandled exception out of a service factory.
+            throw new WorldRenderCapacityRefusedException(
+                innerException: capacity,
+                message: (((((((string)$"the composed render scene exceeds the engine's {capacity.Limit}-{capacity.Capacity} ceiling — {definition.Placements.Count} placement row(s), {definition.Screens.Count} screen(s), ")
+                    + $"population {WorldBodiesLimits.CapacityCeiling} body slots, and ")
+                    + $"{WorldAdjacencyBands.ProjectionCapacity(definition: definition)} adjacency band(s) at ")
+                    + $"{WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid(s) + {WorldAdjacencyGeometry.MaximumEntitiesPerBand} ")
+                    + $"body(ies) each. Author fewer rows, or fewer adjacency edges (a band is reserved for every direct ")
+                    + $"edge plus every derivable corner pair).")
+            );
+        }
+        ProgramWordCapacity = m_composed.WorstCaseProgramWordCapacity;
+        InstanceCapacity = m_composed.WorstCaseInstanceCapacity;
+        DynamicTransformCapacity = m_composed.WorstCaseDynamicTransformCapacity;
+
+        // Publish the probed envelope + a JOINT candidate measurer so a scene/screen/placement mutation is
+        // capacity-checked at apply time against the SAME worst-case build (avatars and the animated pool are always at
+        // worst case; scene/screens/static placements measure AS AUTHORED, so authoring consumes the reserved room
+        // before the loud rejection) — and, composition-safely, against whatever puck.sdf.v1 document is CURRENTLY
+        // loaded (see MeasureComposed: measuring the world emitter alone would let a mutation spend capacity
+        // the loaded document already holds, since the packed tables the two share are computed over the COMPOSED
+        // program and are not additive).
+        _ = envelope.Configure(
+            programWordCapacity: ProgramWordCapacity,
+            instanceCapacity: InstanceCapacity,
+            measure: candidate => MeasureComposed(
+                worldDefinition: candidate,
+                documentProgram: m_sdfDocuments.CurrentProgram
+            )
+        );
+
+        // THE RECIPROCAL HALF (the asymmetric-join fix): a puck.sdf.v1 document load (world.sdf.load) commits OUTSIDE
+        // WorldRenderEnvelope's queued-mutation path entirely — it is a client-local Immediate door (see
+        // WorldSdfCommandModule), never a WorldMutation the server drains — so it needs its OWN composed-admission
+        // check against the SAME frozen floors, reusing the SAME MeasureComposed method with the roles swapped: the
+        // CANDIDATE is the incoming document, the CURRENT side is the live world definition (m_client.Definition, read
+        // fresh at call time so a document loaded after a scene mutation is checked against what that mutation left
+        // behind, never a stale snapshot). Without this, a scene mutation could spend capacity a document isn't
+        // currently using, and a subsequently loaded — individually valid — document would commit unchecked and
+        // overflow the composed program at the next rebuild.
+        m_sdfDocuments.Configure(
+            programWordCapacity: ProgramWordCapacity,
+            instanceCapacity: InstanceCapacity,
+            measureComposed: candidateProgram => MeasureComposed(
+                worldDefinition: m_client.Definition,
+                documentProgram: candidateProgram
+            )
+        );
+
+        // NEVER m_client.DefinitionRevision here: the client's primer delivery (LoopbackTransport.Bind, run
+        // synchronously inside the client's OWN DI factory, before this type is ever constructed) already bumped the
+        // revision once, so capturing it as the baseline would make ReconcileDelivery's very first call see "nothing
+        // moved" and skip forever absent a LATER live mutation — a fresh boot with zero mutations would leave every
+        // derived face (session/view/testPattern/camera/capture/qr) frozen at its reserved None placeholder forever.
+        // A sentinel outside the revision's real range (which only ever counts up from 0) guarantees the first
+        // ReconcileDelivery call always reconciles once, exactly like every later delivery.
+        m_builtDefinitionRevision = int.MinValue;
+    }
+
+    // One authored `markers` row instance's resolved look, cached once per Dress call (every seat's cull reads the
+    // SAME candidate list — see ComposeMarkerCandidates/ComposeMarkerSeat). RingRadiusWorld is 0 for an instance
+    // with no ring (no authored ring policy, or a tracked row that does not resolve the policy's field).
+    private readonly record struct MarkerCandidate(
+        Vector3 Position,
+        float RingRadiusWorld,
+        ushort IconGlyph0,
+        ushort IconGlyph1,
+        float ChipAlpha,
+        float Size,
+        RgbaColor RingColor,
+        float RingAlpha
+    );
 
     /// <summary>The frozen transform-slot count: maximum-sized catalog ranges for the detailed body band, one root
     /// slot per remaining crowd body, plus the reserved animated-placement replay pool.</summary>

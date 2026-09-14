@@ -14,8 +14,8 @@ namespace Puck.GamingBricks;
 /// The bounded queue semantics of the single-core worker apply to the group as ONE unit: <see cref="Submit"/> accepts
 /// exact tick/seat-input segments up to a finite pending window and applies producer backpressure at capacity rather
 /// than dropping or coalescing authoritative history, and <see cref="Step"/> is the synchronous submit-and-drain path
-/// <see cref="IMachineLink"/> exposes. While the link is live, a member's own <see cref="IScreenMachine.Step"/> is a
-/// no-op and its <see cref="IQueuedScreenMachine.Submit"/> is rejected: the host steps the link instead.
+/// <see cref="IMachineLink"/> exposes. While the link is live, a member's own <see cref="IMachineRuntime.Advance"/> is a
+/// no-op and its <see cref="IQueuedMachineRuntime.Submit"/> is rejected: the host steps the link instead.
 /// </para>
 /// <para>
 /// Time travel is coupled. One <see cref="MachineTimeTravel{TInput}"/> rides the group core, whose state image carries
@@ -34,26 +34,16 @@ namespace Puck.GamingBricks;
 /// serializable state image plus each submitted (tick budget, seat inputs) segment.</remarks>
 public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     private readonly IMachineGroupCore m_core;
-    private readonly IScreenMachine[] m_machines;
+    private readonly QueuedWorkerLifecycle<GroupWorkItem> m_lifecycle;
+    private readonly Lock m_lifecycleLock = new();
+    private readonly IMachineRuntime[] m_machines;
     private readonly int m_maximumPendingSteps;
     private readonly MachineTimeTravel<MachineLinkPads> m_timeTravel;
-    private readonly Queue<GroupWorkItem> m_work;
-    private readonly QueuedMachineWorker[] m_workers;
     private readonly string m_workerName;
+    private readonly QueuedMachineWorker[] m_workers;
 
-    private bool m_acceptingWork;
-    private long m_backpressureEvents;
-    private long m_completedSteps;
     private ulong m_cycleRemainder;
     private int m_disposed;
-    private long m_submittedSteps;
-    private Thread? m_worker;
-    private Exception? m_workerFault;
-
-    // Condition variable, not a plain gate: Monitor.Wait/Pulse require an object monitor, which System.Threading.Lock
-    // refuses (CS9216).
-    private readonly object m_workLock = new();
-    private readonly Lock m_lifecycleLock = new();
 
     /// <summary>Forms a link over two or more queued machines: each member's core is lent to this group, the medium is
     /// built over the lent cores, and the group's execution thread starts. A failure at any point returns every core
@@ -70,7 +60,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     /// <exception cref="InvalidOperationException">A member carries no content, or its core is already lent to another
     /// link.</exception>
     public LinkedMachineGroup(
-        IReadOnlyList<IScreenMachine> machines,
+        IReadOnlyList<IMachineRuntime> machines,
         IReadOnlyList<QueuedMachineWorker> workers,
         Func<IReadOnlyList<IQueuedMachineCore>, IMachineGroupCore> createCore,
         int maximumPendingSteps = 8,
@@ -99,9 +89,13 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             );
         }
 
+        m_lifecycle = new QueuedWorkerLifecycle<GroupWorkItem>(
+            maximumPendingSteps: maximumPendingSteps,
+            role: "link thread",
+            workerName: workerName
+        );
         m_machines = [.. machines];
         m_maximumPendingSteps = maximumPendingSteps;
-        m_work = new Queue<GroupWorkItem>(capacity: (maximumPendingSteps + 1));
         m_workerName = workerName;
         m_workers = [.. workers];
 
@@ -110,8 +104,8 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
 
         try {
             for (; (lentCount < m_workers.Length); ++lentCount) {
-                lent[lentCount] = m_workers[lentCount].LendCore(lender: this)
-                    ?? throw new InvalidOperationException(message: $"Member {lentCount} carries no content, so there is nothing to link.");
+                lent[lentCount] = (m_workers[lentCount].LendCore(lender: this)
+                    ?? throw new InvalidOperationException(message: $"Member {lentCount} carries no content, so there is nothing to link."));
             }
 
             m_core = createCore(arg: lent);
@@ -127,18 +121,16 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             throw;
         }
 
-        StartWorker();
+        m_lifecycle.Start(body: WorkerLoop);
     }
 
     /// <summary>Gets the number of submissions that encountered a full pending-segment window and waited for
     /// capacity.</summary>
-    public long BackpressureEvents {
-        get {
-            lock (m_workLock) {
-                return m_backpressureEvents;
-            }
-        }
-    }
+    public long BackpressureEvents =>
+        m_lifecycle.BackpressureEvents;
+    /// <summary>Gets the number of accepted group segments whose emulation has completed.</summary>
+    public long CompletedSteps =>
+        m_lifecycle.CompletedSteps;
     /// <inheritdoc/>
     public long CompletedTransfers {
         get {
@@ -147,14 +139,6 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             _ = RunOnLinkThread(work: () => transfers = m_core.CompletedTransfers);
 
             return transfers;
-        }
-    }
-    /// <summary>Gets the number of accepted group segments whose emulation has completed.</summary>
-    public long CompletedSteps {
-        get {
-            lock (m_workLock) {
-                return m_completedSteps;
-            }
         }
     }
     /// <summary>Gets the group's current shared cycle count, read on the group's execution thread — the monotonic stamp
@@ -169,34 +153,18 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         }
     }
     /// <inheritdoc/>
-    public IReadOnlyList<IScreenMachine> Machines =>
+    public IReadOnlyList<IMachineRuntime> Machines =>
         m_machines;
     /// <summary>Gets the maximum number of accepted group segments that may remain incomplete.</summary>
     public int MaximumPendingSteps =>
         m_maximumPendingSteps;
     /// <summary>Gets the number of accepted group segments not yet completed, including one currently
     /// executing.</summary>
-    public long PendingSteps {
-        get {
-            lock (m_workLock) {
-                return Math.Max(
-                    val1: 0L,
-                    val2: (m_submittedSteps - m_completedSteps)
-                );
-            }
-        }
-    }
+    public long PendingSteps =>
+        m_lifecycle.PendingSteps;
     /// <summary>Gets a group-thread fault description, or <see langword="null"/> while the link is healthy.</summary>
-    public string? QueueFault {
-        get {
-            lock (m_workLock) {
-                return ((m_workerFault is { } fault)
-                    ? $"{fault.GetType().Name}: {fault.Message}"
-                    : null
-                );
-            }
-        }
-    }
+    public string? QueueFault =>
+        m_lifecycle.Fault;
     /// <summary>Gets a fingerprint folding every byte the medium has carried, in order — the traffic signal two runs of
     /// the same linked script must agree on, read on the group's execution thread like <see cref="CycleCount"/> and
     /// <see cref="CompletedTransfers"/>.</summary>
@@ -207,6 +175,95 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             _ = RunOnLinkThread(work: () => fingerprint = m_core.TrafficFingerprint);
 
             return fingerprint;
+        }
+    }
+
+    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, bool forceStage) {
+        if (
+            (0 != Volatile.Read(location: ref m_disposed)) ||
+            (m_lifecycle.Worker is null) ||
+            (0UL == deltaTicks)
+        ) {
+            return QueuedMachineSubmission.Rejected;
+        }
+
+        if (inputs.Length != m_machines.Length) {
+            throw new ArgumentException(
+                message: $"A link over {m_machines.Length} machines needs one controller image per member; {inputs.Length} were supplied.",
+                paramName: nameof(inputs)
+            );
+        }
+
+        return m_lifecycle.Submit(item: GroupWorkItem.Step(
+            deltaTicks: deltaTicks,
+            forceStage: forceStage,
+            inputs: MachineLinkPads.From(inputs: inputs)
+        ));
+    }
+    // Each member publishes through its OWN worker's surfaces, so a linked machine's framebuffer, audio ring, feedback,
+    // and step count stay the same objects a host already reads.
+    private void PublishMembers(bool forceStage) {
+        foreach (var worker in m_workers) {
+            worker.PublishLentStep(forceStage: forceStage);
+        }
+    }
+    // Consume a tick budget against the exact integer accumulator and return the cycle budget it buys under the medium's
+    // current rate — ONE conversion for the whole group, so every member advances by identical wall time.
+    private ulong TakeCycleBudget(ulong ticks) {
+        var scaled = checked(((ticks * m_core.CyclesPerSecond) + m_cycleRemainder));
+
+        m_cycleRemainder = (scaled % EngineTicks.PerSecond);
+
+        return (scaled / EngineTicks.PerSecond);
+    }
+    private void WorkerLoop() {
+        var current = default(GroupWorkItem);
+
+        try {
+            while (true) {
+                current = m_lifecycle.TakeWork();
+
+                switch (current.Kind) {
+                    case GroupWorkKind.Step:
+                        var inputs = current.Inputs;
+                        var factor = m_timeTravel.FastForwardFactor;
+
+                        for (var repeat = 0; (repeat < factor); ++repeat) {
+                            var budget = checked((long)TakeCycleBudget(ticks: current.DeltaTicks));
+
+                            m_core.ApplyInput(input: in inputs);
+                            m_core.RunCycles(cycles: budget);
+                            m_timeTravel.Record(
+                                budget: budget,
+                                hostAccumulator: m_cycleRemainder,
+                                input: in inputs
+                            );
+                        }
+
+                        PublishMembers(forceStage: current.ForceStage);
+                        m_lifecycle.CompleteStep();
+
+                        break;
+                    case GroupWorkKind.Invoke:
+                        current.Invoke!();
+                        current.Completion!.Set();
+
+                        break;
+                    case GroupWorkKind.Barrier:
+                        current.Completion!.Set();
+
+                        break;
+                    case GroupWorkKind.Stop:
+                        current.Completion!.Set();
+
+                        return;
+                }
+            }
+        } catch (Exception exception) {
+            m_lifecycle.FaultWith(
+                current: current,
+                exception: exception
+            );
         }
     }
 
@@ -241,7 +298,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
                 return;
             }
 
-            StopWorker();
+            m_lifecycle.Stop();
             m_timeTravel.Dispose();
             m_core.Dispose();
 
@@ -249,6 +306,21 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
                 worker.ReturnCore(hostAccumulator: m_cycleRemainder);
             }
         }
+    }
+    /// <inheritdoc/>
+    // Enforces the interface's own "call from inside work already running on the link's thread" contract rather than
+    // marshaling: every current caller (a lent worker's memory-poke/reconfigure path) invokes this from inside a
+    // RunOnLinkThread work item, so a second RunOnLinkThread here would enqueue behind itself and never drain — the
+    // link thread waiting on work only it can dequeue.
+    public void InvalidateLinkHistory() {
+        if (!ReferenceEquals(
+            objA: Thread.CurrentThread,
+            objB: m_lifecycle.Worker
+        )) {
+            throw new InvalidOperationException(message: $"{nameof(InvalidateLinkHistory)} must run on the {m_workerName} link thread; call it from inside work already running there.");
+        }
+
+        m_timeTravel.Reset();
     }
     /// <summary>Rewinds the whole group to the oldest captured instant inside the requested native-frame window, or the
     /// nearest older instant when that window is empty. Every member and the medium's pacing land together.</summary>
@@ -277,57 +349,23 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         return rewound;
     }
     /// <inheritdoc/>
-    // Enforces the interface's own "call from inside work already running on the link's thread" contract rather than
-    // marshaling: every current caller (a lent worker's memory-poke/reconfigure path) invokes this from inside a
-    // RunOnLinkThread work item, so a second RunOnLinkThread here would enqueue behind itself and never drain — the
-    // link thread waiting on work only it can dequeue.
-    public void InvalidateLinkHistory() {
-        if (!ReferenceEquals(
-            objA: Thread.CurrentThread,
-            objB: m_worker
-        )) {
-            throw new InvalidOperationException(message: $"{nameof(InvalidateLinkHistory)} must run on the {m_workerName} link thread; call it from inside work already running there.");
-        }
-
-        m_timeTravel.Reset();
-    }
-    /// <inheritdoc/>
     public bool RunOnLinkThread(Action work) {
         ArgumentNullException.ThrowIfNull(argument: work);
 
         if (
             (0 != Volatile.Read(location: ref m_disposed)) ||
-            (m_worker is null)
+            (m_lifecycle.Worker is null)
         ) {
             return false;
         }
 
         using var completion = new ManualResetEventSlim(initialState: false);
-        var queued = false;
 
-        lock (m_workLock) {
-            if (
-                m_acceptingWork &&
-                (m_workerFault is null)
-            ) {
-                m_work.Enqueue(item: GroupWorkItem.ForInvoke(
-                    completion: completion,
-                    work: work
-                ));
-                Monitor.Pulse(obj: m_workLock);
-                queued = true;
-            }
-        }
-
-        if (queued) {
-            completion.Wait();
-        }
-
-        return queued;
+        return m_lifecycle.EnqueueAndWait(item: GroupWorkItem.ForInvoke(
+            completion: completion,
+            work: work
+        ));
     }
-    /// <inheritdoc/>
-    public void SeverLink() =>
-        Dispose();
     /// <summary>Sets the group's fast-forward factor — the number of exact tick/seat-input segments run per submission,
     /// clamped to at least 1. Every member advances the same number of segments, so the lockstep holds.</summary>
     /// <param name="factor">The exact-segment repeat count (1 = realtime).</param>
@@ -339,18 +377,21 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     public void SetRewindEnabled(bool enabled) =>
         _ = RunOnLinkThread(work: () => m_timeTravel.SetRewindEnabled(enabled: enabled));
     /// <inheritdoc/>
+    public void SeverLink() =>
+        Dispose();
+    /// <inheritdoc/>
     public void Step(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs) {
         if (EnqueueStep(
             deltaTicks: deltaTicks,
             forceStage: true,
             inputs: inputs
         ) == QueuedMachineSubmission.Rejected) {
-            ThrowIfFaulted();
+            m_lifecycle.ThrowIfFaulted();
 
             return;
         }
 
-        Drain();
+        m_lifecycle.Drain();
     }
     /// <summary>Accepts one exact tick/seat-input segment for ordered execution, applying producer backpressure at the
     /// group's pending-segment capacity.</summary>
@@ -363,227 +404,6 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             forceStage: false,
             inputs: inputs
         );
-
-    private void Drain() {
-        using var completion = new ManualResetEventSlim(initialState: false);
-
-        lock (m_workLock) {
-            if (
-                (m_workerFault is not null) ||
-                !m_acceptingWork
-            ) {
-                ThrowIfFaultedLocked();
-
-                return;
-            }
-
-            m_work.Enqueue(item: GroupWorkItem.Barrier(completion: completion));
-            Monitor.Pulse(obj: m_workLock);
-        }
-
-        completion.Wait();
-        ThrowIfFaulted();
-    }
-    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, bool forceStage) {
-        if (
-            (0 != Volatile.Read(location: ref m_disposed)) ||
-            (m_worker is null) ||
-            (0UL == deltaTicks)
-        ) {
-            return QueuedMachineSubmission.Rejected;
-        }
-
-        if (inputs.Length != m_machines.Length) {
-            throw new ArgumentException(
-                message: $"A link over {m_machines.Length} machines needs one controller image per member; {inputs.Length} were supplied.",
-                paramName: nameof(inputs)
-            );
-        }
-
-        var pads = MachineLinkPads.From(inputs: inputs);
-        var backpressured = false;
-
-        lock (m_workLock) {
-            while (
-                m_acceptingWork &&
-                (m_workerFault is null) &&
-                ((m_submittedSteps - m_completedSteps) >= m_maximumPendingSteps)
-            ) {
-                if (!backpressured) {
-                    backpressured = true;
-
-                    if (m_backpressureEvents < long.MaxValue) {
-                        ++m_backpressureEvents;
-                    }
-                }
-
-                Monitor.Wait(obj: m_workLock);
-            }
-
-            if (
-                !m_acceptingWork ||
-                (m_workerFault is not null)
-            ) {
-                return QueuedMachineSubmission.Rejected;
-            }
-
-            m_work.Enqueue(item: GroupWorkItem.Step(
-                deltaTicks: deltaTicks,
-                forceStage: forceStage,
-                inputs: pads
-            ));
-            ++m_submittedSteps;
-            Monitor.Pulse(obj: m_workLock);
-        }
-
-        return (backpressured
-            ? QueuedMachineSubmission.AcceptedAfterBackpressure
-            : QueuedMachineSubmission.Accepted
-        );
-    }
-    // Each member publishes through its OWN worker's surfaces, so a linked machine's framebuffer, audio ring, feedback,
-    // and step count stay the same objects a host already reads.
-    private void PublishMembers(bool forceStage) {
-        foreach (var worker in m_workers) {
-            worker.PublishLentStep(forceStage: forceStage);
-        }
-    }
-    private void StartWorker() {
-        lock (m_workLock) {
-            m_work.Clear();
-            m_acceptingWork = true;
-            m_workerFault = null;
-        }
-
-        m_worker = new Thread(start: WorkerLoop) {
-            IsBackground = true,
-            Name = m_workerName,
-        };
-        m_worker.Start();
-    }
-    private void StopWorker() {
-        var worker = m_worker;
-
-        if (worker is null) {
-            return;
-        }
-
-        using var completion = new ManualResetEventSlim(initialState: false);
-        var queued = false;
-
-        lock (m_workLock) {
-            m_acceptingWork = false;
-            Monitor.PulseAll(obj: m_workLock);
-
-            if (m_workerFault is null) {
-                m_work.Enqueue(item: GroupWorkItem.Stop(completion: completion));
-                Monitor.Pulse(obj: m_workLock);
-                queued = true;
-            }
-        }
-
-        if (queued) {
-            completion.Wait();
-        }
-
-        worker.Join();
-        m_worker = null;
-    }
-    // Consume a tick budget against the exact integer accumulator and return the cycle budget it buys under the medium's
-    // current rate — ONE conversion for the whole group, so every member advances by identical wall time.
-    private ulong TakeCycleBudget(ulong ticks) {
-        var scaled = checked(((ticks * m_core.CyclesPerSecond) + m_cycleRemainder));
-
-        m_cycleRemainder = (scaled % EngineTicks.PerSecond);
-
-        return (scaled / EngineTicks.PerSecond);
-    }
-    private GroupWorkItem TakeWork() {
-        lock (m_workLock) {
-            while (m_work.Count == 0) {
-                Monitor.Wait(obj: m_workLock);
-            }
-
-            return m_work.Dequeue();
-        }
-    }
-    private void ThrowIfFaulted() {
-        lock (m_workLock) {
-            ThrowIfFaultedLocked();
-        }
-    }
-    private void ThrowIfFaultedLocked() {
-        if (m_workerFault is { } fault) {
-            throw new InvalidOperationException(
-                innerException: fault,
-                message: $"The {m_workerName} link thread faulted."
-            );
-        }
-    }
-    private void WorkerLoop() {
-        var current = default(GroupWorkItem);
-
-        try {
-            while (true) {
-                current = TakeWork();
-
-                switch (current.Kind) {
-                    case GroupWorkKind.Step:
-                        var inputs = current.Inputs;
-                        var factor = m_timeTravel.FastForwardFactor;
-
-                        for (var repeat = 0; (repeat < factor); ++repeat) {
-                            var budget = checked((long)TakeCycleBudget(ticks: current.DeltaTicks));
-
-                            m_core.ApplyInput(input: in inputs);
-                            m_core.RunCycles(cycles: budget);
-                            m_timeTravel.Record(
-                                budget: budget,
-                                hostAccumulator: m_cycleRemainder,
-                                input: in inputs
-                            );
-                        }
-
-                        PublishMembers(forceStage: current.ForceStage);
-
-                        lock (m_workLock) {
-                            ++m_completedSteps;
-                            Monitor.PulseAll(obj: m_workLock);
-                        }
-
-                        break;
-                    case GroupWorkKind.Invoke:
-                        current.Invoke!();
-                        current.Completion!.Set();
-
-                        break;
-                    case GroupWorkKind.Barrier:
-                        current.Completion!.Set();
-
-                        break;
-                    case GroupWorkKind.Stop:
-                        current.Completion!.Set();
-
-                        return;
-                }
-            }
-        } catch (Exception exception) {
-            current.Completion?.Set();
-
-            lock (m_workLock) {
-                m_workerFault = exception;
-                m_acceptingWork = false;
-
-                while (m_work.TryDequeue(result: out var abandoned)) {
-                    abandoned.Completion?.Set();
-                }
-
-                Monitor.PulseAll(obj: m_workLock);
-            }
-
-            Console.Error.WriteLine(value: $"[{m_workerName}] link thread stopped ({exception.GetType().Name}: {exception.Message})");
-        }
-    }
 
     private enum GroupWorkKind {
         Step,
@@ -598,7 +418,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         bool ForceStage,
         Action? Invoke,
         ManualResetEventSlim? Completion
-    ) {
+    ) : IQueuedWorkItem<GroupWorkItem> {
         public static GroupWorkItem Barrier(ManualResetEventSlim completion) =>
             new(
                 Completion: completion,

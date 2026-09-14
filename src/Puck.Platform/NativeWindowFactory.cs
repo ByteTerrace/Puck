@@ -36,8 +36,12 @@ public sealed class NativeWindowFactory : INativeWindowFactory {
 
         var displayKind = m_platformSupport.ResolveDisplayKind(requested: m_options.DisplayKind);
 
-        return (m_backends.TryGetValue(key: displayKind, value: out var backend)
+        return (m_backends.TryGetValue(
+            key: displayKind,
+            value: out var backend
+        )
             ? backend.Create(options: m_options)
-            : throw new PlatformNotSupportedException(message: $"Platform windows for display kind '{displayKind}' are not implemented."));
+            : throw new PlatformNotSupportedException(message: $"Platform windows for display kind '{displayKind}' are not implemented.")
+        );
     }
 }

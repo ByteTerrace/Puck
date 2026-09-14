@@ -18,10 +18,10 @@ namespace Puck.HumbleGamingBrick.Post;
 internal sealed class CosimTraceSink : ICpuTraceSink, IPpuTraceSink, IDisposable {
     private readonly IApu? m_apu;
     private readonly MasterClock m_clock;
-    private readonly BinaryWriter m_writer;
     private readonly bool m_wantCpu;
     private readonly bool m_wantPcm;
     private readonly bool m_wantPpu;
+    private readonly BinaryWriter m_writer;
 
     private bool m_firstPcm = true;
     private byte m_lastPcm12 = 0xFF;
@@ -46,6 +46,11 @@ internal sealed class CosimTraceSink : ICpuTraceSink, IPpuTraceSink, IDisposable
     /// <summary>Gets the number of records written so far.</summary>
     public long RecordCount { get; private set; }
 
+    /// <inheritdoc/>
+    public void Dispose() {
+        m_writer.Flush();
+        m_writer.Dispose();
+    }
     /// <inheritdoc/>
     public void OnInstructionBoundary(ushort pc, byte a, byte f, byte b, byte c, byte d, byte e, byte h, byte l, ushort sp) {
         if (m_wantCpu) {
@@ -123,10 +128,5 @@ internal sealed class CosimTraceSink : ICpuTraceSink, IPpuTraceSink, IDisposable
         }.WriteTo(writer: m_writer);
 
         ++RecordCount;
-    }
-    /// <inheritdoc/>
-    public void Dispose() {
-        m_writer.Flush();
-        m_writer.Dispose();
     }
 }

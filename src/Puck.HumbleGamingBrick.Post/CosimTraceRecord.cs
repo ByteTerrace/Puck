@@ -7,7 +7,6 @@ internal enum CosimEventKind : byte {
     PpuPixel = 2,
     Pcm = 3,
 }
-
 /// <summary>
 /// One fixed 32-byte little-endian record of the co-simulation trace format shared with SameBoy's <c>sb-trace events</c>
 /// mode (the external tracer's <c>trace_main.c</c>): 8 bytes cycle (the master T-cycle, 4&#8201;MHz, since
@@ -31,37 +30,62 @@ internal enum CosimEventKind : byte {
 /// still comparing their content fields exactly.
 /// </summary>
 internal readonly struct CosimEvent {
-    public const int ByteSize = 32;
     private const int PayloadSize = 16;
     private const int ReservedSize = 7;
 
-    public required ulong Cycle { get; init; }
-    public required CosimEventKind Kind { get; init; }
+    public const int ByteSize = 32;
 
-    public ushort Pc { get; init; }
     public byte A { get; init; }
-    public byte F { get; init; }
     public byte B { get; init; }
     public byte C { get; init; }
-    public byte D { get; init; }
-    public byte E { get; init; }
-    public byte H { get; init; }
-    public byte L { get; init; }
-    public ushort Sp { get; init; }
-
-    public byte Ly { get; init; }
-    public int Mode { get; init; }
-
-    public int X { get; init; }
     public uint Color { get; init; }
-
-    public byte Pcm12 { get; init; }
-    public byte Pcm34 { get; init; }
-
+    public required ulong Cycle { get; init; }
     /// <summary>Gets a value indicating whether <see cref="Cycle"/> is an exact instruction-boundary stamp rather than
     /// a SameBoy-side <c>GB_run()</c>-call-boundary sample (see the type remarks).</summary>
     public bool CycleIsExact => (Kind == CosimEventKind.Cpu);
+    public byte D { get; init; }
+    public byte E { get; init; }
+    public byte F { get; init; }
+    public byte H { get; init; }
+    public required CosimEventKind Kind { get; init; }
+    public byte L { get; init; }
+    public byte Ly { get; init; }
+    public int Mode { get; init; }
+    public ushort Pc { get; init; }
+    public byte Pcm12 { get; init; }
+    public byte Pcm34 { get; init; }
+    public ushort Sp { get; init; }
+    public int X { get; init; }
 
+    /// <summary>Compares the kind-specific payload fields for equality (excluding <see cref="Cycle"/>, which the
+    /// caller compares separately when <see cref="CycleIsExact"/> holds for both records).</summary>
+    public bool ContentEquals(in CosimEvent other) =>
+        ((Kind == other.Kind) && (Kind switch {
+            CosimEventKind.Cpu =>
+                ((Pc == other.Pc) &&
+                (A == other.A) &&
+                (F == other.F) &&
+                (B == other.B) &&
+                (C == other.C) &&
+                (D == other.D) &&
+                (E == other.E) &&
+                (H == other.H) &&
+                (L == other.L) &&
+                (Sp == other.Sp)),
+            CosimEventKind.PpuMode => ((Ly == other.Ly) && (Mode == other.Mode)),
+            CosimEventKind.PpuPixel => ((Ly == other.Ly) && (X == other.X) && (Color == other.Color)),
+            CosimEventKind.Pcm => ((Pcm12 == other.Pcm12) && (Pcm34 == other.Pcm34)),
+            _ => false,
+        }));
+    /// <summary>Renders a one-line human-readable form for divergence reports.</summary>
+    public string Describe() =>
+        Kind switch {
+            CosimEventKind.Cpu => $"cyc={Cycle,10} CPU   pc={Pc:X4} a={A:X2} f={F:X2} b={B:X2} c={C:X2} d={D:X2} e={E:X2} h={H:X2} l={L:X2} sp={Sp:X4}",
+            CosimEventKind.PpuMode => $"cyc={Cycle,10} MODE  ly={Ly,3} mode={Mode}",
+            CosimEventKind.PpuPixel => $"cyc~{Cycle,10} PIXEL ly={Ly,3} x={X,3} color=0x{Color:X6}",
+            CosimEventKind.Pcm => $"cyc={Cycle,10} PCM   pcm12={Pcm12:X2} pcm34={Pcm34:X2}",
+            _ => $"cyc={Cycle} kind={Kind}",
+        };
     /// <summary>Reads one 32-byte record, or <see langword="null"/> at a clean end of stream.</summary>
     public static CosimEvent? TryReadFrom(BinaryReader reader) {
         var cycleBytes = reader.ReadBytes(count: 8);
@@ -97,8 +121,14 @@ internal readonly struct CosimEvent {
                 H = payload[8],
                 Kind = kind,
                 L = payload[9],
-                Pc = BitConverter.ToUInt16(value: payload.AsSpan(start: 0, length: 2)),
-                Sp = BitConverter.ToUInt16(value: payload.AsSpan(start: 10, length: 2)),
+                Pc = BitConverter.ToUInt16(value: payload.AsSpan(
+            length: 2,
+            start: 0
+        )),
+                Sp = BitConverter.ToUInt16(value: payload.AsSpan(
+            length: 2,
+            start: 10
+        )),
             },
             CosimEventKind.PpuMode => new CosimEvent {
                 Cycle = cycle,
@@ -107,7 +137,10 @@ internal readonly struct CosimEvent {
                 Mode = payload[1],
             },
             CosimEventKind.PpuPixel => new CosimEvent {
-                Color = BitConverter.ToUInt32(value: payload.AsSpan(start: 2, length: 4)),
+                Color = BitConverter.ToUInt32(value: payload.AsSpan(
+            length: 4,
+            start: 2
+        )),
                 Cycle = cycle,
                 Kind = kind,
                 Ly = payload[0],
@@ -119,7 +152,7 @@ internal readonly struct CosimEvent {
                 Pcm12 = payload[0],
                 Pcm34 = payload[1],
             },
-            _ => throw new InvalidDataException(message: $"Unknown cosim event kind {(byte)kind}."),
+            _ => throw new InvalidDataException(message: $"Unknown cosim event kind {((byte)kind)}."),
         };
     }
     /// <summary>Writes this record as the fixed 32-byte layout <see cref="TryReadFrom"/> reads back.</summary>
@@ -174,33 +207,4 @@ internal readonly struct CosimEvent {
         writer.Write(buffer: stackalloc byte[ReservedSize]);
         writer.Write(buffer: payload);
     }
-    /// <summary>Compares the kind-specific payload fields for equality (excluding <see cref="Cycle"/>, which the
-    /// caller compares separately when <see cref="CycleIsExact"/> holds for both records).</summary>
-    public bool ContentEquals(in CosimEvent other) =>
-        ((Kind == other.Kind) && (Kind switch {
-            CosimEventKind.Cpu =>
-                (Pc == other.Pc) &&
-                (A == other.A) &&
-                (F == other.F) &&
-                (B == other.B) &&
-                (C == other.C) &&
-                (D == other.D) &&
-                (E == other.E) &&
-                (H == other.H) &&
-                (L == other.L) &&
-                (Sp == other.Sp),
-            CosimEventKind.PpuMode => ((Ly == other.Ly) && (Mode == other.Mode)),
-            CosimEventKind.PpuPixel => ((Ly == other.Ly) && (X == other.X) && (Color == other.Color)),
-            CosimEventKind.Pcm => ((Pcm12 == other.Pcm12) && (Pcm34 == other.Pcm34)),
-            _ => false,
-        }));
-    /// <summary>Renders a one-line human-readable form for divergence reports.</summary>
-    public string Describe() =>
-        Kind switch {
-            CosimEventKind.Cpu => $"cyc={Cycle,10} CPU   pc={Pc:X4} a={A:X2} f={F:X2} b={B:X2} c={C:X2} d={D:X2} e={E:X2} h={H:X2} l={L:X2} sp={Sp:X4}",
-            CosimEventKind.PpuMode => $"cyc={Cycle,10} MODE  ly={Ly,3} mode={Mode}",
-            CosimEventKind.PpuPixel => $"cyc~{Cycle,10} PIXEL ly={Ly,3} x={X,3} color=0x{Color:X6}",
-            CosimEventKind.Pcm => $"cyc={Cycle,10} PCM   pcm12={Pcm12:X2} pcm34={Pcm34:X2}",
-            _ => $"cyc={Cycle} kind={Kind}",
-        };
 }

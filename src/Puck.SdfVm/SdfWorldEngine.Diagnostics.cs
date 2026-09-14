@@ -83,7 +83,7 @@ public sealed partial class SdfWorldEngine {
     }
 
     /// <summary>Gets the GPU time (in milliseconds) of the last <see cref="RenderFrame"/> when opt-in timing was
-    /// enabled at construction — the frame-start → composite-close bracket of the four per-pass marks — or
+    /// enabled at construction — the frame-start → composite-close bracket of all per-pass marks — or
     /// <see langword="null"/> when timing is disabled or the timestamps were not yet readable.</summary>
     public double? LastFrameGpuMilliseconds => m_lastFrameGpuMilliseconds;
     /// <summary>Gets the CPU wall-clock cost (milliseconds) of the most recently produced frame's per-frame instance-grid

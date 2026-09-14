@@ -447,12 +447,12 @@
         "palette": [
           {
             "color": "state.billiardsColors.pin",
-            "shininess": 20,
+            "roughness": 0.734,
             "specular": 0.1
           },
           {
             "color": "state.billiardsColors.pinBand",
-            "shininess": 20,
+            "roughness": 0.734,
             "specular": 0.1
           }
         ],
@@ -511,7 +511,7 @@
         "palette": [
           {
             "color": "state.billiardsColors.tray",
-            "shininess": 5,
+            "roughness": 0.891,
             "specular": 0.05
           }
         ],

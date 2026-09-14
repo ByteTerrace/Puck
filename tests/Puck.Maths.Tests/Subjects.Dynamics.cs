@@ -46,7 +46,8 @@ internal static partial class Subjects {
             // other refusal here is a genuine mismatch, so it is re-thrown rather than swallowed.
             return ((Math.Abs(value: oracle.OscillationRate) < (1L << 16))
                 ? null
-                : throw new InvalidOperationException(message: $"Create refused (f={frequencyRaw} zeta={dampingRaw}) but the oracle's own oscillation rate {oracle.OscillationRate} does not corroborate a Q16-representable-rate refusal."));
+                : throw new InvalidOperationException(message: $"Create refused (f={frequencyRaw} zeta={dampingRaw}) but the oracle's own oscillation rate {oracle.OscillationRate} does not corroborate a Q16-representable-rate refusal.")
+            );
         }
 
         if (dynamics.StiffnessRaw != oracle.Stiffness) {
@@ -58,7 +59,10 @@ internal static partial class Subjects {
         if (Math.Abs(value: (dynamics.OscillationRateRaw - oracle.OscillationRate)) > 1L) {
             return $"oscillation rate mismatch: subject={dynamics.OscillationRateRaw} oracle={oracle.OscillationRate} (f={frequencyRaw} zeta={dampingRaw})";
         }
-        if ((dynamics.Branch != SecondOrderDynamicsBranch.CriticallyDamped) && (Math.Abs(value: (dynamics.DampingOverOscillationRaw - oracle.DampingOverOscillation)) > 2L)) {
+        if (
+            (dynamics.Branch != SecondOrderDynamicsBranch.CriticallyDamped) &&
+            (Math.Abs(value: (dynamics.DampingOverOscillationRaw - oracle.DampingOverOscillation)) > 2L)
+        ) {
             return $"damping-over-oscillation mismatch: subject={dynamics.DampingOverOscillationRaw} oracle={oracle.DampingOverOscillation}";
         }
         if (dynamics.TargetVelocityGainRaw != oracle.TargetVelocityGain) {
@@ -69,9 +73,15 @@ internal static partial class Subjects {
         }
 
         return (dynamics.Branch switch {
-            SecondOrderDynamicsBranch.Underdamped => ((dampingRaw < (1L << 16)) ? null : "branch should be Underdamped"),
-            SecondOrderDynamicsBranch.CriticallyDamped => ((dampingRaw == (1L << 16)) ? null : "branch should be CriticallyDamped"),
-            _ => ((dampingRaw > (1L << 16)) ? null : "branch should be Overdamped"),
+            SecondOrderDynamicsBranch.Underdamped => ((dampingRaw < (1L << 16))
+            ? null
+            : "branch should be Underdamped"),
+            SecondOrderDynamicsBranch.CriticallyDamped => ((dampingRaw == (1L << 16))
+            ? null
+            : "branch should be CriticallyDamped"),
+            _ => ((dampingRaw > (1L << 16))
+            ? null
+            : "branch should be Overdamped"),
         });
     }
     /// <summary>Walks <see cref="SecondOrderStep.Step(SecondOrderState,FixedQ4816,FixedQ4816)"/> from rest toward a
@@ -81,8 +91,8 @@ internal static partial class Subjects {
     /// <see cref="FixedQ4816.SinCos"/> kernels for the closed form), agreeing within Evaluate's own documented
     /// approximation envelope.</summary>
     public static string? DynamicsStepVsEvaluate(long[] left, long[] right) {
-        const ulong ticksPerSecond = 240UL;
-        const int steps = 240;
+        const ulong TicksPerSecond = 240UL;
+        const int Steps = 240;
 
         // Bounded to [0.5, 8] Hz rather than DynamicsFrequencyRaw's full (0, 100] Hz band: the upper bound avoids
         // accumulating enough oscillation cycles in one second that Step's discrete recurrence and Evaluate's single
@@ -108,20 +118,27 @@ internal static partial class Subjects {
             dampingRatio: FixedQ4816.FromRawBits(value: dampingRaw),
             initialResponse: FixedQ4816.FromRawBits(value: responseRaw)
         );
-        var step = dynamics.Compile(stepTicks: 1UL, ticksPerSecond: ticksPerSecond);
+        var step = dynamics.Compile(
+            stepTicks: 1UL,
+            ticksPerSecond: TicksPerSecond
+        );
         var target = FixedQ4816.FromRawBits(value: targetRaw);
         var state = SecondOrderState.AtRest(position: FixedQ4816.Zero);
 
-        for (var i = 0; (i < steps); ++i) {
-            state = step.Step(state: state, target: target, targetVelocity: FixedQ4816.Zero);
+        for (var i = 0; (i < Steps); ++i) {
+            state = step.Step(
+                state: state,
+                target: target,
+                targetVelocity: FixedQ4816.Zero
+            );
         }
 
         var sample = dynamics.Evaluate(
             initialValue: FixedQ4816.Zero,
             initialVelocity: FixedQ4816.Zero,
             target: target,
-            elapsedTicks: ((ulong)steps),
-            ticksPerSecond: ticksPerSecond
+            elapsedTicks: ((ulong)Steps),
+            ticksPerSecond: TicksPerSecond
         );
 
         var deltaValue = Math.Abs(value: (state.Position.Value - sample.Value.Value));
@@ -134,7 +151,8 @@ internal static partial class Subjects {
 
         return (((deltaValue <= valueBound) && (deltaVelocity <= velocityBound))
             ? null
-            : $"step vs evaluate diverged: dValue={deltaValue} (bound {valueBound}) dVelocity={deltaVelocity} (bound {velocityBound}) (f={frequencyRaw} zeta={dampingRaw} target={targetRaw})");
+            : $"step vs evaluate diverged: dValue={deltaValue} (bound {valueBound}) dVelocity={deltaVelocity} (bound {velocityBound}) (f={frequencyRaw} zeta={dampingRaw} target={targetRaw})"
+        );
     }
     /// <summary>ζ ≥ 1 from rest never overshoots a step target; a light-damping control (ζ = ¼) does.</summary>
     public static string? DynamicsCriticalAndOverdampedNeverOvershoot() {
@@ -144,12 +162,19 @@ internal static partial class Subjects {
                 dampingRatio: FixedQ4816.FromDouble(value: zeta),
                 initialResponse: FixedQ4816.Zero
             );
-            var step = dynamics.Compile(stepTicks: 1UL, ticksPerSecond: 240UL);
+            var step = dynamics.Compile(
+                stepTicks: 1UL,
+                ticksPerSecond: 240UL
+            );
             var state = SecondOrderState.AtRest(position: FixedQ4816.Zero);
             var target = FixedQ4816.FromDouble(value: 10.0);
 
             for (var i = 0; (i < (240 * 5)); ++i) {
-                state = step.Step(state: state, target: target, targetVelocity: FixedQ4816.Zero);
+                state = step.Step(
+                    state: state,
+                    target: target,
+                    targetVelocity: FixedQ4816.Zero
+                );
 
                 if (state.PositionRaw > (target.Value << 16)) {
                     return $"zeta={zeta} overshot at tick {i}: position raw {state.PositionRaw} exceeds target raw {(target.Value << 16)}";
@@ -164,13 +189,20 @@ internal static partial class Subjects {
                 dampingRatio: FixedQ4816.FromDouble(value: 0.25),
                 initialResponse: FixedQ4816.Zero
             );
-            var step = dynamics.Compile(stepTicks: 1UL, ticksPerSecond: 240UL);
+            var step = dynamics.Compile(
+                stepTicks: 1UL,
+                ticksPerSecond: 240UL
+            );
             var state = SecondOrderState.AtRest(position: FixedQ4816.Zero);
             var target = FixedQ4816.FromDouble(value: 10.0);
             var overshot = false;
 
             for (var i = 0; (i < (240 * 5)); ++i) {
-                state = step.Step(state: state, target: target, targetVelocity: FixedQ4816.Zero);
+                state = step.Step(
+                    state: state,
+                    target: target,
+                    targetVelocity: FixedQ4816.Zero
+                );
 
                 if (state.PositionRaw > (target.Value << 16)) {
                     overshot = true;
@@ -195,23 +227,40 @@ internal static partial class Subjects {
                 dampingRatio: FixedQ4816.FromDouble(value: zeta),
                 initialResponse: FixedQ4816.Zero
             );
-            var step = dynamics.Compile(stepTicks: 1UL, ticksPerSecond: 240UL);
+            var step = dynamics.Compile(
+                stepTicks: 1UL,
+                ticksPerSecond: 240UL
+            );
             var state = SecondOrderState.AtRest(position: FixedQ4816.Zero);
             var target = FixedQ4816.FromDouble(value: 7.5);
 
             for (var i = 0; (i < (240 * 10)); ++i) {
-                state = step.Step(state: state, target: target, targetVelocity: FixedQ4816.Zero);
+                state = step.Step(
+                    state: state,
+                    target: target,
+                    targetVelocity: FixedQ4816.Zero
+                );
             }
 
             var atRest = SecondOrderState.AtRest(position: target);
 
-            if ((state.PositionRaw != atRest.PositionRaw) || (state.VelocityRaw != 0L)) {
+            if (
+                (state.PositionRaw != atRest.PositionRaw) ||
+                (state.VelocityRaw != 0L)
+            ) {
                 return $"zeta={zeta} did not settle exactly: position={state.PositionRaw} velocity={state.VelocityRaw}";
             }
 
-            var next = step.Step(state: state, target: target, targetVelocity: FixedQ4816.Zero);
+            var next = step.Step(
+                state: state,
+                target: target,
+                targetVelocity: FixedQ4816.Zero
+            );
 
-            if ((next.PositionRaw != state.PositionRaw) || (next.VelocityRaw != 0L)) {
+            if (
+                (next.PositionRaw != state.PositionRaw) ||
+                (next.VelocityRaw != 0L)
+            ) {
                 return $"zeta={zeta} settled state is not a fixed point of Step";
             }
         }
@@ -228,7 +277,10 @@ internal static partial class Subjects {
                 dampingRatio: FixedQ4816.FromDouble(value: 1.0),
                 initialResponse: FixedQ4816.FromDouble(value: r)
             );
-            var step = dynamics.Compile(stepTicks: 1UL, ticksPerSecond: 240UL);
+            var step = dynamics.Compile(
+                stepTicks: 1UL,
+                ticksPerSecond: 240UL
+            );
             var state = SecondOrderState.AtRest(position: FixedQ4816.Zero);
 
             return step.Step(
@@ -264,7 +316,10 @@ internal static partial class Subjects {
             dampingRatio: FixedQ4816.FromDouble(value: 1.0),
             initialResponse: FixedQ4816.FromDouble(value: 1.0)
         );
-        var before = new SecondOrderSample(Value: FixedQ4816.FromDouble(value: 5.0), Velocity: FixedQ4816.Zero);
+        var before = new SecondOrderSample(
+            Value: FixedQ4816.FromDouble(value: 5.0),
+            Velocity: FixedQ4816.Zero
+        );
         var after = positiveResponse.Retarget(
             current: before,
             oldTarget: FixedQ4816.FromDouble(value: 5.0),
@@ -294,7 +349,8 @@ internal static partial class Subjects {
             } catch (ArgumentOutOfRangeException ex) {
                 return ((ex.ParamName == paramName)
                     ? null
-                    : $"{label}: expected paramName '{paramName}', got '{ex.ParamName}'");
+                    : $"{label}: expected paramName '{paramName}', got '{ex.ParamName}'"
+                );
             } catch (Exception ex) {
                 return $"{label}: expected ArgumentOutOfRangeException, got {ex.GetType().Name}";
             }
@@ -303,7 +359,11 @@ internal static partial class Subjects {
         }
 
         var frequencyFailure = ExpectArgumentOutOfRange(
-            action: () => SecondOrderDynamics.Create(FixedQ4816.Zero, FixedQ4816.Zero, FixedQ4816.Zero),
+            action: () => SecondOrderDynamics.Create(
+                FixedQ4816.Zero,
+                FixedQ4816.Zero,
+                FixedQ4816.Zero
+            ),
             paramName: "frequencyHz",
             label: "f<=0"
         );
@@ -313,7 +373,11 @@ internal static partial class Subjects {
         }
 
         var dampingFailure = ExpectArgumentOutOfRange(
-            action: () => SecondOrderDynamics.Create(FixedQ4816.One, FixedQ4816.FromRawBits(value: -1L), FixedQ4816.Zero),
+            action: () => SecondOrderDynamics.Create(
+                FixedQ4816.One,
+                FixedQ4816.FromRawBits(value: -1L),
+                FixedQ4816.Zero
+            ),
             paramName: "dampingRatio",
             label: "zeta<0"
         );
@@ -322,10 +386,17 @@ internal static partial class Subjects {
             return dampingFailure;
         }
 
-        var dynamics = SecondOrderDynamics.Create(FixedQ4816.One, FixedQ4816.One, FixedQ4816.Zero);
+        var dynamics = SecondOrderDynamics.Create(
+            FixedQ4816.One,
+            FixedQ4816.One,
+            FixedQ4816.Zero
+        );
 
         var stepTicksFailure = ExpectArgumentOutOfRange(
-            action: () => dynamics.Compile(stepTicks: 0UL, ticksPerSecond: 240UL),
+            action: () => dynamics.Compile(
+                stepTicks: 0UL,
+                ticksPerSecond: 240UL
+            ),
             paramName: "stepTicks",
             label: "stepTicks=0"
         );
@@ -335,7 +406,10 @@ internal static partial class Subjects {
         }
 
         var ticksPerSecondFailure = ExpectArgumentOutOfRange(
-            action: () => dynamics.Compile(stepTicks: 1UL, ticksPerSecond: 0UL),
+            action: () => dynamics.Compile(
+                stepTicks: 1UL,
+                ticksPerSecond: 0UL
+            ),
             paramName: "ticksPerSecond",
             label: "ticksPerSecond=0"
         );
@@ -347,7 +421,10 @@ internal static partial class Subjects {
         var unboundCompile = false;
 
         try {
-            default(SecondOrderDynamics).Compile(stepTicks: 1UL, ticksPerSecond: 240UL);
+            default(SecondOrderDynamics).Compile(
+                stepTicks: 1UL,
+                ticksPerSecond: 240UL
+            );
         } catch (InvalidOperationException) {
             unboundCompile = true;
         }
@@ -359,7 +436,10 @@ internal static partial class Subjects {
         var fromValueRefused = false;
 
         try {
-            SecondOrderState.FromValue(position: FixedQ4816.FromRawBits(value: (1L << 47)), velocity: FixedQ4816.Zero);
+            SecondOrderState.FromValue(
+                position: FixedQ4816.FromRawBits(value: (1L << 47)),
+                velocity: FixedQ4816.Zero
+            );
         } catch (ArgumentOutOfRangeException ex) when ((ex.ParamName == "position")) {
             fromValueRefused = true;
         }
@@ -368,12 +448,18 @@ internal static partial class Subjects {
             return "SecondOrderState.FromValue must refuse a position at or past the sixteen guard bits";
         }
 
-        var step = dynamics.Compile(stepTicks: 1UL, ticksPerSecond: 240UL);
+        var step = dynamics.Compile(
+            stepTicks: 1UL,
+            ticksPerSecond: 240UL
+        );
         var overflowed = false;
 
         try {
             step.Step(
-                state: SecondOrderState.FromRawBits(positionRaw: long.MaxValue, velocityRaw: long.MaxValue),
+                state: SecondOrderState.FromRawBits(
+                    positionRaw: long.MaxValue,
+                    velocityRaw: long.MaxValue
+                ),
                 target: FixedQ4816.MaxValue,
                 targetVelocity: FixedQ4816.MaxValue
             );
@@ -383,7 +469,8 @@ internal static partial class Subjects {
 
         return (overflowed
             ? null
-            : "an out-of-range Step must throw OverflowException rather than silently wrap");
+            : "an out-of-range Step must throw OverflowException rather than silently wrap"
+        );
     }
     /// <summary>A three-lane <see cref="SecondOrderStep.Step(SecondOrderState3,FixedVector3,FixedVector3)"/> equals
     /// three independent scalar steps, bit for bit, lane by lane.</summary>
@@ -393,7 +480,10 @@ internal static partial class Subjects {
             dampingRatio: FixedQ4816.FromDouble(value: 0.6),
             initialResponse: FixedQ4816.FromDouble(value: 0.2)
         );
-        var step = dynamics.Compile(stepTicks: 1UL, ticksPerSecond: 240UL);
+        var step = dynamics.Compile(
+            stepTicks: 1UL,
+            ticksPerSecond: 240UL
+        );
 
         FixedVector3 Fold(long[] source) => new(
             X: FixedQ4816.FromRawBits(value: (((long)(DynamicsMagnitude(value: source[0]) % (20UL << 16))) - (10L << 16))),
@@ -409,14 +499,31 @@ internal static partial class Subjects {
         var stateZ = SecondOrderState.AtRest(position: FixedQ4816.Zero);
 
         for (var i = 0; (i < 32); ++i) {
-            state3 = step.Step(state: state3, target: target, targetVelocity: targetVelocity);
-            stateX = step.Step(state: stateX, target: target.X, targetVelocity: targetVelocity.X);
-            stateY = step.Step(state: stateY, target: target.Y, targetVelocity: targetVelocity.Y);
-            stateZ = step.Step(state: stateZ, target: target.Z, targetVelocity: targetVelocity.Z);
+            state3 = step.Step(
+                state: state3,
+                target: target,
+                targetVelocity: targetVelocity
+            );
+            stateX = step.Step(
+                state: stateX,
+                target: target.X,
+                targetVelocity: targetVelocity.X
+            );
+            stateY = step.Step(
+                state: stateY,
+                target: target.Y,
+                targetVelocity: targetVelocity.Y
+            );
+            stateZ = step.Step(
+                state: stateZ,
+                target: target.Z,
+                targetVelocity: targetVelocity.Z
+            );
         }
 
         return (((state3.X == stateX) && (state3.Y == stateY) && (state3.Z == stateZ))
             ? null
-            : $"vector lanes diverged from scalar steps at (target={target}, targetVelocity={targetVelocity})".ToString(provider: CultureInfo.InvariantCulture));
+            : $"vector lanes diverged from scalar steps at (target={target}, targetVelocity={targetVelocity})".ToString(provider: CultureInfo.InvariantCulture)
+        );
     }
 }

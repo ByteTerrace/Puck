@@ -223,7 +223,10 @@ public sealed partial class WorldOutputHub {
                 }
 
                 try {
-                    deliver(subscription.Sink, payload);
+                    deliver(
+                        subscription.Sink,
+                        payload
+                    );
                 } catch (Exception exception) {
                     Detach(
                         callSite: callSite,

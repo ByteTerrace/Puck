@@ -20,16 +20,17 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
     protected sealed class RowMembers {
         /// <summary>Gets the row's authored name.</summary>
         public string Name { get; internal set; } = string.Empty;
-        /// <summary>Gets the raw <c>cycle</c> member, when authored.</summary>
-        public JsonElement? Cycle { get; internal set; }
-        /// <summary>Gets the raw <c>draw</c> member, when authored.</summary>
-        public JsonElement? Draw { get; internal set; }
+        /// <summary>Gets the members the derived converter claimed, keyed by wire name.</summary>
+        public Dictionary<string, JsonElement> Claimed { get; } = new(comparer: StringComparer.Ordinal);
+
         /// <summary>Gets the raw <c>capacity</c> member, when authored.</summary>
         public JsonElement? Capacity { get; internal set; }
         /// <summary>Gets the raw <c>cells</c> member, when authored.</summary>
         public JsonElement? Cells { get; internal set; }
-        /// <summary>Gets the members the derived converter claimed, keyed by wire name.</summary>
-        public Dictionary<string, JsonElement> Claimed { get; } = new(comparer: StringComparer.Ordinal);
+        /// <summary>Gets the raw <c>cycle</c> member, when authored.</summary>
+        public JsonElement? Cycle { get; internal set; }
+        /// <summary>Gets the raw <c>draw</c> member, when authored.</summary>
+        public JsonElement? Draw { get; internal set; }
     }
 
     /// <summary>Gets the shape a refusal quotes for an unmapped or missing member — also the completeness law's own
@@ -52,7 +53,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
     /// <param name="members">The parsed members.</param>
     /// <param name="options">The serializer options the nested objects resolve through.</param>
     protected abstract TRow Create(StateRow row, RowMembers members, JsonSerializerOptions options);
-    /// <summary>Writes the derived row's boolean flags, between <c>nonNegative</c> and <c>evicts</c>.</summary>
+    /// <summary>Writes the derived row's boolean flags, between <c>overflow</c> and <c>evicts</c>.</summary>
     /// <param name="writer">The writer.</param>
     /// <param name="row">The row being written.</param>
     protected virtual void WriteFlags(Utf8JsonWriter writer, TRow row) { }
@@ -61,14 +62,13 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
     /// <param name="row">The row being written.</param>
     /// <param name="options">The serializer options the nested objects resolve through.</param>
     protected virtual void WriteTraits(Utf8JsonWriter writer, TRow row, JsonSerializerOptions options) { }
-
     /// <summary>Reads a nested object through the options' resolver.</summary>
     /// <typeparam name="T">The nested type.</typeparam>
     /// <param name="element">The element to read.</param>
     /// <param name="options">The serializer options.</param>
     /// <param name="context">The member's spelling, for the refusal.</param>
     protected static T ReadNested<T>(JsonElement element, JsonSerializerOptions options, string context) =>
-        (element.Deserialize(jsonTypeInfo: (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T)))
+        (element.Deserialize(jsonTypeInfo: ((JsonTypeInfo<T>)options.GetTypeInfo(type: typeof(T))))
             ?? throw new JsonException(message: $"{context} must be an object."));
     /// <summary>Writes a nested object through the options' resolver.</summary>
     /// <typeparam name="T">The nested type.</typeparam>
@@ -78,7 +78,11 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
     /// <param name="options">The serializer options.</param>
     protected static void WriteNested<T>(Utf8JsonWriter writer, string propertyName, T value, JsonSerializerOptions options) {
         writer.WritePropertyName(propertyName: propertyName);
-        JsonSerializer.Serialize(writer: writer, value: value, jsonTypeInfo: (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T)));
+        JsonSerializer.Serialize(
+            writer: writer,
+            value: value,
+            jsonTypeInfo: ((JsonTypeInfo<T>)options.GetTypeInfo(type: typeof(T)))
+        );
     }
     /// <summary>Reads a boolean member, refusing any other token.</summary>
     /// <param name="element">The element.</param>
@@ -89,25 +93,31 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         _ => throw new JsonException(message: $"{context} must be a boolean."),
     };
 
-    // A dynamics trait's y0/v0 ride the same per-kind spelling as an ordinary cell value (a decimal string via
-    // FixedQ4816 for a fixed row, a plain JSON number for int) — never raw bits, matching StateCell.Value's own
-    // wire convention.
-    private static StateDynamics ReadDynamics(JsonElement element, string context) {
+    // A clock's y0/v0 ride the same per-kind spelling as an ordinary cell value (a decimal string via FixedQ4816 for
+    // a fixed row, a plain JSON number for int) — never raw bits, matching StateCell.Value's own wire convention.
+    private static StateCellClock ReadClock(JsonElement element, string context) {
         if (element.ValueKind != JsonValueKind.Object) {
             throw new JsonException(message: $"{context} must be an object.");
         }
 
-        string? row = null;
+        var epochTick = 0L;
+        var epochEngineTick = 0L;
         JsonElement? y0 = null;
         JsonElement? v0 = null;
-        var epochTick = 0L;
+        var substepTicks = 0L;
 
         foreach (var member in element.EnumerateObject()) {
             switch (member.Name) {
-                case "row":
-                    row = ((member.Value.ValueKind == JsonValueKind.String)
-                        ? member.Value.GetString()
-                        : null
+                case "epochTick":
+                    epochTick = RequireInt64(
+                        context: $"{context}.epochTick",
+                        element: member.Value
+                    );
+                    break;
+                case "epochEngineTick":
+                    epochEngineTick = RequireInt64(
+                        context: $"{context}.epochEngineTick",
+                        element: member.Value
                     );
                     break;
                 case "y0":
@@ -116,9 +126,9 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                 case "v0":
                     v0 = member.Value;
                     break;
-                case "epochTick":
-                    epochTick = RequireInt64(
-                        context: $"{context}.epochTick",
+                case "substepTicks":
+                    substepTicks = RequireInt64(
+                        context: $"{context}.substepTicks",
                         element: member.Value
                     );
                     break;
@@ -127,34 +137,29 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             }
         }
 
-        if (string.IsNullOrEmpty(value: row)) {
-            throw new JsonException(message: $"{context} requires member 'row'.");
-        }
-        if (y0 is not { } y0Element) {
-            throw new JsonException(message: $"{context} requires member 'y0'.");
-        }
-        if (v0 is not { } v0Element) {
-            throw new JsonException(message: $"{context} requires member 'v0'.");
-        }
-
         // y0/v0 are the follower's continuous state and ride raw FixedQ4816 bits whatever the carrying row's kind
-        // (see StateDynamics), so they are authored in the fixed spelling — a decimal string — on every row.
-        return new StateDynamics(
-            Row: row,
-            Y0: RequireNumeric(
-                context: $"{context}.y0",
-                element: y0Element,
-                kind: CellKind.Fixed
-            ),
-            V0: RequireNumeric(
-                context: $"{context}.v0",
-                element: v0Element,
-                kind: CellKind.Fixed
-            ),
-            EpochTick: epochTick
+        // (see StateDynamics), so they are authored in the fixed spelling — a decimal string — regardless of row kind.
+        return new StateCellClock(
+            EpochTick: epochTick,
+            EpochEngineTick: epochEngineTick,
+            Y0: ((y0 is { } y0Element)
+            ? RequireNumeric(
+                    context: $"{context}.y0",
+                    element: y0Element,
+                    kind: CellKind.Fixed
+                )
+            : 0L),
+            V0: ((v0 is { } v0Element)
+            ? RequireNumeric(
+                    context: $"{context}.v0",
+                    element: v0Element,
+                    kind: CellKind.Fixed
+                )
+            : 0L),
+            SubstepTicks: substepTicks
         );
     }
-    private static StateCell ReadCell(CellKind cellKind, CellName key, JsonElement element, string context, StateAdvance? advance = null, string? provenance = null, StateDynamics? dynamics = null, StateCycle? cycle = null) => cellKind switch {
+    private static StateCell ReadCell(CellKind cellKind, CellName key, JsonElement element, string context, StateAdvance? advance = null, string? provenance = null, StateDynamics? dynamics = null, StateCycle? cycle = null, StateCellBehavior behavior = StateCellBehavior.Inherit, StateCellClock? clock = null) => cellKind switch {
         CellKind.Text => new StateCell(
         Key: key,
         Text: RequireString(
@@ -164,7 +169,9 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         Advance: advance,
         Provenance: provenance,
         Dynamics: dynamics,
-        Cycle: cycle
+        Cycle: cycle,
+        Behavior: behavior,
+        Clock: clock
     ),
         CellKind.Bool => new StateCell(
         Key: key,
@@ -177,7 +184,9 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         Advance: advance,
         Provenance: provenance,
         Dynamics: dynamics,
-        Cycle: cycle
+        Cycle: cycle,
+        Behavior: behavior,
+        Clock: clock
     ),
         _ => new StateCell(
         Key: key,
@@ -189,7 +198,9 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         Advance: advance,
         Provenance: provenance,
         Dynamics: dynamics,
-        Cycle: cycle
+        Cycle: cycle,
+        Behavior: behavior,
+        Clock: clock
     ),
     };
     private static List<StateCell> ReadCells(string name, CellKind cellKind, JsonElement cellsElement, JsonSerializerOptions options) {
@@ -210,6 +221,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             JsonElement? cellAdvance = null;
             JsonElement? cellDynamics = null;
             JsonElement? cellCycle = null, cellVisibility = null, cellObservation = null;
+            JsonElement? cellBehavior = null, cellClock = null;
             string? provenance = null;
 
             foreach (var member in entry.EnumerateObject()) {
@@ -232,6 +244,8 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     case "cycle":
                         cellCycle = member.Value;
                         break;
+                    case "behavior": cellBehavior = member.Value; break;
+                    case "clock": cellClock = member.Value; break;
                     case "visibility": cellVisibility = member.Value; break;
                     case "observation": cellObservation = member.Value; break;
                     case "provenance":
@@ -260,34 +274,79 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             }
 
             var advance = ((cellAdvance is { } cellAdvanceElement)
-                ? ReadNested<StateAdvance>(element: cellAdvanceElement, options: options, context: $"state row '{name}'.cells[{index}].advance")
+                ? ReadNested<StateAdvance>(
+                    context: $"state row '{name}'.cells[{index}].advance",
+                    element: cellAdvanceElement,
+                    options: options
+                )
                 : null
             );
             var dynamics = ((cellDynamics is { } cellDynamicsElement)
-                ? ReadDynamics(
+                ? ReadNested<StateDynamics>(
                     context: $"state row '{name}'.cells[{index}].dynamics",
-                    element: cellDynamicsElement
+                    element: cellDynamicsElement,
+                    options: options
                 )
                 : null
             );
 
             var cycle = ((cellCycle is { } cellCycleElement)
-                ? ReadNested<StateCycle>(element: cellCycleElement, options: options, context: $"state row '{name}'.cells[{index}].cycle")
+                ? ReadNested<StateCycle>(
+                    context: $"state row '{name}'.cells[{index}].cycle",
+                    element: cellCycleElement,
+                    options: options
+                )
+                : null
+            );
+            var behavior = ((cellBehavior is { } cellBehaviorElement)
+                ? ReadNested<StateCellBehavior>(
+                    context: $"state row '{name}'.cells[{index}].behavior",
+                    element: cellBehaviorElement,
+                    options: options
+                )
+                : StateCellBehavior.Inherit
+            );
+            var clock = ((cellClock is { } cellClockElement)
+                ? ReadClock(
+                    context: $"state row '{name}'.cells[{index}].clock",
+                    element: cellClockElement
+                )
                 : null
             );
 
+            if (
+                (behavior == StateCellBehavior.None) &&
+                ((advance is not null) || (dynamics is not null) || (cycle is not null))
+            ) {
+                throw new JsonException(message: $"state row '{name}'.cells[{index}] declares behavior 'none' beside its own advance/dynamics/cycle — a cell that opts out declares no trait of its own either.");
+            }
+
             cells.Add(item: ReadCell(
-                cellKind: cellKind,
-                key: cellKey,
-                element: cellValueElement,
-                context: $"state row '{name}'.cells[{index}].value",
                 advance: advance,
-                provenance: provenance,
+                behavior: behavior,
+                cellKind: cellKind,
+                clock: clock,
+                context: $"state row '{name}'.cells[{index}].value",
+                cycle: cycle,
                 dynamics: dynamics,
-                cycle: cycle
+                element: cellValueElement,
+                key: cellKey,
+                provenance: provenance
             ) with {
-                Visibility = cellVisibility is { } cv ? ReadNested<StateVisibility>(element: cv, options: options, context: "visibility") : null,
-                Observation = cellObservation is { } co ? ReadNested<StateObservation>(element: co, options: options, context: "observation") : null
+                Visibility = ((cellVisibility is { } cv)
+                ? ReadNested<StateVisibility>(
+                    context: "visibility",
+                    element: cv,
+                    options: options
+                )
+                : null),
+                Observation = ((cellObservation is { } co)
+                ? ReadNested<StateObservation>(
+                    context: "observation",
+                    element: co,
+                    options: options
+                )
+                : null),
             });
             index++;
         }
@@ -304,10 +363,16 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         var masks = new List<ClosedBitset256>(capacity: element.GetArrayLength());
 
         foreach (var entry in element.EnumerateArray()) {
-            if (entry.ValueKind != JsonValueKind.String || !ClosedBitset256.TryParse(entry.GetString(), out var mask)) {
-                throw new JsonException($"state row '{name}'.drawnMasks[{masks.Count}] must be a 64-digit hexadecimal string.");
+            if (
+                (entry.ValueKind != JsonValueKind.String) ||
+                !ClosedBitset256.TryParse(
+                text: entry.GetString(),
+                value: out var mask
+            )
+            ) {
+                throw new JsonException(message: $"state row '{name}'.drawnMasks[{masks.Count}] must be a 64-digit hexadecimal string.");
             }
-            masks.Add(mask);
+            masks.Add(item: mask);
         }
 
         return masks;
@@ -391,33 +456,50 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                 break;
         }
     }
-    private static void WriteDynamics(Utf8JsonWriter writer, string propertyName, StateDynamics dynamics) {
+    // Written only when non-default (a fresh cell, or one settled back to epoch zero, carries no "clock" member at
+    // all) — the follower's continuous state is fixed-native on every row kind, so y0/v0 are written in the fixed
+    // spelling.
+    private static void WriteClock(Utf8JsonWriter writer, string propertyName, StateCellClock clock) {
         writer.WritePropertyName(propertyName: propertyName);
         writer.WriteStartObject();
-        writer.WriteString(
-            propertyName: "row",
-            value: dynamics.Row
-        );
-        // The follower's continuous state is fixed-native on every row kind, so it is written in the fixed spelling.
-        WriteOptionalNumeric(
-            writer: writer,
-            propertyName: "y0",
-            kind: CellKind.Fixed,
-            raw: dynamics.Y0
-        );
-        WriteOptionalNumeric(
-            writer: writer,
-            propertyName: "v0",
-            kind: CellKind.Fixed,
-            raw: dynamics.V0
-        );
-        writer.WriteNumber(
-            propertyName: "epochTick",
-            value: dynamics.EpochTick
-        );
+
+        if (clock.EpochTick != 0L) {
+            writer.WriteNumber(
+                propertyName: "epochTick",
+                value: clock.EpochTick
+            );
+        }
+        if (clock.EpochEngineTick != 0L) {
+            writer.WriteNumber(
+                propertyName: "epochEngineTick",
+                value: clock.EpochEngineTick
+            );
+        }
+        if (clock.Y0 != 0L) {
+            WriteOptionalNumeric(
+                writer: writer,
+                propertyName: "y0",
+                kind: CellKind.Fixed,
+                raw: clock.Y0
+            );
+        }
+        if (clock.V0 != 0L) {
+            WriteOptionalNumeric(
+                writer: writer,
+                propertyName: "v0",
+                kind: CellKind.Fixed,
+                raw: clock.V0
+            );
+        }
+        if (clock.SubstepTicks != 0L) {
+            writer.WriteNumber(
+                propertyName: "substepTicks",
+                value: clock.SubstepTicks
+            );
+        }
+
         writer.WriteEndObject();
     }
-
     private static void WriteOptionalNumeric(Utf8JsonWriter writer, string propertyName, CellKind kind, long? raw) {
         if (raw is not { } rawValue) {
             return;
@@ -449,7 +531,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         JsonElement? min = null;
         JsonElement? max = null;
         JsonElement? capacity = null;
-        JsonElement? nonNegative = null;
+        JsonElement? overflow = null;
         JsonElement? evicts = null;
         JsonElement? draw = null;
         JsonElement? drawCursor = null;
@@ -463,6 +545,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         JsonElement? advance = null;
         JsonElement? dynamics = null;
         JsonElement? cycle = null;
+        JsonElement? clock = null;
         var members = new RowMembers();
 
         while (
@@ -504,8 +587,8 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                 case "capacity":
                     capacity = JsonElement.ParseValue(reader: ref reader);
                     break;
-                case "nonNegative":
-                    nonNegative = JsonElement.ParseValue(reader: ref reader);
+                case "overflow":
+                    overflow = JsonElement.ParseValue(reader: ref reader);
                     break;
                 case "evicts":
                     evicts = JsonElement.ParseValue(reader: ref reader);
@@ -546,8 +629,14 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                 case "cycle":
                     cycle = JsonElement.ParseValue(reader: ref reader);
                     break;
+                case "clock":
+                    clock = JsonElement.ParseValue(reader: ref reader);
+                    break;
                 default:
-                    if ((property is not null) && ClaimsMember(name: property)) {
+                    if (
+                        (property is not null) &&
+                        ClaimsMember(name: property)
+                    ) {
                         members.Claimed[property] = JsonElement.ParseValue(reader: ref reader);
                         break;
                     }
@@ -612,22 +701,6 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             throw new JsonException(message: $"state row '{name}' declares 'drawnMasks' without 'draw' — drawnMasks is engine bookkeeping for a draw site alone.");
         }
         if (
-            (advance is not null) &&
-            (capacity is not null)
-        ) {
-            throw new JsonException(message: $"state row '{name}' declares 'advance' beside 'capacity' — advance is a scalar (slot) row trait; a keyed row's cells have no single value to accumulate.");
-        }
-        // A non-empty cells array only: the canonical writer emits "cells": [] for every non-slot row, including an
-        // advance row declared with no value at all, so refusing on the member's mere presence would make that
-        // legitimate shape refuse itself the first time it round-tripped through the wire codec.
-        if (
-            (advance is not null) &&
-            (cells is { ValueKind: JsonValueKind.Array } authored) &&
-            (authored.GetArrayLength() > 0)
-        ) {
-            throw new JsonException(message: $"state row '{name}' declares 'advance' beside a non-empty 'cells' array — advance is a scalar (slot) row trait; author it with 'value' or leave the row empty until the first explicit set.");
-        }
-        if (
             (dynamics is not null) &&
             (draw is not null)
         ) {
@@ -638,19 +711,6 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             (advance is not null)
         ) {
             throw new JsonException(message: $"state row '{name}' declares both 'dynamics' and 'advance' — a row is a linear accumulator or a second-order easing cell, never both.");
-        }
-        if (
-            (dynamics is not null) &&
-            (capacity is not null)
-        ) {
-            throw new JsonException(message: $"state row '{name}' declares 'dynamics' beside 'capacity' — dynamics is a scalar (slot) row trait; a keyed row's cells have no single value to ease.");
-        }
-        if (
-            (dynamics is not null) &&
-            (cells is { ValueKind: JsonValueKind.Array } dynamicsCells) &&
-            (dynamicsCells.GetArrayLength() > 0)
-        ) {
-            throw new JsonException(message: $"state row '{name}' declares 'dynamics' beside a non-empty 'cells' array — dynamics is a scalar (slot) row trait; author it with 'value' or leave the row empty until the first explicit set.");
         }
 
         if (
@@ -671,27 +731,26 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         ) {
             throw new JsonException(message: $"state row '{name}' declares both 'cycle' and 'dynamics' — a row is a second-order easing cell or a tick-indexed rotation, never both.");
         }
+        // 'clock' is the slot cell's own timing state (see StateCellClock), so it rides beside 'value' alone — the
+        // same rule 'advance'/'dynamics'/'cycle' at the row level follow, restated for the timing member that
+        // carries no trait of its own.
+        if (
+            (clock is not null) &&
+            (value is null)
+        ) {
+            throw new JsonException(message: $"state row '{name}' declares 'clock' without 'value' — 'clock' is the slot cell's own timing state, authored beside 'value'; a keyed row's cells each carry their own 'clock'.");
+        }
         Validate(members: members);
-        if (
-            (cycle is not null) &&
-            (capacity is not null)
-        ) {
-            throw new JsonException(message: $"state row '{name}' declares 'cycle' beside 'capacity' — cycle is a scalar (slot) row trait; a keyed row's cells each declare their own 'cycle'.");
-        }
-        if (
-            (cycle is not null) &&
-            (cells is { ValueKind: JsonValueKind.Array } cycleCells) &&
-            (cycleCells.GetArrayLength() > 0)
-        ) {
-            throw new JsonException(message: $"state row '{name}' declares 'cycle' beside a non-empty 'cells' array — cycle is a scalar (slot) row trait; author it with 'value' or leave the row empty, and give a keyed row's cells their own 'cycle'.");
-        }
 
         CellKind cellKind;
 
         try {
-            cellKind = kindElement.Deserialize(jsonTypeInfo: (JsonTypeInfo<CellKind>)options.GetTypeInfo(typeof(CellKind)));
+            cellKind = kindElement.Deserialize(jsonTypeInfo: ((JsonTypeInfo<CellKind>)options.GetTypeInfo(type: typeof(CellKind))));
         } catch (JsonException) {
-            throw new JsonException(message: $"state row '{name}'.kind must be one of {string.Join(separator: ", ", values: Enum.GetNames<CellKind>())}.");
+            throw new JsonException(message: $"state row '{name}'.kind must be one of {string.Join(
+                separator: ", ",
+                values: Enum.GetNames<CellKind>()
+            )}.");
         }
 
         var row = new StateRow(
@@ -717,10 +776,13 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     element: capacityElement
                 )
             : null),
-            NonNegative: ((nonNegative is { } nonNegativeElement) && RequireBool(
-                context: $"state row '{name}'.nonNegative",
-                element: nonNegativeElement
-            )),
+            Overflow: ((overflow is { } overflowElement)
+            ? ReadNested<StateOverflow>(
+                    context: $"state row '{name}'.overflow",
+                    element: overflowElement,
+                    options: options
+                )
+            : StateOverflow.Refuse),
             Evicts: ((evicts is { } evictsElement) && RequireBool(
                 context: $"state row '{name}'.evicts",
                 element: evictsElement
@@ -728,6 +790,12 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             Cells: ((value is { } valueElement)
             ? [ReadCell(
                         cellKind: cellKind,
+                        clock: ((clock is { } clockElement)
+                            ? ReadClock(
+                                context: $"state row '{name}'.clock",
+                                element: clockElement
+                            )
+                            : null),
                         key: StateRow.SlotKey,
                         element: valueElement,
                         context: $"state row '{name}'.value"
@@ -741,10 +809,18 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     )
                 : [])),
             Advance: ((advance is { } advanceElement)
-            ? ReadNested<StateAdvance>(element: advanceElement, options: options, context: $"state row '{name}'.advance")
+            ? ReadNested<StateAdvance>(
+                    context: $"state row '{name}'.advance",
+                    element: advanceElement,
+                    options: options
+                )
             : null),
             Draw: ((draw is { } drawElement)
-            ? ReadNested<Draw>(element: drawElement, options: options, context: $"state row '{name}'.draw")
+            ? ReadNested<Draw>(
+                    context: $"state row '{name}'.draw",
+                    element: drawElement,
+                    options: options
+                )
             : null),
             DrawCursor: ((drawCursor is { } drawCursorElement)
             ? RequireInt64(
@@ -752,16 +828,42 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     element: drawCursorElement
                 )
             : 0L),
-            Visibility: visibility is { } visibilityElement ? ReadNested<StateVisibility>(element: visibilityElement, options: options, context: "visibility") : null,
-            Knowledge: knowledge is { } knowledgeElement ? ReadNested<StateKnowledge>(element: knowledgeElement, options: options, context: "knowledge") : null,
-            Phase: phase is { } phaseElement ? ReadNested<StatePhase>(element: phaseElement, options: options, context: "phase") : null,
+            Visibility: ((visibility is { } visibilityElement)
+            ? ReadNested<StateVisibility>(
+                    context: "visibility",
+                    element: visibilityElement,
+                    options: options
+                )
+            : null),
+            Knowledge: ((knowledge is { } knowledgeElement)
+            ? ReadNested<StateKnowledge>(
+                    context: "knowledge",
+                    element: knowledgeElement,
+                    options: options
+                )
+            : null),
+            Phase: ((phase is { } phaseElement)
+            ? ReadNested<StatePhase>(
+                    context: "phase",
+                    element: phaseElement,
+                    options: options
+                )
+            : null),
             PhaseOf: phaseOf,
             ValuesFrom: valuesFrom,
             Domain: ((domain is { } domainElement)
-            ? ReadNested<StateDomain>(element: domainElement, options: options, context: $"state row '{name}'.domain")
+            ? ReadNested<StateDomain>(
+                    context: $"state row '{name}'.domain",
+                    element: domainElement,
+                    options: options
+                )
             : null),
             Inverse: ((inverse is { } inverseElement)
-            ? ReadNested<StateInverse>(element: inverseElement, options: options, context: $"state row '{name}'.inverse")
+            ? ReadNested<StateInverse>(
+                    context: $"state row '{name}'.inverse",
+                    element: inverseElement,
+                    options: options
+                )
             : null),
             DrawnMasks: ((drawnMasks is { } drawnMasksElement)
             ? ReadDrawnMasks(
@@ -770,13 +872,18 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                 )
             : null),
             Dynamics: ((dynamics is { } dynamicsElement)
-            ? ReadDynamics(
+            ? ReadNested<StateDynamics>(
                     context: $"state row '{name}'.dynamics",
-                    element: dynamicsElement
+                    element: dynamicsElement,
+                    options: options
                 )
             : null),
             Cycle: ((cycle is { } cycleElement)
-            ? ReadNested<StateCycle>(element: cycleElement, options: options, context: $"state row '{name}'.cycle")
+            ? ReadNested<StateCycle>(
+                    context: $"state row '{name}'.cycle",
+                    element: cycleElement,
+                    options: options
+                )
             : null),
             HistoryCursor: ((historyCursor is { } historyCursorElement)
             ? RequireInt64(
@@ -786,7 +893,11 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             : 0L)
         );
 
-        return Create(row: row, members: members, options: options);
+        return Create(
+            members: members,
+            options: options,
+            row: row
+        );
     }
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, TRow value, JsonSerializerOptions options) {
@@ -821,14 +932,19 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             );
         }
 
-        if (value.NonNegative) {
-            writer.WriteBoolean(
-                propertyName: "nonNegative",
-                value: true
+        if (value.Overflow != StateOverflow.Refuse) {
+            WriteNested(
+                options: options,
+                propertyName: "overflow",
+                value: value.Overflow,
+                writer: writer
             );
         }
 
-        WriteFlags(writer: writer, row: value);
+        WriteFlags(
+            row: value,
+            writer: writer
+        );
 
         if (value.Evicts) {
             writer.WriteBoolean(
@@ -841,13 +957,24 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         // load->save round-trip is byte-identical; every other shape writes its cells keyed. A slot row that has
         // never been explicitly set carries no cell yet (the first write mints it) — round-trips as an empty
         // `cells` array, since there is no value to spell as `value` sugar.
-        if (value.IsSlot && (value.Cells is { Count: 1 })) {
+        if (
+            value.IsSlot &&
+            (value.Cells is { Count: 1 })
+        ) {
             WriteCellValue(
                 writer: writer,
                 propertyName: "value",
                 kind: value.Kind,
                 cell: value.Cells[0]
             );
+
+            if (value.Cells[0].Clock is { } slotClock) {
+                WriteClock(
+                    clock: slotClock,
+                    propertyName: "clock",
+                    writer: writer
+                );
+            }
         } else {
             writer.WriteStartArray(propertyName: "cells");
 
@@ -865,23 +992,61 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                 );
 
                 if (cell.Advance is { } cellAdvance) {
-                    WriteNested(writer: writer, propertyName: "advance", value: cellAdvance, options: options);
+                    WriteNested(
+                        options: options,
+                        propertyName: "advance",
+                        value: cellAdvance,
+                        writer: writer
+                    );
                 }
 
                 if (cell.Dynamics is { } cellDynamics) {
-                    WriteDynamics(
-                        dynamics: cellDynamics,
+                    WriteNested(
+                        options: options,
                         propertyName: "dynamics",
+                        value: cellDynamics,
                         writer: writer
                     );
                 }
 
                 if (cell.Cycle is { } cellCycle) {
-                    WriteNested(writer: writer, propertyName: "cycle", value: cellCycle, options: options);
+                    WriteNested(
+                        options: options,
+                        propertyName: "cycle",
+                        value: cellCycle,
+                        writer: writer
+                    );
                 }
 
-                if (cell.Visibility is { } cellVisibility) { WriteNested(writer: writer, propertyName: "visibility", value: cellVisibility, options: options); }
-                if (cell.Observation is { } observation) { WriteNested(writer: writer, propertyName: "observation", value: observation, options: options); }
+                if (cell.Behavior != StateCellBehavior.Inherit) {
+                    WriteNested(
+                        options: options,
+                        propertyName: "behavior",
+                        value: cell.Behavior,
+                        writer: writer
+                    );
+                }
+
+                if (cell.Clock is { } cellClock) {
+                    WriteClock(
+                        clock: cellClock,
+                        propertyName: "clock",
+                        writer: writer
+                    );
+                }
+
+                if (cell.Visibility is { } cellVisibility) { WriteNested(
+                    options: options,
+                    propertyName: "visibility",
+                    value: cellVisibility,
+                    writer: writer
+                ); }
+                if (cell.Observation is { } observation) { WriteNested(
+                    options: options,
+                    propertyName: "observation",
+                    value: observation,
+                    writer: writer
+                ); }
                 if (cell.Provenance is { } provenance) {
                     writer.WriteString(
                         propertyName: "provenance",
@@ -899,25 +1064,45 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         // collides in practice. The facet goes last, after the drawn value's own cell, and its bookkeeping last of all
         // — so a saved draw site reads top-down as "what it is, then where it is".
         if (value.Advance is { } advance) {
-            WriteNested(writer: writer, propertyName: "advance", value: advance, options: options);
+            WriteNested(
+                options: options,
+                propertyName: "advance",
+                value: advance,
+                writer: writer
+            );
         }
 
         if (value.Dynamics is { } rowDynamics) {
-            WriteDynamics(
-                dynamics: rowDynamics,
+            WriteNested(
+                options: options,
                 propertyName: "dynamics",
+                value: rowDynamics,
                 writer: writer
             );
         }
 
         if (value.Cycle is { } rowCycle) {
-            WriteNested(writer: writer, propertyName: "cycle", value: rowCycle, options: options);
+            WriteNested(
+                options: options,
+                propertyName: "cycle",
+                value: rowCycle,
+                writer: writer
+            );
         }
 
-        WriteTraits(writer: writer, row: value, options: options);
+        WriteTraits(
+            options: options,
+            row: value,
+            writer: writer
+        );
 
         if (value.Draw is { } draw) {
-            WriteNested(writer: writer, propertyName: "draw", value: draw, options: options);
+            WriteNested(
+                options: options,
+                propertyName: "draw",
+                value: draw,
+                writer: writer
+            );
         }
 
         if (value.DrawCursor != 0L) {
@@ -934,20 +1119,51 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             );
         }
 
-        if (value.Visibility is { } visibility) { WriteNested(writer: writer, propertyName: "visibility", value: visibility, options: options); }
-        if (value.Knowledge is { } knowledge) { WriteNested(writer: writer, propertyName: "knowledge", value: knowledge, options: options); }
+        if (value.Visibility is { } visibility) { WriteNested(
+            options: options,
+            propertyName: "visibility",
+            value: visibility,
+            writer: writer
+        ); }
+        if (value.Knowledge is { } knowledge) { WriteNested(
+            options: options,
+            propertyName: "knowledge",
+            value: knowledge,
+            writer: writer
+        ); }
         if (value.Phase is { } phase) {
-            WriteNested(writer: writer, propertyName: "phase", value: phase, options: options);
+            WriteNested(
+                options: options,
+                propertyName: "phase",
+                value: phase,
+                writer: writer
+            );
         }
-        if (value.PhaseOf is { } phaseOf) { writer.WriteString("phaseOf", phaseOf); }
+        if (value.PhaseOf is { } phaseOf) { writer.WriteString(
+            propertyName: "phaseOf",
+            value: phaseOf
+        ); }
         if (value.ValuesFrom is { } valuesFrom) {
-            writer.WriteString("valuesFrom", valuesFrom);
+            writer.WriteString(
+                propertyName: "valuesFrom",
+                value: valuesFrom
+            );
         }
         if (value.Domain is { } domain) {
-            WriteNested(writer: writer, propertyName: "domain", value: domain, options: options);
+            WriteNested(
+                options: options,
+                propertyName: "domain",
+                value: domain,
+                writer: writer
+            );
         }
         if (value.Inverse is { } inverse) {
-            WriteNested(writer: writer, propertyName: "inverse", value: inverse, options: options);
+            WriteNested(
+                options: options,
+                propertyName: "inverse",
+                value: inverse,
+                writer: writer
+            );
         }
         if (value.DrawnMasks is { Count: > 0 } drawnMasks) {
             writer.WritePropertyName(propertyName: "drawnMasks");
@@ -966,7 +1182,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 /// <summary>The row converter of the standalone state document — the shared shape and nothing more.</summary>
 public sealed class StateRowJsonConverter : StateRowJsonConverter<StateRow> {
     /// <inheritdoc/>
-    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
+    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"behavior\":\"None\",\"clock\":{…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
 
     /// <inheritdoc/>
     protected override StateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => row;

@@ -20,7 +20,7 @@ namespace Puck.DirectX.Interop;
 /// <para>
 /// The texture is created in, and left after each <see cref="FinalizeForExport"/> in, the <c>COMMON</c> state —
 /// the cross-API handoff state. The shared <see cref="DirectXGpuCommandRecorder"/> ends compose passes in
-/// <c>PIXEL_SHADER_RESOURCE</c>, so <see cref="FinalizeForExport"/> records the final transition back to
+/// <c>PIXEL_SHADER_RESOURCE | NON_PIXEL_SHADER_RESOURCE</c>, so <see cref="FinalizeForExport"/> records the final transition back to
 /// <c>COMMON</c> and blocks until the GPU is done. Single-thread affine.
 /// </para>
 /// </summary>
@@ -65,7 +65,12 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
 
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
-        CreateSharedRenderTarget(device: device, format: format, height: height, width: width);
+        CreateSharedRenderTarget(
+            device: device,
+            format: format,
+            height: height,
+            width: width
+        );
 
         var srvHeapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
             Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
@@ -231,6 +236,10 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
             riidResource: in resourceIid
         );
         m_renderTarget = ((nint)renderTarget);
+        DirectXResourceStates.Register(
+            m_renderTarget,
+            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON
+        );
 
         var sharedHandle = default(HANDLE);
 
@@ -279,6 +288,10 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
 
         var state = ((DirectXCommandBufferState)m_commandBufferToken.Target!);
 
+        state.RenderTargetState = DirectXResourceStates.Get(
+            fallback: state.RenderTargetState,
+            resource: m_renderTarget
+        );
         if (D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON != state.RenderTargetState) {
             var allocator = ((ID3D12CommandAllocator*)m_finalizeAllocator);
             var commandList = ((ID3D12GraphicsCommandList*)m_finalizeCommandList);
@@ -295,14 +308,24 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
                 resource: ((ID3D12Resource*)m_renderTarget)
             );
 
-            commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &toCommon);
+            commandList->ResourceBarrier(
+                NumBarriers: 1,
+                pBarriers: &toCommon
+            );
             commandList->Close();
 
             var executable = ((ID3D12CommandList*)commandList);
 
-            ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->ExecuteCommandLists(NumCommandLists: 1, ppCommandLists: &executable);
+            ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->ExecuteCommandLists(
+                NumCommandLists: 1,
+                ppCommandLists: &executable
+            );
 
             state.RenderTargetState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
+            DirectXResourceStates.Set(
+                resource: m_renderTarget,
+                state: state.RenderTargetState
+            );
         }
 
         WaitForGpu();
@@ -314,6 +337,7 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
         }
 
         m_disposed = true;
+        DirectXResourceStates.Forget(resource: m_renderTarget);
 
         // Drain only while the context is alive — at host shutdown it may already be disposed (CommandQueueHandle
         // throws), and a dead queue has nothing left in flight (see DirectXGpuExportableStorageImage.Dispose).

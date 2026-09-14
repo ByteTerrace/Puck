@@ -59,6 +59,342 @@ internal static class BessImporter {
         (0xFF1E - MemoryMap.IoRegistersStart), (0xFF23 - MemoryMap.IoRegistersStart),
     ];
 
+    // fillCapacity: the destination region's fixed size, for a region whose buffer-table entry is allowed to declare
+    // fewer bytes than that (work-RAM, video-RAM — BufferSizeShape.Range). BESS spec: "if a too small VRAM size is
+    // specified... the implementation is expected to set that extra bank to all zeros" — applied here to any
+    // undersized Range region so the destination never retains the machine's prior contents past the imported span.
+    // Regions validated as BufferSizeShape.Exact (OAM, HRAM) can never reach this method undersized, so they pass
+    // null and skip the fill loop entirely.
+    private static void ApplyBuffer(ISystemBus bus, byte[] core, int tableOffset, ushort start, byte[] file, int? fillCapacity = null) {
+        var absolute = (Bess.BufferTableOffset + tableOffset);
+        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
+        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
+
+        for (var index = 0; (index < size); ++index) {
+            bus.WriteByte(
+                address: ((ushort)(start + index)),
+                value: file[(offset + index)]
+            );
+        }
+
+        for (var index = size; (fillCapacity.HasValue && (index < fillCapacity.Value)); ++index) {
+            bus.WriteByte(
+                address: ((ushort)(start + index)),
+                value: 0
+            );
+        }
+    }
+    private static void ApplyMbcRam(ICartridge cartridge, byte[] core, byte[] file) {
+        var absolute = (Bess.BufferTableOffset + 0x10);
+        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
+        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
+
+        if (size > 0) {
+            cartridge.ImportExternalRam(source: file.AsSpan(
+                length: size,
+                start: offset
+            ));
+        }
+    }
+    private static void ApplyPalette(ISystemBus bus, byte[] core, int tableOffset, (ushort Index, ushort Data) registers, byte indexRegisterValue, byte[] file) {
+        var absolute = (Bess.BufferTableOffset + tableOffset);
+        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
+        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
+
+        if (size > 0) {
+            BessScope.WriteColorPalette(
+                bus: bus,
+                registers: registers,
+                finalIndexRegister: indexRegisterValue,
+                palette: file.AsSpan(
+                    length: size,
+                    start: offset
+                )
+            );
+        }
+    }
+    // Parses and fully validates a BESS file's block graph, CORE buffer table, and optional MBC payload — against
+    // both the file's bounds and the destination machine's region capacities — before any machine state is touched.
+    // This pass touches only `file` — no service lookups, no writes — so any InvalidDataException it throws leaves
+    // the machine byte-for-byte as it was.
+    private static (string Name, byte[] Core, byte[]? Mbc) ParseAndValidate(byte[] file, ConsoleModel model) {
+        if (!Bess.TryReadFooter(
+            file: file,
+            firstBlockOffset: out var cursor
+        )) {
+            throw new InvalidDataException(message: "The file has no BESS footer.");
+        }
+
+        var name = string.Empty;
+        byte[]? core = null;
+        byte[]? mbc = null;
+        var sawCore = false;
+        var sawEnd = false;
+        var end = (file.Length - Bess.FooterLength);
+
+        while (cursor < end) {
+            // BESS spec (END block): "Naturally, it must be the last block." Once END has been read, ANY further
+            // block — well-formed or not — violates that, so this is checked before the next block is even parsed.
+            if (sawEnd) {
+                throw new InvalidDataException(message: "a BESS block follows the END block; the spec requires END to be the last block.");
+            }
+
+            if (!Bess.TryReadBlock(
+                end: end,
+                file: file,
+                next: out var next,
+                offset: cursor,
+                payload: out var payload,
+                tag: out var tag
+            )) {
+                throw new InvalidDataException(message: $"a BESS block at file offset {cursor} is truncated or extends past the file.");
+            }
+
+            switch (tag) {
+                case "NAME": name = System.Text.Encoding.ASCII.GetString(bytes: payload); break;
+                case "CORE":
+                    // BESS spec (Validation and Failures): "Duplicate CORE block" is listed among SameBoy's own
+                    // fatal conditions.
+                    if (sawCore) {
+                        throw new InvalidDataException(message: "the file has more than one CORE block; the spec makes a duplicate CORE block fatal.");
+                    }
+
+                    core = payload.ToArray();
+                    sawCore = true;
+
+                    break;
+                case "MBC ":
+                    // BESS spec (Validation and Failures): "A known block, other than NAME, appearing before
+                    // CORE" is a SameBoy fatal condition; the CORE block section itself grants the one further
+                    // exemption this importer honors ("This block must be the first block, unless the NAME or INFO
+                    // blocks exist then it must come directly after them"). NAME is handled above unconditionally,
+                    // and INFO — like every tag this importer assigns no dedicated meaning to — falls to the default
+                    // case below and stays unconditionally ignorable ("An implementation should not enforce block
+                    // order on blocks unknown to it for future compatibility"). MBC is the one other block type this
+                    // importer DOES interpret, so it is the one gated on CORE having already been seen.
+                    if (!sawCore) {
+                        throw new InvalidDataException(message: "an MBC block was encountered before the required CORE block.");
+                    }
+
+                    mbc = payload.ToArray();
+                    ValidateMbcBlock(mbc: mbc);
+
+                    break;
+                case "END ":
+                    // BESS spec (END block): "The length of the END block must be 0" — also listed among SameBoy's
+                    // own fatal conditions ("An END block with non-zero length").
+                    if (payload.Length != 0) {
+                        throw new InvalidDataException(message: $"the END block has a {payload.Length}-byte payload; the spec requires 0.");
+                    }
+
+                    sawEnd = true;
+
+                    break;
+                default: break; // INFO and any unsupported block: ignored per spec ("should be completely ignored").
+            }
+
+            cursor = next;
+        }
+
+        if (core is null) {
+            throw new InvalidDataException(message: "The file has no CORE block.");
+        }
+
+        // Required per the BESS spec: "Naturally, it must be the last block" and a missing END block is an
+        // irrecoverable structural error — a CORE graph that merely reaches the footer without one is not accepted.
+        if (!sawEnd) {
+            throw new InvalidDataException(message: "The file has no required END block.");
+        }
+
+        // (M-10) BESS spec (CORE block): "The length of the CORE block is 0xD0 bytes, but implementations are
+        // expected to ignore any excess bytes." Only a payload SHORTER than the defined prefix is rejected; a longer
+        // one is a legal forward-compatible file from a newer minor revision. Only the defined prefix is kept from
+        // here on — every field-offset read below (including the version check immediately following) stays within
+        // it, so the tail is truly ignored rather than merely unread.
+        if (core.Length < Bess.CoreBlockLength) {
+            throw new InvalidDataException(message: $"the CORE block is {core.Length} bytes; the spec requires at least {Bess.CoreBlockLength}.");
+        }
+
+        core = core.AsSpan(
+            length: Bess.CoreBlockLength,
+            start: 0
+        ).ToArray();
+
+        // (H-10) BESS spec (CORE block): "0x00 | Major BESS version as a 16-bit integer" and "Both major and minor
+        // versions should be 1. Implementations are expected to reject incompatible majors, but still attempt to
+        // read newer minor versions." The minor is deliberately never read as a compatibility gate.
+        var majorVersion = BinaryPrimitives.ReadUInt16LittleEndian(source: core.AsSpan(start: 0x00));
+
+        if (majorVersion != Bess.SupportedCoreMajorVersion) {
+            throw new InvalidDataException(message: $"the CORE block declares BESS major version {majorVersion}; only major version {Bess.SupportedCoreMajorVersion} is supported.");
+        }
+
+        // Palette RAM exists only on a color-capable destination (DMG has none); the spec's own "sizes must be 0 for
+        // models prior to Game Boy Color" gives a DMG destination zero capacity here, so any nonzero palette entry is
+        // rejected the same way an oversized one is.
+        var paletteCapacity = (model.SupportsColor()
+            ? 0x40
+            : 0
+        ); // BESS spec: palette size "must be 0 or 0x40".
+
+        // Work-RAM/video-RAM/OAM/high-RAM capacities are the fixed CPU-visible bus windows ApplyBuffer writes through
+        // (start, start+1, ...) — the same extents BessScope captures on export — regardless of DMG/CGB/AGB, since a
+        // banked region beyond that window is not reachable through this sequential bus-write path at all.
+        //
+        // Work-RAM and video-RAM have no fixed size in the spec's buffer table (unlike OAM/HRAM/palette below, whose
+        // rows carry an explicit "=" size) — only an upper bound applies here; a smaller-than-capacity size is legal
+        // and gets the spec's own graceful handling ("if a too small VRAM size is specified... set that extra bank to
+        // all zeros") at apply time in ApplyBuffer, not rejected here.
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x00,
+            fileLength: file.Length,
+            name: "work-RAM",
+            destinationCapacity: ((MemoryMap.WorkRamBankNEnd - MemoryMap.WorkRamBank0Start) + 1)
+        );
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x08,
+            fileLength: file.Length,
+            name: "video-RAM",
+            destinationCapacity: ((MemoryMap.VideoRamEnd - MemoryMap.VideoRamStart) + 1)
+        );
+        // MBC-RAM has no destination-capacity check: ICartridge.ImportExternalRam already clamps to the cartridge's own
+        // RAM size (Math.Min), matching the spec's explicit "too large MBC RAM size... the superfluous data should be
+        // ignored" — there is no unchecked-index write here to guard.
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x10,
+            fileLength: file.Length,
+            name: "MBC-RAM"
+        );
+        // OAM and HRAM carry a fixed spec size ("=0xA0", "=0x7F") with no "or 0" escape (unlike palette below), so
+        // anything but the exact capacity is rejected.
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x18,
+            fileLength: file.Length,
+            name: "OAM",
+            destinationCapacity: ((MemoryMap.ObjectAttributeMemoryEnd - MemoryMap.ObjectAttributeMemoryStart) + 1),
+            shape: BufferSizeShape.Exact
+        );
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x20,
+            fileLength: file.Length,
+            name: "high-RAM",
+            destinationCapacity: ((MemoryMap.HighRamEnd - MemoryMap.HighRamStart) + 1),
+            shape: BufferSizeShape.Exact
+        );
+        // Palette carries a fixed spec size too, but with the explicit "or 0" escape ("=0x40 or 0") — a DMG
+        // destination's capacity is already 0, so its two allowed sizes collapse to just 0.
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x28,
+            fileLength: file.Length,
+            name: "background-palette",
+            destinationCapacity: paletteCapacity,
+            shape: BufferSizeShape.ExactOrZero
+        );
+        ValidateBufferTable(
+            core: core,
+            tableOffset: 0x30,
+            fileLength: file.Length,
+            name: "object-palette",
+            destinationCapacity: paletteCapacity,
+            shape: BufferSizeShape.ExactOrZero
+        );
+
+        return (name, core, mbc);
+    }
+    // Splices the divider's high byte via TimerComponent's own SaveState/LoadState round trip (its published field
+    // order: counter:u16, tima:u8, tma:u8, tac:u8, lastTimaInput:bool, overflowCountdown:i32, reloadedThisCycle:bool,
+    // stopLatched:bool, switchBlockLatched:bool) — everything but the counter's high byte is read back unchanged, so
+    // only the divider moves.
+    private static void RestoreDivider(TimerComponent timer, byte dividerByte) {
+        var writer = new StateWriter();
+
+        timer.SaveState(writer: writer);
+
+        var bytes = writer.ToArray();
+
+        bytes[1] = dividerByte; // counter is little-endian u16 at [0..1]; DIV is its high byte.
+
+        timer.LoadState(reader: new StateReader(buffer: bytes));
+    }
+    // Splices the double-speed flag via Key1Component's own SaveState/LoadState round trip (its published field order:
+    // armed:bool, isDoubleSpeed:bool, stopped:bool, ...) — everything but that one byte is read back unchanged.
+    private static void RestoreDoubleSpeed(Key1Component key1, bool isDoubleSpeed) {
+        var writer = new StateWriter();
+
+        key1.SaveState(writer: writer);
+
+        var bytes = writer.ToArray();
+
+        bytes[1] = ((byte)(isDoubleSpeed
+            ? 1
+            : 0)); // armed:bool is byte 0; isDoubleSpeed:bool is byte 1.
+
+        key1.LoadState(reader: new StateReader(buffer: bytes));
+    }
+    // One CORE buffer-table entry (a size/file-offset UInt32 pair at Bess.BufferTableOffset+tableOffset) must reference
+    // a span that fits entirely within the file, and — when destinationCapacity is given — must match its destination
+    // region's permitted size shape; ApplyBuffer/ApplyMbcRam/ApplyPalette trust both once validation has returned, so
+    // every entry the importer reads must be checked here first.
+    private static void ValidateBufferTable(byte[] core, int tableOffset, int fileLength, string name, int? destinationCapacity = null, BufferSizeShape shape = BufferSizeShape.Range) {
+        var absolute = (Bess.BufferTableOffset + tableOffset);
+        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
+        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
+
+        if (
+            (size < 0) ||
+            (offset < 0) ||
+            (offset > (fileLength - size))
+        ) {
+            throw new InvalidDataException(message: $"the {name} buffer table entry references {size} bytes at file offset {offset}, outside the file's {fileLength} bytes.");
+        }
+
+        if (!destinationCapacity.HasValue) {
+            return;
+        }
+
+        var capacity = destinationCapacity.Value;
+
+        if (size > capacity) {
+            throw new InvalidDataException(message: $"the {name} buffer table entry declares {size} bytes, exceeding its destination region's {capacity}-byte capacity.");
+        }
+
+        var shapeValid = shape switch {
+            BufferSizeShape.Exact => (size == capacity),
+            BufferSizeShape.ExactOrZero => ((size == 0) || (size == capacity)),
+            _ => true,
+        };
+
+        if (!shapeValid) {
+            throw new InvalidDataException(message: $"the {name} buffer table entry declares {size} bytes; the spec requires exactly {capacity}{((shape == BufferSizeShape.ExactOrZero)
+                ? " or 0"
+                : string.Empty)}.");
+        }
+    }
+    // BESS spec (MBC block): "The length of this block is variable and must be divisible by 3" and "Values outside
+    // the 0x0000-0x7FFF and 0xA000-0xBFFF ranges are not allowed" — both also listed among SameBoy's own fatal
+    // conditions ("An invalid length of MBC (not a multiple of 3)", "A write outside the $0000-$7FFF and
+    // $A000-$BFFF ranges in the MBC block"). Called from the pure parse pass in ParseAndValidate as soon as an
+    // "MBC " block's payload is read, so a violation is rejected before CORE, register, or buffer state is applied.
+    private static void ValidateMbcBlock(byte[] mbc) {
+        if ((mbc.Length % 3) != 0) {
+            throw new InvalidDataException(message: $"the MBC block is {mbc.Length} bytes; the spec requires a length divisible by 3.");
+        }
+
+        for (var offset = 0; (offset < mbc.Length); offset += 3) {
+            var address = ((ushort)(mbc[offset] | (mbc[(offset + 1)] << 8)));
+
+            if (!(((address >= 0x0000) && (address <= 0x7FFF)) || ((address >= 0xA000) && (address <= 0xBFFF)))) {
+                throw new InvalidDataException(message: $"the MBC block record at index {(offset / 3)} writes address 0x{address:X4}, outside the spec's 0x0000-0x7FFF and 0xA000-0xBFFF ranges.");
+            }
+        }
+    }
+
     /// <summary>Imports a BESS-compliant file into a machine. The whole block graph and buffer table are parsed and
     /// validated against the file's bounds and the destination machine's region capacities before anything is
     /// applied — a malformed file is rejected wholesale and the machine is left exactly as it was; nothing here
@@ -252,7 +588,8 @@ internal static class BessImporter {
             offset: out var ramOffset
         ) && (ramLength > 0))
             ? (ramOffset / 0x2000)
-            : -1);
+            : -1
+        );
 
         return new BessImportReport(
             EmulatorName: name,
@@ -279,218 +616,6 @@ internal static class BessImporter {
         );
     }
 
-    // Parses and fully validates a BESS file's block graph, CORE buffer table, and optional MBC payload — against
-    // both the file's bounds and the destination machine's region capacities — before any machine state is touched.
-    // This pass touches only `file` — no service lookups, no writes — so any InvalidDataException it throws leaves
-    // the machine byte-for-byte as it was.
-    private static (string Name, byte[] Core, byte[]? Mbc) ParseAndValidate(byte[] file, ConsoleModel model) {
-        if (!Bess.TryReadFooter(
-            file: file,
-            firstBlockOffset: out var cursor
-        )) {
-            throw new InvalidDataException(message: "The file has no BESS footer.");
-        }
-
-        var name = string.Empty;
-        byte[]? core = null;
-        byte[]? mbc = null;
-        var sawCore = false;
-        var sawEnd = false;
-        var end = (file.Length - Bess.FooterLength);
-
-        while (cursor < end) {
-            // BESS spec (END block): "Naturally, it must be the last block." Once END has been read, ANY further
-            // block — well-formed or not — violates that, so this is checked before the next block is even parsed.
-            if (sawEnd) {
-                throw new InvalidDataException(message: "a BESS block follows the END block; the spec requires END to be the last block.");
-            }
-
-            if (!Bess.TryReadBlock(
-                end: end,
-                file: file,
-                next: out var next,
-                offset: cursor,
-                payload: out var payload,
-                tag: out var tag
-            )) {
-                throw new InvalidDataException(message: $"a BESS block at file offset {cursor} is truncated or extends past the file.");
-            }
-
-            switch (tag) {
-                case "NAME": name = System.Text.Encoding.ASCII.GetString(bytes: payload); break;
-                case "CORE":
-                    // BESS spec (Validation and Failures): "Duplicate CORE block" is listed among SameBoy's own
-                    // fatal conditions.
-                    if (sawCore) {
-                        throw new InvalidDataException(message: "the file has more than one CORE block; the spec makes a duplicate CORE block fatal.");
-                    }
-
-                    core = payload.ToArray();
-                    sawCore = true;
-
-                    break;
-                case "MBC ":
-                    // BESS spec (Validation and Failures): "A known block, other than NAME, appearing before
-                    // CORE" is a SameBoy fatal condition; the CORE block section itself grants the one further
-                    // exemption this importer honors ("This block must be the first block, unless the NAME or INFO
-                    // blocks exist then it must come directly after them"). NAME is handled above unconditionally,
-                    // and INFO — like every tag this importer assigns no dedicated meaning to — falls to the default
-                    // case below and stays unconditionally ignorable ("An implementation should not enforce block
-                    // order on blocks unknown to it for future compatibility"). MBC is the one other block type this
-                    // importer DOES interpret, so it is the one gated on CORE having already been seen.
-                    if (!sawCore) {
-                        throw new InvalidDataException(message: "an MBC block was encountered before the required CORE block.");
-                    }
-
-                    mbc = payload.ToArray();
-                    ValidateMbcBlock(mbc: mbc);
-
-                    break;
-                case "END ":
-                    // BESS spec (END block): "The length of the END block must be 0" — also listed among SameBoy's
-                    // own fatal conditions ("An END block with non-zero length").
-                    if (payload.Length != 0) {
-                        throw new InvalidDataException(message: $"the END block has a {payload.Length}-byte payload; the spec requires 0.");
-                    }
-
-                    sawEnd = true;
-
-                    break;
-                default: break; // INFO and any unsupported block: ignored per spec ("should be completely ignored").
-            }
-
-            cursor = next;
-        }
-
-        if (core is null) {
-            throw new InvalidDataException(message: "The file has no CORE block.");
-        }
-
-        // Required per the BESS spec: "Naturally, it must be the last block" and a missing END block is an
-        // irrecoverable structural error — a CORE graph that merely reaches the footer without one is not accepted.
-        if (!sawEnd) {
-            throw new InvalidDataException(message: "The file has no required END block.");
-        }
-
-        // (M-10) BESS spec (CORE block): "The length of the CORE block is 0xD0 bytes, but implementations are
-        // expected to ignore any excess bytes." Only a payload SHORTER than the defined prefix is rejected; a longer
-        // one is a legal forward-compatible file from a newer minor revision. Only the defined prefix is kept from
-        // here on — every field-offset read below (including the version check immediately following) stays within
-        // it, so the tail is truly ignored rather than merely unread.
-        if (core.Length < Bess.CoreBlockLength) {
-            throw new InvalidDataException(message: $"the CORE block is {core.Length} bytes; the spec requires at least {Bess.CoreBlockLength}.");
-        }
-
-        core = core.AsSpan(
-            length: Bess.CoreBlockLength,
-            start: 0
-        ).ToArray();
-
-        // (H-10) BESS spec (CORE block): "0x00 | Major BESS version as a 16-bit integer" and "Both major and minor
-        // versions should be 1. Implementations are expected to reject incompatible majors, but still attempt to
-        // read newer minor versions." The minor is deliberately never read as a compatibility gate.
-        var majorVersion = BinaryPrimitives.ReadUInt16LittleEndian(source: core.AsSpan(start: 0x00));
-
-        if (majorVersion != Bess.SupportedCoreMajorVersion) {
-            throw new InvalidDataException(message: $"the CORE block declares BESS major version {majorVersion}; only major version {Bess.SupportedCoreMajorVersion} is supported.");
-        }
-
-        // Palette RAM exists only on a color-capable destination (DMG has none); the spec's own "sizes must be 0 for
-        // models prior to Game Boy Color" gives a DMG destination zero capacity here, so any nonzero palette entry is
-        // rejected the same way an oversized one is.
-        var paletteCapacity = (model.SupportsColor()
-            ? 0x40
-            : 0); // BESS spec: palette size "must be 0 or 0x40".
-
-        // Work-RAM/video-RAM/OAM/high-RAM capacities are the fixed CPU-visible bus windows ApplyBuffer writes through
-        // (start, start+1, ...) — the same extents BessScope captures on export — regardless of DMG/CGB/AGB, since a
-        // banked region beyond that window is not reachable through this sequential bus-write path at all.
-        //
-        // Work-RAM and video-RAM have no fixed size in the spec's buffer table (unlike OAM/HRAM/palette below, whose
-        // rows carry an explicit "=" size) — only an upper bound applies here; a smaller-than-capacity size is legal
-        // and gets the spec's own graceful handling ("if a too small VRAM size is specified... set that extra bank to
-        // all zeros") at apply time in ApplyBuffer, not rejected here.
-        ValidateBufferTable(
-            core: core,
-            tableOffset: 0x00,
-            fileLength: file.Length,
-            name: "work-RAM",
-            destinationCapacity: ((MemoryMap.WorkRamBankNEnd - MemoryMap.WorkRamBank0Start) + 1)
-        );
-        ValidateBufferTable(
-            core: core,
-            tableOffset: 0x08,
-            fileLength: file.Length,
-            name: "video-RAM",
-            destinationCapacity: ((MemoryMap.VideoRamEnd - MemoryMap.VideoRamStart) + 1)
-        );
-        // MBC-RAM has no destination-capacity check: ICartridge.ImportExternalRam already clamps to the cartridge's own
-        // RAM size (Math.Min), matching the spec's explicit "too large MBC RAM size... the superfluous data should be
-        // ignored" — there is no unchecked-index write here to guard.
-        ValidateBufferTable(
-            core: core,
-            tableOffset: 0x10,
-            fileLength: file.Length,
-            name: "MBC-RAM"
-        );
-        // OAM and HRAM carry a fixed spec size ("=0xA0", "=0x7F") with no "or 0" escape (unlike palette below), so
-        // anything but the exact capacity is rejected.
-        ValidateBufferTable(
-            core: core,
-            tableOffset: 0x18,
-            fileLength: file.Length,
-            name: "OAM",
-            destinationCapacity: ((MemoryMap.ObjectAttributeMemoryEnd - MemoryMap.ObjectAttributeMemoryStart) + 1),
-            shape: BufferSizeShape.Exact
-        );
-        ValidateBufferTable(
-            core: core,
-            tableOffset: 0x20,
-            fileLength: file.Length,
-            name: "high-RAM",
-            destinationCapacity: ((MemoryMap.HighRamEnd - MemoryMap.HighRamStart) + 1),
-            shape: BufferSizeShape.Exact
-        );
-        // Palette carries a fixed spec size too, but with the explicit "or 0" escape ("=0x40 or 0") — a DMG
-        // destination's capacity is already 0, so its two allowed sizes collapse to just 0.
-        ValidateBufferTable(
-            core: core,
-            tableOffset: 0x28,
-            fileLength: file.Length,
-            name: "background-palette",
-            destinationCapacity: paletteCapacity,
-            shape: BufferSizeShape.ExactOrZero
-        );
-        ValidateBufferTable(
-            core: core,
-            tableOffset: 0x30,
-            fileLength: file.Length,
-            name: "object-palette",
-            destinationCapacity: paletteCapacity,
-            shape: BufferSizeShape.ExactOrZero
-        );
-
-        return (name, core, mbc);
-    }
-    // BESS spec (MBC block): "The length of this block is variable and must be divisible by 3" and "Values outside
-    // the 0x0000-0x7FFF and 0xA000-0xBFFF ranges are not allowed" — both also listed among SameBoy's own fatal
-    // conditions ("An invalid length of MBC (not a multiple of 3)", "A write outside the $0000-$7FFF and
-    // $A000-$BFFF ranges in the MBC block"). Called from the pure parse pass in ParseAndValidate as soon as an
-    // "MBC " block's payload is read, so a violation is rejected before CORE, register, or buffer state is applied.
-    private static void ValidateMbcBlock(byte[] mbc) {
-        if ((mbc.Length % 3) != 0) {
-            throw new InvalidDataException(message: $"the MBC block is {mbc.Length} bytes; the spec requires a length divisible by 3.");
-        }
-
-        for (var offset = 0; (offset < mbc.Length); offset += 3) {
-            var address = ((ushort)(mbc[offset] | (mbc[(offset + 1)] << 8)));
-
-            if (!(((address >= 0x0000) && (address <= 0x7FFF)) || ((address >= 0xA000) && (address <= 0xBFFF)))) {
-                throw new InvalidDataException(message: $"the MBC block record at index {(offset / 3)} writes address 0x{address:X4}, outside the spec's 0x0000-0x7FFF and 0xA000-0xBFFF ranges.");
-            }
-        }
-    }
-
     // The permitted shape of a CORE buffer-table entry's declared size against its destination region's capacity —
     // the BESS spec gives some regions (OAM, HRAM, palette) a fixed size instead of the plain upper bound the rest get.
     private enum BufferSizeShape {
@@ -501,129 +626,5 @@ internal static class BessImporter {
         Exact,
         /// <summary>Exactly the destination capacity, or exactly 0 (palette "=0x40 or 0").</summary>
         ExactOrZero,
-    }
-
-    // One CORE buffer-table entry (a size/file-offset UInt32 pair at Bess.BufferTableOffset+tableOffset) must reference
-    // a span that fits entirely within the file, and — when destinationCapacity is given — must match its destination
-    // region's permitted size shape; ApplyBuffer/ApplyMbcRam/ApplyPalette trust both once validation has returned, so
-    // every entry the importer reads must be checked here first.
-    private static void ValidateBufferTable(byte[] core, int tableOffset, int fileLength, string name, int? destinationCapacity = null, BufferSizeShape shape = BufferSizeShape.Range) {
-        var absolute = (Bess.BufferTableOffset + tableOffset);
-        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
-        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
-
-        if (
-            (size < 0) ||
-            (offset < 0) ||
-            (offset > (fileLength - size))
-        ) {
-            throw new InvalidDataException(message: $"the {name} buffer table entry references {size} bytes at file offset {offset}, outside the file's {fileLength} bytes.");
-        }
-
-        if (!destinationCapacity.HasValue) {
-            return;
-        }
-
-        var capacity = destinationCapacity.Value;
-
-        if (size > capacity) {
-            throw new InvalidDataException(message: $"the {name} buffer table entry declares {size} bytes, exceeding its destination region's {capacity}-byte capacity.");
-        }
-
-        var shapeValid = shape switch {
-            BufferSizeShape.Exact => (size == capacity),
-            BufferSizeShape.ExactOrZero => ((size == 0) || (size == capacity)),
-            _ => true,
-        };
-
-        if (!shapeValid) {
-            throw new InvalidDataException(message: $"the {name} buffer table entry declares {size} bytes; the spec requires exactly {capacity}{((shape == BufferSizeShape.ExactOrZero)
-                ? " or 0"
-                : string.Empty)}.");
-        }
-    }
-    // Splices the double-speed flag via Key1Component's own SaveState/LoadState round trip (its published field order:
-    // armed:bool, isDoubleSpeed:bool, stopped:bool, ...) — everything but that one byte is read back unchanged.
-    private static void RestoreDoubleSpeed(Key1Component key1, bool isDoubleSpeed) {
-        var writer = new StateWriter();
-
-        key1.SaveState(writer: writer);
-
-        var bytes = writer.ToArray();
-
-        bytes[1] = ((byte)(isDoubleSpeed
-            ? 1
-            : 0)); // armed:bool is byte 0; isDoubleSpeed:bool is byte 1.
-
-        key1.LoadState(reader: new StateReader(buffer: bytes));
-    }
-    // Splices the divider's high byte via TimerComponent's own SaveState/LoadState round trip (its published field
-    // order: counter:u16, tima:u8, tma:u8, tac:u8, lastTimaInput:bool, overflowCountdown:i32, reloadedThisCycle:bool,
-    // stopLatched:bool, switchBlockLatched:bool) — everything but the counter's high byte is read back unchanged, so
-    // only the divider moves.
-    private static void RestoreDivider(TimerComponent timer, byte dividerByte) {
-        var writer = new StateWriter();
-
-        timer.SaveState(writer: writer);
-
-        var bytes = writer.ToArray();
-
-        bytes[1] = dividerByte; // counter is little-endian u16 at [0..1]; DIV is its high byte.
-
-        timer.LoadState(reader: new StateReader(buffer: bytes));
-    }
-    // fillCapacity: the destination region's fixed size, for a region whose buffer-table entry is allowed to declare
-    // fewer bytes than that (work-RAM, video-RAM — BufferSizeShape.Range). BESS spec: "if a too small VRAM size is
-    // specified... the implementation is expected to set that extra bank to all zeros" — applied here to any
-    // undersized Range region so the destination never retains the machine's prior contents past the imported span.
-    // Regions validated as BufferSizeShape.Exact (OAM, HRAM) can never reach this method undersized, so they pass
-    // null and skip the fill loop entirely.
-    private static void ApplyBuffer(ISystemBus bus, byte[] core, int tableOffset, ushort start, byte[] file, int? fillCapacity = null) {
-        var absolute = (Bess.BufferTableOffset + tableOffset);
-        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
-        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
-
-        for (var index = 0; (index < size); ++index) {
-            bus.WriteByte(
-                address: ((ushort)(start + index)),
-                value: file[(offset + index)]
-            );
-        }
-
-        for (var index = size; (fillCapacity.HasValue && (index < fillCapacity.Value)); ++index) {
-            bus.WriteByte(
-                address: ((ushort)(start + index)),
-                value: 0
-            );
-        }
-    }
-    private static void ApplyMbcRam(ICartridge cartridge, byte[] core, byte[] file) {
-        var absolute = (Bess.BufferTableOffset + 0x10);
-        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
-        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
-
-        if (size > 0) {
-            cartridge.ImportExternalRam(source: file.AsSpan(
-                length: size,
-                start: offset
-            ));
-        }
-    }
-    private static void ApplyPalette(ISystemBus bus, byte[] core, int tableOffset, (ushort Index, ushort Data) registers, byte indexRegisterValue, byte[] file) {
-        var absolute = (Bess.BufferTableOffset + tableOffset);
-        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
-        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
-
-        if (size > 0) {
-            BessScope.WriteColorPalette(
-                bus: bus,
-                registers: registers,
-                finalIndexRegister: indexRegisterValue,
-                palette: file.AsSpan(
-                    length: size,
-                    start: offset
-                )
-            );
-        }
     }
 }

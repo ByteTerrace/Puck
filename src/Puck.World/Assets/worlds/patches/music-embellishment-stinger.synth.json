@@ -1,5 +1,5 @@
 {
-  "schema": "puck.synth.v1",
+  "schema": "puck.synthesizer-patch.v1",
   "name": "embellishment-stinger",
   "oscillator": "Sine",
   "dutyThousandths": null,

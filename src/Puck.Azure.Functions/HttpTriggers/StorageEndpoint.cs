@@ -2,6 +2,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using System.Net;
 using Puck.Azure.Functions.Services;
+using Puck.Azure.Functions.Utilities;
 
 namespace Puck.Azure.Functions.HttpTriggers;
 
@@ -10,27 +11,7 @@ namespace Puck.Azure.Functions.HttpTriggers;
 // pending the recorded home and the computed partition differ, and the data is still in the home.
 // IUserStorageLocationService wraps the grain call with a short-TTL cache and a local-resolver
 // fallback for when the silo is unreachable.
-public sealed class StorageEndpoint(IUserStorageLocationService userStorageLocationService)
-{
-    private static string? GetDelegatedUserObjectId(FunctionContext functionContext) {
-        var user = functionContext
-            .GetHttpContext()!
-            .User;
-        var hasScopes = user
-            .Claims
-            .Any(predicate: static claim =>
-                ("scp" == claim.Type) ||
-                ("http://schemas.microsoft.com/identity/claims/scope" == claim.Type)
-            );
-
-        return hasScopes
-            ? user
-                .Identity
-                ?.Name
-                ?.ToLowerInvariant()
-            : null;
-    }
-
+public sealed class StorageEndpoint(IUserStorageLocationService userStorageLocationService) {
     [Function(name: nameof(StorageEndpoint))]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(
@@ -41,7 +22,7 @@ public sealed class StorageEndpoint(IUserStorageLocationService userStorageLocat
         FunctionContext functionContext
     ) {
         var cancellationToken = functionContext.CancellationToken;
-        var userObjectId = GetDelegatedUserObjectId(functionContext: functionContext);
+        var userObjectId = functionContext.GetDelegatedUserObjectId();
 
         if (userObjectId is null) {
             return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);

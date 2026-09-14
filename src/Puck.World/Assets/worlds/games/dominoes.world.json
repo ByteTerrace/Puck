@@ -370,7 +370,7 @@
         "palette": [
           {
             "color": "#EDE0C8",
-            "shininess": 15,
+            "roughness": 0.774,
             "specular": 0.1
           }
         ],
@@ -405,7 +405,7 @@
         "palette": [
           {
             "color": "#EDE0C8",
-            "shininess": 15,
+            "roughness": 0.774,
             "specular": 0.1
           }
         ],

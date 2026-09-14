@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Puck.Abstractions.Machines;
 using System.Text;
 using Puck.Networking;
 using Puck.World.Server;
@@ -12,10 +14,13 @@ namespace Puck.World.Protocol;
 /// ride <see cref="HandshakeWireFormat"/> directly. Downstream (server → client) is this type's own, deliberately
 /// small v1 grammar: a Hello verdict once, then one completion per submitted frame (this v1 socket is strictly
 /// request-then-response per connection, so no correlation id travels on the wire) — not one of
-/// <see cref="WorldSubmissionCodec"/>'s twelve leaf kinds, since v1 carries only the Completion lane (streamed
+/// <see cref="WorldSubmissionCodec"/>'s submission leaf kinds, since v1 carries only the Completion lane (streamed
 /// snapshots/definitions/compositions/levers are not carried here).
 /// </summary>
 public static class WorldPeerWireFormat {
+    private const int MaxDownstreamBodyBytes = ((MaxDownstreamFrameBytes - sizeof(uint)) - sizeof(byte));
+    private const int MaxProposalMetadataItems = 256;
+
     /// <summary>The hard cap on a downstream frame's total bytes. Typed reflow proposals remain bounded by this
     /// same cap and never become unbounded bulk payloads.</summary>
     public const int MaxDownstreamFrameBytes = (64 * 1024);
@@ -54,15 +59,194 @@ public static class WorldPeerWireFormat {
         /// <summary><see cref="WorldSubmissionResult.Query"/> carrying a typed
         /// <see cref="WorldPlacementProposal"/> beside its review text.</summary>
         QueryPlacementProposal,
+
+        /// <summary><see cref="WorldSubmissionResult.Mutation"/> carrying the applied/refused decision and its
+        /// independent persistence status.</summary>
+        MutationOutcome = 8,
+
+        /// <summary>The typed provider outcome of a named-machine operation.</summary>
+        MachineOperationOutcome = 9,
     }
 
+    private static string BoundWireString(string value) {
+        if (Encoding.UTF8.GetByteCount(s: value) <= WireLimits.MaxStringBytes) {
+            return value;
+        }
+        var low = 0;
+        var high = value.Length;
+
+        while (low < high) {
+            var middle = (low + (((high - low) + 1) / 2));
+
+            if (Encoding.UTF8.GetByteCount(chars: value.AsSpan(
+                length: middle,
+                start: 0
+            )) <= (WireLimits.MaxStringBytes - 3)) {
+                low = middle;
+            } else {
+                high = (middle - 1);
+            }
+        }
+        if (
+            (low > 0) &&
+            char.IsHighSurrogate(c: value[(low - 1)])
+        ) {
+            low--;
+        }
+        return $"{value[..low]}...";
+    }
+    private static byte[] EncodeMachineOperationResult(MachineOperationResult result) {
+        var reason = (result.Reason ?? string.Empty);
+        var valueBytes = ((result.Value is { } value)
+            ? Encoding.UTF8.GetBytes(s: value.GetRawText())
+            : null
+        );
+        var includeValue = ((valueBytes is not null) && (valueBytes.Length <= WorldFrameCodec.MaxPayloadBytes(kind: WorldSubmissionKind.Operation)));
+
+        if (
+            (valueBytes is not null) &&
+            !includeValue
+        ) {
+            reason = $"{reason} machine operation result value omitted because it exceeds the downstream frame budget.";
+        }
+
+        var writer = new WireWriter();
+
+        writer.WriteByte(value: ((byte)result.Status));
+        writer.WriteString(value: BoundWireString(value: reason));
+        writer.WriteBoolean(value: includeValue);
+        if (includeValue) {
+            writer.WriteBlock(value: valueBytes!);
+        }
+        if (
+            (writer.Length > MaxDownstreamBodyBytes) &&
+            includeValue
+        ) {
+            writer = new WireWriter();
+            writer.WriteByte(value: ((byte)result.Status));
+            writer.WriteString(value: BoundWireString(value: $"{reason} machine operation result value omitted to fit the downstream frame budget."));
+            writer.WriteBoolean(value: false);
+        }
+
+        return writer.ToArray();
+    }
     private static byte[] EncodeText(string text) => Encoding.UTF8.GetBytes(s: (text ?? string.Empty));
+    private static string[] ReadProposalStrings(string field, ref WireReader reader) {
+        var count = reader.ReadCount(
+            field: field,
+            maximum: MaxProposalMetadataItems,
+            minimum: 0
+        );
+        var values = new string[count];
+
+        for (var index = 0; (index < count); index++) {
+            values[index] = reader.ReadString(field: $"{field}[{index}]");
+        }
+
+        return values;
+    }
+    private static bool TryEncodePlacementProposalAnswer(QueryAnswer answer, out byte[] body, out string reason) {
+        body = [];
+        reason = string.Empty;
+        if (answer.Payload is not WorldPlacementProposal proposal) {
+            reason = "query payload is not a placement proposal";
+
+            return false;
+        }
+        if (!WorldSubmissionCodec.TryEncodeMutation(
+            mutation: proposal.Mutation,
+            bytes: out var mutationBytes,
+            failure: out var mutationFailure
+        )) {
+            reason = $"reflow proposal mutation is not encodable: {mutationFailure}";
+
+            return false;
+        }
+        if (!proposal.Mutation.TryValidateShape(reason: out var batchReason)) {
+            reason = $"reflow proposal batch is malformed: {batchReason}";
+
+            return false;
+        }
+        if (mutationBytes.Length > MaxDownstreamBodyBytes) {
+            reason = $"reflow proposal mutation carries {mutationBytes.Length} bytes; cap is {MaxDownstreamBodyBytes}";
+
+            return false;
+        }
+        if (
+            !TryValidateProposalStrings(
+            proposal.AffectedIds,
+            "affected ids",
+            out reason
+        ) ||
+            !TryValidateProposalStrings(
+            proposal.Constraints,
+            "constraints",
+            out reason
+        )
+        ) {
+            return false;
+        }
+
+        try {
+            var writer = new WireWriter(capacity: Math.Min(
+                val1: MaxDownstreamBodyBytes,
+                val2: (mutationBytes.Length + 1024)
+            ));
+
+            writer.WriteBoolean(value: answer.Refused);
+            writer.WriteString(value: answer.Text);
+            writer.WriteBlock(value: mutationBytes);
+            writer.WriteInt32(value: proposal.Candidates);
+            writer.WriteInt32(value: proposal.Moved);
+            writer.WriteInt64(value: proposal.Cost);
+            WriteProposalStrings(
+                writer: writer,
+                values: proposal.AffectedIds
+            );
+            WriteProposalStrings(
+                writer: writer,
+                values: proposal.Constraints
+            );
+            if (writer.Length > MaxDownstreamBodyBytes) {
+                reason = $"typed reflow proposal carries {writer.Length} bytes; cap is {MaxDownstreamBodyBytes}";
+
+                return false;
+            }
+
+            body = writer.ToArray();
+
+            return true;
+        } catch (ArgumentException exception) {
+            reason = $"reflow proposal metadata is not encodable: {exception.Message}";
+
+            return false;
+        }
+    }
+    private static bool TryValidateProposalStrings(IReadOnlyList<string>? values, string field, out string reason) {
+        if (
+            (values is null) ||
+            (values.Count > MaxProposalMetadataItems) ||
+            values.Any(predicate: value => (value is null))
+        ) {
+            reason = $"reflow proposal {field} exceed the metadata bound or contain null entries";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
     private static Task WriteDownstreamAsync(Stream stream, DownstreamKind kind, ReadOnlyMemory<byte> body, CancellationToken ct) => WireFrame.WriteAsync(
         body: body,
         ct: ct,
         kind: ((byte)kind),
         stream: stream
     );
+    private static void WriteProposalStrings(WireWriter writer, IReadOnlyList<string> values) {
+        writer.WriteInt32(value: values.Count);
+        foreach (var value in values) { writer.WriteString(value: value); }
+    }
 
     /// <summary>Decodes a whole downstream body as raw UTF-8 text — the shape <see cref="EncodeText"/> writes for
     /// <see cref="DownstreamKind.HelloRefused"/> and <see cref="DownstreamKind.Refusal"/>: a single text field with
@@ -123,6 +307,314 @@ public static class WorldPeerWireFormat {
             ? (kind, body)
             : null
         );
+    }
+    /// <summary>Decodes a <paramref name="kind"/>/<paramref name="body"/> pair from <see cref="TryReadDownstreamAsync"/>
+    /// back into its typed <see cref="WorldSubmissionResult"/> — the read-side twin of <see cref="WriteResultAsync"/>,
+    /// shared by every consumer that turns a peer's completion frame into a result rather than re-deriving the field
+    /// offsets per call site.</summary>
+    /// <param name="kind">The downstream kind.</param>
+    /// <param name="body">The frame body.</param>
+    /// <param name="result">The decoded result on success.</param>
+    /// <param name="reason">The refusal text — the peer's own refusal narration for <see cref="DownstreamKind.Refusal"/>,
+    /// a truncation detail for a malformed <see cref="DownstreamKind.Session"/>/<see cref="DownstreamKind.Query"/> body,
+    /// or empty on success.</param>
+    /// <returns><see langword="true"/> when <paramref name="result"/> decoded.</returns>
+    public static bool TryReadResult(DownstreamKind kind, ReadOnlySpan<byte> body, out WorldSubmissionResult? result, out string reason) {
+        switch (kind) {
+            case DownstreamKind.Ack:
+                result = WorldSubmissionResult.Ack.Instance;
+                reason = string.Empty;
+
+                return true;
+            case DownstreamKind.Session: {
+                    var reader = new WireReader(bytes: body);
+                    var accepted = reader.ReadBoolean();
+                    var assignedIndex = reader.ReadInt32();
+                    var sessionReason = reader.ReadString(field: "session completion reason");
+
+                    if (!reader.TryFinish(failure: out _)) {
+                        result = null;
+                        reason = "remote authority returned a truncated session completion";
+
+                        return false;
+                    }
+
+                    result = new WorldSubmissionResult.Session(Reply: new SessionReply(
+                        Accepted: accepted,
+                        AssignedIndex: assignedIndex,
+                        Reason: sessionReason,
+                        RosterEcho: string.Empty
+                    ));
+                    reason = string.Empty;
+
+                    return true;
+                }
+            case DownstreamKind.Query: {
+                    var reader = new WireReader(bytes: body);
+                    var refused = reader.ReadBoolean();
+                    var text = reader.ReadString(field: "query completion text");
+
+                    if (!reader.TryFinish(failure: out _)) {
+                        result = null;
+                        reason = "remote authority returned a truncated query completion";
+
+                        return false;
+                    }
+
+                    result = new WorldSubmissionResult.Query(Answer: new QueryAnswer(
+                        Text: text,
+                        Refused: refused
+                    ));
+                    reason = string.Empty;
+
+                    return true;
+                }
+            case DownstreamKind.QueryPlacementProposal: {
+                    if (body.Length > MaxDownstreamBodyBytes) {
+                        result = null;
+                        reason = $"typed reflow proposal carries {body.Length} bytes; cap is {MaxDownstreamBodyBytes}";
+
+                        return false;
+                    }
+
+                    var reader = new WireReader(bytes: body);
+                    var refused = reader.ReadBoolean();
+                    var text = reader.ReadString(field: "query completion text");
+                    var mutationBytes = reader.ReadBlock(
+                        field: "reflow proposal mutation",
+                        maxBytes: MaxDownstreamBodyBytes
+                    );
+                    var candidates = reader.ReadInt32();
+                    var moved = reader.ReadInt32();
+                    var cost = reader.ReadInt64();
+                    var affectedIds = ReadProposalStrings(
+                        field: "reflow proposal affected ids",
+                        reader: ref reader
+                    );
+                    var constraints = ReadProposalStrings(
+                        field: "reflow proposal constraints",
+                        reader: ref reader
+                    );
+
+                    if (!reader.TryFinish(failure: out var wireFailure)) {
+                        result = null;
+                        reason = wireFailure.Detail;
+
+                        return false;
+                    }
+                    if (
+                        (candidates < 0) ||
+                        (moved < 0) ||
+                        (cost < 0)
+                    ) {
+                        result = null;
+                        reason = "reflow proposal metadata carries a negative count or cost";
+
+                        return false;
+                    }
+                    if (
+                        !WorldSubmissionCodec.TryDecodeMutation(
+                        bytes: mutationBytes,
+                        failure: out var mutationFailure,
+                        mutation: out var mutation
+                    ) ||
+                        (mutation is not WorldMutation.Batch batch)
+                    ) {
+                        result = null;
+                        reason = $"reflow proposal mutation is invalid: {mutationFailure}";
+
+                        return false;
+                    }
+                    if (!batch.TryValidateShape(reason: out var batchReason)) {
+                        result = null;
+                        reason = $"reflow proposal batch is malformed: {batchReason}";
+
+                        return false;
+                    }
+
+                    result = new WorldSubmissionResult.Query(Answer: new QueryAnswer(
+                        Text: text,
+                        Refused: refused,
+                        Payload: new WorldPlacementProposal(
+                            Candidates: candidates,
+                            Cost: cost,
+                            Moved: moved,
+                            Mutation: batch
+                        ) {
+                            AffectedIds = affectedIds,
+                            Constraints = constraints,
+                        }
+                    ));
+                    reason = string.Empty;
+
+                    return true;
+                }
+            case DownstreamKind.MachineOperationOutcome: {
+                    if (body.Length > MaxDownstreamBodyBytes) {
+                        result = null;
+                        reason = $"machine operation completion carries {body.Length} bytes; cap is {MaxDownstreamBodyBytes}";
+                        return false;
+                    }
+                    var reader = new WireReader(bytes: body);
+                    var status = ((MachineOperationStatus)reader.ReadByte());
+                    var operationReason = reader.ReadString(field: "machine operation completion reason");
+                    var hasValue = reader.ReadBoolean();
+                    JsonElement? value = null;
+
+                    if (hasValue) {
+                        var valueBytes = reader.ReadBlock(
+                            field: "machine operation completion value",
+                            maxBytes: WorldFrameCodec.MaxPayloadBytes(kind: WorldSubmissionKind.Operation)
+                        );
+
+                        try {
+                            using var document = JsonDocument.Parse(valueBytes);
+
+                            value = document.RootElement.Clone();
+                        } catch (JsonException exception) {
+                            result = null;
+                            reason = $"remote authority returned invalid machine operation value: {exception.Message}";
+                            return false;
+                        }
+                    }
+                    var finished = reader.TryFinish(failure: out var wireFailure);
+
+                    if (
+                        !Enum.IsDefined(value: status) ||
+                        !finished
+                    ) {
+                        result = null;
+                        reason = (!Enum.IsDefined(value: status)
+                            ? $"remote authority returned unknown machine operation status {((byte)status)}"
+                            : wireFailure.Detail
+                        );
+                        return false;
+                    }
+                    result = new WorldSubmissionResult.MachineOperation(Result: new MachineOperationResult(
+                        reason: operationReason,
+                        status: status,
+                        value: value
+                    ));
+                    reason = string.Empty;
+                    return true;
+                }
+            case DownstreamKind.MutationOutcome: {
+                    var reader = new WireReader(bytes: body);
+                    var operationText = reader.ReadRequiredString(
+                        field: "mutation operation id",
+                        maxBytes: 64
+                    );
+                    var actorText = reader.ReadRequiredString(
+                        field: "mutation actor",
+                        maxBytes: 256
+                    );
+                    var payloadDigest = reader.ReadRequiredString(
+                        field: "mutation payload digest",
+                        maxBytes: 128
+                    );
+                    var decision = ((WorldMutationDecision)reader.ReadByte());
+                    var persistence = ((WorldMutationPersistenceStatus)reader.ReadByte());
+                    var code = reader.ReadRequiredString(
+                        field: "mutation decision code",
+                        maxBytes: 256
+                    );
+                    var detail = reader.ReadString(
+                        field: "mutation decision detail",
+                        maxBytes: 4096
+                    );
+                    var hasGroupRevision = reader.ReadBoolean();
+                    var groupRevision = (hasGroupRevision
+                        ? reader.ReadInt64()
+                        : (long?)null
+                    );
+                    var hasWatermark = reader.ReadBoolean();
+                    var watermark = (hasWatermark
+                        ? new WorldDurableWatermark(
+                            RootSequence: reader.ReadInt64(),
+                            CheckpointOrdinal: (reader.ReadBoolean()
+                            ? reader.ReadInt64()
+                            : (long?)null),
+                            JournalSequence: (reader.ReadBoolean()
+                            ? reader.ReadInt64()
+                            : (long?)null),
+                            Tick: reader.ReadUInt64()
+                        )
+                        : (WorldDurableWatermark?)null
+                    );
+
+                    if (!reader.TryFinish(failure: out var wireFailure)) {
+                        result = null;
+                        reason = wireFailure.Detail;
+                        return false;
+                    }
+                    if (
+                        !Guid.TryParseExact(
+                        format: "D",
+                        input: operationText,
+                        result: out var operationId
+                    ) ||
+                        (operationId == Guid.Empty)
+                    ) {
+                        result = null;
+                        reason = "mutation operation id is not a canonical GUID";
+                        return false;
+                    }
+                    if (
+                        !WorldPrincipal.TryParse(
+                        principal: out var actor,
+                        token: actorText
+                    ) ||
+                        !actor.IsCanonical()
+                    ) {
+                        result = null;
+                        reason = "mutation actor is not a canonical principal";
+                        return false;
+                    }
+                    if (
+                        !Enum.IsDefined(value: decision) ||
+                        !Enum.IsDefined(value: persistence) ||
+                        !WorldMutationBinding.IsSha256Hex(value: payloadDigest) ||
+                        (groupRevision is < 0) ||
+                        (watermark is { IsValid: false })
+                    ) {
+                        result = null;
+                        reason = "mutation outcome carries an invalid enum, digest, revision, or watermark";
+                        return false;
+                    }
+
+                    var outcome = new WorldMutationOutcome(
+                        Actor: actor,
+                        AffectedGroupRevision: groupRevision,
+                        Code: code,
+                        Decision: decision,
+                        Detail: detail,
+                        DurableWatermark: watermark,
+                        OperationId: operationId,
+                        PayloadDigest: payloadDigest,
+                        PersistenceStatus: persistence
+                    );
+
+                    if (!outcome.IsValid) {
+                        result = null;
+                        reason = "mutation outcome is malformed";
+                        return false;
+                    }
+
+                    result = new WorldSubmissionResult.Mutation(Outcome: outcome);
+                    reason = string.Empty;
+                    return true;
+                }
+            case DownstreamKind.Refusal:
+                result = null;
+                reason = DecodeText(body: body);
+
+                return false;
+            default:
+                result = null;
+                reason = $"no downstream decoding for {kind}";
+
+                return false;
+        }
     }
     /// <summary>Writes a downstream Hello-accepted verdict.</summary>
     public static Task WriteHelloAcceptedAsync(Stream stream, int peerIndex, int generation, int connectionId, CancellationToken ct) {
@@ -233,6 +725,73 @@ public static class WorldPeerWireFormat {
                         stream: stream
                     );
                 }
+            case WorldSubmissionResult.MachineOperation machineOperation:
+                return WriteDownstreamAsync(
+                    stream: stream,
+                    kind: DownstreamKind.MachineOperationOutcome,
+                    body: EncodeMachineOperationResult(result: machineOperation.Result),
+                    ct: ct
+                );
+            case WorldSubmissionResult.Mutation mutation: {
+                    if (!mutation.Outcome.IsValid) {
+                        return WriteDownstreamAsync(
+                            stream: stream,
+                            kind: DownstreamKind.Refusal,
+                            body: EncodeText(text: "mutation outcome is malformed"),
+                            ct: ct
+                        );
+                    }
+
+                    try {
+                        var writer = new WireWriter();
+
+                        writer.WriteString(value: mutation.Outcome.OperationId.ToString(format: "D"));
+                        writer.WriteString(value: mutation.Outcome.Actor.Describe());
+                        writer.WriteString(value: mutation.Outcome.PayloadDigest);
+                        writer.WriteByte(value: ((byte)mutation.Outcome.Decision));
+                        writer.WriteByte(value: ((byte)mutation.Outcome.PersistenceStatus));
+                        writer.WriteString(value: mutation.Outcome.Code);
+                        writer.WriteString(value: mutation.Outcome.Detail);
+                        writer.WriteBoolean(value: mutation.Outcome.AffectedGroupRevision.HasValue);
+                        if (mutation.Outcome.AffectedGroupRevision is { } groupRevision) {
+                            writer.WriteInt64(value: groupRevision);
+                        }
+                        writer.WriteBoolean(value: mutation.Outcome.DurableWatermark.HasValue);
+                        if (mutation.Outcome.DurableWatermark is { } watermark) {
+                            writer.WriteInt64(value: watermark.RootSequence);
+                            writer.WriteBoolean(value: watermark.CheckpointOrdinal.HasValue);
+                            if (watermark.CheckpointOrdinal is { } checkpointOrdinal) {
+                                writer.WriteInt64(value: checkpointOrdinal);
+                            }
+                            writer.WriteBoolean(value: watermark.JournalSequence.HasValue);
+                            if (watermark.JournalSequence is { } journalSequence) {
+                                writer.WriteInt64(value: journalSequence);
+                            }
+                            writer.WriteUInt64(value: watermark.Tick);
+                        }
+
+                        return WriteDownstreamAsync(
+                            body: writer.WrittenMemory,
+                            ct: ct,
+                            kind: DownstreamKind.MutationOutcome,
+                            stream: stream
+                        );
+                    } catch (ArgumentException exception) {
+                        return WriteDownstreamAsync(
+                            stream: stream,
+                            kind: DownstreamKind.Refusal,
+                            body: EncodeText(text: $"mutation outcome is not encodable: {exception.Message}"),
+                            ct: ct
+                        );
+                    }
+                }
+            case WorldSubmissionResult.Refusal refusal:
+                return WriteDownstreamAsync(
+                    stream: stream,
+                    kind: DownstreamKind.Refusal,
+                    body: EncodeText(text: $"{refusal.Code}: {refusal.Detail}"),
+                    ct: ct
+                );
             default:
                 return WriteDownstreamAsync(
                     stream: stream,
@@ -241,240 +800,6 @@ public static class WorldPeerWireFormat {
                     ct: ct
                 );
         }
-    }
-    /// <summary>Decodes a <paramref name="kind"/>/<paramref name="body"/> pair from <see cref="TryReadDownstreamAsync"/>
-    /// back into its typed <see cref="WorldSubmissionResult"/> — the read-side twin of <see cref="WriteResultAsync"/>,
-    /// shared by every consumer that turns a peer's completion frame into a result rather than re-deriving the field
-    /// offsets per call site.</summary>
-    /// <param name="kind">The downstream kind.</param>
-    /// <param name="body">The frame body.</param>
-    /// <param name="result">The decoded result on success.</param>
-    /// <param name="reason">The refusal text — the peer's own refusal narration for <see cref="DownstreamKind.Refusal"/>,
-    /// a truncation detail for a malformed <see cref="DownstreamKind.Session"/>/<see cref="DownstreamKind.Query"/> body,
-    /// or empty on success.</param>
-    /// <returns><see langword="true"/> when <paramref name="result"/> decoded.</returns>
-    public static bool TryReadResult(DownstreamKind kind, ReadOnlySpan<byte> body, out WorldSubmissionResult? result, out string reason) {
-        switch (kind) {
-            case DownstreamKind.Ack:
-                result = WorldSubmissionResult.Ack.Instance;
-                reason = string.Empty;
-
-                return true;
-            case DownstreamKind.Session: {
-                    var reader = new WireReader(bytes: body);
-                    var accepted = reader.ReadBoolean();
-                    var assignedIndex = reader.ReadInt32();
-                    var sessionReason = reader.ReadString(field: "session completion reason");
-
-                    if (!reader.TryFinish(failure: out _)) {
-                        result = null;
-                        reason = "remote authority returned a truncated session completion";
-
-                        return false;
-                    }
-
-                    result = new WorldSubmissionResult.Session(Reply: new SessionReply(
-                        Accepted: accepted,
-                        AssignedIndex: assignedIndex,
-                        Reason: sessionReason,
-                        RosterEcho: string.Empty
-                    ));
-                    reason = string.Empty;
-
-                    return true;
-                }
-            case DownstreamKind.Query: {
-                    var reader = new WireReader(bytes: body);
-                    var refused = reader.ReadBoolean();
-                    var text = reader.ReadString(field: "query completion text");
-
-                    if (!reader.TryFinish(failure: out _)) {
-                        result = null;
-                        reason = "remote authority returned a truncated query completion";
-
-                        return false;
-                    }
-
-                    result = new WorldSubmissionResult.Query(Answer: new QueryAnswer(
-                        Text: text,
-                        Refused: refused
-                    ));
-                    reason = string.Empty;
-
-                    return true;
-                }
-            case DownstreamKind.QueryPlacementProposal: {
-                    if (body.Length > MaxDownstreamBodyBytes) {
-                        result = null;
-                        reason = $"typed reflow proposal carries {body.Length} bytes; cap is {MaxDownstreamBodyBytes}";
-
-                        return false;
-                    }
-
-                    var reader = new WireReader(bytes: body);
-                    var refused = reader.ReadBoolean();
-                    var text = reader.ReadString(field: "query completion text");
-                    var mutationBytes = reader.ReadBlock(
-                        field: "reflow proposal mutation",
-                        maxBytes: MaxDownstreamBodyBytes
-                    );
-                    var candidates = reader.ReadInt32();
-                    var moved = reader.ReadInt32();
-                    var cost = reader.ReadInt64();
-                    var affectedIds = ReadProposalStrings(
-                        field: "reflow proposal affected ids",
-                        reader: ref reader
-                    );
-                    var constraints = ReadProposalStrings(
-                        field: "reflow proposal constraints",
-                        reader: ref reader
-                    );
-
-                    if (!reader.TryFinish(failure: out var wireFailure)) {
-                        result = null;
-                        reason = wireFailure.Detail;
-
-                        return false;
-                    }
-                    if ((candidates < 0) || (moved < 0) || (cost < 0)) {
-                        result = null;
-                        reason = "reflow proposal metadata carries a negative count or cost";
-
-                        return false;
-                    }
-                    if (!WorldSubmissionCodec.TryDecodeMutation(
-                        bytes: mutationBytes,
-                        mutation: out var mutation,
-                        failure: out var mutationFailure
-                    ) || mutation is not WorldMutation.Batch batch) {
-                        result = null;
-                        reason = $"reflow proposal mutation is invalid: {mutationFailure}";
-
-                        return false;
-                    }
-                    if (!batch.TryValidateShape(out var batchReason)) {
-                        result = null;
-                        reason = $"reflow proposal batch is malformed: {batchReason}";
-
-                        return false;
-                    }
-
-                    result = new WorldSubmissionResult.Query(Answer: new QueryAnswer(
-                        Text: text,
-                        Refused: refused,
-                        Payload: new WorldPlacementProposal(
-                            Mutation: batch,
-                            Candidates: candidates,
-                            Moved: moved,
-                            Cost: cost
-                        ) {
-                            AffectedIds = affectedIds,
-                            Constraints = constraints
-                        }
-                    ));
-                    reason = string.Empty;
-
-                    return true;
-                }
-            case DownstreamKind.Refusal:
-                result = null;
-                reason = DecodeText(body: body);
-
-                return false;
-            default:
-                result = null;
-                reason = $"no downstream decoding for {kind}";
-
-                return false;
-        }
-    }
-
-    private const int MaxDownstreamBodyBytes = MaxDownstreamFrameBytes - sizeof(uint) - sizeof(byte);
-    private const int MaxProposalMetadataItems = 256;
-
-    private static bool TryEncodePlacementProposalAnswer(QueryAnswer answer, out byte[] body, out string reason) {
-        body = [];
-        reason = string.Empty;
-        if (answer.Payload is not WorldPlacementProposal proposal) {
-            reason = "query payload is not a placement proposal";
-
-            return false;
-        }
-        if (!WorldSubmissionCodec.TryEncodeMutation(
-            mutation: proposal.Mutation,
-            bytes: out var mutationBytes,
-            failure: out var mutationFailure
-        )) {
-            reason = $"reflow proposal mutation is not encodable: {mutationFailure}";
-
-            return false;
-        }
-        if (!proposal.Mutation.TryValidateShape(out var batchReason)) {
-            reason = $"reflow proposal batch is malformed: {batchReason}";
-
-            return false;
-        }
-        if (mutationBytes.Length > MaxDownstreamBodyBytes) {
-            reason = $"reflow proposal mutation carries {mutationBytes.Length} bytes; cap is {MaxDownstreamBodyBytes}";
-
-            return false;
-        }
-        if (!TryValidateProposalStrings(proposal.AffectedIds, "affected ids", out reason) ||
-            !TryValidateProposalStrings(proposal.Constraints, "constraints", out reason)) {
-            return false;
-        }
-
-        try {
-            var writer = new WireWriter(capacity: Math.Min(MaxDownstreamBodyBytes, mutationBytes.Length + 1024));
-            writer.WriteBoolean(value: answer.Refused);
-            writer.WriteString(value: answer.Text);
-            writer.WriteBlock(value: mutationBytes);
-            writer.WriteInt32(value: proposal.Candidates);
-            writer.WriteInt32(value: proposal.Moved);
-            writer.WriteInt64(value: proposal.Cost);
-            WriteProposalStrings(writer: writer, values: proposal.AffectedIds);
-            WriteProposalStrings(writer: writer, values: proposal.Constraints);
-            if (writer.Length > MaxDownstreamBodyBytes) {
-                reason = $"typed reflow proposal carries {writer.Length} bytes; cap is {MaxDownstreamBodyBytes}";
-
-                return false;
-            }
-
-            body = writer.ToArray();
-
-            return true;
-        } catch (ArgumentException exception) {
-            reason = $"reflow proposal metadata is not encodable: {exception.Message}";
-
-            return false;
-        }
-    }
-
-    private static bool TryValidateProposalStrings(IReadOnlyList<string>? values, string field, out string reason) {
-        if (values is null || values.Count > MaxProposalMetadataItems || values.Any(value => value is null)) {
-            reason = $"reflow proposal {field} exceed the metadata bound or contain null entries";
-
-            return false;
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
-
-    private static void WriteProposalStrings(WireWriter writer, IReadOnlyList<string> values) {
-        writer.WriteInt32(value: values.Count);
-        foreach (var value in values) { writer.WriteString(value: value); }
-    }
-
-    private static string[] ReadProposalStrings(string field, ref WireReader reader) {
-        var count = reader.ReadCount(field: field, minimum: 0, maximum: MaxProposalMetadataItems);
-        var values = new string[count];
-        for (var index = 0; index < count; index++) {
-            values[index] = reader.ReadString(field: $"{field}[{index}]");
-        }
-
-        return values;
     }
 
 }

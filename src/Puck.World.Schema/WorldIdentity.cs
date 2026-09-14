@@ -92,7 +92,10 @@ public sealed class WorldIdentity {
     /// <summary>Gets the facts row this identity carries, or <see langword="null"/> when no fact was ever written or
     /// there is no owned document to carry one.</summary>
     public WorldStateRow? Facts => ((Document is { } document)
-        ? WorldDefinitionRows.FindStateRow(rows: document.State, name: FactsDefinition.State)
+        ? WorldDefinitionRows.FindStateRow(
+            rows: document.State,
+            name: FactsDefinition.State
+        )
         : null
     );
     /// <summary>Gets the facts row name and capacity this identity's document declares, or the default for one
@@ -111,22 +114,6 @@ public sealed class WorldIdentity {
     public WorldHudPanel? Hud { get; set; }
     /// <summary>Gets the stable identity/world id.</summary>
     public string Id { get; }
-    /// <summary>Sets the claimed locomotion speed — the deliberate override door <c>identity.motion</c> walks;
-    /// mints the identity document's rate row on first write.</summary>
-    /// <param name="value">The rate to claim.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite and positive.</exception>
-    public void SetMoveSpeed(float value) {
-        var rate = RequirePositiveRate(
-            value: value,
-            name: nameof(value)
-        );
-
-        m_moveSpeed = rate;
-        WriteFixed(
-            slot: Document?.Identity?.MoveSpeedState,
-            value: rate
-        );
-    }
     /// <summary>Gets the display name.</summary>
     public string Name { get; private set; }
     /// <summary>Gets the accent color.</summary>
@@ -142,21 +129,6 @@ public sealed class WorldIdentity {
     /// answer whether the profile is about to arrive in-process or across a link: nothing here assumes an identity
     /// document can only be built locally.</remarks>
     public WorldSeatCameraFeel? SeatLook { get; set; }
-    /// <summary>Sets the claimed turn speed — the same deliberate override door as <see cref="SetMoveSpeed"/>.</summary>
-    /// <param name="value">The rate to claim.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite and positive.</exception>
-    public void SetTurnSpeed(float value) {
-        var rate = RequirePositiveRate(
-            value: value,
-            name: nameof(value)
-        );
-
-        m_turnSpeed = rate;
-        WriteFixed(
-            slot: Document?.Identity?.TurnSpeedState,
-            value: rate
-        );
-    }
 
     // An absent rate row is an identity that claims no rate — the kit's authored rate applies at the seat.
     private static FixedQ4816? ReadFixed(IReadOnlyList<WorldStateRow> rows, string name) =>
@@ -209,7 +181,7 @@ public sealed class WorldIdentity {
         WriteState(row: new WorldStateRow(
             Name: seqRowName,
             Kind: CellKind.Int,
-            NonNegative: true,
+            Min: 0L,
             Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
                     Value: next
@@ -295,80 +267,6 @@ public sealed class WorldIdentity {
         Document = document;
         m_factsRevision++;
     }
-    /// <summary>Writes one fact on this identity's own facts row — minting the row on the first write — and reports
-    /// whether the row changed. A write of the value the row already holds changes nothing and touches no
-    /// document.</summary>
-    /// <param name="key">The fact key.</param>
-    /// <param name="value">The fact's integer value.</param>
-    /// <param name="changed">Whether the row changed.</param>
-    /// <param name="reason">Why the write was refused, or empty on success.</param>
-    /// <returns><see langword="true"/> when the write applied or was already in place.</returns>
-    public bool TrySetFact(CellName key, long value, out bool changed, out string reason) {
-        changed = false;
-
-        if (Document is null) {
-            reason = "this identity carries no owned document to persist a fact into";
-
-            return false;
-        }
-
-        var definition = FactsDefinition;
-        var row = Facts;
-
-        if (row is { } declared) {
-            if (declared is not { Kind: CellKind.Int, IsKeyed: true }) {
-                reason = $"state row '{definition.State}' is not a keyed int row";
-
-                return false;
-            }
-
-            var cells = (declared.Cells ?? []);
-
-            for (var index = 0; (index < cells.Count); index++) {
-                if (cells[index].Key != key) {
-                    continue;
-                }
-                if (cells[index].Value == value) {
-                    reason = string.Empty;
-
-                    return true;
-                }
-
-                var replaced = new StateCell[cells.Count];
-
-                for (var copy = 0; (copy < cells.Count); copy++) {
-                    replaced[copy] = cells[copy];
-                }
-
-                replaced[index] = new StateCell(Key: key, Value: value);
-                WriteState(row: declared with { Cells = replaced });
-                changed = true;
-                reason = string.Empty;
-
-                return true;
-            }
-
-            if (cells.Count >= definition.Capacity) {
-                reason = $"facts row '{definition.State}' holds {cells.Count} of {definition.Capacity} facts; '{key}' does not fit";
-
-                return false;
-            }
-
-            WriteState(row: declared with { Cells = [.. cells, new StateCell(Key: key, Value: value)] });
-        } else {
-            WriteState(row: new WorldStateRow(
-                Name: definition.State,
-                Kind: CellKind.Int,
-                Capacity: definition.Capacity,
-                Cells: [new StateCell(Key: key, Value: value)]
-            ));
-        }
-
-        changed = true;
-        reason = string.Empty;
-
-        return true;
-    }
     /// <summary>Changes display identity in the owned world.</summary>
     /// <param name="name">The new display name.</param>
     /// <param name="colorHex">The new authored color, as <c>#RRGGBB</c>.</param>
@@ -382,6 +280,37 @@ public sealed class WorldIdentity {
         if (Document?.Identity is { } identity) {
             Document = Document with { Identity = identity with { Name = name, Color = colorHex } };
         }
+    }
+    /// <summary>Sets the claimed locomotion speed — the deliberate override door <c>identity.motion</c> walks;
+    /// mints the identity document's rate row on first write.</summary>
+    /// <param name="value">The rate to claim.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite and positive.</exception>
+    public void SetMoveSpeed(float value) {
+        var rate = RequirePositiveRate(
+            value: value,
+            name: nameof(value)
+        );
+
+        m_moveSpeed = rate;
+        WriteFixed(
+            slot: Document?.Identity?.MoveSpeedState,
+            value: rate
+        );
+    }
+    /// <summary>Sets the claimed turn speed — the same deliberate override door as <see cref="SetMoveSpeed"/>.</summary>
+    /// <param name="value">The rate to claim.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite and positive.</exception>
+    public void SetTurnSpeed(float value) {
+        var rate = RequirePositiveRate(
+            value: value,
+            name: nameof(value)
+        );
+
+        m_turnSpeed = rate;
+        WriteFixed(
+            slot: Document?.Identity?.TurnSpeedState,
+            value: rate
+        );
     }
     /// <summary>Appends one text cell to a bounded, evicting keyed row already declared on this identity's document
     /// — the ONE append primitive a self-authored chat log and a cross-document delivery into a bounded inbox both
@@ -452,6 +381,89 @@ public sealed class WorldIdentity {
             : null!
         );
         return (row is not null);
+    }
+    /// <summary>Writes one fact on this identity's own facts row — minting the row on the first write — and reports
+    /// whether the row changed. A write of the value the row already holds changes nothing and touches no
+    /// document.</summary>
+    /// <param name="key">The fact key.</param>
+    /// <param name="value">The fact's integer value.</param>
+    /// <param name="changed">Whether the row changed.</param>
+    /// <param name="reason">Why the write was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the write applied or was already in place.</returns>
+    public bool TrySetFact(CellName key, long value, out bool changed, out string reason) {
+        changed = false;
+
+        if (Document is null) {
+            reason = "this identity carries no owned document to persist a fact into";
+
+            return false;
+        }
+
+        var definition = FactsDefinition;
+        var row = Facts;
+
+        if (row is { } declared) {
+            if (declared is not { Kind: CellKind.Int, IsKeyed: true }) {
+                reason = $"state row '{definition.State}' is not a keyed int row";
+
+                return false;
+            }
+
+            var cells = (declared.Cells ?? []);
+
+            for (var index = 0; (index < cells.Count); index++) {
+                if (cells[index].Key != key) {
+                    continue;
+                }
+                if (cells[index].Value == value) {
+                    reason = string.Empty;
+
+                    return true;
+                }
+
+                var replaced = new StateCell[cells.Count];
+
+                for (var copy = 0; (copy < cells.Count); copy++) {
+                    replaced[copy] = cells[copy];
+                }
+
+                replaced[index] = new StateCell(
+                    Key: key,
+                    Value: value
+                );
+                WriteState(row: declared with { Cells = replaced });
+                changed = true;
+                reason = string.Empty;
+
+                return true;
+            }
+
+            if (cells.Count >= definition.Capacity) {
+                reason = $"facts row '{definition.State}' holds {cells.Count} of {definition.Capacity} facts; '{key}' does not fit";
+
+                return false;
+            }
+
+            WriteState(row: declared with { Cells = [.. cells, new StateCell(
+                    Key: key,
+                    Value: value
+                )] });
+        } else {
+            WriteState(row: new WorldStateRow(
+                Name: definition.State,
+                Kind: CellKind.Int,
+                Capacity: definition.Capacity,
+                Cells: [new StateCell(
+                        Key: key,
+                        Value: value
+                    )]
+            ));
+        }
+
+        changed = true;
+        reason = string.Empty;
+
+        return true;
     }
     /// <summary>Replaces or adds one durable state row.</summary>
     /// <param name="row">The state row to write.</param>

@@ -5,6 +5,19 @@ using Xunit;
 namespace Puck.Networking.Tests.Peers;
 
 public sealed class RefusalTests {
+    private static async Task AssertHonestTrafficStillFlowsAsync(PeerLink sender, PeerLink receiver, CancellationToken ct) {
+        await sender.SendAsync(
+            ct: ct,
+            payload: "still honest"u8.ToArray()
+        );
+
+        var received = Assert.IsType<PeerEvent.Received>(@object: await PeerTestSupport.NextEventAsync(link: receiver));
+
+        Assert.Equal(
+            expected: "still honest",
+            actual: Encoding.UTF8.GetString(bytes: received.Payload.Span)
+        );
+    }
     private static async Task<(PeerIdentity IdentityB, Peer PeerA, Peer PeerB, PeerLink LinkAtoB, PeerLink LinkBtoA, Stream ControlStreamAtB)> ConnectAsync(CancellationToken ct) {
         var identityB = PeerIdentity.Create();
         var peerA = PeerTestSupport.NewPeer();
@@ -19,48 +32,7 @@ public sealed class RefusalTests {
 
         return (identityB, peerA, peerB, linkAtoB, linkBtoA, Assert.Single(collection: tapB.Streams));
     }
-    private static async Task AssertHonestTrafficStillFlowsAsync(PeerLink sender, PeerLink receiver, CancellationToken ct) {
-        await sender.SendAsync(
-            ct: ct,
-            payload: "still honest"u8.ToArray()
-        );
 
-        var received = Assert.IsType<PeerEvent.Received>(@object: await PeerTestSupport.NextEventAsync(link: receiver));
-
-        Assert.Equal(
-            expected: "still honest",
-            actual: Encoding.UTF8.GetString(bytes: received.Payload.Span)
-        );
-    }
-
-    [Fact]
-    public async Task UnsignedBytes_AreRefusedAsUnsigned_AndTheLinkStaysOpen() {
-        var ct = TestContext.Current.CancellationToken;
-
-        var (_, peerA, peerB, linkAtoB, linkBtoA, controlStreamAtB) = await ConnectAsync(ct: ct);
-
-        await using var disposeA = peerA;
-        await using var disposeB = peerB;
-
-        await PeerTestSupport.SendRawMessageFrameAsync(
-            attestationOrGarbageBytes: "not an attestation at all"u8.ToArray(),
-            controlStream: controlStreamAtB,
-            ct: ct
-        );
-
-        var refused = Assert.IsType<PeerEvent.Refused>(@object: await PeerTestSupport.NextEventAsync(link: linkAtoB));
-
-        Assert.Equal(
-            expected: PeerRefusal.MessageUnsigned,
-            actual: refused.Failure.Refusal
-        );
-
-        await AssertHonestTrafficStillFlowsAsync(
-            ct: ct,
-            receiver: linkAtoB,
-            sender: linkBtoA
-        );
-    }
     [Fact]
     public async Task MessageSignedByAnotherKey_IsRefusedAsWrongSigner_AndTheLinkStaysOpen() {
         var ct = TestContext.Current.CancellationToken;
@@ -127,6 +99,34 @@ public sealed class RefusalTests {
 
         Assert.Equal(
             expected: PeerRefusal.MessageUnverified,
+            actual: refused.Failure.Refusal
+        );
+
+        await AssertHonestTrafficStillFlowsAsync(
+            ct: ct,
+            receiver: linkAtoB,
+            sender: linkBtoA
+        );
+    }
+    [Fact]
+    public async Task UnsignedBytes_AreRefusedAsUnsigned_AndTheLinkStaysOpen() {
+        var ct = TestContext.Current.CancellationToken;
+
+        var (_, peerA, peerB, linkAtoB, linkBtoA, controlStreamAtB) = await ConnectAsync(ct: ct);
+
+        await using var disposeA = peerA;
+        await using var disposeB = peerB;
+
+        await PeerTestSupport.SendRawMessageFrameAsync(
+            attestationOrGarbageBytes: "not an attestation at all"u8.ToArray(),
+            controlStream: controlStreamAtB,
+            ct: ct
+        );
+
+        var refused = Assert.IsType<PeerEvent.Refused>(@object: await PeerTestSupport.NextEventAsync(link: linkAtoB));
+
+        Assert.Equal(
+            expected: PeerRefusal.MessageUnsigned,
             actual: refused.Failure.Refusal
         );
 

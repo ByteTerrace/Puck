@@ -41,6 +41,23 @@ internal static class LedgerAcceptance {
         }
     }
 
+    private static string Name(LedgerEntry entry) =>
+        $"{entry.Suite}/{entry.Path}[{entry.Model}]";
+    private static IEnumerable<LedgerEntry> Ordered(IEnumerable<LedgerEntry> entries) =>
+        entries
+            .OrderBy(
+            keySelector: static entry => entry.Suite,
+            comparer: StringComparer.Ordinal
+        )
+            .ThenBy(
+            keySelector: static entry => entry.Path,
+            comparer: StringComparer.Ordinal
+        )
+            .ThenBy(
+            keySelector: static entry => entry.Model,
+            comparer: StringComparer.Ordinal
+        );
+
     /// <summary>Builds the candidate ledger from a run's measurements.</summary>
     /// <param name="existing">The ledger the run gated against.</param>
     /// <param name="measurements">What the run discovered and measured.</param>
@@ -133,21 +150,4 @@ internal static class LedgerAcceptance {
 
         return refusals;
     }
-
-    private static string Name(LedgerEntry entry) =>
-        $"{entry.Suite}/{entry.Path}[{entry.Model}]";
-    private static IEnumerable<LedgerEntry> Ordered(IEnumerable<LedgerEntry> entries) =>
-        entries
-            .OrderBy(
-            keySelector: static entry => entry.Suite,
-            comparer: StringComparer.Ordinal
-        )
-            .ThenBy(
-            keySelector: static entry => entry.Path,
-            comparer: StringComparer.Ordinal
-        )
-            .ThenBy(
-            keySelector: static entry => entry.Model,
-            comparer: StringComparer.Ordinal
-        );
 }

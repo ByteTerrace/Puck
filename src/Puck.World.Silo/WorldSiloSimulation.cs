@@ -13,7 +13,15 @@ public sealed class WorldSiloSimulation(WorldSiloHost host) : IFixedStepSimulati
     public void Step(in FixedStepContext context, in CommandSnapshot commands) {
         host.DrainActivationMailbox();
         if (host.IsDraining) { return; }
-        host.Instances.DrainPendingTransfers();
+        if (!host.ReleaseAdmissionOpen) {
+            // A candidate still receives pump heartbeats for private health, but no simulation step, transfer drain,
+            // forwarding, or external effect may run before the durable group barrier opens.
+            host.NoteMasterStep(stepTicks: context.StepTicks);
+            return;
+        }
+        // A managed candidate may pump privately while its durable group remains closed. Pending transfers and
+        // forwarding are external effects, so they stay frozen until the same publication gate opens the row door.
+        if (host.ReleaseAdmissionOpen) { host.Instances.DrainPendingTransfers(); }
         host.Instances.StepInstances(masterDeltaTicks: context.StepTicks);
         host.NoteMasterStep(stepTicks: context.StepTicks);
     }

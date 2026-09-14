@@ -12,8 +12,9 @@ public static class StateRows {
             return null;
         }
 
-        for (var index = 0; index < cells.Count; index++) {
+        for (var index = 0; (index < cells.Count); index++) {
             var cell = cells[index];
+
             if (cell.Key == key) {
                 return cell;
             }
@@ -30,9 +31,17 @@ public static class StateRows {
             return null;
         }
 
-        for (var index = 0; index < dynamics.Count; index++) {
+        for (var index = 0; (index < dynamics.Count); index++) {
             var row = dynamics[index];
-            if ((row is not null) && string.Equals(a: row.Name, b: name, comparisonType: StringComparison.Ordinal)) {
+
+            if (
+                (row is not null) &&
+                string.Equals(
+                a: row.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
                 return row;
             }
         }
@@ -52,9 +61,17 @@ public static class StateRows {
             return null;
         }
 
-        for (var index = 0; index < rows.Count; index++) {
+        for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
-            if ((row is not null) && string.Equals(a: row.Name.Value, b: name, comparisonType: StringComparison.Ordinal)) {
+
+            if (
+                (row is not null) &&
+                string.Equals(
+                a: row.Name.Value,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
                 return row;
             }
         }

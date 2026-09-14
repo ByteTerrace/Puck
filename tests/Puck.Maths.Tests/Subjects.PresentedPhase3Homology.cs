@@ -260,9 +260,9 @@ internal static partial class Subjects {
             (2 != torsion[0])
         ) {
             return $"the projective plane's first homology carries torsion [{string.Join(
-            separator: ", ",
-            values: torsion.ToArray()
-        )}] where topology says a single two";
+                separator: ", ",
+                values: torsion.ToArray()
+            )}] where topology says a single two";
         }
 
         if (1 != homology.EulerCharacteristic) { return $"the projective plane's Euler characteristic from the Betti numbers is {homology.EulerCharacteristic}"; }
@@ -553,9 +553,9 @@ internal static partial class Subjects {
 
                 for (var middle = 0; (middle < rows); ++middle) {
                     total += (form.Left(
-                    column: middle,
-                    row: row
-                ) * entries[((middle * columns) + column)]);
+                        column: middle,
+                        row: row
+                    ) * entries[((middle * columns) + column)]);
                 }
 
                 staged[((row * columns) + column)] = total;
@@ -568,9 +568,9 @@ internal static partial class Subjects {
 
                 for (var middle = 0; (middle < columns); ++middle) {
                     total += (staged[((row * columns) + middle)] * form.Right(
-                    column: column,
-                    row: middle
-                ));
+                        column: column,
+                        row: middle
+                    ));
                 }
 
                 var expected = (((row == column) && (row < form.Rank))
@@ -896,9 +896,9 @@ internal static partial class Subjects {
 
         for (var index = 0; (index < entries.Length); ++index) {
             bits[index] = !BigInteger.Remainder(
-            dividend: entries[index],
-            divisor: 2
-        ).IsZero;
+                dividend: entries[index],
+                divisor: 2
+            ).IsZero;
         }
 
         var rank = 0;
@@ -1315,9 +1315,9 @@ internal static partial class Subjects {
 
             for (var drop = 0; (drop < face.Length); ++drop) {
                 Collect(face: Facet(
-                drop: drop,
-                face: face
-            ));
+                    drop: drop,
+                    face: face
+                ));
             }
         }
 

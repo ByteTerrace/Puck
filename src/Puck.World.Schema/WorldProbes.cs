@@ -8,13 +8,13 @@ namespace Puck.World;
 /// bindings that route its channels. A socket is a named input slot the kind's manifest declares (e.g. <c>color</c>,
 /// <c>strobe</c>); a row plugs one <see cref="WorldFrameSource"/> into each socket name it binds. Exactly one of
 /// <see cref="Inputs"/>/<see cref="Track"/> is present — the live-hardware leg (named sockets) or the recorded-track
-/// leg (one <c>puck.probe-track.v1</c> document standing in for every socket at once), never both, never neither. A
+/// leg (one <c>puck.probe.track.v1</c> document standing in for every socket at once), never both, never neither. A
 /// world declares no <c>probes</c> rows when it wants no camera-derived reading at all. Boot-authored only: no
 /// <see cref="Protocol.WorldSection"/> dispatch axis carries a live mutation kind for it yet (see
 /// <see cref="Protocol.WorldSection.Probes"/>), the same standing <c>music</c> carries.</summary>
 /// <param name="Id">The probe's own name — <see cref="SafeName"/>-shaped, unique among the rows; <c>probe.status</c>
 /// and <c>probe.record</c> address it.</param>
-/// <param name="Kind">The registered probe kind id (a <c>puck.probe.v1</c> manifest's file stem) — checked
+/// <param name="Kind">The registered probe kind id (a <c>puck.probe.manifest.v1</c> manifest's file stem) — checked
 /// against the shipped vocabulary at document load
 /// (<see cref="WorldProbeVocabularyHook.IsRegisteredProbeKind"/>), never interpreted here. The document never
 /// states where the kind runs; the kind's own registration decides kernel-on-device versus out-of-process
@@ -25,7 +25,7 @@ namespace Puck.World;
 /// leg. The socket vocabulary itself lives behind the kind's manifest, unchecked here; the host checks a bound name
 /// against it by name at boot, the same shallow-then-deep split every kind-vocabulary field follows. Mutually
 /// exclusive with <see cref="Track"/>. Omitted from the wire when null.</param>
-/// <param name="Track">A recorded <c>puck.probe-track.v1</c> document path, resolved against the world document's own
+/// <param name="Track">A recorded <c>puck.probe.track.v1</c> document path, resolved against the world document's own
 /// directory, played back in place of every socket at once — <c>probe.record</c>'s own output shape, the
 /// hardware-free leg every probe admits. Mutually exclusive with <see cref="Inputs"/>. Omitted from the wire when
 /// null.</param>

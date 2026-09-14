@@ -4,8 +4,8 @@ namespace Puck.AdvancedGamingBrick.Post;
 // (the AGB analogue of the DMG/CGB FlatRamBus). Timing is irrelevant to instruction-logic tests, so the
 // access type and idle hooks only accumulate a cycle tally; correctness is what these vectors probe.
 internal sealed class FlatTestBus : IAgbBus {
-    private readonly byte[] m_memory;
     private readonly uint m_mask;
+    private readonly byte[] m_memory;
 
     public FlatTestBus(int sizeBytes = (1 << 20)) {
         m_memory = new byte[sizeBytes];
@@ -15,6 +15,9 @@ internal sealed class FlatTestBus : IAgbBus {
     public long Cycles { get; private set; }
     public bool IrqPending => false;
 
+    public void Idle(int cycles) {
+        Cycles += cycles;
+    }
     public void LoadArm(uint byteOffset, params uint[] words) {
         for (var i = 0; (i < words.Length); ++i) {
             Write32(
@@ -33,7 +36,6 @@ internal sealed class FlatTestBus : IAgbBus {
             );
         }
     }
-    public byte Read8(uint address, BusAccessType access) => m_memory[address & m_mask];
     public ushort Read16(uint address, BusAccessType access) {
         var a = address & ~1u;
 
@@ -47,6 +49,7 @@ internal sealed class FlatTestBus : IAgbBus {
             | (m_memory[(a + 2u) & m_mask] << 16)
             | (m_memory[(a + 3u) & m_mask] << 24)));
     }
+    public byte Read8(uint address, BusAccessType access) => m_memory[address & m_mask];
     public ushort ReadCode16(uint address, BusAccessType access) => Read16(
         access: access,
         address: address
@@ -55,9 +58,6 @@ internal sealed class FlatTestBus : IAgbBus {
         access: access,
         address: address
     );
-    public void Write8(uint address, byte value, BusAccessType access) {
-        m_memory[address & m_mask] = value;
-    }
     public void Write16(uint address, ushort value, BusAccessType access) {
         var a = address & ~1u;
 
@@ -72,7 +72,7 @@ internal sealed class FlatTestBus : IAgbBus {
         m_memory[(a + 2u) & m_mask] = ((byte)(value >> 16));
         m_memory[(a + 3u) & m_mask] = ((byte)(value >> 24));
     }
-    public void Idle(int cycles) {
-        Cycles += cycles;
+    public void Write8(uint address, byte value, BusAccessType access) {
+        m_memory[address & m_mask] = value;
     }
 }

@@ -19,6 +19,7 @@ the project table in the main `SKILL.md`).
 - The stdin drain barrier and `world.wait`
 - The mirror
 - Screenshots
+- `.puck`-booted worlds: `world.reload`/`world.save` are JSON-only today
 - The document has ONE door — do not add a per-section verb
 - Grammar conventions for new verbs
 
@@ -274,6 +275,26 @@ the PNG; failure carries an exception, including disposal before service.
 tick wait alone does not prove a particular request finished. Cancelling an
 await does not cancel the accepted capture or release its output path for reuse.
 
+## `.puck`-booted worlds: `world.reload`/`world.save` are JSON-only today
+
+A world booted from `.puck` source (`--world <x>.puck`, transparently
+compiled by `src/Puck.World/PuckWorldLoader.cs`) is compiled ONCE, at boot.
+`WorldMutationCommandModule`'s `world.reload` and no-arg `world.save` do not
+know the source was `.puck` and do not re-invoke the compiler:
+
+- `world.reload` re-reads `definitionSource.SourcePath` through
+  `WorldDefinitionFileSource.TryLoad`, a JSON-only reader — reloading a
+  `.puck`-booted world fails to parse rather than recompiling it.
+- No-arg `world.save` writes canonical JSON to `definitionSource.SourcePath`
+  — on a `.puck`-booted world this overwrites the `.puck` source with
+  compiled JSON. `world.save <path>` to an explicit, different path is safe.
+
+Until this is fixed, the artist loop for a `.puck`-booted world is: edit the
+`.puck` file, then restart the world — do not `world.reload` it, and only
+`world.save` to a path that is not the `.puck` source. A JSON-booted world's
+`world.reload`/no-arg `world.save` are unaffected and behave exactly as their
+own verb descriptions state.
+
 ## The document has ONE door — do not add a per-section verb
 
 `world.row.set <path> <json>` and `world.row.remove <path> <key>`
@@ -285,15 +306,108 @@ refuses by name and enumerates its siblings.
 **Adding a section means adding a ROW to `BuildSections`, never a verb pair.**
 That table carries the only three facts the document model cannot supply: whether
 the section is a keyed list, which member is its key, and its
-upsert/remove `WorldMutation` pair. The 2026-08-07 reduction wave collapsed 49
-per-section verbs into these two; re-growing one is the regression that wave
+upsert/remove `WorldMutation` pair. These two generic verbs replace separate per-section
+verbs; re-growing individual per-section verbs is the regression this design
 exists to prevent. `puck schema` documents payload shapes — cite it, but there is
 deliberately NO runtime schema validation (owner deferred the gate; validation
 stays at the full-document revalidation on apply).
 
-Same rule for per-field convenience: a verb that reads a row, changes one field
-and submits the whole row back is a stale read against the same batch's own
-composing writes. That is a defect class, not a shortcut.
+Same rule for per-field convenience: a BESPOKE per-section verb that reads a row,
+changes one field, and submits the whole row back is a stale read against the
+same batch's own composing writes — a defect class, not a shortcut. The general
+literal field/list doors below do exactly this shape, safely, because they share
+ONE window guard (`WorldRowStepWindowGuard`) that refuses a second read-modify-
+whole-row-write against the same row inside one tick window rather than letting
+the later one silently revert the earlier; a bespoke verb reinventing the shape
+without that guard is the regression this rule still targets.
+
+**`creation.sculpt(s)` is not a second door.** `creation.sculpts` lists the
+registered code-authored generators (`Puck.World.Authoring.Sculpting.CreationSculptRegistry`
+— see that project's README); `creation.sculpt <name>` runs the named one's
+patch against a working copy of the live document, echoes that plan
+(`[creation.sculpt: planned=<name> <path>=<verdict> …]`), and composes each
+distinct row it touched through the row door's own section table
+(`WorldRowCommandModule.TryComposeEditedRow`/`TryComposeRemove`, one
+`WorldMutation` per row, stamped with `context.ActingPrincipal()` — a seat's
+sculpt lands as that seat and is refused where that seat lacks `Mutate` over
+the section), claims each row in the shared `WorldRowStepWindowGuard`, and
+submits over the link like any buffered mutation — the same whole-document
+revalidation, tick-boundary apply, recorded tape entry, and deferred
+`[creation.sculpt: …]` verdict echo. It never re-dispatches text lines: a
+nested `Registry.Submit` would stamp the shared injection sink's Console
+identity over the issuer. All-or-nothing: a row that fails to compose, a row
+already claimed this tick window (`row '<identity>' already has an edit
+buffered this tick — fence with world.wait`), or a patch fault refuses by
+name and submits nothing. No `--write`: writing to disk stays `world.save`.
+Laws: `WorldSculptCommandModuleLawTests`.
+
+### Field and list-element doors — one level inside a row
+
+Four more verbs, all in `WorldRowCommandModule`, address ONE FIELD or ONE LIST
+ELEMENT inside a row rather than the whole thing — the same section table
+`world.row.set`/`.remove` resolve against, one level deeper, through a shared
+path grammar (`WorldRowFieldPath`, `internal` — no `InternalsVisibleTo`
+needed, since every consumer lives in this same project):
+
+- **Path grammar**: dot-separated segments, each an optional trailing bracketed
+  selector — a zero-based list INDEX (`shapes[3]`) or a name/id-addressed
+  SELECTOR (`shapes[name=forearmL]`, `shapes[id=42]`) naming any member the
+  list's element type carries, not only `name`/`id`. A selector matching no
+  element or more than one is refused BY NAME, listing every element's own
+  candidate value for that field.
+- **`world.row.set <path> <key> <fieldPath> <json>`** (keyed) / `world.row.set
+  <path> <fieldPath> <json>` (keyless) — the LITERAL sibling of the whole-row
+  form, sharing its verb name: the SECOND token's own shape discriminates them
+  (a bare key/field path never starts with `{`/`[`, the only way a whole-row
+  payload — always a record — can start). Reads the row, replaces one field's
+  value in place (a NAME segment creates an absent optional member; an
+  INDEX/SELECTOR segment must already exist), and resubmits the whole row
+  through the SAME `Upsert` the whole-row form uses — so the spliced value
+  crosses the row's own `JsonTypeInfo` exactly once, at reparse, which is where
+  a bindable field's declared shape (`[x,y,z]` or a `"state.row.key"` string for
+  a `DocumentVector3`; JSON `null` clears a nullable field) is actually
+  validated. A `"state.<row>[.<key>]"` string written into a bindable field
+  keeps the binding: the compose boundary resolves a submitted row's references
+  against the current definition's state (`WorldServer.TryCompose` rehydrates
+  the candidate when the mutation carries one; the `creations` arm resolves a
+  private copy of the row before canonicalizing it), so the installed row
+  carries the reference and re-resolves on every later write to that state
+  row. A reference naming no declared cell is refused at apply by name
+  (`must name a declared state cell`), and the row is unchanged.
+- **`world.row.add <path> <key> <listPath> <json> [after=<selector>]`** (keyed)
+  / `world.row.add <path> <listPath> <json> [after=<selector>]` (keyless) —
+  inserts one element into a list field. `<listPath>` is the dotted/bracketed
+  path TO the list itself (`document.shapes`, `document.shapes[name=
+  forearmL].swings`); omitting `after=` appends, `after=<n>` inserts after that
+  index, `after=<field>=<value>` inserts after the selected element.
+- **`world.row.remove <path> <key> <listPath> <selector>`** (keyed) /
+  `world.row.remove <path> <listPath> <selector>` (keyless) — the list-element
+  sibling of the whole-row `world.row.remove`, discriminated by ARGUMENT COUNT
+  (3 or 4, never 2) rather than payload shape, since neither form here carries
+  JSON. `<selector>` is a bare index or `field=value`.
+- **`world.row <path> <key> [<fieldPath>]`** (keyed) / `world.row <path>
+  [<fieldPath>]` (keyless) — Immediate read-back of a row or one field as
+  canonical JSON; a `<fieldPath>` ending at a bare list field LISTS it instead
+  — one `[world.row <index>: <name-or-id> <compact-json>]` line per element,
+  headed by a `[world.row: … N element(s)]` line. The whole-row echo omits the
+  section's `DropOnEdit` members (a creation's `hash`), so it is exactly what
+  the whole-row `world.row.set` accepts back with a field changed; read the
+  digest itself by field path (`world.row creations moth hash`).
+- **`world.row.step`**'s own `<path>` (`<section>.<key>.<field>` or
+  `<section>.<field>`) resolves the identical `[n]`/`[field=value]` grammar for
+  its numeric/boolean/enum delta (`WorldRowFieldStepper`, over
+  `WorldRowFieldPath`).
+
+Every one of these four (plus `world.row.step`) claims its addressed row in the
+shared `WorldRowStepWindowGuard` for the current tick window before submitting
+— a second edit to the SAME row (by any of the five) inside one window is
+refused by name, naming the row, rather than silently reverting the earlier one.
+A section whose row carries its own derived self-digest alongside its content
+(`creations`' `WorldPrototype.HashRaw`, recomputed from the SAME embedded
+document a field/list edit just changed) is marked `DropOnEdit: ["hash"]` in
+`BuildSections` — stripped before resubmission so the reparsed row reads as
+self-consistent (an absent hash) rather than resubmitting a digest that no
+longer matches its own content.
 
 ## Grammar conventions for new verbs
 
@@ -333,6 +447,12 @@ composing writes. That is a defect class, not a shortcut.
   other `world.row.set`/`.remove`. The drain barrier makes a following
   `world.addons` read wait for settled state.
 - New decision surface ⇒ read-back verb in the same change.
+- A `.puck` world is authored and checked offline (`puck fmt`/`puck
+  lint`/`puck compile`, `puck-dsl`) and booted via `--world <x>.puck`;
+  `world.row.set`/`.remove` and the field/list-element doors above remain the
+  LIVE runtime mutation surface for an already-booted session — complementary
+  doors, not competing ones. What a rule's own effect sugar compiles to is
+  [mutations.md](mutations.md)'s to state.
 
 `world.decisions` is an Immediate, no-argument, headless-safe read-back of
 world-rule choice policies and their active bindings. It reports the selected
@@ -359,3 +479,19 @@ seat1 sees and what seat2 sees without submitting as either — the read-back
 side of a hidden-hand table (see the garden's `games/poker.world.json` poker table).
 Operators and limits live in the Schema README's discrete-state section rather
 than a second command vocabulary here.
+
+`pipeline.*` (`WorldPipelineCommandModule`) is core-registered in rendered and
+headless hosts. `pipeline.load <name> <source> [camera]` upserts a
+`views.pipelines` row through normal authority and validation. A rendered host
+reconciles accepted rows, creates instances, and schedules complete pipeline
+compilation in the background. A refused mutation must never create a GPU
+instance. `pipeline.reload`, `pipeline.watch`, `pipeline.time`, `pipeline.step`,
+`pipeline.reset`, `pipeline.output` and `pipeline.status` control presentation
+or report state; controls that need a renderer refuse when none exists.
+`WorldPipelineRuntime.PumpWatches` installs completed candidates on the frame
+thread and watches source dependencies with a 150 ms debounce. Shader errors
+retain the previous complete pipeline. Frame inputs are filled once per
+instance, even when several view slots show it. The pointer follows the
+Shadertoy pixel convention; clocks and feedback remain presentation state.
+See [the World workflow](../../../../src/Puck.World/README.md#shader-pipelines)
+and [the pipeline contract](../../../../src/Puck.Shaders/README.md#shader-pipelines-and-live-development).

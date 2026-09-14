@@ -34,6 +34,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
     private readonly IHostApplicationLifetime m_applicationLifetime;
     private readonly BufferedConsoleOutput m_bufferedOutput;
+    private readonly FrameCaptureController? m_capture;
     private readonly ExternalClockRegistry m_externalClocks;
     private readonly FrameTimingHub m_frameTimingHub;
     private readonly IInputClock m_inputClock;
@@ -41,11 +42,10 @@ public sealed class LauncherWindowHostedService : BackgroundService {
     private readonly ILogger<LauncherWindowHostedService> m_logger;
     private readonly LauncherOptions m_options;
     private readonly PresentPacingControl m_presentPacing;
-    private readonly ISurfacePresenter m_presenter;
     private readonly IPresentSurfaceReadback? m_presentReadback;
+    private readonly ISurfacePresenter m_presenter;
     private readonly CommandRegistry m_registry;
     private readonly IRenderNode m_root;
-    private readonly FrameCaptureController? m_capture;
     private readonly IHostContext m_rootHostContext;
     private readonly IFixedStepSimulation? m_simulation;
     private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;

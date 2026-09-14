@@ -12,6 +12,15 @@ namespace Puck.World;
 /// <see cref="Puck.Commands.CommandEcho.SpliceTag(string, string, string)"/>.
 /// </summary>
 internal static class WorldArgs {
+    /// <summary>Whether <paramref name="token"/> opens with <see cref="InstanceTokenPrefix"/> — the test every
+    /// instance-addressed verb uses to decide whether a positional slot IS the trailing instance token before
+    /// parsing it further.</summary>
+    /// <param name="token">The candidate token.</param>
+    /// <returns>Whether the token carries the reserved prefix.</returns>
+    public static bool IsInstanceToken(ReadOnlySpan<char> token) => token.StartsWith(
+        comparisonType: StringComparison.OrdinalIgnoreCase,
+        value: InstanceTokenPrefix
+    );
     /// <summary>Parses an integer index token at <paramref name="at"/> constrained to <c>[min, max]</c>. When
     /// <paramref name="fallback"/> is non-<see langword="null"/> the token is optional — an absent token yields the
     /// fallback (and <see langword="true"/>); when it is <see langword="null"/> the token is required — an absent token
@@ -65,19 +74,6 @@ internal static class WorldArgs {
             (value <= max)
         );
     }
-
-    /// <summary>The reserved trailing-token prefix every instance-addressed verb shares (case-insensitive match).</summary>
-    public const string InstanceTokenPrefix = "instance:";
-
-    /// <summary>Whether <paramref name="token"/> opens with <see cref="InstanceTokenPrefix"/> — the test every
-    /// instance-addressed verb uses to decide whether a positional slot IS the trailing instance token before
-    /// parsing it further.</summary>
-    /// <param name="token">The candidate token.</param>
-    /// <returns>Whether the token carries the reserved prefix.</returns>
-    public static bool IsInstanceToken(ReadOnlySpan<char> token) => token.StartsWith(
-        comparisonType: StringComparison.OrdinalIgnoreCase,
-        value: InstanceTokenPrefix
-    );
     /// <summary>Parses the name out of a token already confirmed by <see cref="IsInstanceToken"/>: decodes the echo's
     /// escapes (see the remarks), refuses an empty name, and refuses the literal boot-instance name as redundant
     /// addressing (the boot world is already the default — omit the token to address it). Does not check whether a
@@ -163,4 +159,7 @@ internal static class WorldArgs {
 
         return true;
     }
+
+    /// <summary>The reserved trailing-token prefix every instance-addressed verb shares (case-insensitive match).</summary>
+    public const string InstanceTokenPrefix = "instance:";
 }

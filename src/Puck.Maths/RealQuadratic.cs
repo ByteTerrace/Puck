@@ -44,7 +44,10 @@ public readonly struct RealQuadratic : IComparable<RealQuadratic>, IEquatable<Re
     /// <summary>Gets <c>a</c>, the rational numerator.</summary>
     public BigInteger RationalNumerator { get; }
     /// <summary>Gets the rational coordinate <c>a / c</c>.</summary>
-    public Rational RationalPart => new(Numerator: RationalNumerator, Denominator: Denominator);
+    public Rational RationalPart => new(
+        Numerator: RationalNumerator,
+        Denominator: Denominator
+    );
     /// <summary>Gets the exact sign of the represented real number.</summary>
     public int Sign => SignOf(
         radicand: Radicand,
@@ -54,30 +57,66 @@ public readonly struct RealQuadratic : IComparable<RealQuadratic>, IEquatable<Re
     /// <summary>Gets <c>b</c>, the coefficient of the square root.</summary>
     public BigInteger SurdNumerator { get; }
     /// <summary>Gets the surd coordinate <c>b / c</c>.</summary>
-    public Rational SurdPart => new(Numerator: SurdNumerator, Denominator: Denominator);
+    public Rational SurdPart => new(
+        Numerator: SurdNumerator,
+        Denominator: Denominator
+    );
     /// <summary>Gets the additive identity.</summary>
     public static RealQuadratic Zero => Rational(value: BigInteger.Zero);
 
-    // The sign of a + b√d over a positive denominator, exactly: agreeing signs decide outright, and opposing signs
-    // compare a² against b²d.
-    private static int SignOf(BigInteger rationalNumerator, BigInteger surdNumerator, BigInteger radicand) {
-        if (surdNumerator.IsZero) { return rationalNumerator.Sign; }
-        if (
-            (rationalNumerator.Sign >= 0) &&
-            (surdNumerator.Sign >= 0)
-        ) { return 1; }
-        if (
-            (rationalNumerator.Sign <= 0) &&
-            (surdNumerator.Sign <= 0)
-        ) { return -1; }
-
-        var comparison = (rationalNumerator * rationalNumerator).CompareTo(other: ((surdNumerator * surdNumerator) * radicand));
-
-        return ((rationalNumerator.Sign > 0)
-            ? comparison
-            : -comparison
+    internal static RealQuadratic FromCanonical(BigInteger rationalNumerator, BigInteger surdNumerator, RealQuadraticField field, BigInteger denominator) =>
+        Normalize(
+            denominator: denominator,
+            field: field,
+            rationalNumerator: rationalNumerator,
+            surdNumerator: surdNumerator
         );
+    internal static bool TryCommonField(in RealQuadratic left, in RealQuadratic right, out RealQuadraticField field, out BigInteger leftSurdNumerator, out BigInteger rightSurdNumerator) {
+        if (left.IsRational) {
+            field = right.Field;
+            leftSurdNumerator = BigInteger.Zero;
+            rightSurdNumerator = right.SurdNumerator;
+
+            return true;
+        }
+
+        if (right.IsRational) {
+            field = left.Field;
+            leftSurdNumerator = left.SurdNumerator;
+            rightSurdNumerator = BigInteger.Zero;
+
+            return true;
+        }
+
+        if (left.Field == right.Field) {
+            field = left.Field;
+            leftSurdNumerator = left.SurdNumerator;
+            rightSurdNumerator = right.SurdNumerator;
+
+            return true;
+        }
+
+        if (RealQuadraticField.TrySame(
+            common: out var common,
+            left: left.Radicand,
+            leftScale: out var leftScale,
+            right: right.Radicand,
+            rightScale: out var rightScale
+        )) {
+            field = RealQuadraticField.Create(radicand: common);
+            leftSurdNumerator = (left.SurdNumerator * leftScale);
+            rightSurdNumerator = (right.SurdNumerator * rightScale);
+
+            return true;
+        }
+
+        field = default;
+        leftSurdNumerator = default;
+        rightSurdNumerator = default;
+
+        return false;
     }
+
     private static void AddRadicalBounds(
         ref BigInteger lower,
         ref BigInteger upper,
@@ -148,6 +187,20 @@ public readonly struct RealQuadratic : IComparable<RealQuadratic>, IEquatable<Re
 
         throw new ArgumentException(message: $"√{left.Radicand} and √{right.Radicand} lie in different real quadratic fields; their values cannot be combined.");
     }
+    // ⌊value · 2^scale⌋, exactly: the root term is bounded below by the floor root for a positive coefficient and by
+    // the negated ceiling root for a negative one, so the floor of the sum is the floor of the value.
+    private BigInteger FloorScaled(int scale) {
+        var rootRadicand = (((SurdNumerator * SurdNumerator) * Radicand) << (2 * scale));
+        var root = BigIntegerFunctions.SquareRoot(value: rootRadicand);
+        var rootTerm = ((SurdNumerator.Sign > 0)
+            ? root
+            : -(((root * root) == rootRadicand)
+                ? root
+                : (root + BigInteger.One))
+        );
+
+        return ((RationalNumerator << scale) + rootTerm).FloorDivide(divisor: Denominator);
+    }
     private static RealQuadratic Normalize(BigInteger rationalNumerator, BigInteger surdNumerator, RealQuadraticField field, BigInteger denominator) {
         if (denominator.Sign < 0) {
             rationalNumerator = -rationalNumerator;
@@ -168,64 +221,37 @@ public readonly struct RealQuadratic : IComparable<RealQuadratic>, IEquatable<Re
         );
 
         return new(
-            denominator: (divisor.IsOne ? denominator : (denominator / divisor)),
+            denominator: (divisor.IsOne
+            ? denominator
+            : (denominator / divisor)),
             field: field,
-            rationalNumerator: (divisor.IsOne ? rationalNumerator : (rationalNumerator / divisor)),
-            surdNumerator: (divisor.IsOne ? surdNumerator : (surdNumerator / divisor))
+            rationalNumerator: (divisor.IsOne
+            ? rationalNumerator
+            : (rationalNumerator / divisor)),
+            surdNumerator: (divisor.IsOne
+            ? surdNumerator
+            : (surdNumerator / divisor))
         );
     }
+    // The sign of a + b√d over a positive denominator, exactly: agreeing signs decide outright, and opposing signs
+    // compare a² against b²d.
+    private static int SignOf(BigInteger rationalNumerator, BigInteger surdNumerator, BigInteger radicand) {
+        if (surdNumerator.IsZero) { return rationalNumerator.Sign; }
+        if (
+            (rationalNumerator.Sign >= 0) &&
+            (surdNumerator.Sign >= 0)
+        ) { return 1; }
+        if (
+            (rationalNumerator.Sign <= 0) &&
+            (surdNumerator.Sign <= 0)
+        ) { return -1; }
 
-    internal static RealQuadratic FromCanonical(BigInteger rationalNumerator, BigInteger surdNumerator, RealQuadraticField field, BigInteger denominator) =>
-        Normalize(
-            denominator: denominator,
-            field: field,
-            rationalNumerator: rationalNumerator,
-            surdNumerator: surdNumerator
+        var comparison = (rationalNumerator * rationalNumerator).CompareTo(other: ((surdNumerator * surdNumerator) * radicand));
+
+        return ((rationalNumerator.Sign > 0)
+            ? comparison
+            : -comparison
         );
-    internal static bool TryCommonField(in RealQuadratic left, in RealQuadratic right, out RealQuadraticField field, out BigInteger leftSurdNumerator, out BigInteger rightSurdNumerator) {
-        if (left.IsRational) {
-            field = right.Field;
-            leftSurdNumerator = BigInteger.Zero;
-            rightSurdNumerator = right.SurdNumerator;
-
-            return true;
-        }
-
-        if (right.IsRational) {
-            field = left.Field;
-            leftSurdNumerator = left.SurdNumerator;
-            rightSurdNumerator = BigInteger.Zero;
-
-            return true;
-        }
-
-        if (left.Field == right.Field) {
-            field = left.Field;
-            leftSurdNumerator = left.SurdNumerator;
-            rightSurdNumerator = right.SurdNumerator;
-
-            return true;
-        }
-
-        if (RealQuadraticField.TrySame(
-            common: out var common,
-            left: left.Radicand,
-            leftScale: out var leftScale,
-            right: right.Radicand,
-            rightScale: out var rightScale
-        )) {
-            field = RealQuadraticField.Create(radicand: common);
-            leftSurdNumerator = (left.SurdNumerator * leftScale);
-            rightSurdNumerator = (right.SurdNumerator * rightScale);
-
-            return true;
-        }
-
-        field = default;
-        leftSurdNumerator = default;
-        rightSurdNumerator = default;
-
-        return false;
     }
 
     /// <summary>Returns the absolute value.</summary>
@@ -471,7 +497,10 @@ public readonly struct RealQuadratic : IComparable<RealQuadratic>, IEquatable<Re
 
             if (scaledBits >= 60L) { break; }
 
-            scale += ((int)Math.Min(val1: (72L - scaledBits), val2: 4096L));
+            scale += ((int)Math.Min(
+                val1: (72L - scaledBits),
+                val2: 4096L
+            ));
             scaled = FloorScaled(scale: scale);
         }
 
@@ -482,19 +511,6 @@ public readonly struct RealQuadratic : IComparable<RealQuadratic>, IEquatable<Re
             truncatedMagnitude: scaled
         );
     }
-
-    // ⌊value · 2^scale⌋, exactly: the root term is bounded below by the floor root for a positive coefficient and by
-    // the negated ceiling root for a negative one, so the floor of the sum is the floor of the value.
-    private BigInteger FloorScaled(int scale) {
-        var rootRadicand = (((SurdNumerator * SurdNumerator) * Radicand) << (2 * scale));
-        var root = BigIntegerFunctions.SquareRoot(value: rootRadicand);
-        var rootTerm = ((SurdNumerator.Sign > 0)
-            ? root
-            : -(((root * root) == rootRadicand) ? root : (root + BigInteger.One)));
-
-        return ((RationalNumerator << scale) + rootTerm).FloorDivide(divisor: Denominator);
-    }
-
     /// <inheritdoc />
     /// <remarks>Every component is formatted against <see cref="CultureInfo.InvariantCulture"/>, so the text is the
     /// same on every host and can reach a log, a snapshot or a golden file.</remarks>

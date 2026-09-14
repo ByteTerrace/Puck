@@ -17,7 +17,7 @@ namespace Puck.World;
 /// <c>Puck.World.Browser.Engine.BrowserExtensionVocabulary</c>).
 /// </remarks>
 public static class WorldProbeVocabularyHook {
-    /// <summary>Answers whether a key names a shipped probe kind (a <c>puck.probe.v1</c> manifest — this project
+    /// <summary>Answers whether a key names a shipped probe kind (a <c>puck.probe.manifest.v1</c> manifest — this project
     /// cannot reference <c>Puck.Shaders</c>, so the catalog never appears here), or <see langword="null"/> when the
     /// installing host carries no probe-kind catalog at all. Installed once by the composition root's module
     /// initializer; read through <see cref="IsRegisteredProbeKind"/>, never directly.</summary>

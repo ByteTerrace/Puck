@@ -22,65 +22,6 @@ public sealed class AgbLinkCable : IAgbLink {
     /// <inheritdoc/>
     public int PlayerCount => m_nodes.Count;
 
-    /// <inheritdoc/>
-    /// <exception cref="ArgumentNullException"><paramref name="client"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">The chain already carries <see cref="MaxPlayers"/> consoles, or
-    /// <paramref name="client"/> is already on it.</exception>
-    public IAgbLinkNode Connect(IAgbLinkClient client) {
-        ArgumentNullException.ThrowIfNull(argument: client);
-
-        if (m_nodes.Count == MaxPlayers) {
-            throw new InvalidOperationException(message: $"The link cable already carries {MaxPlayers} consoles; a multiplayer chain goes no deeper.");
-        }
-
-        foreach (var existing in m_nodes) {
-            if (ReferenceEquals(
-                objA: existing.Client,
-                objB: client
-            )) {
-                throw new InvalidOperationException(message: "This console is already on the link cable; a console occupies exactly one chain position.");
-            }
-        }
-
-        var node = new Node(
-            cable: this,
-            client: client,
-            playerId: m_nodes.Count
-        );
-
-        m_nodes.Add(item: node);
-
-        return node;
-    }
-
-    // Normal mode is a point-to-point wire: the partner is the first OTHER console on the cable (a normal-mode cable
-    // physically joins exactly two consoles; extra chain members simply are not on that wire). If the partner has a
-    // matching slave transfer armed the words swap; otherwise the master reads the idle-high data line, exactly as a
-    // lone console does.
-    private uint NormalExchange(Node from, uint outgoing, bool word) {
-        foreach (var node in m_nodes) {
-            if (ReferenceEquals(
-                objA: node,
-                objB: from
-            )) {
-                continue;
-            }
-
-            if (node.Client.TryCompleteNormalSlave(
-                incoming: outgoing,
-                word: word,
-                out var reply
-            )) {
-                return reply;
-            }
-
-            break;
-        }
-
-        return (word
-            ? 0xFFFFFFFFu
-            : 0xFFu);
-    }
     // One multiplayer round, clocked by `from` (the console whose transfer just completed — the parent): latch every
     // participating console's send word FIRST, so every delivery below observes the same completed round regardless
     // of chain position, then deliver the slots to every other participant. `from`'s own registers are set by its own
@@ -119,6 +60,66 @@ public sealed class AgbLinkCable : IAgbLink {
 
         return (m_nodes.Count > 1);
     }
+    // Normal mode is a point-to-point wire: the partner is the first OTHER console on the cable (a normal-mode cable
+    // physically joins exactly two consoles; extra chain members simply are not on that wire). If the partner has a
+    // matching slave transfer armed the words swap; otherwise the master reads the idle-high data line, exactly as a
+    // lone console does.
+    private uint NormalExchange(Node from, uint outgoing, bool word) {
+        foreach (var node in m_nodes) {
+            if (ReferenceEquals(
+                objA: node,
+                objB: from
+            )) {
+                continue;
+            }
+
+            if (node.Client.TryCompleteNormalSlave(
+                incoming: outgoing,
+                word: word,
+                out var reply
+            )) {
+                return reply;
+            }
+
+            break;
+        }
+
+        return (word
+            ? 0xFFFFFFFFu
+            : 0xFFu
+        );
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException"><paramref name="client"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The chain already carries <see cref="MaxPlayers"/> consoles, or
+    /// <paramref name="client"/> is already on it.</exception>
+    public IAgbLinkNode Connect(IAgbLinkClient client) {
+        ArgumentNullException.ThrowIfNull(argument: client);
+
+        if (m_nodes.Count == MaxPlayers) {
+            throw new InvalidOperationException(message: $"The link cable already carries {MaxPlayers} consoles; a multiplayer chain goes no deeper.");
+        }
+
+        foreach (var existing in m_nodes) {
+            if (ReferenceEquals(
+                objA: existing.Client,
+                objB: client
+            )) {
+                throw new InvalidOperationException(message: "This console is already on the link cable; a console occupies exactly one chain position.");
+            }
+        }
+
+        var node = new Node(
+            cable: this,
+            client: client,
+            playerId: m_nodes.Count
+        );
+
+        m_nodes.Add(item: node);
+
+        return node;
+    }
 
     /// <summary>One console's endpoint: its chain position plus the routes back into the shared cable.</summary>
     private sealed class Node : IAgbLinkNode {
@@ -136,13 +137,6 @@ public sealed class AgbLinkCable : IAgbLink {
         public int PlayerId { get; }
 
         /// <inheritdoc/>
-        public uint NormalExchange(uint outgoing, bool word) =>
-            m_cable.NormalExchange(
-            from: this,
-            outgoing: outgoing,
-            word: word
-        );
-        /// <inheritdoc/>
         public bool MultiplayerExchange(ushort send, out ushort[] slots) {
             slots = new ushort[MaxPlayers];
 
@@ -152,5 +146,12 @@ public sealed class AgbLinkCable : IAgbLink {
                 slots: slots
             );
         }
+        /// <inheritdoc/>
+        public uint NormalExchange(uint outgoing, bool word) =>
+            m_cable.NormalExchange(
+                from: this,
+                outgoing: outgoing,
+                word: word
+            );
     }
 }

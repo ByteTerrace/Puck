@@ -12,6 +12,10 @@ public interface IWorldScreenPresenter {
     /// source is not a machine.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     IAudioMachine? AudioMachine(int index);
+    /// <summary>Gets a named machine's audio output, or <see langword="null"/> when the instance or output is not live.</summary>
+    /// <param name="instance">The declared machine instance name.</param>
+    /// <param name="output">The provider audio output name.</param>
+    IAudioMachine? AudioOutput(string instance, string output);
     /// <summary>Drops every device-owned upload and offscreen view while preserving CPU sessions, machine
     /// simulation, declarations, and view registrations.</summary>
     void NotifyDeviceLost();

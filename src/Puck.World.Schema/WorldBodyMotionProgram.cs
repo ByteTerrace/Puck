@@ -36,7 +36,10 @@ public sealed record ActionStateSlot(
     bool PlayerWritable = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionStateEnvelope? Envelope = null
 ) : IStateSlot {
-    StateValueKind IStateSlot.ValueKind => ((Kind == ActionStateKind.Timer) ? StateValueKind.Timer : StateValueKind.Counter);
+    StateValueKind IStateSlot.ValueKind => ((Kind == ActionStateKind.Timer)
+        ? StateValueKind.Timer
+        : StateValueKind.Counter
+    );
 }
 /// <summary>An authored fixed-phase body motion program.</summary>
 /// <param name="Name">The stable name kits use to select the program.</param>
@@ -103,20 +106,182 @@ public static class BodyMotionProgramRoles {
 /// <summary>The document intake for <see cref="CompiledActionSpec"/> — the one place an authored
 /// <see cref="ActionSpec"/> becomes the engine's compiled trigger form.</summary>
 public static class BodyActionSpecFactory {
-    /// <summary>Flattens a predicate tree into a bounded postfix Boolean gate, allocating one shared recency slot per
-    /// <see cref="WorldPredicate.Recently"/> instance.</summary>
-    /// <param name="predicate">The authored predicate, or <see langword="null"/> for an open gate.</param>
-    /// <param name="gate">Receives the flattened postfix program.</param>
-    /// <param name="recencyFacts">The shared recency-clock fact table this gate appends to.</param>
-    /// <param name="recencyWindows">The shared recency-clock window table, parallel to <paramref name="recencyFacts"/>.</param>
-    /// <param name="stateSlots">The kit-wide named action-state lookup, or <see langword="null"/> when no slot may be
-    /// referenced.</param>
-    /// <param name="channels">The world's compiled channel table, required to resolve a <see cref="WorldPredicate.Held"/>
-    /// predicate's channel — legitimate only in a kit's <c>shaping</c>-row gate. <see langword="null"/> everywhere
-    /// else; a <c>held</c> predicate reaching a flatten with no table throws, since validation has already refused
-    /// authoring one outside a shaping gate.</param>
-    public static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots = null, WorldChannelTable? channels = null) =>
-        FlattenPredicate(predicate: predicate, gate: gate, recencyFacts: recencyFacts, recencyWindows: recencyWindows, stateSlots: stateSlots, channels: channels, depth: 0);
+    private static CompiledBodyInstruction CompileEffect(ActionEffect effect, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
+        var instruction = effect switch {
+            WorldEffect.SetVerticalVelocity set => new CompiledBodyInstruction(
+            Operation: BodyMotionOp.SetVerticalVelocity,
+            Value: FixedQ4816.FromDouble(value: set.Velocity),
+            Direction: default,
+            DurationTicks: 0UL,
+            StateSlot: -1,
+            Target: set.Target
+        ),
+            WorldEffect.ScaleVerticalVelocity scale => new CompiledBodyInstruction(
+            Operation: BodyMotionOp.ScaleVerticalVelocity,
+            Value: FixedQ4816.FromDouble(value: scale.Factor),
+            Direction: default,
+            DurationTicks: 0UL,
+            StateSlot: -1,
+            Target: scale.Target
+        ),
+            WorldEffect.PlanarImpulse impulse => new CompiledBodyInstruction(
+            Operation: BodyMotionOp.PlanarImpulse,
+            Value: FixedQ4816.FromDouble(value: impulse.Speed),
+            Direction: new FixedVector3(
+                X: FixedQ4816.FromDouble(value: impulse.BodyDirection.X),
+                Y: FixedQ4816.FromDouble(value: impulse.BodyDirection.Y),
+                Z: FixedQ4816.FromDouble(value: impulse.BodyDirection.Z)
+            ),
+            DurationTicks: DurationTicks(seconds: impulse.DurationSeconds),
+            StateSlot: -1,
+            Target: impulse.Target
+        ),
+            ActionEffect.SetState set => new CompiledBodyInstruction(
+            Operation: BodyMotionOp.SetState,
+            Value: NumericLiteral.ToFixed(value: RequireBodyEffectValue(
+                value: set.Value,
+                fromState: set.FromState,
+                fromKey: set.FromKey,
+                valueSeconds: set.ValueSeconds,
+                expression: set.Expression,
+                actionName: actionName,
+                effectName: "setState",
+                state: set.State
+            )),
+            Direction: default,
+            DurationTicks: 0UL,
+            StateSlot: ResolveState(
+                name: set.State,
+                stateSlots: stateSlots,
+                key: set.Key,
+                effect: "setState"
+            ),
+            Target: set.Target,
+            StateName: set.State
+        ),
+            ActionEffect.AddState add => new CompiledBodyInstruction(
+            Operation: BodyMotionOp.AddState,
+            Value: NumericLiteral.ToFixed(value: RequireBodyEffectValue(
+                value: add.Value,
+                fromState: add.FromState,
+                fromKey: add.FromKey,
+                valueSeconds: add.ValueSeconds,
+                expression: add.Expression,
+                actionName: actionName,
+                effectName: "addState",
+                state: add.State
+            )),
+            Direction: default,
+            DurationTicks: 0UL,
+            StateSlot: ResolveState(
+                name: add.State,
+                stateSlots: stateSlots,
+                key: add.Key,
+                effect: "addState"
+            ),
+            Target: add.Target,
+            StateName: add.State
+        ),
+            WorldEffect.StartTimer timer => new CompiledBodyInstruction(
+            Operation: BodyMotionOp.StartTimer,
+            Value: default,
+            Direction: default,
+            DurationTicks: DurationTicks(seconds: timer.Seconds),
+            StateSlot: ResolveState(
+                name: timer.State,
+                stateSlots: stateSlots
+            ),
+            Target: timer.Target,
+            StateName: timer.State
+        ),
+            WorldEffect.Designate designate => new CompiledBodyInstruction(
+            Operation: BodyMotionOp.Designate,
+            Value: default,
+            Direction: default,
+            DurationTicks: 0UL,
+            StateSlot: -1,
+            Target: designate.Target,
+            StateName: designate.Register
+        ),
+            // Nothing is resolved at kit-compile time: the generator row and the destination row are world-global
+            // `state` rows, not this kit's per-body slot table, so both names ride through to the mutation compose
+            // boundary that owns their existence checks.
+            ActionEffect.Generate generate => new CompiledBodyInstruction(
+            Operation: BodyMotionOp.Generate,
+            Value: default,
+            Direction: default,
+            DurationTicks: 0UL,
+            StateSlot: -1,
+            Target: ActionTarget.Self,
+            StateName: generate.Row
+        ),
+            // countdownState/upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement author WORLD state/document
+            // rows — a per-body
+            // action has none of its own, so these are refused BY NAME here rather than parsed and discarded
+            // (legitimate only inside a WorldRule; see WorldRuleCompiler.CompileEffect).
+            ActionEffect.CountdownState or WorldEffect.UpsertHudPanel or WorldEffect.RemoveHudPanel or WorldEffect.UpsertPlacement or WorldEffect.RemovePlacement =>
+                throw new InvalidOperationException(message: $"Action '{actionName}' uses effect '{effect.GetType().Name}', which has no body-scope meaning — it authors a WORLD document row and is admissible only inside a world rule's own effects."),
+            // A per-body action compiles to a flat CompiledBodyInstruction stream with no branch of its own.
+            ActionEffect.If =>
+                throw new InvalidOperationException(message: $"Action '{actionName}' uses effect 'if', which has no body-scope meaning — it is admissible only inside a world rule's own effects."),
+            // save writes the WORLD's own file — a per-body action has no world file of its own to save, so this is
+            // refused BY NAME here too (legitimate only inside a WorldRule; see WorldRuleCompiler.CompileEffect and
+            // WorldEffect.Save's own remarks).
+            WorldEffect.Save =>
+                throw new InvalidOperationException(message: $"Action '{actionName}' uses effect 'Save', which has no body-scope meaning — a per-body action has no world file of its own to save, and is admissible only inside a world rule's own effects."),
+            WorldEffect.Pose =>
+                throw new InvalidOperationException(message: $"Action '{actionName}' uses effect 'Pose', which has no body-scope meaning — it teleports a body the world names, and is admissible only inside a world rule's own effects."),
+            _ => throw new InvalidOperationException(message: $"Action '{actionName}' contains an unknown effect kind."),
+        };
+
+        if (!program.Admits(operation: instruction.Operation)) {
+            throw new BodyMotionProgramException(
+                refusal: BodyMotionProgramRefusal.OpcodeInadmissible,
+                programName: program.Name,
+                detail: $"action '{actionName}' opcode '{instruction.Operation}' is inadmissible for program kind '{program.Kind}'"
+            );
+        }
+
+        return instruction;
+    }
+    private static CompiledTrigger? CompileTrigger(ActionTrigger? trigger, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
+        if (trigger is null) {
+            return null;
+        }
+
+        var gate = new List<CompiledPredicate>();
+
+        FlattenPredicate(
+            predicate: trigger.Gate,
+            gate: gate,
+            recencyFacts: recencyFacts,
+            recencyWindows: recencyWindows,
+            stateSlots: stateSlots
+        );
+
+        var effects = new CompiledBodyInstruction[trigger.Effects.Count];
+
+        for (var index = 0; (index < effects.Length); index++) {
+            effects[index] = CompileEffect(
+                effect: trigger.Effects[index],
+                stateSlots: stateSlots,
+                program: program,
+                actionName: actionName
+            );
+        }
+
+        return new CompiledTrigger(
+            Gate: gate.ToArray(),
+            LatchTicks: DurationTicks(seconds: trigger.LatchSeconds),
+            Effects: effects
+        );
+    }
+    // Seconds → engine ticks through the same FromDouble + round-up path the runtime tuning conversions ride.
+    // Puck.Maths.FixedTickConversion is the single-sourced conversion Puck.World.Server's WorldBody calls too — this
+    // project cannot reference WorldBody directly (Puck.World.Schema must not depend on Puck.World.Server).
+    private static ulong DurationTicks(float seconds) {
+        return FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: seconds));
+    }
     private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots, WorldChannelTable? channels, int depth) {
         if (depth >= CompiledPredicateCapacity.MaxTokens) {
             throw new InvalidOperationException(message: $"An action gate is nested past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");
@@ -132,13 +297,13 @@ public static class BodyActionSpecFactory {
                         throw new InvalidOperationException(message: "An 'all' action gate contains a null predicate.");
                     }
                     FlattenPredicate(
+                        channels: channels,
+                        depth: (depth + 1),
                         gate: gate,
                         predicate: inner,
                         recencyFacts: recencyFacts,
                         recencyWindows: recencyWindows,
-                        stateSlots: stateSlots,
-                        channels: channels,
-                        depth: (depth + 1)
+                        stateSlots: stateSlots
                     );
                 }
 
@@ -162,13 +327,13 @@ public static class BodyActionSpecFactory {
                         throw new InvalidOperationException(message: "An 'any' action gate contains a null predicate.");
                     }
                     FlattenPredicate(
+                        channels: channels,
+                        depth: (depth + 1),
                         gate: gate,
                         predicate: inner,
                         recencyFacts: recencyFacts,
                         recencyWindows: recencyWindows,
-                        stateSlots: stateSlots,
-                        channels: channels,
-                        depth: (depth + 1)
+                        stateSlots: stateSlots
                     );
                 }
 
@@ -302,180 +467,6 @@ public static class BodyActionSpecFactory {
             throw new InvalidOperationException(message: $"An action gate compiles past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");
         }
     }
-
-    private static CompiledBodyInstruction CompileEffect(ActionEffect effect, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
-        var instruction = effect switch {
-            WorldEffect.SetVerticalVelocity set => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.SetVerticalVelocity,
-            Value: FixedQ4816.FromDouble(value: set.Velocity),
-            Direction: default,
-            DurationTicks: 0UL,
-            StateSlot: -1,
-            Target: set.Target
-        ),
-            WorldEffect.ScaleVerticalVelocity scale => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.ScaleVerticalVelocity,
-            Value: FixedQ4816.FromDouble(value: scale.Factor),
-            Direction: default,
-            DurationTicks: 0UL,
-            StateSlot: -1,
-            Target: scale.Target
-        ),
-            WorldEffect.PlanarImpulse impulse => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.PlanarImpulse,
-            Value: FixedQ4816.FromDouble(value: impulse.Speed),
-            Direction: new FixedVector3(
-                X: FixedQ4816.FromDouble(value: impulse.BodyDirection.X),
-                Y: FixedQ4816.FromDouble(value: impulse.BodyDirection.Y),
-                Z: FixedQ4816.FromDouble(value: impulse.BodyDirection.Z)
-            ),
-            DurationTicks: DurationTicks(seconds: impulse.DurationSeconds),
-            StateSlot: -1,
-            Target: impulse.Target
-        ),
-            ActionEffect.SetState set => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.SetState,
-            Value: NumericLiteral.ToFixed(value: RequireBodyEffectValue(
-                value: set.Value,
-                fromState: set.FromState,
-                fromKey: set.FromKey,
-                valueSeconds: set.ValueSeconds,
-                expression: set.Expression,
-                actionName: actionName,
-                effectName: "setState",
-                state: set.State
-            )),
-            Direction: default,
-            DurationTicks: 0UL,
-            StateSlot: ResolveState(
-                name: set.State,
-                stateSlots: stateSlots,
-                key: set.Key,
-                effect: "setState"
-            ),
-            Target: set.Target,
-            StateName: set.State
-        ),
-            ActionEffect.AddState add => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.AddState,
-            Value: NumericLiteral.ToFixed(value: RequireBodyEffectValue(
-                value: add.Value,
-                fromState: add.FromState,
-                fromKey: add.FromKey,
-                valueSeconds: add.ValueSeconds,
-                expression: add.Expression,
-                actionName: actionName,
-                effectName: "addState",
-                state: add.State
-            )),
-            Direction: default,
-            DurationTicks: 0UL,
-            StateSlot: ResolveState(
-                name: add.State,
-                stateSlots: stateSlots,
-                key: add.Key,
-                effect: "addState"
-            ),
-            Target: add.Target,
-            StateName: add.State
-        ),
-            WorldEffect.StartTimer timer => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.StartTimer,
-            Value: default,
-            Direction: default,
-            DurationTicks: DurationTicks(seconds: timer.Seconds),
-            StateSlot: ResolveState(
-                name: timer.State,
-                stateSlots: stateSlots
-            ),
-            Target: timer.Target,
-            StateName: timer.State
-        ),
-            WorldEffect.Designate designate => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.Designate,
-            Value: default,
-            Direction: default,
-            DurationTicks: 0UL,
-            StateSlot: -1,
-            Target: designate.Target,
-            StateName: designate.Register
-        ),
-            // Nothing is resolved at kit-compile time: the generator row and the destination row are world-global
-            // `state` rows, not this kit's per-body slot table, so both names ride through to the mutation compose
-            // boundary that owns their existence checks.
-            ActionEffect.Generate generate => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.Generate,
-            Value: default,
-            Direction: default,
-            DurationTicks: 0UL,
-            StateSlot: -1,
-            Target: ActionTarget.Self,
-            StateName: generate.Row
-        ),
-            // countdownState/upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement author WORLD state/document
-            // rows — a per-body
-            // action has none of its own, so these are refused BY NAME here rather than parsed and discarded
-            // (legitimate only inside a WorldRule; see WorldRuleCompiler.CompileEffect).
-            ActionEffect.CountdownState or WorldEffect.UpsertHudPanel or WorldEffect.RemoveHudPanel or WorldEffect.UpsertPlacement or WorldEffect.RemovePlacement =>
-                throw new InvalidOperationException(message: $"Action '{actionName}' uses effect '{effect.GetType().Name}', which has no body-scope meaning — it authors a WORLD document row and is admissible only inside a world rule's own effects."),
-            // save writes the WORLD's own file — a per-body action has no world file of its own to save, so this is
-            // refused BY NAME here too (legitimate only inside a WorldRule; see WorldRuleCompiler.CompileEffect and
-            // WorldEffect.Save's own remarks).
-            WorldEffect.Save =>
-                throw new InvalidOperationException(message: $"Action '{actionName}' uses effect 'Save', which has no body-scope meaning — a per-body action has no world file of its own to save, and is admissible only inside a world rule's own effects."),
-            WorldEffect.Pose =>
-                throw new InvalidOperationException(message: $"Action '{actionName}' uses effect 'Pose', which has no body-scope meaning — it teleports a body the world names, and is admissible only inside a world rule's own effects."),
-            _ => throw new InvalidOperationException(message: $"Action '{actionName}' contains an unknown effect kind."),
-        };
-
-        if (!program.Admits(operation: instruction.Operation)) {
-            throw new BodyMotionProgramException(
-                refusal: BodyMotionProgramRefusal.OpcodeInadmissible,
-                programName: program.Name,
-                detail: $"action '{actionName}' opcode '{instruction.Operation}' is inadmissible for program kind '{program.Kind}'"
-            );
-        }
-
-        return instruction;
-    }
-    private static CompiledTrigger? CompileTrigger(ActionTrigger? trigger, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
-        if (trigger is null) {
-            return null;
-        }
-
-        var gate = new List<CompiledPredicate>();
-
-        FlattenPredicate(
-            predicate: trigger.Gate,
-            gate: gate,
-            recencyFacts: recencyFacts,
-            recencyWindows: recencyWindows,
-            stateSlots: stateSlots
-        );
-
-        var effects = new CompiledBodyInstruction[trigger.Effects.Count];
-
-        for (var index = 0; (index < effects.Length); index++) {
-            effects[index] = CompileEffect(
-                effect: trigger.Effects[index],
-                stateSlots: stateSlots,
-                program: program,
-                actionName: actionName
-            );
-        }
-
-        return new CompiledTrigger(
-            Gate: gate.ToArray(),
-            LatchTicks: DurationTicks(seconds: trigger.LatchSeconds),
-            Effects: effects
-        );
-    }
-    // Seconds → engine ticks through the same FromDouble + round-up path the runtime tuning conversions ride.
-    // Puck.Maths.FixedTickConversion is the single-sourced conversion Puck.World.Server's WorldBody calls too — this
-    // project cannot reference WorldBody directly (Puck.World.Schema must not depend on Puck.World.Server).
-    private static ulong DurationTicks(float seconds) {
-        return FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: seconds));
-    }
     // A per-body action-state slot has no world state row to copy from — setState/addState's live 'fromState'/
     // 'fromKey' spelling is legitimate only in a world rule (WorldRuleCompiler); a body-scope effect always writes an
     // authored constant, so 'value' is required here on the same terms compareState's own body-scope 'value' is.
@@ -578,6 +569,28 @@ public static class BodyActionSpecFactory {
             RecencyWindows: recencyWindows.ToArray()
         );
     }
+    /// <summary>Flattens a predicate tree into a bounded postfix Boolean gate, allocating one shared recency slot per
+    /// <see cref="WorldPredicate.Recently"/> instance.</summary>
+    /// <param name="predicate">The authored predicate, or <see langword="null"/> for an open gate.</param>
+    /// <param name="gate">Receives the flattened postfix program.</param>
+    /// <param name="recencyFacts">The shared recency-clock fact table this gate appends to.</param>
+    /// <param name="recencyWindows">The shared recency-clock window table, parallel to <paramref name="recencyFacts"/>.</param>
+    /// <param name="stateSlots">The kit-wide named action-state lookup, or <see langword="null"/> when no slot may be
+    /// referenced.</param>
+    /// <param name="channels">The world's compiled channel table, required to resolve a <see cref="WorldPredicate.Held"/>
+    /// predicate's channel — legitimate only in a kit's <c>shaping</c>-row gate. <see langword="null"/> everywhere
+    /// else; a <c>held</c> predicate reaching a flatten with no table throws, since validation has already refused
+    /// authoring one outside a shaping gate.</param>
+    public static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots = null, WorldChannelTable? channels = null) =>
+        FlattenPredicate(
+            channels: channels,
+            depth: 0,
+            gate: gate,
+            predicate: predicate,
+            recencyFacts: recencyFacts,
+            recencyWindows: recencyWindows,
+            stateSlots: stateSlots
+        );
 }
 /// <summary>One producer program and a kit's fixed-point arguments for it, resolved to
 /// <see cref="BodyProducerParameter"/> ordinals once at kit-compile time — the tick path indexes
@@ -597,26 +610,134 @@ public sealed class CompiledBodyProducer {
         RoamActive = roamActive;
     }
 
-    /// <summary>Gets the compiled producer program.</summary>
-    public CompiledBodyMotionProgram Program { get; }
-    /// <summary>Gets the compiled target source, when this producer senses a target.</summary>
-    public FixedBodyTargetSource? Target { get; }
     /// <summary>Gets bounded local-perception and steering parameters, when authored.</summary>
     public FixedWorldFlockProfile? Flock { get; }
+    /// <summary>Gets the compiled producer program.</summary>
+    public CompiledBodyMotionProgram Program { get; }
     /// <summary>Gets a value indicating whether <see cref="BodyMotionOp.ProduceSteeringIntent"/>'s roam shape runs
     /// for this producer — always true for a non-sensing steering program, and derived at compile time from a
     /// roam-exclusive <see cref="BodyProducerParameterVocabulary.SteeringScalars"/> member for a sensing program;
     /// never authored as a separate flag.</summary>
     public bool RoamActive { get; }
+    /// <summary>Gets the compiled target source, when this producer senses a target.</summary>
+    public FixedBodyTargetSource? Target { get; }
 
-    /// <summary>Reads one validated channel ordinal, or <c>-1</c> when the kit binds none.</summary>
-    public int Channel(BodyProducerParameter parameter) => m_channelOrdinals[(int)parameter];
-    /// <summary>Reads one validated fixed-point scalar.</summary>
-    public FixedQ4816 Scalar(BodyProducerParameter parameter) => m_scalars[(int)parameter];
     // The scalar ordinals CHANNEL args (Press) may legitimately name, alongside the op-declared scalar set — kept
     // separate from BodyProducerParameterVocabulary.RequiredScalars, which answers only for the SCALAR-valued
     // argument space.
     private static bool AdmitsChannelArgument(CompiledBodyMotionProgram program, BodyProducerParameter parameter) => ((parameter == BodyProducerParameter.Press) && program.Contains(operation: BodyMotionOp.ProduceSteeringIntent));
+
+    /// <summary>Reads one validated channel ordinal, or <c>-1</c> when the kit binds none.</summary>
+    public int Channel(BodyProducerParameter parameter) => m_channelOrdinals[((int)parameter)];
+    /// <summary>Compiles a kit's producer parameters, refusing an authored <c>scalars</c>/<c>channels</c> key that
+    /// names no parameter this program's selected operations read, or that omits one they require.</summary>
+    /// <param name="program">The compiled producer program.</param>
+    /// <param name="source">The program's authored target source, or <see langword="null"/> when it senses none.</param>
+    /// <param name="parameters">The kit's authored arguments for the program.</param>
+    /// <param name="channels">The world's compiled channel table.</param>
+    /// <param name="targets">The world's compiled target-register table.</param>
+    /// <param name="curves">The world's compiled curves-row table.</param>
+    /// <param name="navigation">The world's compiled navigation-domain table.</param>
+    /// <param name="simulationRateHz">The world's own simulation rate — a curve-follow target's per-tick arc step
+    /// divisor.</param>
+    /// <returns>The compiled producer binding.</returns>
+    /// <exception cref="BodyMotionProgramException">An authored key names no parameter this program's operations
+    /// read, or a required parameter is missing.</exception>
+    public static CompiledBodyProducer Compile(CompiledBodyMotionProgram program, BodyTargetSource? source, BodyProgramParameters parameters, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, WorldNavigationDomainTable navigation, int simulationRateHz) {
+        var requiredScalars = ResolveRequiredScalars(
+            parameters: parameters,
+            program: program,
+            target: source
+        );
+        var producesSteering = program.Contains(operation: BodyMotionOp.ProduceSteeringIntent);
+        var senses = program.Contains(operation: BodyMotionOp.SenseNearestInCone);
+        var roamActive = (producesSteering && (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars)));
+
+        var scalars = new FixedQ4816[ParameterCount];
+
+        foreach (var (name, value) in parameters.Scalars) {
+            if (
+                !BodyProducerParameterVocabulary.TryParse(
+                name: name,
+                parameter: out var parameter
+            ) ||
+                !requiredScalars.Contains(item: parameter)
+            ) {
+                throw new BodyMotionProgramException(
+                    refusal: BodyMotionProgramRefusal.ParameterUnknown,
+                    programName: program.Name,
+                    detail: $"scalar '{name}' names no parameter this program's selected operations read"
+                );
+            }
+
+            scalars[((int)parameter)] = FixedQ4816.FromDouble(value: value);
+        }
+        foreach (var required in requiredScalars) {
+            if (!parameters.Scalars.ContainsKey(key: BodyProducerParameterVocabulary.Name(parameter: required))) {
+                throw new BodyMotionProgramException(
+                    refusal: BodyMotionProgramRefusal.ParameterMissing,
+                    programName: program.Name,
+                    detail: $"scalar '{BodyProducerParameterVocabulary.Name(parameter: required)}' is required by this program's selected operations"
+                );
+            }
+        }
+
+        var channelOrdinals = new int[ParameterCount];
+
+        Array.Fill(
+            array: channelOrdinals,
+            value: -1
+        );
+
+        foreach (var (name, channel) in parameters.Channels) {
+            if (
+                !BodyProducerParameterVocabulary.TryParse(
+                name: name,
+                parameter: out var parameter
+            ) ||
+                !AdmitsChannelArgument(
+                parameter: parameter,
+                program: program
+            )
+            ) {
+                throw new BodyMotionProgramException(
+                    refusal: BodyMotionProgramRefusal.ParameterUnknown,
+                    programName: program.Name,
+                    detail: $"channel argument '{name}' names no parameter this program's selected operations read"
+                );
+            }
+
+            channelOrdinals[((int)parameter)] = (channels.TryGetOrdinal(
+                name: channel,
+                ordinal: out var ordinal
+            )
+                ? ordinal
+                : -1
+            );
+        }
+
+        return new CompiledBodyProducer(
+            program: program,
+            flock: ((parameters.Flock is { } flock)
+            ? new FixedWorldFlockProfile(
+                    navigation: navigation,
+                    source: flock
+                )
+            : null),
+            scalars: scalars,
+            channelOrdinals: channelOrdinals,
+            roamActive: roamActive,
+            target: ((source is { } target)
+            ? FixedBodyTargetSource.Compile(
+                    curves: curves,
+                    navigation: navigation,
+                    registers: targets,
+                    simulationRateHz: simulationRateHz,
+                    source: target
+                )
+            : null)
+        );
+    }
     /// <summary>Computes one producer program's full required-scalar set from its selected operations and authored
     /// arguments — the ONE derivation both this type's <see cref="Compile"/> and the schema validator
     /// (<c>WorldDefinitionValidator.Motion.cs</c>'s <c>ValidateProducerParameters</c>) read, so a required-set rule
@@ -640,12 +761,18 @@ public sealed class CompiledBodyProducer {
         // With sensing, roam is an optional fallback and its exclusive scalar presence activates it. Without
         // sensing, roam is the op's only reachable shape, so selecting ProduceSteeringIntent requires it outright;
         // accepting an empty bare producer would compile a permanently inert program.
-        if (producesSteering && (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars))) {
+        if (
+            producesSteering &&
+            (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars))
+        ) {
             required.UnionWith(other: BodyProducerParameterVocabulary.SteeringScalars);
         }
         // The approach shape ProduceSteeringIntent runs is reachable only on a tick this program's own sensing
         // found a target — never on a bare roam producer, which can only ever run the roam shape.
-        if (senses && producesSteering) {
+        if (
+            senses &&
+            producesSteering
+        ) {
             required.UnionWith(other: BodyProducerParameterVocabulary.SteeringApproachScalars);
         }
         // SenseTarget's own release-radius hysteresis (WorldBody.Step.cs) reads this scalar only for a NON-flock
@@ -661,102 +788,6 @@ public sealed class CompiledBodyProducer {
 
         return required;
     }
-    /// <summary>Compiles a kit's producer parameters, refusing an authored <c>scalars</c>/<c>channels</c> key that
-    /// names no parameter this program's selected operations read, or that omits one they require.</summary>
-    /// <param name="program">The compiled producer program.</param>
-    /// <param name="source">The program's authored target source, or <see langword="null"/> when it senses none.</param>
-    /// <param name="parameters">The kit's authored arguments for the program.</param>
-    /// <param name="channels">The world's compiled channel table.</param>
-    /// <param name="targets">The world's compiled target-register table.</param>
-    /// <param name="curves">The world's compiled curves-row table.</param>
-    /// <param name="navigation">The world's compiled navigation-domain table.</param>
-    /// <param name="simulationRateHz">The world's own simulation rate — a curve-follow target's per-tick arc step
-    /// divisor.</param>
-    /// <returns>The compiled producer binding.</returns>
-    /// <exception cref="BodyMotionProgramException">An authored key names no parameter this program's operations
-    /// read, or a required parameter is missing.</exception>
-    public static CompiledBodyProducer Compile(CompiledBodyMotionProgram program, BodyTargetSource? source, BodyProgramParameters parameters, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, WorldNavigationDomainTable navigation, int simulationRateHz) {
-        var requiredScalars = ResolveRequiredScalars(
-            program: program,
-            target: source,
-            parameters: parameters
-        );
-        var producesSteering = program.Contains(operation: BodyMotionOp.ProduceSteeringIntent);
-        var senses = program.Contains(operation: BodyMotionOp.SenseNearestInCone);
-        var roamActive = (producesSteering && (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars)));
-
-        var scalars = new FixedQ4816[ParameterCount];
-
-        foreach (var (name, value) in parameters.Scalars) {
-            if (
-                !BodyProducerParameterVocabulary.TryParse(name: name, parameter: out var parameter) ||
-                !requiredScalars.Contains(item: parameter)
-            ) {
-                throw new BodyMotionProgramException(
-                    refusal: BodyMotionProgramRefusal.ParameterUnknown,
-                    programName: program.Name,
-                    detail: $"scalar '{name}' names no parameter this program's selected operations read"
-                );
-            }
-
-            scalars[(int)parameter] = FixedQ4816.FromDouble(value: value);
-        }
-        foreach (var required in requiredScalars) {
-            if (!parameters.Scalars.ContainsKey(key: BodyProducerParameterVocabulary.Name(parameter: required))) {
-                throw new BodyMotionProgramException(
-                    refusal: BodyMotionProgramRefusal.ParameterMissing,
-                    programName: program.Name,
-                    detail: $"scalar '{BodyProducerParameterVocabulary.Name(parameter: required)}' is required by this program's selected operations"
-                );
-            }
-        }
-
-        var channelOrdinals = new int[ParameterCount];
-
-        Array.Fill(
-            array: channelOrdinals,
-            value: -1
-        );
-
-        foreach (var (name, channel) in parameters.Channels) {
-            if (
-                !BodyProducerParameterVocabulary.TryParse(name: name, parameter: out var parameter) ||
-                !AdmitsChannelArgument(
-                program: program,
-                parameter: parameter
-            )
-            ) {
-                throw new BodyMotionProgramException(
-                    refusal: BodyMotionProgramRefusal.ParameterUnknown,
-                    programName: program.Name,
-                    detail: $"channel argument '{name}' names no parameter this program's selected operations read"
-                );
-            }
-
-            channelOrdinals[(int)parameter] = (channels.TryGetOrdinal(
-                name: channel,
-                ordinal: out var ordinal
-            )
-                ? ordinal
-                : -1
-            );
-        }
-
-        return new CompiledBodyProducer(
-            program: program,
-            flock: parameters.Flock is { } flock ? new FixedWorldFlockProfile(flock, navigation) : null,
-            scalars: scalars,
-            channelOrdinals: channelOrdinals,
-            roamActive: roamActive,
-            target: ((source is { } target)
-            ? FixedBodyTargetSource.Compile(
-                    curves: curves,
-                    navigation: navigation,
-                    registers: targets,
-                    simulationRateHz: simulationRateHz,
-                    source: target
-                )
-            : null)
-        );
-    }
+    /// <summary>Reads one validated fixed-point scalar.</summary>
+    public FixedQ4816 Scalar(BodyProducerParameter parameter) => m_scalars[((int)parameter)];
 }

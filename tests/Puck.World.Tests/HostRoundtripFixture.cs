@@ -10,6 +10,13 @@ namespace Puck.World.Tests;
 /// fresh host — see <see cref="WorldAuthorityCheckpointHostRoundtripLawTests"/> for the scenario's own remarks on
 /// why the moved seat stays local (never peer-range) and why row-a keeps a second occupant.</summary>
 internal static class HostRoundtripFixture {
+    /// <summary>Drains pending transfers and steps <paramref name="host"/> for <paramref name="ticks"/> settled ticks.</summary>
+    private static void AdvanceSettledTicks(WorldInstanceHost host, int ticks) {
+        for (var tick = 0; (tick < ticks); tick++) {
+            host.DrainPendingTransfers();
+            host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+        }
+    }
     /// <summary>Builds a two-row host's <see cref="WorldInstanceHost"/> with a fresh temp state root under
     /// <paramref name="tempPrefix"/> — the exact construction shape every scenario builder below shares.</summary>
     private static WorldInstanceHost BuildHost(Guid machineId, string tempPrefix) => new(
@@ -37,19 +44,15 @@ internal static class HostRoundtripFixture {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
     }
-    /// <summary>Drains pending transfers and steps <paramref name="host"/> for <paramref name="ticks"/> settled ticks.</summary>
-    private static void AdvanceSettledTicks(WorldInstanceHost host, int ticks) {
-        for (var tick = 0; (tick < ticks); tick++) {
-            host.DrainPendingTransfers();
-            host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
-        }
-    }
 
     /// <summary>Builds the two-row host, joins two local seats on row-a, steps both rows, drains a transfer of
     /// slot 0 to row-b, and steps a settled tail.</summary>
     public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB, Guid MachineId) BuildCommittedScenario() {
         var machineId = Guid.NewGuid();
-        var host = BuildHost(machineId: machineId, tempPrefix: "puck-host-roundtrip-tests-");
+        var host = BuildHost(
+            machineId: machineId,
+            tempPrefix: "puck-host-roundtrip-tests-"
+        );
         var rowA = HostRow.Build(name: "row-a");
         var rowB = HostRow.Build(name: "row-b");
 
@@ -58,7 +61,10 @@ internal static class HostRoundtripFixture {
 
         JoinTwoLocalSeats(rowA: rowA);
 
-        AdvanceSettledTicks(host: host, ticks: 50);
+        AdvanceSettledTicks(
+            host: host,
+            ticks: 50
+        );
 
         _ = host.EnqueueTransfer(
             actingPrincipal: WorldPrincipal.Console,
@@ -71,7 +77,10 @@ internal static class HostRoundtripFixture {
 
         Assert.True(condition: rowB.Server.Population.IsActive(index: 0));
 
-        AdvanceSettledTicks(host: host, ticks: 50);
+        AdvanceSettledTicks(
+            host: host,
+            ticks: 50
+        );
 
         return (host, rowA, rowB, machineId);
     }
@@ -82,7 +91,10 @@ internal static class HostRoundtripFixture {
     /// retry the commit for real and resolve the in-doubt entry this scenario exists to capture.</summary>
     public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB, Guid MachineId, ulong TransferId) BuildInDoubtScenario() {
         var machineId = Guid.NewGuid();
-        var host = BuildHost(machineId: machineId, tempPrefix: "puck-host-roundtrip-in-doubt-tests-");
+        var host = BuildHost(
+            machineId: machineId,
+            tempPrefix: "puck-host-roundtrip-in-doubt-tests-"
+        );
         var rowA = HostRow.Build(name: "row-a");
         var rowB = HostRow.Build(name: "row-b");
 
@@ -95,7 +107,10 @@ internal static class HostRoundtripFixture {
 
         JoinTwoLocalSeats(rowA: rowA);
 
-        AdvanceSettledTicks(host: host, ticks: 50);
+        AdvanceSettledTicks(
+            host: host,
+            ticks: 50
+        );
 
         var transferId = host.EnqueueTransfer(
             actingPrincipal: WorldPrincipal.Console,
@@ -109,10 +124,13 @@ internal static class HostRoundtripFixture {
 
         Assert.False(condition: rowA.Server.Population.IsActive(index: 0));
         Assert.False(condition: rowB.Server.Population.IsActive(index: 0));
-        Assert.Equal(expected: WorldTransferStatus.Reserved, actual: rowB.Server.TransferStatus(
-            sourceAuthority: rowA.Server.AuthorityIdentity,
-            transferId: transferId
-        ));
+        Assert.Equal(
+            expected: WorldTransferStatus.Reserved,
+            actual: rowB.Server.TransferStatus(
+                sourceAuthority: rowA.Server.AuthorityIdentity,
+                transferId: transferId
+            )
+        );
 
         return (host, rowA, rowB, machineId, transferId);
     }
@@ -126,7 +144,10 @@ internal static class HostRoundtripFixture {
     /// why that resume is what makes the comparison hold.</summary>
     public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB, Guid MachineId, int PeerSlot) BuildPeerRangeCommittedScenario() {
         var machineId = Guid.NewGuid();
-        var host = BuildHost(machineId: machineId, tempPrefix: "puck-host-roundtrip-peer-tests-");
+        var host = BuildHost(
+            machineId: machineId,
+            tempPrefix: "puck-host-roundtrip-peer-tests-"
+        );
         var document = Fixtures.BuildDocument() with {
             PopulationRaw = Fixtures.BuildDocument().Population with {
                 CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
@@ -134,9 +155,15 @@ internal static class HostRoundtripFixture {
             },
             Admission = [Fixtures.AnyAuthorityArrivals()],
         };
-        const int peerSlot = WorldBodiesLimits.LocalSeatCount;
-        var rowA = HostRow.Build(definition: document, name: "row-a");
-        var rowB = HostRow.Build(definition: document, name: "row-b");
+        const int PeerSlot = WorldBodiesLimits.LocalSeatCount;
+        var rowA = HostRow.Build(
+            definition: document,
+            name: "row-a"
+        );
+        var rowB = HostRow.Build(
+            definition: document,
+            name: "row-b"
+        );
 
         host.Admit(row: rowA.Instance);
         host.Admit(row: rowB.Instance);
@@ -152,7 +179,7 @@ internal static class HostRoundtripFixture {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
         Assert.True(condition: rowA.Server.ExecuteAuthorityOperation(operation: () => rowA.Server.Population.TryAdmitRemotePeerAt(
-            slot: peerSlot,
+            slot: PeerSlot,
             source: IntentSource.Live,
             grantTemplates: [],
             identityDomain: "example.test",
@@ -161,34 +188,46 @@ internal static class HostRoundtripFixture {
             refusal: out _
         )));
 
-        AdvanceSettledTicks(host: host, ticks: 50);
+        AdvanceSettledTicks(
+            host: host,
+            ticks: 50
+        );
 
         _ = host.EnqueueTransfer(
             actingPrincipal: WorldPrincipal.Console,
             destination: WorldInstanceHost.TransferDestination.Existing(name: "row-b"),
             scope: WorldInstanceHost.TransferScope.Body,
             sourceInstance: "row-a",
-            sourceSlot: peerSlot
+            sourceSlot: PeerSlot
         );
         host.DrainPendingTransfers();
 
-        Assert.True(condition: rowB.Server.Population.IsActive(index: peerSlot));
+        Assert.True(condition: rowB.Server.Population.IsActive(index: PeerSlot));
 
-        AdvanceSettledTicks(host: host, ticks: 50);
+        AdvanceSettledTicks(
+            host: host,
+            ticks: 50
+        );
 
-        return (host, rowA, rowB, machineId, peerSlot);
+        return (host, rowA, rowB, machineId, PeerSlot);
     }
     public static (WorldAuthorityCheckpoint A, WorldAuthorityCheckpoint B) CaptureBoth(WorldInstanceHost host, HostRow rowA, HostRow rowB) {
-        Assert.True(condition: rowA.Server.TryCaptureCheckpoint(
-            checkpoint: out var checkpointA,
-            hostRow: host.CaptureRow(row: rowA.Instance),
-            reason: out var reasonA
-        ), userMessage: reasonA);
-        Assert.True(condition: rowB.Server.TryCaptureCheckpoint(
-            checkpoint: out var checkpointB,
-            hostRow: host.CaptureRow(row: rowB.Instance),
-            reason: out var reasonB
-        ), userMessage: reasonB);
+        Assert.True(
+            condition: rowA.Server.TryCaptureCheckpoint(
+                checkpoint: out var checkpointA,
+                hostRow: host.CaptureRow(row: rowA.Instance),
+                reason: out var reasonA
+            ),
+            userMessage: reasonA
+        );
+        Assert.True(
+            condition: rowB.Server.TryCaptureCheckpoint(
+                checkpoint: out var checkpointB,
+                hostRow: host.CaptureRow(row: rowB.Instance),
+                reason: out var reasonB
+            ),
+            userMessage: reasonB
+        );
 
         return (checkpointA!, checkpointB!);
     }
@@ -198,11 +237,14 @@ internal static class HostRoundtripFixture {
     public static WorldAuthorityCheckpoint EncodeDecode(WorldAuthorityCheckpoint checkpoint) {
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
 
-        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: encoded,
-            checkpoint: out var decoded,
-            reason: out var reason
-        ), userMessage: reason);
+        Assert.True(
+            condition: WorldAuthorityCheckpointCodec.TryDecode(
+                bytes: encoded,
+                checkpoint: out var decoded,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
 
         return decoded!;
     }
@@ -211,11 +253,17 @@ internal static class HostRoundtripFixture {
     /// different id here would diverge a byte-identity comparison on a field the law itself introduces, never one the
     /// checkpoint completeness rule is about.</summary>
     public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB) RestoreBoth(Guid machineId, WorldAuthorityCheckpoint checkpointA, WorldAuthorityCheckpoint checkpointB) {
-        var host = BuildHost(machineId: machineId, tempPrefix: "puck-host-roundtrip-restore-tests-");
+        var host = BuildHost(
+            machineId: machineId,
+            tempPrefix: "puck-host-roundtrip-restore-tests-"
+        );
 
         static HostRow RestoredRow(WorldAuthorityCheckpoint checkpoint, string name) {
             var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
-            var machines = new WorldMachineHost(engines: [], screens: definition.Screens);
+            var machines = new WorldMachineHost(
+                engines: [],
+                screens: definition.Screens
+            );
 
             var (server, _) = WorldServer.FromCheckpoint(
                 checkpoint: checkpoint,
@@ -228,19 +276,35 @@ internal static class HostRoundtripFixture {
                 )
             );
 
-            return HostRow.Wrap(machines: machines, name: name, server: server);
+            return HostRow.Wrap(
+                machines: machines,
+                name: name,
+                server: server
+            );
         }
 
-        var rowA = RestoredRow(checkpoint: checkpointA, name: "row-a");
-        var rowB = RestoredRow(checkpoint: checkpointB, name: "row-b");
+        var rowA = RestoredRow(
+            checkpoint: checkpointA,
+            name: "row-a"
+        );
+        var rowB = RestoredRow(
+            checkpoint: checkpointB,
+            name: "row-b"
+        );
 
         host.Admit(row: rowA.Instance);
         host.Admit(row: rowB.Instance);
 
         // Both rows are admitted before EITHER restore runs — a co-hosted forwarded arm's destination row must
         // already be in the registry (RestoreRow's own remarks).
-        host.RestoreRow(row: rowA.Instance, slice: checkpointA.HostRow);
-        host.RestoreRow(row: rowB.Instance, slice: checkpointB.HostRow);
+        host.RestoreRow(
+            row: rowA.Instance,
+            slice: checkpointA.HostRow
+        );
+        host.RestoreRow(
+            row: rowB.Instance,
+            slice: checkpointB.HostRow
+        );
 
         return (host, rowA, rowB);
     }

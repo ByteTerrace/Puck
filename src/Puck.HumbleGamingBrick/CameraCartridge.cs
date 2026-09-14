@@ -22,16 +22,6 @@ namespace Puck.HumbleGamingBrick;
 /// </para>
 /// </summary>
 public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
-    private const int CameraRegisterCount = 0x36;
-    private const int RamBankSize = 0x2000;
-    private const int RomBankSize = 0x4000;
-    // Camera register indices (M64282FP working registers, as the MAC-GBD exposes them at 0xA000+).
-    private const int ShootRegister = 0x00;         // bit 0: capture trigger / busy; bits 1-2: 1-D / edge mode
-    private const int GainAndEdgeRegister = 0x01;   // bits 0-4: analog gain index; bits 5-7 == 0xE0: edge enhancement on
-    private const int ExposureHighRegister = 0x02;  // exposure time, high byte
-    private const int ExposureLowRegister = 0x03;   // exposure time, low byte
-    private const int EdgeRatioRegister = 0x04;     // bits 4-6: edge-enhancement exclusive-ratio index
-    private const int DitherPatternStart = 0x06;    // registers 6..0x35: 16 cells × 3 thresholds = the dither matrix
     // Busy timing (in LCD dots ≈ CPU T-cycles at normal speed), matching real-hardware countdown timing: a fixed base, a penalty
     // when 1-D processing is off (register 1 bit 7 clear), and 64 dots per unit of the 16-bit exposure register. The
     // real cart's sub-DIV alignment jitter is a host-clock artifact and is deliberately not modeled (it would import
@@ -39,7 +29,20 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
     private const int BusyBaseDots = 129792;
     private const int BusyDotsPerExposureUnit = 64;
     private const int BusyOneDimensionalPenaltyDots = 2048;
+    private const int CameraRegisterCount = 0x36;
+    private const int DitherPatternStart = 0x06;    // registers 6..0x35: 16 cells × 3 thresholds = the dither matrix
+    private const int EdgeRatioRegister = 0x04;     // bits 4-6: edge-enhancement exclusive-ratio index
+    private const int ExposureHighRegister = 0x02;  // exposure time, high byte
+    private const int ExposureLowRegister = 0x03;   // exposure time, low byte
+    private const int GainAndEdgeRegister = 0x01;   // bits 0-4: analog gain index; bits 5-7 == 0xE0: edge enhancement on
+    private const int RamBankSize = 0x2000;
+    private const int RomBankSize = 0x4000;
+    // Camera register indices (M64282FP working registers, as the MAC-GBD exposes them at 0xA000+).
+    private const int ShootRegister = 0x00;         // bit 0: capture trigger / busy; bits 1-2: 1-D / edge mode
 
+    // The eight edge-enhancement exclusive ratios {0.5, 0.75, 1, 1.25, 2, 3, 4, 5} in quarter units, so the enhancement
+    // term is `ratioQuarters × (4·color − neighbours) / 4` — the ratios are exact quarters, so nothing is lost.
+    private static readonly int[] EdgeRatioQuarters = [2, 3, 4, 5, 8, 12, 16, 20];
     // The analog gain curve as 16.16 fixed-point (gain × 65536), so `(pixel * gain) >> 16` is exact integer arithmetic.
     // These are the M64282FP's 32 gain steps (from a hardware-accurate reference table), rounded once at authoring time — index 4 is exactly 1.0.
     private static readonly int[] GainTable = [
@@ -52,21 +55,18 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
         101916, 103126, 104273, 105362,
         106400, 107391, 108339, 109247,
     ];
-    // The eight edge-enhancement exclusive ratios {0.5, 0.75, 1, 1.25, 2, 3, 4, 5} in quarter units, so the enhancement
-    // term is `ratioQuarters × (4·color − neighbours) / 4` — the ratios are exact quarters, so nothing is lost.
-    private static readonly int[] EdgeRatioQuarters = [2, 3, 4, 5, 8, 12, 16, 20];
 
     private readonly byte[] m_cameraRegisters;
     private readonly byte[] m_plane;         // scratch: the latched sensor readout (rebuilt every capture)
-    private readonly byte[] m_tiles;         // scratch: the packed 2bpp image (rebuilt every capture)
     private readonly int m_ramBankWrapMask;
+    private readonly byte[] m_tiles;         // scratch: the packed 2bpp image (rebuilt every capture)
 
     private int m_busyDots;
     private bool m_cameraSelected;
-    private ICameraSensor m_sensor;
     private int m_ramBank;
     private bool m_ramEnabled;
     private int m_romBank;
+    private ICameraSensor m_sensor;
 
     /// <summary>Creates a camera cartridge with its registers at reset (ROM bank 1, RAM disabled, RAM window
     /// selected), a zeroed camera register file, and the deterministic default sensor.</summary>
@@ -88,6 +88,13 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
         m_tiles = new byte[SensorImage.TiledByteCount];
     }
 
+    /// <inheritdoc/>
+    protected override bool RamAccessible =>
+        (Header.HasRam && m_ramEnabled);
+
+    /// <inheritdoc/>
+    public ClockDomain Domain =>
+        ClockDomain.Lcd;
     /// <summary>Gets or sets the sensor whose readout a capture latches — the seam a host swaps for a live camera. Never
     /// null; the constructor installs the deterministic default. This is host input, not snapshot state, so it is not
     /// serialized (like the joypad's button source, it is owned by whoever drives the machine).</summary>
@@ -95,155 +102,6 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
     public ICameraSensor Sensor {
         get => m_sensor;
         set => m_sensor = (value ?? throw new ArgumentNullException(paramName: nameof(value)));
-    }
-    /// <inheritdoc/>
-    public ClockDomain Domain =>
-        ClockDomain.Lcd;
-
-    /// <inheritdoc/>
-    protected override bool RamAccessible =>
-        (Header.HasRam && m_ramEnabled);
-
-    /// <inheritdoc/>
-    public void Tick() {
-        // The exposure countdown runs on the fixed LCD clock (like the MBC3's RTC), so the busy window is the same
-        // number of emulated dots on every run: a ROM polling register 0's busy bit always sees it clear at the same
-        // deterministic point.
-        if (m_busyDots <= 0) {
-            return;
-        }
-
-        if (--m_busyDots == 0) {
-            m_cameraRegisters[ShootRegister] &= 0xFE;
-        }
-    }
-    /// <inheritdoc/>
-    public override void WriteControl(ushort address, byte value) {
-        switch (address >> 13) {
-            case 0: // 0x0000-0x1FFF: RAM enable (the camera block ignores it)
-                m_ramEnabled = ((value & 0x0F) == 0x0A);
-
-                break;
-            case 1: // 0x2000-0x3FFF: six-bit ROM bank, zero reads as one
-                m_romBank = value & 0x3F;
-
-                if (m_romBank == 0) {
-                    m_romBank = 1;
-                }
-
-                break;
-            case 2: // 0x4000-0x5FFF: bit 4 maps the camera block over the window; bits 3-0 select the RAM bank
-                m_cameraSelected = ((value & 0x10) != 0);
-                m_ramBank = value & 0x0F;
-
-                break;
-            default: // 0x6000-0x7FFF: no register
-                break;
-        }
-    }
-    /// <summary>Reads from the external window: register&#160;0's busy flag while the camera block is selected and that
-    /// register is addressed, <c>0x00</c> for the other (write-only) camera registers, otherwise banked RAM — which is
-    /// where a completed capture's image lives (bank&#160;0, from <c>0xA100</c>).</summary>
-    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
-    /// <returns>The busy flag, <c>0x00</c>, or the RAM byte.</returns>
-    public override byte ReadRam(ushort address) {
-        if (!m_cameraSelected) {
-            return base.ReadRam(address: address);
-        }
-
-        var register = (address - MemoryMap.ExternalRamStart) & 0x7F;
-
-        return ((register == ShootRegister)
-            ? m_cameraRegisters[ShootRegister]
-            : (byte)0x00);
-    }
-    /// <summary>Writes to the external window: a camera register while the camera block is selected (register&#160;0's
-    /// bit&#160;0 arms a capture on its rising edge and cannot be cleared while a shoot is in progress), otherwise banked
-    /// RAM.</summary>
-    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
-    /// <param name="value">The value to store.</param>
-    public override void WriteRam(ushort address, byte value) {
-        if (!m_cameraSelected) {
-            base.WriteRam(
-                address: address,
-                value: value
-            );
-
-            return;
-        }
-
-        var register = (address - MemoryMap.ExternalRamStart) & 0x7F;
-
-        if (register >= CameraRegisterCount) {
-            return;
-        }
-
-        if (register != ShootRegister) {
-            m_cameraRegisters[register] = value;
-
-            return;
-        }
-
-        // Register 0 keeps only bits 0-2. A 0->1 edge on bit 0 fires the shoot (latch + process + start the busy
-        // countdown); a real cart cannot cancel an in-progress shoot, so a bit-0 clear while busy is ignored.
-        value &= 0x07;
-
-        if (
-            ((value & 0x01) != 0) &&
-            ((m_cameraRegisters[ShootRegister] & 0x01) == 0)
-        ) {
-            m_cameraRegisters[ShootRegister] = value;
-            Capture();
-
-            return;
-        }
-
-        if (
-            ((value & 0x01) == 0) &&
-            ((m_cameraRegisters[ShootRegister] & 0x01) != 0)
-        ) {
-            value |= 0x01;
-        }
-
-        m_cameraRegisters[ShootRegister] = value;
-    }
-    /// <inheritdoc/>
-    /// <remarks>Overridden: bit&#160;4 of the RAM-bank register can map the camera register block over the whole
-    /// window, and register&#160;0 triggers a capture side effect — the window stays on the interface path.</remarks>
-    public override bool TryComputeRamWindow(out int offset, out int length) {
-        offset = 0;
-        length = 0;
-
-        return false;
-    }
-
-    /// <inheritdoc/>
-    protected override int MapRomOffset(ushort address) =>
-        MapStandardRomOffset(
-            address: address,
-            bankSize: RomBankSize,
-            romBank: m_romBank
-        );
-    /// <inheritdoc/>
-    protected override int MapRamOffset(ushort address) =>
-        (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
-    /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBytes(value: m_cameraRegisters);
-        writer.WriteInt32(value: m_busyDots);
-        writer.WriteBoolean(value: m_cameraSelected);
-        writer.WriteInt32(value: m_ramBank);
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_romBank);
-    }
-    /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        reader.ReadBytes(destination: m_cameraRegisters);
-        m_busyDots = reader.ReadInt32();
-        m_cameraSelected = reader.ReadBoolean();
-        m_ramBank = reader.ReadInt32();
-        m_ramEnabled = reader.ReadBoolean();
-        m_romBank = reader.ReadInt32();
     }
 
     // Latches the sensor, processes the M64282FP image into 2bpp tiles, deposits them at 0xA100 in bank 0, and arms the
@@ -355,5 +213,148 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
         var exposure = (m_cameraRegisters[ExposureHighRegister] << 8) | m_cameraRegisters[ExposureLowRegister];
 
         return ((color * exposure) / 0x1000);
+    }
+
+    /// <inheritdoc/>
+    protected override void LoadRegisters(StateReader reader) {
+        reader.ReadBytes(destination: m_cameraRegisters);
+        m_busyDots = reader.ReadInt32();
+        m_cameraSelected = reader.ReadBoolean();
+        m_ramBank = reader.ReadInt32();
+        m_ramEnabled = reader.ReadBoolean();
+        m_romBank = reader.ReadInt32();
+    }
+    /// <inheritdoc/>
+    protected override int MapRamOffset(ushort address) =>
+        (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
+    /// <inheritdoc/>
+    protected override int MapRomOffset(ushort address) =>
+        MapStandardRomOffset(
+            address: address,
+            bankSize: RomBankSize,
+            romBank: m_romBank
+        );
+    /// <inheritdoc/>
+    protected override void SaveRegisters(StateWriter writer) {
+        writer.WriteBytes(value: m_cameraRegisters);
+        writer.WriteInt32(value: m_busyDots);
+        writer.WriteBoolean(value: m_cameraSelected);
+        writer.WriteInt32(value: m_ramBank);
+        writer.WriteBoolean(value: m_ramEnabled);
+        writer.WriteInt32(value: m_romBank);
+    }
+
+    /// <summary>Reads from the external window: register&#160;0's busy flag while the camera block is selected and that
+    /// register is addressed, <c>0x00</c> for the other (write-only) camera registers, otherwise banked RAM — which is
+    /// where a completed capture's image lives (bank&#160;0, from <c>0xA100</c>).</summary>
+    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
+    /// <returns>The busy flag, <c>0x00</c>, or the RAM byte.</returns>
+    public override byte ReadRam(ushort address) {
+        if (!m_cameraSelected) {
+            return base.ReadRam(address: address);
+        }
+
+        var register = (address - MemoryMap.ExternalRamStart) & 0x7F;
+
+        return ((register == ShootRegister)
+            ? m_cameraRegisters[ShootRegister]
+            : (byte)0x00
+        );
+    }
+    /// <inheritdoc/>
+    public void Tick() {
+        // The exposure countdown runs on the fixed LCD clock (like the MBC3's RTC), so the busy window is the same
+        // number of emulated dots on every run: a ROM polling register 0's busy bit always sees it clear at the same
+        // deterministic point.
+        if (m_busyDots <= 0) {
+            return;
+        }
+
+        if (--m_busyDots == 0) {
+            m_cameraRegisters[ShootRegister] &= 0xFE;
+        }
+    }
+    /// <inheritdoc/>
+    /// <remarks>Overridden: bit&#160;4 of the RAM-bank register can map the camera register block over the whole
+    /// window, and register&#160;0 triggers a capture side effect — the window stays on the interface path.</remarks>
+    public override bool TryComputeRamWindow(out int offset, out int length) {
+        offset = 0;
+        length = 0;
+
+        return false;
+    }
+    /// <inheritdoc/>
+    public override void WriteControl(ushort address, byte value) {
+        switch (address >> 13) {
+            case 0: // 0x0000-0x1FFF: RAM enable (the camera block ignores it)
+                m_ramEnabled = ((value & 0x0F) == 0x0A);
+
+                break;
+            case 1: // 0x2000-0x3FFF: six-bit ROM bank, zero reads as one
+                m_romBank = value & 0x3F;
+
+                if (m_romBank == 0) {
+                    m_romBank = 1;
+                }
+
+                break;
+            case 2: // 0x4000-0x5FFF: bit 4 maps the camera block over the window; bits 3-0 select the RAM bank
+                m_cameraSelected = ((value & 0x10) != 0);
+                m_ramBank = value & 0x0F;
+
+                break;
+            default: // 0x6000-0x7FFF: no register
+                break;
+        }
+    }
+    /// <summary>Writes to the external window: a camera register while the camera block is selected (register&#160;0's
+    /// bit&#160;0 arms a capture on its rising edge and cannot be cleared while a shoot is in progress), otherwise banked
+    /// RAM.</summary>
+    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
+    /// <param name="value">The value to store.</param>
+    public override void WriteRam(ushort address, byte value) {
+        if (!m_cameraSelected) {
+            base.WriteRam(
+                address: address,
+                value: value
+            );
+
+            return;
+        }
+
+        var register = (address - MemoryMap.ExternalRamStart) & 0x7F;
+
+        if (register >= CameraRegisterCount) {
+            return;
+        }
+
+        if (register != ShootRegister) {
+            m_cameraRegisters[register] = value;
+
+            return;
+        }
+
+        // Register 0 keeps only bits 0-2. A 0->1 edge on bit 0 fires the shoot (latch + process + start the busy
+        // countdown); a real cart cannot cancel an in-progress shoot, so a bit-0 clear while busy is ignored.
+        value &= 0x07;
+
+        if (
+            ((value & 0x01) != 0) &&
+            ((m_cameraRegisters[ShootRegister] & 0x01) == 0)
+        ) {
+            m_cameraRegisters[ShootRegister] = value;
+            Capture();
+
+            return;
+        }
+
+        if (
+            ((value & 0x01) == 0) &&
+            ((m_cameraRegisters[ShootRegister] & 0x01) != 0)
+        ) {
+            value |= 0x01;
+        }
+
+        m_cameraRegisters[ShootRegister] = value;
     }
 }

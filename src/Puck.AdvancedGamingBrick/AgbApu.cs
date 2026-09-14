@@ -37,14 +37,14 @@ public sealed partial class AgbApu : IAgbApu {
     private int m_outputWrite;
     private int m_outputRead;
     private int m_sampleRate;
-    private long m_samplePhase;
+    private RationalRateAccumulator m_samplePhase;
 
     /// <inheritdoc/>
     public void ConfigureOutput(int sampleRate) {
         if (sampleRate <= 0) {
             m_outputRing = Array.Empty<short>();
             m_sampleRate = 0;
-            m_samplePhase = 0L;
+            m_samplePhase.Reset();
             m_outputWrite = 0;
             m_outputRead = 0;
 
@@ -53,7 +53,7 @@ public sealed partial class AgbApu : IAgbApu {
 
         m_outputRing = new short[(sampleRate * 2)]; // ~1 second of stereo headroom
         m_sampleRate = sampleRate;
-        m_samplePhase = 0L;
+        m_samplePhase.Reset();
         m_outputWrite = 0;
         m_outputRead = 0;
     }
@@ -92,18 +92,15 @@ public sealed partial class AgbApu : IAgbApu {
         }
 
         if (m_sampleRate > 0) {
-            // An exact-rational accumulator (the HGB output-stage pattern): every emulated cycle weights the phase
-            // by the configured rate against the master clock, and a sample emits each time the phase crosses one
-            // whole master-clock second, subtracting rather than resetting — so there is no truncated
-            // cycles-per-sample constant to drift against the true (irrational-looking) ratio. `cycles * m_sampleRate`
-            // is computed in `long` because a single Step span (up to a full frame) times a high sample rate can
-            // exceed `int.MaxValue` before the loop below brings the phase back under `MasterClock`. Exact for
-            // power-of-two rates: at 32768 Hz the phase crosses MasterClock (2^24) every exactly 512 cycles.
-            m_samplePhase += (((long)cycles) * m_sampleRate);
+            // The weight is computed in `long` because a single Step span (up to a full frame) times a high sample
+            // rate can exceed `int.MaxValue` before the phase comes back under MasterClock. Exact for power-of-two
+            // rates: at 32768 Hz the phase crosses MasterClock (2^24) every exactly 512 cycles.
+            var due = m_samplePhase.Advance(
+                period: MasterClock,
+                weight: (((long)cycles) * m_sampleRate)
+            );
 
-            while (m_samplePhase >= MasterClock) {
-                m_samplePhase -= MasterClock;
-
+            for (var sample = 0L; (sample < due); ++sample) {
                 GenerateSample();
             }
         }
@@ -147,6 +144,7 @@ public sealed partial class AgbApu : IAgbApu {
 
     // A non-consuming readiness check lets an idle CPU bus access avoid both FIFO callbacks.
     internal bool HasPendingFifoRefill => (m_fifoARefill || m_fifoBRefill);
+
     /// <inheritdoc/>
     public bool ConsumeFifoBRefill() {
         var requested = m_fifoBRefill;
@@ -385,7 +383,8 @@ public sealed partial class AgbApu : IAgbApu {
                 ? 1
                 : ((psgRatio == 1)
                     ? 2
-                    : 4)); // 25% / 50% / 100% (×4 = full)
+                    : 4
+            )); // 25% / 50% / 100% (×4 = full)
             var volRight = ((m_soundControlLow & 0x7) + 1);
             var volLeft = (((m_soundControlLow >> 4) & 0x7) + 1);
 
@@ -397,10 +396,12 @@ public sealed partial class AgbApu : IAgbApu {
 
             var dsaShift = (((m_soundControlHigh & 0x4) != 0)
                 ? 3
-                : 2); // 100% / 50%
+                : 2
+            ); // 100% / 50%
             var dsbShift = (((m_soundControlHigh & 0x8) != 0)
                 ? 3
-                : 2);
+                : 2
+            );
             var dsa = (m_directSoundA << dsaShift);
             var dsb = (m_directSoundB << dsbShift);
 
@@ -455,7 +456,8 @@ public sealed partial class AgbApu : IAgbApu {
     /// playing buffer produced) — a diagnostic peek; <paramref name="fifo"/> is 0 (A) or 1 (B).</summary>
     public int DebugDirectSound(int fifo) => ((fifo == 0)
         ? m_directSoundA
-        : m_directSoundB);
+        : m_directSoundB
+    );
 
     /// <summary>
     /// The hardware-measured Direct Sound FIFO: a 7-word (28-byte) ring buffer plus a separate 32-bit playing
@@ -469,18 +471,31 @@ public sealed partial class AgbApu : IAgbApu {
 
         private readonly uint[] m_ring = new uint[RingWords];
 
-        private int m_head;     // index of the oldest filled word
         private int m_count;    // filled words in the ring (0..7)
-        private uint m_fillWord;
         private int m_fillBytes; // bytes accumulated toward the next word (0..3)
+        private uint m_fillWord;
+        private int m_head;     // index of the oldest filled word
         private uint m_playing;
         private int m_playingBytes; // bytes remaining in the 32-bit playing buffer (0..4)
 
-        /// <summary>The number of filled words currently in the ring (0..7).</summary>
-        public int WordCount => m_count;
         /// <summary>The bytes remaining in the playing buffer (0..4).</summary>
         public int PlayingBytes => m_playingBytes;
+        /// <summary>The number of filled words currently in the ring (0..7).</summary>
+        public int WordCount => m_count;
 
+        /// <summary>Restores the whole FIFO from <see cref="SaveState"/>'s image.</summary>
+        public void LoadState(StateReader reader) {
+            for (var i = 0; (i < RingWords); ++i) {
+                m_ring[i] = reader.ReadUInt32();
+            }
+
+            m_head = reader.ReadInt32();
+            m_count = reader.ReadInt32();
+            m_fillWord = reader.ReadUInt32();
+            m_fillBytes = reader.ReadInt32();
+            m_playing = reader.ReadUInt32();
+            m_playingBytes = reader.ReadInt32();
+        }
         /// <summary>Clears the whole FIFO — ring, fill accumulator, and playing buffer (a SOUNDCNT_H reset, or the
         /// auto-reset hardware performs on a write overrun).</summary>
         public void Reset() {
@@ -492,30 +507,18 @@ public sealed partial class AgbApu : IAgbApu {
             m_playing = 0;
             m_playingBytes = 0;
         }
-        /// <summary>Streams one byte into the FIFO. Bytes accumulate in write order; every fourth byte completes a
-        /// word and pushes it into the ring. Pushing into a full ring auto-resets the FIFO to empty (hardware drops
-        /// the buffered samples rather than wrapping).</summary>
-        public void WriteByte(byte value) {
-            m_fillWord = (m_fillWord & ~(0xFFu << (m_fillBytes * 8))) | (((uint)value) << (m_fillBytes * 8));
-
-            if (++m_fillBytes < 4) {
-                return;
+        /// <summary>Captures the whole FIFO — ring contents, cursors, fill accumulator, and playing buffer.</summary>
+        public void SaveState(StateWriter writer) {
+            for (var i = 0; (i < RingWords); ++i) {
+                writer.WriteUInt32(value: m_ring[i]);
             }
 
-            var word = m_fillWord;
-
-            m_fillWord = 0;
-            m_fillBytes = 0;
-
-            if (m_count >= RingWords) {
-                // Write overrun: hardware auto-resets the FIFO to empty and drops the incoming word.
-                Reset();
-
-                return;
-            }
-
-            m_ring[((m_head + m_count) % RingWords)] = word;
-            ++m_count;
+            writer.WriteInt32(value: m_head);
+            writer.WriteInt32(value: m_count);
+            writer.WriteUInt32(value: m_fillWord);
+            writer.WriteInt32(value: m_fillBytes);
+            writer.WriteUInt32(value: m_playing);
+            writer.WriteInt32(value: m_playingBytes);
         }
         /// <summary>A selected-timer overflow. Requests a DMA top-up when the ring has &#8805;4 empty words; refills
         /// the playing buffer from the ring when the buffer is empty; then hands the DAC one byte. Returns whether a
@@ -550,31 +553,30 @@ public sealed partial class AgbApu : IAgbApu {
 
             return false;
         }
-        /// <summary>Captures the whole FIFO — ring contents, cursors, fill accumulator, and playing buffer.</summary>
-        public void SaveState(StateWriter writer) {
-            for (var i = 0; (i < RingWords); ++i) {
-                writer.WriteUInt32(value: m_ring[i]);
+        /// <summary>Streams one byte into the FIFO. Bytes accumulate in write order; every fourth byte completes a
+        /// word and pushes it into the ring. Pushing into a full ring auto-resets the FIFO to empty (hardware drops
+        /// the buffered samples rather than wrapping).</summary>
+        public void WriteByte(byte value) {
+            m_fillWord = (m_fillWord & ~(0xFFu << (m_fillBytes * 8))) | (((uint)value) << (m_fillBytes * 8));
+
+            if (++m_fillBytes < 4) {
+                return;
             }
 
-            writer.WriteInt32(value: m_head);
-            writer.WriteInt32(value: m_count);
-            writer.WriteUInt32(value: m_fillWord);
-            writer.WriteInt32(value: m_fillBytes);
-            writer.WriteUInt32(value: m_playing);
-            writer.WriteInt32(value: m_playingBytes);
-        }
-        /// <summary>Restores the whole FIFO from <see cref="SaveState"/>'s image.</summary>
-        public void LoadState(StateReader reader) {
-            for (var i = 0; (i < RingWords); ++i) {
-                m_ring[i] = reader.ReadUInt32();
+            var word = m_fillWord;
+
+            m_fillWord = 0;
+            m_fillBytes = 0;
+
+            if (m_count >= RingWords) {
+                // Write overrun: hardware auto-resets the FIFO to empty and drops the incoming word.
+                Reset();
+
+                return;
             }
 
-            m_head = reader.ReadInt32();
-            m_count = reader.ReadInt32();
-            m_fillWord = reader.ReadUInt32();
-            m_fillBytes = reader.ReadInt32();
-            m_playing = reader.ReadUInt32();
-            m_playingBytes = reader.ReadInt32();
+            m_ring[((m_head + m_count) % RingWords)] = word;
+            ++m_count;
         }
     }
 }

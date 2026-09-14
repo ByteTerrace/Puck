@@ -24,7 +24,10 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
     private readonly WorldReplayTape m_tape = tape;
 
     private CommandResult Cancel(WireArgs args) {
-        if (CommandResult.RequireNoArguments(args: args, verb: "replay.cancel") is { } refusal) {
+        if (CommandResult.RequireNoArguments(
+            args: args,
+            verb: "replay.cancel"
+        ) is { } refusal) {
             return refusal;
         }
 
@@ -41,7 +44,10 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         }
     }
     private static CommandResult ListReplays(WireArgs args) {
-        if (CommandResult.RequireNoArguments(args: args, verb: "replay.list") is { } refusal) {
+        if (CommandResult.RequireNoArguments(
+            args: args,
+            verb: "replay.list"
+        ) is { } refusal) {
             return refusal;
         }
 
@@ -83,7 +89,10 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         return new CommandResult(Output: $"[replay.record: recording '{name}' — replay.stop persists it, replay.cancel drops it]");
     }
     private CommandResult Status(WireArgs args) {
-        if (CommandResult.RequireNoArguments(args: args, verb: "replay.status") is { } refusal) {
+        if (CommandResult.RequireNoArguments(
+            args: args,
+            verb: "replay.status"
+        ) is { } refusal) {
             return refusal;
         }
 
@@ -103,7 +112,10 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
             : $"[replay.status: recording '{m_tape.Name}' | {m_tape.TickCount} ticks captured]"));
     }
     private CommandResult Stop(WireArgs args) {
-        if (CommandResult.RequireNoArguments(args: args, verb: "replay.stop") is { } refusal) {
+        if (CommandResult.RequireNoArguments(
+            args: args,
+            verb: "replay.stop"
+        ) is { } refusal) {
             return refusal;
         }
 

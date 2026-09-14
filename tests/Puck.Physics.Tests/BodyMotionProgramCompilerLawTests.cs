@@ -66,16 +66,14 @@ public sealed class BodyMotionProgramCompilerLawTests {
 
             Assert.Equal(
                 expected: (MotionSelectable.Contains(value: op)
-                    ? null
-                    : BodyMotionProgramRefusal.OpcodeInadmissible
-                ),
+                ? null
+                : BodyMotionProgramRefusal.OpcodeInadmissible),
                 actual: motion
             );
             Assert.Equal(
                 expected: (ProducerSelectable.Contains(value: op)
-                    ? null
-                    : BodyMotionProgramRefusal.OpcodeInadmissible
-                ),
+                ? null
+                : BodyMotionProgramRefusal.OpcodeInadmissible),
                 actual: producer
             );
             // No opcode may sit on both sides: a program's registers are decided by its kind, so an operation

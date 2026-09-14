@@ -78,7 +78,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             mobility: member.Mobility
         );
-        writer.WriteByte(member.FollowedSeatMask);
+        writer.WriteByte(value: member.FollowedSeatMask);
     }
     private static WorldLandedMemberCheckpoint ReadLandedMember(ref WireReader reader) {
         var sourceSlot = reader.ReadInt32();
@@ -114,8 +114,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             BodyColor: bodyColor,
             Designations: designations,
             DynamicState: dynamicState,
-            Mobility: mobility,
             FollowedSeatMask: followedSeatMask,
+            Mobility: mobility,
             Peer: peer,
             Position: position,
             SourceGrants: sourceGrants,
@@ -135,8 +135,16 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: row.MemberCount);
         writer.WriteBoolean(value: row.RollbackOnly);
         writer.WriteBoolean(value: row.CommitConfirmed);
-        WriteOptionalClass(writer, row.Continuation, WriteTransferContinuation);
-        WriteOptionalClass(writer, row.TargetDefinitionJson, static (w, bytes) => w.WriteBlock(bytes));
+        WriteOptionalClass(
+            writer,
+            row.Continuation,
+            WriteTransferContinuation
+        );
+        WriteOptionalClass(
+            writer,
+            row.TargetDefinitionJson,
+            static (w, bytes) => w.WriteBlock(value: bytes)
+        );
         WriteArray(
             writer: writer,
             items: row.CommitMembers,
@@ -171,8 +179,17 @@ public static partial class WorldAuthorityCheckpointCodec {
         var memberCount = reader.ReadInt32();
         var rollbackOnly = reader.ReadBoolean();
         var commitConfirmed = reader.ReadBoolean();
-        var continuation = ReadOptionalClass(ref reader, ReadTransferContinuation);
-        var targetDefinition = ReadOptionalClass(ref reader, static (ref WireReader r) => r.ReadBlock("recovery destination definition", MaxSectionBytes));
+        var continuation = ReadOptionalClass(
+            readValue: ReadTransferContinuation,
+            reader: ref reader
+        );
+        var targetDefinition = ReadOptionalClass(
+            ref reader,
+            static (ref WireReader r) => r.ReadBlock(
+                field: "recovery destination definition",
+                maxBytes: MaxSectionBytes
+            )
+        );
         var commitMembers = ReadArray(
             reader: ref reader,
             field: "in-doubt transfer commit members",
@@ -188,20 +205,20 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
 
         return new WorldInDoubtTransferCheckpoint(
+            CommitConfirmed: commitConfirmed,
             CommitMembers: commitMembers,
+            Continuation: continuation,
             Landed: landed,
             MemberCount: memberCount,
+            RollbackOnly: rollbackOnly,
             SourceDeadlineTick: sourceDeadlineTick,
             SourceInstance: sourceInstance,
             Spawned: spawned,
             TargetAuthority: targetAuthority,
+            TargetDefinitionJson: targetDefinition,
             TargetEndpoint: targetEndpoint,
             TargetName: targetName,
-            TransferId: transferId,
-            RollbackOnly: rollbackOnly,
-            CommitConfirmed: commitConfirmed,
-            Continuation: continuation,
-            TargetDefinitionJson: targetDefinition
+            TransferId: transferId
         );
     }
     private static void WriteForwardedBody(WireWriter writer, WorldForwardedBodyCheckpoint row) {
@@ -218,27 +235,43 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             mobility: row.Mobility
         );
-        writer.WriteString(row.SourceAuthority);
-        writer.WriteNullableString(row.DestinationEndpoint);
-        WriteOptionalClass(writer, row.DestinationDefinitionJson, static (w, bytes) => w.WriteBlock(bytes));
+        writer.WriteString(value: row.SourceAuthority);
+        writer.WriteNullableString(value: row.DestinationEndpoint);
+        WriteOptionalClass(
+            writer,
+            row.DestinationDefinitionJson,
+            static (w, bytes) => w.WriteBlock(value: bytes)
+        );
     }
     private static WorldForwardedBodyCheckpoint ReadForwardedBody(ref WireReader reader) {
         var sourceIncarnation = WorldWireLeaves.ReadEntityAddress(reader: ref reader);
         var destinationAddress = WorldWireLeaves.ReadEntityAddress(reader: ref reader);
         var destinationBodyIndex = reader.ReadInt32();
         var mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
-        var sourceAuthority = reader.ReadString("forwarding source authority", MaxStringBytes);
-        var endpoint = reader.ReadNullableString("forwarding destination endpoint", MaxStringBytes);
-        var definition = ReadOptionalClass(ref reader, static (ref WireReader r) => r.ReadBlock("forwarding destination definition", MaxSectionBytes));
+        var sourceAuthority = reader.ReadString(
+            field: "forwarding source authority",
+            maxBytes: MaxStringBytes
+        );
+        var endpoint = reader.ReadNullableString(
+            field: "forwarding destination endpoint",
+            maxBytes: MaxStringBytes
+        );
+        var definition = ReadOptionalClass(
+            ref reader,
+            static (ref WireReader r) => r.ReadBlock(
+                field: "forwarding destination definition",
+                maxBytes: MaxSectionBytes
+            )
+        );
 
         return new WorldForwardedBodyCheckpoint(
             DestinationAddress: destinationAddress,
             DestinationBodyIndex: destinationBodyIndex,
-            Mobility: mobility,
-            SourceIncarnation: sourceIncarnation,
-            SourceAuthority: sourceAuthority,
+            DestinationDefinitionJson: definition,
             DestinationEndpoint: endpoint,
-            DestinationDefinitionJson: definition
+            Mobility: mobility,
+            SourceAuthority: sourceAuthority,
+            SourceIncarnation: sourceIncarnation
         );
     }
 }

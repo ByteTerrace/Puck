@@ -15,15 +15,21 @@ public sealed class WorldSeatBindingModifierCeilingLawTests {
     private static WorldDefinition MinimalBindingDocument() => Fixtures.BuildDocument() with {
         BindingOverlaysRaw = [
             new WorldBindingOverlay(
-                Id: "modifier-ceiling-law",
-                Document: new BindingProfileDocument(
-                    Version: BindingProfileDocument.CurrentVersion,
-                    Modifiers: [],
-                    Chords: [
-                        new BindingChordDefinition(Group: "resting", Page: new BindingPageDefinition(Id: "resting-base", Entries: [])),
+            Id: "modifier-ceiling-law",
+            Document: new BindingProfileDocument(
+                Version: BindingProfileDocument.CurrentVersion,
+                Modifiers: [],
+                Chords: [
+                        new BindingChordDefinition(
+                        Group: "resting",
+                        Page: new BindingPageDefinition(
+                            Id: "resting-base",
+                            Entries: []
+                        )
+                    ),
                     ]
-                )
-            ),
+            )
+        ),
         ],
     };
     // A rebind carrying `count` distinct modifiers (unique id AND unique source, so composition unions rather than
@@ -33,7 +39,13 @@ public sealed class WorldSeatBindingModifierCeilingLawTests {
     // before the ceiling this law is about is ever reached.
     private static BindingProfileDocument RebindWithModifiers(int count) => new(
         Version: BindingProfileDocument.CurrentVersion,
-        Modifiers: [.. Enumerable.Range(count: count, start: 0).Select(selector: static index => new BindingModifierDefinition(Id: $"mod{index}", Sources: [$"mouse.button{(index + 1)}"]))],
+        Modifiers: [.. Enumerable.Range(
+                count: count,
+                start: 0
+            ).Select(selector: static index => new BindingModifierDefinition(
+                Id: $"mod{index}",
+                Sources: [$"mouse.button{(index + 1)}"]
+            ))],
         Chords: []
     );
 
@@ -46,7 +58,11 @@ public sealed class WorldSeatBindingModifierCeilingLawTests {
             rebinds: RebindWithModifiers(count: (WorldBindingBarCapacity.MaxModifiers + 1)),
             reason: out var reason
         ));
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: $"{WorldBindingBarCapacity.MaxModifiers}-modifier ceiling");
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: $"{WorldBindingBarCapacity.MaxModifiers}-modifier ceiling"
+        );
 
         // Control: the same path with one fewer modifier — exactly at the ceiling — validates.
         Assert.True(

@@ -150,6 +150,36 @@ public readonly ref struct WireArgs {
             value: out value
         );
     }
+    /// <summary>Parses <paramref name="count"/> consecutive float arguments starting at <paramref name="start"/>
+    /// (e.g. an <c>&lt;x&gt; &lt;y&gt; &lt;z&gt;</c> triple) — fails as a unit if any token is missing or unparsable,
+    /// the zero-copy peer of <see cref="CommandArgs.TryParseFloats(string[], int, int, out float[])"/>.</summary>
+    /// <param name="start">The zero-based trailing-token index to start from.</param>
+    /// <param name="count">How many consecutive floats to parse.</param>
+    /// <param name="values">The parsed values (length <paramref name="count"/>), zeroed from the first token that
+    /// failed to parse; an EMPTY array when the tail is too short to hold the range at all.</param>
+    /// <returns>Whether every token in the range parsed.</returns>
+    public bool TryFloats(int start, int count, out float[] values) {
+        // Count first, allocate second: the common failure is a verb called with too few arguments, and that answer
+        // costs nothing to give — the same order CommandArgs.TryParseFloats uses.
+        if (Count < (start + count)) {
+            values = [];
+
+            return false;
+        }
+
+        values = new float[count];
+
+        for (var index = 0; (index < count); index++) {
+            if (!TryFloat(
+                index: (start + index),
+                value: out values[index]
+            )) {
+                return false;
+            }
+        }
+
+        return true;
+    }
     /// <summary>Parses the token at <paramref name="index"/> as an invariant-culture <see cref="int"/> straight from its
     /// span, through <see cref="CommandArgs.TryParseInt(ReadOnlySpan{char}, out int)"/>. An out-of-range index is
     /// <see langword="false"/>, matching <see cref="Is"/> and <see cref="TryFloat"/>.</summary>
@@ -222,35 +252,5 @@ public readonly ref struct WireArgs {
             text: this[index],
             value: out value
         );
-    }
-    /// <summary>Parses <paramref name="count"/> consecutive float arguments starting at <paramref name="start"/>
-    /// (e.g. an <c>&lt;x&gt; &lt;y&gt; &lt;z&gt;</c> triple) — fails as a unit if any token is missing or unparsable,
-    /// the zero-copy peer of <see cref="CommandArgs.TryParseFloats(string[], int, int, out float[])"/>.</summary>
-    /// <param name="start">The zero-based trailing-token index to start from.</param>
-    /// <param name="count">How many consecutive floats to parse.</param>
-    /// <param name="values">The parsed values (length <paramref name="count"/>), zeroed from the first token that
-    /// failed to parse; an EMPTY array when the tail is too short to hold the range at all.</param>
-    /// <returns>Whether every token in the range parsed.</returns>
-    public bool TryFloats(int start, int count, out float[] values) {
-        // Count first, allocate second: the common failure is a verb called with too few arguments, and that answer
-        // costs nothing to give — the same order CommandArgs.TryParseFloats uses.
-        if (Count < (start + count)) {
-            values = [];
-
-            return false;
-        }
-
-        values = new float[count];
-
-        for (var index = 0; (index < count); index++) {
-            if (!TryFloat(
-                index: (start + index),
-                value: out values[index]
-            )) {
-                return false;
-            }
-        }
-
-        return true;
     }
 }

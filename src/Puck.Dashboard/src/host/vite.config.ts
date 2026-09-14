@@ -34,6 +34,7 @@ const sharedPackages = [
 
 export default defineConfig(() => ({
   build: {
+    emptyOutDir: true,
     outDir: "../../dist/host",
     target: "esnext",
   },

@@ -60,7 +60,6 @@ public interface IRuleHost : IRuleReader {
     /// <param name="diagnostic">The category's first entry.</param>
     void RefusalRecorded(in RuleRuntimeDiagnostic diagnostic);
 }
-
 /// <summary>What a fired effect did, as the host answers it for the arms it owns.</summary>
 public enum EffectOutcome : byte {
     /// <summary>Nothing installed: the effect emitted (a cue, a pose), or could not move its destination.</summary>
@@ -70,7 +69,6 @@ public enum EffectOutcome : byte {
     /// <summary>The effect could not fire; under preflight this fails the enclosing transaction.</summary>
     Refused,
 }
-
 /// <summary>A state-neutral mutation a firing effect asks its host to run: the four shapes the library's own effects
 /// produce. The host maps each onto its own mutation vocabulary, stamped with whatever principal a rule's own act
 /// carries there.</summary>
@@ -84,7 +82,11 @@ public abstract record StateMutation {
     /// <param name="Value">The raw value in the row's encoding.</param>
     /// <param name="Write">Set or add.</param>
     /// <param name="Text">The text payload for a text row, or <see langword="null"/>.</param>
-    public sealed record UpsertCell(string Row, string Key, long Value, StateWriteKind Write, string? Text = null) : StateMutation;
+    /// <param name="Handle">The pre-resolved handle of <paramref name="Row"/> in the current catalog, or default.
+    /// A host using the handle must verify that it names the same row as the replayable string address.</param>
+    /// <param name="CellKey">The pre-parsed form of <paramref name="Key"/>, or default. A host using this value must
+    /// verify that it matches the string key, so frame writes and replay address the same cell.</param>
+    public sealed record UpsertCell(string Row, string Key, long Value, StateWriteKind Write, string? Text = null, StateHandle Handle = default, CellName CellKey = default) : StateMutation;
     /// <summary>Removes one cell of a keyed row.</summary>
     /// <param name="Row">The row.</param>
     /// <param name="Key">The cell key, resolved.</param>
@@ -94,5 +96,7 @@ public abstract record StateMutation {
     public sealed record Generate(string Row) : StateMutation;
     /// <summary>Applies one atomic state transform.</summary>
     /// <param name="Transform">The transform.</param>
-    public sealed record Apply(StateTransform Transform) : StateMutation;
+    /// <param name="Handle">The destination row handle for a push, or default. A host using it must verify that
+    /// it matches the transform's replayable row name; other transforms do not use this hint.</param>
+    public sealed record Apply(StateTransform Transform, StateHandle Handle = default) : StateMutation;
 }

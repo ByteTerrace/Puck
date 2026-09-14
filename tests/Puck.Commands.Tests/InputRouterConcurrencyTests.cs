@@ -13,25 +13,28 @@ public sealed class InputRouterConcurrencyTests {
 
     [Fact]
     public async Task EveryConcurrentlyCapturedSignalIsSnapshotOnceInItsProducersOrder() {
-        const int perProducer = 250;
-        const int producerCount = 4;
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        const int PerProducer = 250;
+        const int ProducerCount = 4;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
+
+        deadline.CancelAfter(delay: TimeSpan.FromSeconds(seconds: 10));
 
         var router = new InputRouter(
             registry: new CommandRegistry(modules: [new ProbeModule()]),
             bindings: new AnySourceBindings(),
             principalResolver: new ConsolePrincipal()
         );
-        using var start = new Barrier(participantCount: (producerCount + 1));
-        var producers = new Task[producerCount];
+        using var start = new Barrier(participantCount: (ProducerCount + 1));
+        var producers = new Task[ProducerCount];
 
-        for (var producerIndex = 0; (producerIndex < producerCount); producerIndex++) {
+        for (var producerIndex = 0; (producerIndex < ProducerCount); producerIndex++) {
             var producer = producerIndex;
-            producers[producer] = Task.Factory.StartNew(action: () => {
+
+            producers[producer] = Task.Factory.StartNew(
+                action: () => {
                 start.SignalAndWait(cancellationToken: deadline.Token);
 
-                for (var index = 0; (index < perProducer); index++) {
+                for (var index = 0; (index < PerProducer); index++) {
                     deadline.Token.ThrowIfCancellationRequested();
                     // A TEXT signal folds into exactly one entry and leaves no held state behind, so the lane carries
                     // the capture stream itself rather than a re-assertion of it.
@@ -40,15 +43,22 @@ public sealed class InputRouterConcurrencyTests {
                         text: "x"
                     ));
                 }
-            }, cancellationToken: CancellationToken.None, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default);
+            },
+                cancellationToken: CancellationToken.None,
+                creationOptions: TaskCreationOptions.LongRunning,
+                scheduler: TaskScheduler.Default
+            );
         }
 
-        var expected = (producerCount * perProducer);
+        var expected = (ProducerCount * PerProducer);
         var observed = new List<string>(capacity: expected);
         var tick = 0UL;
 
         void Drain() {
-            foreach (var lane in router.SnapshotForTick(tick: ++tick, windowEndTick: ulong.MaxValue).Lanes) {
+            foreach (var lane in router.SnapshotForTick(
+                tick: ++tick,
+                windowEndTick: ulong.MaxValue
+            ).Lanes) {
                 foreach (var entry in lane.Entries) {
                     observed.Add(item: entry.Source!);
                 }
@@ -56,38 +66,53 @@ public sealed class InputRouterConcurrencyTests {
         }
         try {
             start.SignalAndWait(cancellationToken: deadline.Token);
-            while (!producers.All(static producer => producer.IsCompleted)) {
+            while (!producers.All(predicate: static producer => producer.IsCompleted)) {
                 deadline.Token.ThrowIfCancellationRequested();
                 Drain();
                 Thread.Yield();
             }
             // Await faults on the test thread. Once every producer has finished, one final drain must contain
             // all remaining signals; missing data should fail immediately, not spin through a million ticks.
-            await Task.WhenAll(producers).WaitAsync(deadline.Token);
+            await Task.WhenAll(producers).WaitAsync(cancellationToken: deadline.Token);
             Drain();
         } finally {
             deadline.Cancel();
         }
 
-        Assert.Equal(actual: observed.Count, expected: expected);
-        Assert.Equal(actual: observed.Distinct(comparer: StringComparer.Ordinal).Count(), expected: expected);
+        Assert.Equal(
+            actual: observed.Count,
+            expected: expected
+        );
+        Assert.Equal(
+            actual: observed.Distinct(comparer: StringComparer.Ordinal).Count(),
+            expected: expected
+        );
 
         // Per producer, the snapshots replay exactly the order that producer captured in — the interleaving between
         // producers is whatever the threads did, but no producer's own stream may be reordered or torn.
-        var nextByProducer = new int[producerCount];
+        var nextByProducer = new int[ProducerCount];
 
         foreach (var source in observed) {
-            var separator = source.IndexOf(comparisonType: StringComparison.Ordinal, value: '.');
+            var separator = source.IndexOf(
+                comparisonType: StringComparison.Ordinal,
+                value: '.'
+            );
             var producer = int.Parse(
                 provider: CultureInfo.InvariantCulture,
-                s: source.AsSpan(length: (separator - 1), start: 1)
+                s: source.AsSpan(
+                    length: (separator - 1),
+                    start: 1
+                )
             );
             var index = int.Parse(
                 provider: CultureInfo.InvariantCulture,
                 s: source.AsSpan(start: (separator + 1))
             );
 
-            Assert.Equal(actual: index, expected: nextByProducer[producer]);
+            Assert.Equal(
+                actual: index,
+                expected: nextByProducer[producer]
+            );
 
             nextByProducer[producer]++;
         }

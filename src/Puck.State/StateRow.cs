@@ -1,7 +1,69 @@
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 
 namespace Puck.State;
 
+/// <summary>What <see cref="StateRow.Overflow"/> does with a write <see cref="StateRow.TryAdmitWrite"/> finds
+/// outside the row's declared envelope, or that overflows raw 64-bit arithmetic.</summary>
+[JsonConverter(typeof(StrictEnumConverter<StateOverflow>))]
+public enum StateOverflow : byte {
+    /// <summary>Refuse the write by name.</summary>
+    Refuse = 0,
+    /// <summary>Clamp the write to the crossed bound, or to <see cref="long.MinValue"/>/<see cref="long.MaxValue"/>
+    /// on a side with no declared bound.</summary>
+    Saturate,
+}
+/// <summary>Whether a cell's effective value-over-time behavior is its carrying row's own default, or an explicit
+/// opt-out — see <see cref="StateCell.Behavior"/> and <see cref="EffectiveBehavior.Resolve"/>.</summary>
+[JsonConverter(typeof(StrictEnumConverter<StateCellBehavior>))]
+public enum StateCellBehavior : byte {
+    /// <summary>The cell carries no override of its own: its effective behavior is whichever of
+    /// <see cref="StateRow.Advance"/>/<see cref="StateRow.Dynamics"/>/<see cref="StateRow.Cycle"/> the row
+    /// declares, or none at all. The default, and the only legitimate value for a row's own slot cell.</summary>
+    Inherit = 0,
+    /// <summary>The cell explicitly opts out of its row's default behavior — its effective behavior is none,
+    /// regardless of what the row declares. Refused together with the cell's own <see cref="StateCell.Advance"/>/
+    /// <see cref="StateCell.Dynamics"/>/<see cref="StateCell.Cycle"/> (a cell that opts out declares no trait of
+    /// its own either) and on the reserved slot key (see <see cref="StateRow.SlotKey"/>) — nothing for a slot's
+    /// one cell to opt out of beyond simply not declaring a row trait.</summary>
+    None,
+}
+/// <summary>
+/// A cell's own value-over-time timing state — the epoch(s), the second-order follower's sampled position and
+/// velocity, and a rotation's carried substep remainder — moved off the trait records
+/// (<see cref="StateAdvance"/>/<see cref="StateDynamics"/>/<see cref="StateCycle"/>, which keep only their
+/// authored parameters) onto the cell they time, so a key a write mints later starts its own clock from the tick
+/// it was created rather than sharing one baked into a trait every cell of the row would otherwise repeat.
+/// </summary>
+/// <remarks>
+/// For a slot-shaped row written with the <c>value</c> sugar, the slot cell's clock is authored as a row-level
+/// <c>clock</c> member beside <c>value</c> — see <see cref="StateRowJsonConverter{TRow}"/>. Every field defaults
+/// to zero, the settled-at-epoch-zero shape <c>world.save</c> and undo/checkpoint restore leave behind; the
+/// fields a particular effective behavior does not read are simply ignored (an <see cref="StateAdvance"/> cell
+/// never reads <see cref="Y0"/>/<see cref="V0"/>/<see cref="SubstepTicks"/>/<see cref="EpochTick"/>, a
+/// <see cref="StateCycle"/> cell never reads <see cref="Y0"/>/<see cref="V0"/>/<see cref="EpochEngineTick"/>).
+/// <see cref="EpochTick"/> and <see cref="EpochEngineTick"/> are two independent clocks, never convertible from one
+/// another at a world's current simulation rate: <see cref="EpochTick"/> is a simulation-tick coordinate (read by
+/// <see cref="StateCycle"/>), and <see cref="EpochEngineTick"/> is an engine-tick coordinate (read by
+/// <see cref="StateAdvance"/>) — see <c>WorldServer.CompletedEngineTicks</c> for where the engine-tick coordinate
+/// comes from live.
+/// </remarks>
+/// <param name="EpochTick">The simulation tick this clock's rotation is measured from — the tick the cell's base
+/// value was last explicitly set, or its own behavior last changed. Read by <see cref="StateCycle"/>. A negative
+/// value is refused; in practice this can only be violated by an authored boot document, since every live settle
+/// rebases to the applying tick before validation sees it.</param>
+/// <param name="EpochEngineTick">The engine tick (<see cref="Puck.Maths.FixedTickConversion.TicksPerSecond"/> per
+/// second) this clock's accumulation is measured from — the engine tick the cell's base value was last explicitly
+/// set, or its own behavior last changed. Read by <see cref="StateAdvance"/> alone; never derived from
+/// <see cref="EpochTick"/> at a simulation rate, since a live rate change must move neither. A negative value is
+/// refused, for the same reason <see cref="EpochTick"/> is.</param>
+/// <param name="Y0">A <see cref="StateDynamics"/> follower's position at <see cref="EpochTick"/>, as raw
+/// <c>FixedQ4816</c> bits, independent of the carrying row's stored-value kind.</param>
+/// <param name="V0">A <see cref="StateDynamics"/> follower's velocity at <see cref="EpochTick"/>, per second, as
+/// raw <c>FixedQ4816</c> bits.</param>
+/// <param name="SubstepTicks">Elapsed ticks a <see cref="StateCycle"/> has already accumulated toward its next
+/// step at <see cref="EpochTick"/>; must be non-negative and less than the cycle's own <c>ticksPerStep</c>.</param>
+public sealed record StateCellClock(long EpochTick = 0, long EpochEngineTick = 0, long Y0 = 0, long V0 = 0, long SubstepTicks = 0);
 /// <summary>
 /// One cell of the <c>state</c> section's substrate — a typed value addressed by a stable string <see cref="Key"/>
 /// within its carrying <see cref="StateRow"/>. A row whose cells hold exactly one entry keyed
@@ -14,28 +76,34 @@ namespace Puck.State;
 /// ingress converts before writing here.</param>
 /// <param name="Text">The cell's text for <see cref="CellKind.Text"/>; <see langword="null"/> for every other
 /// kind.</param>
-/// <param name="Advance">This cell's own continuous accumulation trait, or <see langword="null"/> if the value only
-/// changes through an explicit write — the keyed counterpart of <see cref="StateRow.Advance"/>, which governs a
-/// slot's own cell instead. <see cref="Value"/> is this cell's stored base when present; see
-/// <see cref="StateAdvance"/> for the read-side computation. Legitimate only on a cell whose <see cref="Key"/>
-/// is not <see cref="StateRow.SlotKey"/> — a scalar row's own accumulation is authored at the row level
-/// instead.</param>
+/// <param name="Advance">This cell's own continuous accumulation trait, replacing its row's <see cref="StateRow.Advance"/>
+/// default wholesale, or <see langword="null"/> to inherit that default (see <see cref="EffectiveBehavior.Resolve"/>).
+/// <see cref="Value"/> is this cell's stored base when the effective behavior is advancing; see
+/// <see cref="StateAdvance"/> for the read-side computation and <see cref="StateCellClock"/> for where its epoch
+/// lives. Legitimate only on a cell whose <see cref="Key"/> is not <see cref="StateRow.SlotKey"/> — a slot's one
+/// cell has no separate override to declare; its behavior is entirely its row's.</param>
 /// <param name="Provenance">The identity that minted this cell's current value. A keyed <see cref="CellKind.Int"/>
 /// row addressed by a holder's 0-based entity index is an item or currency fact: <see cref="Value"/> is the
 /// quantity or balance, and this field names who minted it. <see langword="null"/> means locally self-minted, the
 /// only value a single-authority world produces today; a federated authority is expected to populate a real issuer
 /// id.</param>
-/// <param name="Dynamics">This cell's own second-order easing trait, or <see langword="null"/> for an ordinary cell
-/// whose value only changes through an explicit write — the keyed counterpart of
-/// <see cref="StateRow.Dynamics"/>, which governs a slot's own cell instead. Legitimate only on a cell whose
+/// <param name="Dynamics">This cell's own second-order easing trait, replacing its row's <see cref="StateRow.Dynamics"/>
+/// default wholesale, or <see langword="null"/> to inherit that default. Legitimate only on a cell whose
 /// <see cref="Key"/> is not <see cref="StateRow.SlotKey"/>.</param>
-/// <param name="Cycle">This cell's own tick-indexed rotation trait, or <see langword="null"/> for an ordinary cell —
-/// the keyed counterpart of <see cref="StateRow.Cycle"/>, which governs a slot's own cell instead. See
-/// <see cref="StateCycle"/>; <see cref="Value"/> is the phase (or the lattice node) the trait turns from.
-/// Legitimate only on a cell whose <see cref="Key"/> is not <see cref="StateRow.SlotKey"/>.</param>
+/// <param name="Cycle">This cell's own tick-indexed rotation trait, replacing its row's <see cref="StateRow.Cycle"/>
+/// default wholesale, or <see langword="null"/> to inherit that default. See <see cref="StateCycle"/>;
+/// <see cref="Value"/> is the phase (or the lattice node) the trait turns from. Legitimate only on a cell whose
+/// <see cref="Key"/> is not <see cref="StateRow.SlotKey"/>.</param>
+/// <param name="Behavior"><see cref="StateCellBehavior.None"/> opts this cell out of its row's default behavior
+/// entirely (effective behavior none, regardless of what the row declares); the default, <see cref="StateCellBehavior.Inherit"/>,
+/// leaves the row's default — or this cell's own <see cref="Advance"/>/<see cref="Dynamics"/>/<see cref="Cycle"/>,
+/// when declared — in effect. Refused together with any of those three, and on the reserved slot key.</param>
+/// <param name="Clock">This cell's own value-over-time timing state (epoch, a follower's sampled position/velocity,
+/// a rotation's substep remainder), or <see langword="null"/> for a cell whose effective behavior has never
+/// settled anywhere but tick zero. See <see cref="StateCellClock"/>.</param>
 /// <param name="Visibility">An additional cell-level audience restriction; slot policies belong on the row.</param>
 /// <param name="Observation">The persisted last-seen stamp of a knowledge cell.</param>
-public sealed record StateCell(CellName Key, long Value = 0, string? Text = null, StateAdvance? Advance = null, string? Provenance = null, StateDynamics? Dynamics = null, StateCycle? Cycle = null, StateVisibility? Visibility = null, StateObservation? Observation = null);
+public sealed record StateCell(CellName Key, long Value = 0, string? Text = null, StateAdvance? Advance = null, string? Provenance = null, StateDynamics? Dynamics = null, StateCycle? Cycle = null, StateCellBehavior Behavior = StateCellBehavior.Inherit, StateCellClock? Clock = null, StateVisibility? Visibility = null, StateObservation? Observation = null);
 /// <summary>
 /// One row of the <c>state</c> section — a named cell or a named collection of cells, addressed by its stable
 /// <see cref="Name"/>. <see cref="Name"/> is the <c>UpsertStateRow</c>/<c>RemoveStateRow</c> key, the
@@ -47,27 +115,31 @@ public sealed record StateCell(CellName Key, long Value = 0, string? Text = null
 /// array of author-keyed cells, never both; carrying both, or a <c>value</c> beside a declared
 /// <see cref="Capacity"/>, is refused by name. A row whose <see cref="Cells"/> holds exactly one cell keyed
 /// <see cref="SlotKey"/> and declares no <see cref="Capacity"/> is a slot (<see cref="IsSlot"/>).
-/// <para><see cref="NonNegative"/> enforces a floor of zero regardless of any authored <see cref="Min"/>. Every
-/// consumer that reads this row's cells — including the cross-document write-back channel in
-/// the document project's identity-write door — must read this trait off the row rather than assume a floor of its
-/// own.</para>
+/// <para>A timer is a <see cref="CellKind.Int"/> row declaring <see cref="Min"/> zero. Every consumer that reads
+/// this row's cells — including the cross-document write-back channel in the document
+/// project's identity-write door — must read <see cref="TryAdmitWrite"/>'s decision rather than assume an envelope
+/// of its own.</para>
 /// </remarks>
 /// <param name="Name">The row's stable string name (unique within the section).</param>
 /// <param name="Kind">Which cell kind every cell in this row carries.</param>
 /// <param name="Min">The row-wide declared lower bound every cell's <see cref="StateCell.Value"/> must satisfy,
 /// raw-encoded per <see cref="Kind"/> (raw <c>FixedQ4816</c> bits for <see cref="CellKind.Fixed"/>), or
-/// <see langword="null"/> for none. Present only together with <see cref="Max"/> — a range is authored as a pair or
-/// not at all. Legitimate only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>. Omitted from the wire
-/// when null.</param>
+/// <see langword="null"/> for none. Independent of <see cref="Max"/> — a one-sided range (a floor with no ceiling,
+/// or the reverse) is legal; when both are present <see cref="Min"/> must be less than <see cref="Max"/>.
+/// Legitimate only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>. Omitted from the wire when null. A
+/// timer is represented as <see cref="CellKind.Int"/> with this at zero.</param>
 /// <param name="Max">The row-wide declared upper bound, raw-encoded per <see cref="Kind"/>, or <see langword="null"/>
-/// for none. Present only together with <see cref="Min"/>. Omitted from the wire when null.</param>
+/// for none. Independent of <see cref="Min"/>; see its remarks. Omitted from the wire when null.</param>
 /// <param name="Capacity">The row's own cell-count ceiling (<c>1..</c><see cref="StateCapacity.MaxCellsPerRow"/>),
 /// or <see langword="null"/> to fall back to the implicit ceiling. A row declaring <see cref="Capacity"/> can never
 /// be a slot (<see cref="IsSlot"/>), even if it happens to carry exactly one cell — declaring a capacity is
 /// declaring table intent. Omitted from the wire when null.</param>
-/// <param name="NonNegative">Whether every cell's value must be non-negative, enforced regardless of any authored
-/// <see cref="Min"/>. Legitimate only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>. A timer is
-/// represented as <see cref="CellKind.Int"/> with this set.</param>
+/// <param name="Overflow">What a write that would leave <see cref="Min"/>/<see cref="Max"/>, or that overflows raw
+/// 64-bit arithmetic, does: refuse by name (<see cref="StateOverflow.Refuse"/>, the default — including a row that
+/// declares no envelope at all, which still refuses a genuine arithmetic overflow rather than wrapping), or clamp
+/// to the crossed bound, or to <see cref="long.MinValue"/>/<see cref="long.MaxValue"/> on a side with no declared
+/// bound (<see cref="StateOverflow.Saturate"/>). Legitimate only for <see cref="CellKind.Int"/>/
+/// <see cref="CellKind.Fixed"/>. See <see cref="TryAdmitWrite"/>, the one door every write path decides through.</param>
 /// <param name="Evicts">Whether this row is a bounded, FIFO-evicting table. Ordinarily a <see cref="Capacity"/> is a
 /// hard ceiling and a write that would exceed it is refused by name; with this set, such a write instead succeeds
 /// and, if it added a new key past capacity, evicts the row's oldest surviving cell. Eviction runs as a pure
@@ -83,12 +155,12 @@ public sealed record StateCell(CellName Key, long Value = 0, string? Text = null
 /// <see cref="IsSlot"/>) holds exactly one cell keyed <see cref="SlotKey"/>; a keyed row may hold any author-chosen
 /// keys except <see cref="SlotKey"/> itself, which is reserved for the <c>value</c> sugar and refused as an
 /// authored cell key.</param>
-/// <param name="Advance">The row's own (slot-cell) continuous accumulation trait, or <see langword="null"/> for an
-/// ordinary row whose slot value only changes through an explicit write. See <see cref="StateAdvance"/>.
-/// Legitimate only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>, only on a scalar (slot-eligible)
-/// row, and never together with <see cref="Draw"/> — a row is an authored-randomness draw site or a continuous
-/// accumulator, never both. A keyed row's own cells accumulate independently through
-/// <see cref="StateCell.Advance"/> instead.</param>
+/// <param name="Advance">The row's default continuous accumulation trait — the effective behavior of every cell
+/// that does not declare its own (see <see cref="EffectiveBehavior.Resolve"/>), including a key a write mints
+/// later. See <see cref="StateAdvance"/>. Legitimate only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>,
+/// and never together with <see cref="Draw"/> — a row is an authored-randomness draw site or a continuous
+/// accumulator, never both. A cell replaces this default wholesale with its own <see cref="StateCell.Advance"/>,
+/// or opts out with <see cref="StateCell.Behavior"/>.</param>
 /// <param name="Draw">The row's authored-randomness facet, or <see langword="null"/> for an ordinary row. A row
 /// carrying one is a draw site (see <see cref="Draw"/> and <see cref="IsDraw"/>): its slot cell's value is
 /// drawn at first fill and at every later <c>generate</c> its <see cref="Draw.Timing"/> admits, from the
@@ -108,16 +180,16 @@ public sealed record StateCell(CellName Key, long Value = 0, string? Text = null
 /// one for a weighted numeric source. Bit <c>i</c> is set when entry <c>i</c> has been drawn. Lives at the site rather
 /// than on the source row, which lets two sites reference one declared source and draw independently. Null or empty
 /// for a site whose source never exhausts.</param>
-/// <param name="Dynamics">The row's own (slot-cell) second-order easing trait, or <see langword="null"/> for an
-/// ordinary row whose slot value only changes through an explicit write. See <see cref="StateDynamics"/>.
-/// Legitimate only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>, only on a scalar (slot-eligible)
-/// row, and never together with <see cref="Advance"/> or <see cref="Draw"/>. A keyed row's own cells ease
-/// independently through <see cref="StateCell.Dynamics"/> instead.</param>
-/// <param name="Cycle">The row's own (slot-cell) tick-indexed rotation trait, or <see langword="null"/> for an
-/// ordinary row. See <see cref="StateCycle"/>. Legitimate only for <see cref="CellKind.Int"/>/
-/// <see cref="CellKind.Fixed"/>, only on a scalar (slot-eligible) row, and never together with
-/// <see cref="Advance"/>, <see cref="Dynamics"/> or <see cref="Draw"/>. A keyed row's own
-/// cells turn independently through <see cref="StateCell.Cycle"/> instead.</param>
+/// <param name="Dynamics">The row's default second-order easing trait — the effective behavior of every cell that
+/// does not declare its own. See <see cref="StateDynamics"/>. Legitimate only for <see cref="CellKind.Int"/>/
+/// <see cref="CellKind.Fixed"/>, and never together with <see cref="Advance"/> or <see cref="Draw"/>. A cell
+/// replaces this default wholesale with its own <see cref="StateCell.Dynamics"/>, or opts out with
+/// <see cref="StateCell.Behavior"/>.</param>
+/// <param name="Cycle">The row's default tick-indexed rotation trait — the effective behavior of every cell that
+/// does not declare its own. See <see cref="StateCycle"/>. Legitimate only for <see cref="CellKind.Int"/>/
+/// <see cref="CellKind.Fixed"/>, and never together with <see cref="Advance"/>, <see cref="Dynamics"/> or
+/// <see cref="Draw"/>. A cell replaces this default wholesale with its own <see cref="StateCell.Cycle"/>, or
+/// opts out with <see cref="StateCell.Behavior"/>.</param>
 /// <param name="Domain">The row's declared cell domain (see <see cref="StateDomain"/>) —
 /// <see langword="null"/> when unauthored, in which case <see cref="InferDomain"/> derives one from
 /// <see cref="Cells"/>/<see cref="Capacity"/> exactly as an unauthored row always has.</param>
@@ -140,7 +212,7 @@ public record StateRow(
     long? Min = null,
     long? Max = null,
     int? Capacity = null,
-    bool NonNegative = false,
+    StateOverflow Overflow = StateOverflow.Refuse,
     bool Evicts = false,
     IReadOnlyList<StateCell>? Cells = null,
     StateAdvance? Advance = null,
@@ -167,36 +239,41 @@ public record StateRow(
     /// <see cref="CellName"/> like any other.</summary>
     public static readonly CellName SlotKey = CellName.Parse(candidate: "$value");
 
+    /// <summary>Gets the storage ceiling admitted by the row's shape: the declared capacity when there is one, else
+    /// <see cref="StateCapacity.MaxCellsPerRow"/>, the one cell bound every domain shares.</summary>
+    public int CellCeiling => EffectiveDomain switch {
+        StateDomain.Ring ring => Math.Clamp(
+        ring.Capacity,
+        1,
+        StateCapacity.MaxCellsPerRow
+    ),
+        StateDomain.KeysOf or StateDomain.CellsOf => ((Capacity is { } linked)
+        ? Math.Clamp(
+            max: StateCapacity.MaxCellsPerRow,
+            min: 1,
+            value: linked
+        )
+        : StateCapacity.MaxCellsPerRow),
+        _ => ((Capacity is { } capacity)
+        ? Math.Clamp(
+            max: StateCapacity.MaxCellsPerRow,
+            min: 1,
+            value: capacity
+        )
+        : StateCapacity.DefaultCellRoom),
+    };
     /// <summary>Gets the effective domain: the authored <see cref="Domain"/>, or <see cref="InferDomain"/>'s answer
     /// when unauthored.</summary>
     [JsonIgnore]
     public StateDomain EffectiveDomain => (Domain ?? InferDomain());
-    /// <summary>Infers the domain an unauthored row carries from its <see cref="Cells"/>/<see cref="Capacity"/>/
-    /// <see cref="Phase"/> alone — the same shape a plain row (no <see cref="Domain"/> member at all) has always had,
-    /// restated as a case rather than a pair of booleans: a declared <see cref="Capacity"/>, more than one cell, a
-    /// single cell under an author-chosen key, or a declared <see cref="Phase"/> trait is <see cref="StateDomain.Keys"/>
-    /// — a phase row has no single value to read even before its first participant is admitted; anything else (no
-    /// cells yet, or exactly one cell keyed <see cref="SlotKey"/>) is <see cref="StateDomain.Slot"/>. A plain row
-    /// therefore authors nothing new by omitting <see cref="Domain"/>.</summary>
-    public StateDomain InferDomain() =>
-        ((Phase is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey))
-            ? StateDomain.Keys.Instance
-            : StateDomain.Slot.Instance);
-    /// <summary>Gets the storage ceiling admitted by the row's shape: the declared capacity when there is one, else
-    /// <see cref="StateCapacity.MaxCellsPerRow"/>, the one cell bound every domain shares.</summary>
-    public int CellCeiling => EffectiveDomain switch {
-        StateDomain.Ring ring => Math.Clamp(ring.Capacity, 1, StateCapacity.MaxCellsPerRow),
-        StateDomain.KeysOf or StateDomain.CellsOf => (Capacity is { } linked ? Math.Clamp(linked, 1, StateCapacity.MaxCellsPerRow) : StateCapacity.MaxCellsPerRow),
-        _ => (Capacity is { } capacity ? Math.Clamp(capacity, 1, StateCapacity.MaxCellsPerRow) : StateCapacity.DefaultCellRoom),
-    };
     /// <summary>Gets whether the row accumulates continuously.</summary>
     public bool IsAdvancing => (Advance is not null);
-    /// <summary>Gets a value indicating whether this row declares a <see cref="StateDynamics"/> easing trait.</summary>
-    public bool IsEasing => (Dynamics is not null);
     /// <summary>Gets a value indicating whether the row's slot cell turns with the tick through a <see cref="StateCycle"/> trait.</summary>
     public bool IsCycling => (Cycle is not null);
     /// <summary>Gets a value indicating whether this row declares a <see cref="Draw"/> — whether it is a draw site.</summary>
     public bool IsDraw => (Draw is not null);
+    /// <summary>Gets a value indicating whether this row declares a <see cref="StateDynamics"/> easing trait.</summary>
+    public bool IsEasing => (Dynamics is not null);
     /// <summary>Gets a value indicating whether this row is keyed — its domain is anything but
     /// <see cref="StateDomain.Slot"/>. Such a row has no single cell, so an omitted key beside it addresses
     /// nothing: a world rule's <c>compareState</c>/<c>setState</c>/<c>addState</c>, a <c>generate</c> effect's
@@ -215,34 +292,90 @@ public record StateRow(
     /// <see cref="DrawnMasks"/>) lives in row fields rather than in cells.</summary>
     public bool IsSlot => (EffectiveDomain is StateDomain.Slot);
 
-    /// <summary>Clamps <paramref name="value"/> into this row's declared numeric envelope: the
-    /// <see cref="NonNegative"/> floor first, then an authored <see cref="Min"/>/<see cref="Max"/> pair.</summary>
-    /// <remarks>Used for reads, never for writes: a computed value clamps through this method, but an explicit write
-    /// that falls outside the envelope is refused by the document project's validator rather than clamped.
-    /// <see cref="StateAdvance.ComputeCurrentValue"/> uses this for its read clamp; the evaluator's write effect
-    /// uses it only to test whether a rule's write could move the destination, never to alter the value the write
-    /// submits.</remarks>
+    /// <summary>Clamps <paramref name="value"/> into this row's declared <see cref="Min"/>/<see cref="Max"/>
+    /// envelope, each bound applied independently when present.</summary>
+    /// <remarks>Used for computed reads alone — an advancing, easing, or cycling row's live value — never for
+    /// writes: <see cref="TryAdmitWrite"/> is the one door every write path decides through, and it never calls
+    /// this method, since a write's admission also depends on <see cref="Overflow"/> and on detecting arithmetic
+    /// overflow the way a plain clamp cannot.</remarks>
     /// <param name="value">The raw value to clamp, encoded per this row's <see cref="Kind"/>.</param>
-    /// <returns>The clamped raw value; <paramref name="value"/> unchanged when this row declares no envelope.</returns>
+    /// <returns>The clamped raw value; <paramref name="value"/> unchanged on the side(s) this row declares no
+    /// bound for.</returns>
     public long ClampToEnvelope(long value) {
-        var clamped = ((NonNegative && (value < 0L))
-            ? 0L
-            : value
-        );
+        var clamped = value;
 
         if (
             (Min is { } lo) &&
-            (Max is { } hi)
+            (clamped < lo)
         ) {
-            clamped = ((clamped < lo)
-                ? lo
-                : ((clamped > hi)
-                    ? hi
-                    : clamped
-            ));
+            clamped = lo;
+        }
+        if (
+            (Max is { } hi) &&
+            (clamped > hi)
+        ) {
+            clamped = hi;
         }
 
         return clamped;
+    }
+    /// <summary>Decides one write against this row's declared <see cref="Min"/>/<see cref="Max"/>/<see cref="Overflow"/>
+    /// envelope — the one method every write path (the rule frame, mutation compose, ring push, board combine,
+    /// write sets, the rule evaluator's no-op test, and the rule compiler's constant checks) calls instead of
+    /// composing its own range or overflow test.</summary>
+    /// <remarks>The candidate result is computed as a 128-bit intermediate, so a genuine 64-bit arithmetic overflow
+    /// is detected rather than silently wrapping. A row declaring no envelope at all still refuses such an
+    /// overflow under <see cref="StateOverflow.Refuse"/> (the default); it never reaches
+    /// <see cref="StateOverflow.Saturate"/>'s per-side <see cref="long.MinValue"/>/<see cref="long.MaxValue"/>
+    /// clamp unless authored to.</remarks>
+    /// <param name="current">The cell's stored value before this write.</param>
+    /// <param name="operand">The write's operand: the replacement for <see cref="StateWriteKind.Set"/>, or the
+    /// addend for <see cref="StateWriteKind.Add"/>.</param>
+    /// <param name="write">Set or add.</param>
+    /// <param name="stored">The value to store: the exact result when admitted, or the clamped bound under
+    /// <see cref="StateOverflow.Saturate"/>; zero when refused.</param>
+    /// <param name="reason">Why the write was refused, in the author's own vocabulary, or empty on success.</param>
+    /// <returns><see langword="true"/> when the write is admitted, whether stored exactly or saturated.</returns>
+    public bool TryAdmitWrite(long current, long operand, StateWriteKind write, out long stored, out string reason) {
+        var exact = ((write == StateWriteKind.Add)
+            ? (((Int128)current) + operand)
+            : ((Int128)operand)
+        );
+        var lowerBound = ((Int128)(Min ?? long.MinValue));
+        var upperBound = ((Int128)(Max ?? long.MaxValue));
+
+        if (
+            (exact < lowerBound) ||
+            (exact > upperBound)
+        ) {
+            if (Overflow == StateOverflow.Saturate) {
+                stored = ((long)((exact < lowerBound)
+                    ? lowerBound
+                    : upperBound
+                ));
+                reason = string.Empty;
+
+                return true;
+            }
+
+            var overflowed = (
+                (exact < long.MinValue) ||
+                (exact > long.MaxValue)
+            );
+
+            stored = 0L;
+            reason = (overflowed
+                ? "would overflow 64-bit storage"
+                : "would leave the row's declared envelope"
+            );
+
+            return false;
+        }
+
+        stored = ((long)exact);
+        reason = string.Empty;
+
+        return true;
     }
     /// <summary>Determines whether this row declares a cell under <paramref name="key"/> — the (row, key) existence
     /// check used by the rule compiler's operand walk, the HUD binding validator, and the <c>world.hud</c> read-back
@@ -259,6 +392,18 @@ public record StateRow(
         cells: Cells,
         key: cellKey
     ) is not null));
+    /// <summary>Infers the domain an unauthored row carries from its <see cref="Cells"/>/<see cref="Capacity"/>/
+    /// <see cref="Phase"/> alone — the same shape a plain row (no <see cref="Domain"/> member at all) has always had,
+    /// restated as a case rather than a pair of booleans: a declared <see cref="Capacity"/>, more than one cell, a
+    /// single cell under an author-chosen key, or a declared <see cref="Phase"/> trait is <see cref="StateDomain.Keys"/>
+    /// — a phase row has no single value to read even before its first participant is admitted; anything else (no
+    /// cells yet, or exactly one cell keyed <see cref="SlotKey"/>) is <see cref="StateDomain.Slot"/>. A plain row
+    /// therefore authors nothing new by omitting <see cref="Domain"/>.</summary>
+    public StateDomain InferDomain() =>
+        (((Phase is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey)))
+            ? StateDomain.Keys.Instance
+            : StateDomain.Slot.Instance
+        );
 }
 /// <summary>
 /// The rule for a <see cref="StateRow.ReservedNamePrefix"/>-prefixed cell: which reserved keys a row's shape
@@ -307,21 +452,18 @@ public static class StateReservedCells {
 /// all), or to a keyed row (no single value to show) draws empty at render time rather than failing validation.
 /// </remarks>
 public static class StateCapacity {
+    /// <summary>The growth room a slot- or keys-domain row gets when it authors no <see cref="StateRow.Capacity"/>;
+    /// a registry-sized row authors its capacity, up to <see cref="MaxCellsPerRow"/>.</summary>
+    public const int DefaultCellRoom = 128;
     /// <summary>The combined body- and identity-state slot ceiling. Compilation allocates fixed parallel arrays of
     /// this authored length per body, so the document gate bounds both memory and checkpoint width before runtime.</summary>
     public const int MaxBodySlots = 128;
-    /// <summary>The most attribute keys one zone sort orders by — each key names a declared state row, so a sort
-    /// can never carry more keys than <see cref="MaxRows"/> the section holds.</summary>
-    public const int MaxSortKeys = MaxRows;
     /// <summary>The implicit per-row cell-count ceiling — applies to every <see cref="StateRow.Cells"/>,
     /// slot-shaped or keyed alike (a slot never approaches it: exactly one cell), even when the author omits
     /// <see cref="StateRow.Capacity"/>, so a row can never state no bound at all (unbounded growth is refused by
     /// construction, never by author diligence). An authored <see cref="StateRow.Capacity"/> may only narrow
     /// this, never widen it.</summary>
     public const int MaxCellsPerRow = TopologyCompilation.MaxCells;
-    /// <summary>The growth room a slot- or keys-domain row gets when it authors no <see cref="StateRow.Capacity"/>;
-    /// a registry-sized row authors its capacity, up to <see cref="MaxCellsPerRow"/>.</summary>
-    public const int DefaultCellRoom = 128;
     /// <summary>A cell's <see cref="StateCell.Provenance"/> length ceiling, in UTF-16 code units — bounded like
     /// <see cref="MaxTextValueLength"/> since it is likewise a free-form issuer label, never a validated-identifier
     /// type.</summary>
@@ -329,6 +471,9 @@ public static class StateCapacity {
     /// <summary>The section's row-count ceiling — a pure capacity bound on document size and per-tick iteration
     /// cost, never a fixed-size stack buffer or a per-world tunable.</summary>
     public const int MaxRows = 256;
+    /// <summary>The most attribute keys one zone sort orders by — each key names a declared state row, so a sort
+    /// can never carry more keys than <see cref="MaxRows"/> the section holds.</summary>
+    public const int MaxSortKeys = MaxRows;
     /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units.</summary>
     public const int MaxTextValueLength = 256;
 }

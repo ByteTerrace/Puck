@@ -18,9 +18,8 @@ internal static class WorldReferenceCensus {
                     key: reference.RowName,
                     value: out var existing
                 )
-                    ? existing
-                    : default
-                ),
+                ? existing
+                : default),
                 reference.Section
             );
         }

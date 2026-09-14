@@ -21,11 +21,11 @@ namespace Puck.World.Server;
 /// field retains ordinary kit gravity.</para>
 /// </remarks>
 public sealed class WorldGravityField {
-    private readonly GravityBody[] m_bodies;
     private readonly FixedVector3[] m_accelerations;
     private readonly bool[] m_areaActive;
     private readonly FixedVector3[] m_areaPositions;
     private readonly FixedQuaternion[] m_areaRotations;
+    private readonly GravityBody[] m_bodies;
     private readonly FixedWorldGravity m_compiled;
     private readonly int[] m_entityBySlot;
     private readonly bool[] m_participating;
@@ -34,77 +34,89 @@ public sealed class WorldGravityField {
 
     private int m_bodyCount;
 
+    private void ApplyAreas(IReadOnlyList<WorldGravityTarget> targets) {
+        if (m_compiled.Areas.Length == 0) {
+            return;
+        }
+
+        var evaluations = 0;
+        var matches = 0;
+        var activeAreas = 0;
+
+        foreach (var active in m_areaActive) {
+            if (active) {
+                activeAreas++;
+            }
+        }
+
+        foreach (var target in targets) {
+            if (((uint)target.EntityIndex) >= ((uint)m_slotByEntity.Length)) {
+                continue;
+            }
+
+            var acceleration = m_accelerations[target.EntityIndex];
+
+            for (var index = 0; (index < m_compiled.Areas.Length); index++) {
+                if (!m_areaActive[index]) {
+                    continue;
+                }
+
+                evaluations++;
+                var area = m_compiled.Areas[index];
+
+                if (!area.Contains(
+                    center: m_areaPositions[index],
+                    point: target.Position,
+                    rotation: m_areaRotations[index]
+                )) {
+                    continue;
+                }
+
+                matches++;
+                m_participating[target.EntityIndex] = true;
+                var contribution = area.AccelerationAt(
+                    center: m_areaPositions[index],
+                    point: target.Position,
+                    rotation: m_areaRotations[index]
+                );
+
+                acceleration = ((area.Mode == WorldGravityAreaMode.Replace)
+                    ? contribution
+                    : Compose(
+                        left: acceleration,
+                        right: contribution
+                    )
+                );
+            }
+
+            m_accelerations[target.EntityIndex] = acceleration;
+        }
+
+        AreaStatistics = new WorldGravityAreaStatistics(
+            ActiveAreaCount: activeAreas,
+            EvaluationCount: evaluations,
+            MatchCount: matches,
+            TargetCount: targets.Count
+        );
+    }
     // Composition is the one place independently valid accelerations meet. Saturating componentwise prevents an
     // overlap from wrapping toward the opposite direction; the fixed extreme is deterministic and Replace can still
     // reset it before a later Combine.
     private static FixedVector3 Compose(FixedVector3 left, FixedVector3 right) => new(
-        X: FixedSaturate.Add(left: left.X, right: right.X),
-        Y: FixedSaturate.Add(left: left.Y, right: right.Y),
-        Z: FixedSaturate.Add(left: left.Z, right: right.Z)
+        X: FixedSaturate.Add(
+            left: left.X,
+            right: right.X
+        ),
+        Y: FixedSaturate.Add(
+            left: left.Y,
+            right: right.Y
+        ),
+        Z: FixedSaturate.Add(
+            left: left.Z,
+            right: right.Z
+        )
     );
 
-    /// <summary>Initializes the field for a fixed population capacity.</summary>
-    /// <param name="compiled">The compiled gravity section.</param>
-    /// <param name="capacity">The population capacity; the largest number of body targets one solve can carry.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is negative.</exception>
-    public WorldGravityField(FixedWorldGravity compiled, int capacity) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: capacity);
-
-        m_compiled = compiled;
-        m_solver = GravitySolvers.Create(kind: compiled.Kind);
-        m_accelerations = new FixedVector3[capacity];
-        m_areaActive = new bool[compiled.Areas.Length];
-        m_areaPositions = new FixedVector3[compiled.Areas.Length];
-        m_areaRotations = new FixedQuaternion[compiled.Areas.Length];
-        m_bodies = new GravityBody[(compiled.Attractors.Length + capacity)];
-        m_entityBySlot = new int[capacity];
-        m_participating = new bool[capacity];
-        m_slotByEntity = new int[capacity];
-
-        Array.Fill(
-            array: m_slotByEntity,
-            value: -1
-        );
-
-        for (var index = 0; (index < compiled.Areas.Length); index++) {
-            var area = compiled.Areas[index];
-
-            m_areaPositions[index] = area.AuthoredPosition;
-            m_areaRotations[index] = area.AuthoredRotation;
-            m_areaActive[index] = (area.Attach is null);
-        }
-    }
-
-    /// <summary>Gets the compiled section this field solves.</summary>
-    public FixedWorldGravity Compiled => m_compiled;
-    /// <summary>Gets a value indicating whether a global or bounded local field is authored.</summary>
-    public bool IsActive => m_compiled.IsActive;
-    /// <summary>Gets the work counters the last solve reported.</summary>
-    public GravitySolveStatistics Statistics { get; private set; }
-    /// <summary>Gets the local-area work counters from the last solve.</summary>
-    public WorldGravityAreaStatistics AreaStatistics { get; private set; }
-
-    /// <summary>Returns the acceleration solved for a body this tick.</summary>
-    /// <param name="entityIndex">The body's entity index.</param>
-    /// <param name="acceleration">The solved acceleration. Zero may be an authored participating answer or the
-    /// default written when the body took no part; the return value distinguishes those cases.</param>
-    /// <returns><see langword="true"/> when the body participated in the active authored field. The acceleration may
-    /// be zero after a Replace pocket, exact cancellation, or at a radial area's centre.</returns>
-    public bool TryAcceleration(int entityIndex, out FixedVector3 acceleration) {
-        acceleration = FixedVector3.Zero;
-
-        if (
-            (((uint)entityIndex) >= ((uint)m_slotByEntity.Length)) ||
-            (m_slotByEntity[entityIndex] < 0) ||
-            !m_participating[entityIndex]
-        ) {
-            return false;
-        }
-
-        acceleration = m_accelerations[entityIndex];
-
-        return true;
-    }
     /// <summary>Refreshes areas riding attached placements from the current authoritative body poses.</summary>
     /// <param name="population">The live population used by the established placement-attachment resolver.</param>
     public void RefreshAttachedAreas(WorldPopulation population) {
@@ -239,72 +251,68 @@ public sealed class WorldGravityField {
 
         ApplyAreas(targets: targets);
     }
+    /// <summary>Returns the acceleration solved for a body this tick.</summary>
+    /// <param name="entityIndex">The body's entity index.</param>
+    /// <param name="acceleration">The solved acceleration. Zero may be an authored participating answer or the
+    /// default written when the body took no part; the return value distinguishes those cases.</param>
+    /// <returns><see langword="true"/> when the body participated in the active authored field. The acceleration may
+    /// be zero after a Replace pocket, exact cancellation, or at a radial area's centre.</returns>
+    public bool TryAcceleration(int entityIndex, out FixedVector3 acceleration) {
+        acceleration = FixedVector3.Zero;
 
-    private void ApplyAreas(IReadOnlyList<WorldGravityTarget> targets) {
-        if (m_compiled.Areas.Length == 0) {
-            return;
+        if (
+            (((uint)entityIndex) >= ((uint)m_slotByEntity.Length)) ||
+            (m_slotByEntity[entityIndex] < 0) ||
+            !m_participating[entityIndex]
+        ) {
+            return false;
         }
 
-        var evaluations = 0;
-        var matches = 0;
-        var activeAreas = 0;
+        acceleration = m_accelerations[entityIndex];
 
-        foreach (var active in m_areaActive) {
-            if (active) {
-                activeAreas++;
-            }
-        }
-
-        foreach (var target in targets) {
-            if (((uint)target.EntityIndex) >= ((uint)m_slotByEntity.Length)) {
-                continue;
-            }
-
-            var acceleration = m_accelerations[target.EntityIndex];
-
-            for (var index = 0; (index < m_compiled.Areas.Length); index++) {
-                if (!m_areaActive[index]) {
-                    continue;
-                }
-
-                evaluations++;
-                var area = m_compiled.Areas[index];
-
-                if (!area.Contains(
-                    center: m_areaPositions[index],
-                    point: target.Position,
-                    rotation: m_areaRotations[index]
-                )) {
-                    continue;
-                }
-
-                matches++;
-                m_participating[target.EntityIndex] = true;
-                var contribution = area.AccelerationAt(
-                    center: m_areaPositions[index],
-                    point: target.Position,
-                    rotation: m_areaRotations[index]
-                );
-
-                acceleration = ((area.Mode == WorldGravityAreaMode.Replace)
-                    ? contribution
-                    : Compose(
-                        left: acceleration,
-                        right: contribution
-                    )
-                );
-            }
-
-            m_accelerations[target.EntityIndex] = acceleration;
-        }
-
-        AreaStatistics = new WorldGravityAreaStatistics(
-            ActiveAreaCount: activeAreas,
-            EvaluationCount: evaluations,
-            MatchCount: matches,
-            TargetCount: targets.Count
-        );
+        return true;
     }
+
+    /// <summary>Initializes the field for a fixed population capacity.</summary>
+    /// <param name="compiled">The compiled gravity section.</param>
+    /// <param name="capacity">The population capacity; the largest number of body targets one solve can carry.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is negative.</exception>
+    public WorldGravityField(FixedWorldGravity compiled, int capacity) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: capacity);
+
+        m_compiled = compiled;
+        m_solver = GravitySolvers.Create(kind: compiled.Kind);
+        m_accelerations = new FixedVector3[capacity];
+        m_areaActive = new bool[compiled.Areas.Length];
+        m_areaPositions = new FixedVector3[compiled.Areas.Length];
+        m_areaRotations = new FixedQuaternion[compiled.Areas.Length];
+        m_bodies = new GravityBody[(compiled.Attractors.Length + capacity)];
+        m_entityBySlot = new int[capacity];
+        m_participating = new bool[capacity];
+        m_slotByEntity = new int[capacity];
+
+        Array.Fill(
+            array: m_slotByEntity,
+            value: -1
+        );
+
+        for (var index = 0; (index < compiled.Areas.Length); index++) {
+            var area = compiled.Areas[index];
+
+            m_areaPositions[index] = area.AuthoredPosition;
+            m_areaRotations[index] = area.AuthoredRotation;
+            m_areaActive[index] = (area.Attach is null);
+        }
+    }
+
+    /// <summary>Gets the local-area work counters from the last solve.</summary>
+    public WorldGravityAreaStatistics AreaStatistics { get; private set; }
+    /// <summary>Gets the compiled section this field solves.</summary>
+    public FixedWorldGravity Compiled => m_compiled;
+    /// <summary>Gets a value indicating whether a global or bounded local field is authored.</summary>
+    public bool IsActive => m_compiled.IsActive;
+    /// <summary>Gets the work counters the last solve reported.</summary>
+    public GravitySolveStatistics Statistics { get; private set; }
 }
 /// <summary>The deterministic local-area work reported by one gravity solve.</summary>
 /// <param name="ActiveAreaCount">The areas with a resolved placement pose this tick.</param>

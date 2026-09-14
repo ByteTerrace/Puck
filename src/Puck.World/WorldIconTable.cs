@@ -100,17 +100,6 @@ public sealed class WorldIconTable {
         );
     }
 
-    /// <summary>Resolves an icon name (e.g. <c>action.jump</c>, <c>edit.next</c>) to its atlas content.</summary>
-    /// <param name="name">The icon name, or <see langword="null"/>/empty.</param>
-    /// <returns>The resolved content, or <see cref="OverlayResolvedGlyph.None"/> when unresolved.</returns>
-    public OverlayResolvedGlyph ResolveIcon(string? name) =>
-        (((name is { Length: > 0 }) && m_icons.TryGetValue(
-            key: name,
-            value: out var resolved
-        ))
-            ? resolved
-            : OverlayResolvedGlyph.None
-        );
     /// <summary>Resolves a physical control's badge content for a connected controller family (the family override
     /// seam, checked before the row's default icon). The ONE badge door: a bar slot, a modifier indicator, and a
     /// chord hint all arrive here with the same input source id, and a control the badge table carries no row for
@@ -135,4 +124,15 @@ public sealed class WorldIconTable {
             : OverlayResolvedGlyph.None
         );
     }
+    /// <summary>Resolves an icon name (e.g. <c>action.jump</c>, <c>edit.next</c>) to its atlas content.</summary>
+    /// <param name="name">The icon name, or <see langword="null"/>/empty.</param>
+    /// <returns>The resolved content, or <see cref="OverlayResolvedGlyph.None"/> when unresolved.</returns>
+    public OverlayResolvedGlyph ResolveIcon(string? name) =>
+        (((name is { Length: > 0 }) && m_icons.TryGetValue(
+            key: name,
+            value: out var resolved
+        ))
+            ? resolved
+            : OverlayResolvedGlyph.None
+        );
 }

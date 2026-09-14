@@ -44,65 +44,36 @@ public sealed class SdfDomainExpansionBudgetLawTests {
     }
 
     [Fact]
-    public void RepeatLimitPastTheBudgetRefusesWithoutMaterializing() {
-        var allocated = MeasureRefusal(
+    public void AChainRefusesAtTheOpThatOverrunsTheBudget() {
+        // Symmetry (2) then polar (40) is 80 copies: the chain is refused, and the refusal names the op whose branch
+        // set overran it rather than the chain as a whole.
+        Assert.False(condition: SdfDomainExpansion.TryExpand(
             domain: [
-                new SdfDomainOp.Repeat(
-                    Limit: new Vector3(value: 120f),
-                    Spacing: Vector3.One
-                ),
+                new SdfDomainOp.Symmetry(Normal: Vector3.UnitX),
+                new SdfDomainOp.Polar(Count: 40),
             ],
-            expectedName: "repeat"
+            frames: out _,
+            refusal: out var refusal
+        ));
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: "polar"
         );
-
-        Assert.True(
-            condition: (allocated <= RefusalAllocationCeiling),
-            userMessage: $"refusing a 241^3-cell repeat allocated {allocated} bytes, so the frames were built before the budget was consulted"
-        );
-    }
-    [Fact]
-    public void RepeatLimitWithinTheBudgetExpands() {
         Assert.True(
             condition: SdfDomainExpansion.TryExpand(
                 domain: [
-                    new SdfDomainOp.Repeat(
-                        Limit: new Vector3(value: 1f),
-                        Spacing: Vector3.One
-                    ),
+                    new SdfDomainOp.Symmetry(Normal: Vector3.UnitX),
+                    new SdfDomainOp.Polar(Count: 30),
                 ],
                 frames: out var frames,
-                refusal: out var refusal
+                refusal: out var control
             ),
-            userMessage: refusal
+            userMessage: control
         );
         Assert.Equal(
             actual: frames.Length,
-            expected: 27
+            expected: 60
         );
-    }
-    [Fact]
-    public void RepeatLimitAtTheBudgetEdgeStillExpands() {
-        // 3^3 = 27 <= 64 < 5^3 = 125: the pair straddles the default budget on a single authored number.
-        Assert.True(condition: SdfDomainExpansion.TryExpand(
-            domain: [
-                new SdfDomainOp.Repeat(
-                    Limit: new Vector3(value: 1f),
-                    Spacing: Vector3.One
-                ),
-            ],
-            frames: out _,
-            refusal: out _
-        ));
-        Assert.False(condition: SdfDomainExpansion.TryExpand(
-            domain: [
-                new SdfDomainOp.Repeat(
-                    Limit: new Vector3(value: 2f),
-                    Spacing: Vector3.One
-                ),
-            ],
-            frames: out _,
-            refusal: out _
-        ));
     }
     [Fact]
     public void PolarCountPastTheBudgetRefusesWithoutMaterializing() {
@@ -160,35 +131,64 @@ public sealed class SdfDomainExpansionBudgetLawTests {
         );
     }
     [Fact]
-    public void AChainRefusesAtTheOpThatOverrunsTheBudget() {
-        // Symmetry (2) then polar (40) is 80 copies: the chain is refused, and the refusal names the op whose branch
-        // set overran it rather than the chain as a whole.
-        Assert.False(condition: SdfDomainExpansion.TryExpand(
+    public void RepeatLimitAtTheBudgetEdgeStillExpands() {
+        // 3^3 = 27 <= 64 < 5^3 = 125: the pair straddles the default budget on a single authored number.
+        Assert.True(condition: SdfDomainExpansion.TryExpand(
             domain: [
-                new SdfDomainOp.Symmetry(Normal: Vector3.UnitX),
-                new SdfDomainOp.Polar(Count: 40),
+                new SdfDomainOp.Repeat(
+                    Limit: new Vector3(value: 1f),
+                    Spacing: Vector3.One
+                ),
             ],
             frames: out _,
-            refusal: out var refusal
+            refusal: out _
         ));
-        Assert.Contains(
-            actualString: refusal,
-            expectedSubstring: "polar"
+        Assert.False(condition: SdfDomainExpansion.TryExpand(
+            domain: [
+                new SdfDomainOp.Repeat(
+                    Limit: new Vector3(value: 2f),
+                    Spacing: Vector3.One
+                ),
+            ],
+            frames: out _,
+            refusal: out _
+        ));
+    }
+    [Fact]
+    public void RepeatLimitPastTheBudgetRefusesWithoutMaterializing() {
+        var allocated = MeasureRefusal(
+            domain: [
+                new SdfDomainOp.Repeat(
+                    Limit: new Vector3(value: 120f),
+                    Spacing: Vector3.One
+                ),
+            ],
+            expectedName: "repeat"
         );
+
+        Assert.True(
+            condition: (allocated <= RefusalAllocationCeiling),
+            userMessage: $"refusing a 241^3-cell repeat allocated {allocated} bytes, so the frames were built before the budget was consulted"
+        );
+    }
+    [Fact]
+    public void RepeatLimitWithinTheBudgetExpands() {
         Assert.True(
             condition: SdfDomainExpansion.TryExpand(
                 domain: [
-                    new SdfDomainOp.Symmetry(Normal: Vector3.UnitX),
-                    new SdfDomainOp.Polar(Count: 30),
+                    new SdfDomainOp.Repeat(
+                        Limit: new Vector3(value: 1f),
+                        Spacing: Vector3.One
+                    ),
                 ],
                 frames: out var frames,
-                refusal: out var control
+                refusal: out var refusal
             ),
-            userMessage: control
+            userMessage: refusal
         );
         Assert.Equal(
             actual: frames.Length,
-            expected: 60
+            expected: 27
         );
     }
 }

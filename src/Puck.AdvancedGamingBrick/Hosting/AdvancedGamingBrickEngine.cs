@@ -4,46 +4,54 @@ namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
 /// The native ARM7TDMI AdvancedGamingBrick screen-machine engine. Its stable id is
-/// <c>advanced-gaming-brick</c>; cartridges direct-boot against an explicit <c>bios=&lt;path&gt;</c> image.
+/// <c>advanced-gaming-brick</c>; cartridges cold-boot with bundled Puck firmware by default.
+/// <c>fast</c> skips startup without discarding BIOS services; a final <c>bios=&lt;path&gt;</c> selects an external image.
 /// <c>stub</c> explicitly selects a zeroed image for diagnostics that never call BIOS services or dispatch IRQs.
 /// </summary>
-public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
+public sealed partial class AdvancedGamingBrickEngine : IMachineEngine, IMachineOperationProvider {
     /// <inheritdoc/>
     public string Id => "advanced-gaming-brick";
 
     /// <inheritdoc/>
-    public IScreenMachine Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) {
-        var bios = ResolveBios(options: options);
+    public IMachineRuntime Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) {
+        var (bios, mode) = ResolveStartup(options: options);
 
         return new AdvancedMachineHost(
             audioSampleRate: audioSampleRate,
             biosImage: bios,
+            bootMode: mode,
             cartridgeRom: contentBytes,
             savePath: savePath
         );
     }
 
-    private static byte[] ResolveBios(string? options) {
-        if (
-            options is not null && options.Equals(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: "stub"
-        )
-        ) {
-            return new byte[ReplacementBios.ImageSize];
-        }
-
-        const string BiosPrefix = "bios=";
-
-        if (string.IsNullOrWhiteSpace(value: options) || !options.StartsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: BiosPrefix
+    private static (byte[] Bios, MachineBootMode Mode) ResolveStartup(string? options) {
+        if (string.Equals(
+            a: options?.Trim(),
+            b: "stub",
+            comparisonType: StringComparison.OrdinalIgnoreCase
         )) {
-            throw new ArgumentException(message: "Advanced GamingBrick requires bios=<path>. Use stub only for BIOS-independent diagnostics; direct boot does not replace BIOS services.", paramName: nameof(options));
+            return (Bios: new byte[ReplacementBios.ImageSize], Mode: MachineBootMode.Fast);
         }
 
-        var path = options[BiosPrefix.Length..].Trim();
+        var boot = MachineBootOptions.Parse(
+            options: options,
+            machineTokens: out var tokens
+        );
 
+        if (tokens.Length != 0) {
+            throw new ArgumentException(
+                message: $"Unknown advanced-gaming-brick option '{tokens[0]}'; expected cold, fast, a final bios=<path>, or the standalone diagnostic stub option.",
+                paramName: nameof(options)
+            );
+        }
+
+        return (Bios: ResolveBios(path: boot.ImagePath), Mode: boot.Mode);
+    }
+    private static byte[] ResolveBios(string? path) {
+        if (path is null) {
+            return AgbFirmware.GetImage();
+        }
         if (!File.Exists(path: path)) {
             throw new ArgumentException(message: $"advanced-gaming-brick BIOS '{path}' not found");
         }
@@ -56,7 +64,10 @@ public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
             }
 
             if (AgbBiosProfile.Identify(image: bios).Kind == AgbBiosKind.ReplacementStub) {
-                throw new ArgumentException(message: "The BIOS image is zero-filled and cannot execute BIOS services. Use a working BIOS image, or stub explicitly for BIOS-independent diagnostics.", paramName: nameof(options));
+                throw new ArgumentException(
+                    message: "The BIOS image is zero-filled and cannot execute BIOS services. Use a working BIOS image, or stub explicitly for BIOS-independent diagnostics.",
+                    paramName: nameof(path)
+                );
             }
 
             return bios;

@@ -9,16 +9,16 @@ namespace Puck.SdfVm.Views;
 /// output is B8G8R8A8 (the capture-path pixel order), ready to hand to <see cref="CpuSurfaceSource"/>.
 /// </summary>
 public sealed class TestPatternSource {
-    /// <summary>The pixel format the pattern writes (B8G8R8A8).</summary>
-    public const SurfaceFormat PixelFormat = SurfaceFormat.B8G8R8A8Unorm;
-
-    private const int BytesPerPixel = 4;
+    private const int BarRegionDenominator = 3;
     // The bars fill the top of the frame; the bottom band shows a moving luma ramp.
     private const int BarRegionNumerator = 2;
-    private const int BarRegionDenominator = 3;
+    private const int BytesPerPixel = 4;
     // The sweep advances one column every this-many ticks, so the motion stays gentle regardless of the caller's tick
     // rate.
     private const ulong SweepTicksPerColumn = 64UL;
+
+    /// <summary>The pixel format the pattern writes (B8G8R8A8).</summary>
+    public const SurfaceFormat PixelFormat = SurfaceFormat.B8G8R8A8Unorm;
 
     // The seven SMPTE-style bars, brightest to primary, as packed 0xRRGGBB.
     private static readonly uint[] Bars = [
@@ -46,17 +46,22 @@ public sealed class TestPatternSource {
         m_pixels = new byte[((width * height) * BytesPerPixel)];
     }
 
-    /// <summary>Gets the frame width in pixels.</summary>
-    public int Width { get; }
     /// <summary>Gets the frame height in pixels.</summary>
     public int Height { get; }
+    /// <summary>Gets the frame width in pixels.</summary>
+    public int Width { get; }
 
     /// <summary>Renders the pattern for <paramref name="tick"/> into the internal buffer and returns it — the frame to
     /// hand to <see cref="CpuSurfaceSource.Publish(Puck.Abstractions.Gpu.IGpuDeviceContext, Puck.Abstractions.Gpu.IGpuComputeServices, ReadOnlyMemory{byte}, uint, uint, SurfaceFormat)"/>.</summary>
     /// <param name="tick">The engine tick driving the sweep phase.</param>
     /// <returns>The rendered B8G8R8A8 pixels (owned by this producer, valid until the next render).</returns>
     public ReadOnlyMemory<byte> Render(ulong tick) {
-        Render(destination: m_pixels, tick: tick, width: Width, height: Height);
+        Render(
+            destination: m_pixels,
+            tick: tick,
+            width: Width,
+            height: Height
+        );
 
         return m_pixels;
     }
@@ -84,7 +89,10 @@ public sealed class TestPatternSource {
         var barCount = Bars.Length;
         var barRegionHeight = ((height * BarRegionNumerator) / BarRegionDenominator);
         var sweepColumn = ((int)((tick / SweepTicksPerColumn) % ((ulong)width)));
-        var sweepHalfWidth = Math.Max(val1: 1, val2: (width / 64));
+        var sweepHalfWidth = Math.Max(
+            val1: 1,
+            val2: (width / 64)
+        );
 
         for (var y = 0; (y < height); y++) {
             var inBars = (y < barRegionHeight);

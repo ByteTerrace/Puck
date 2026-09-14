@@ -10,11 +10,11 @@ namespace Puck.World;
 /// <see cref="Puck.World.Protocol.IntentSource.Idle"/> and resolving its view through <c>views.cameraRig</c>
 /// instead.</param>
 public sealed record WorldSeatModeState(string Name, string? Target = null) {
-    /// <summary>The only admitted <see cref="Target"/> value — the camera control application.</summary>
-    public const string CameraTarget = "camera";
     /// <summary>The inhabited placement id prefix a camera control application possesses — a world authors one
     /// <c>"{CameraPlacementIdPrefix}&lt;0-based seat slot&gt;"</c> row per local seat it wants Free Cam over.</summary>
     public const string CameraPlacementIdPrefix = "camera-seat-";
+    /// <summary>The only admitted <see cref="Target"/> value — the camera control application.</summary>
+    public const string CameraTarget = "camera";
 }
 /// <summary>An AUTHORED per-seat mode family — a document-declared name plus its admitted states.
 /// <c>player.mode &lt;family&gt; &lt;state&gt; [seat]</c> flips a seat's published state within the family;

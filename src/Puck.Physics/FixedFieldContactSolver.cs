@@ -776,8 +776,7 @@ public sealed class FixedFieldContactSolver(
         const int StackVolumeBudget = 64;
         var boxConservativeMinimum = ((volumes.Length <= StackVolumeBudget)
             ? stackalloc FixedQ4816[StackVolumeBudget]
-            : new FixedQ4816[volumes.Length]
-        )[..volumes.Length];
+            : new FixedQ4816[volumes.Length])[..volumes.Length];
 
         for (var index = 0; (index < volumes.Length); index++) {
             if (volumes[index].Kind == FixedBodyColliderKind.Box) {

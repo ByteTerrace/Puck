@@ -22,7 +22,7 @@
             "description": "The role\u2192capability map (see WorldGroupRole). May be empty \u2014 a kind with no roles reaches no capability at all through its group principal, so any grant naming it is refused as unreachable.",
             "type": "array",
             "items": {
-              "description": "One named role a WorldGroupKind declares \u2014 the role\u2192capability half of the kind\u0027s policy bundle. A role names nothing about membership (this head keeps a membership row role-less; see Members); it exists so world.grant can refuse, at the door, a hold over a group principal that no role of its kind could ever exercise (the addon-reachability-honesty analog: an admitted-but- unreachable grant is a grant that lies).",
+              "description": "One named role a WorldGroupKind declares \u2014 the role\u2192capability half of the kind\u0027s policy bundle. Role assigns this name to an individual membership row. The catalog lets world.grant refuse a hold over a group principal that no declared role could exercise. During live permission expansion, only a current local member whose exact assigned role reaches the capability receives that group\u0027s row; a null or unknown role receives no capability. The catalog-wide admission check and this per-member projection are deliberately separate.",
               "type": [
                 "object",
                 "null"
@@ -48,16 +48,6 @@
               "title": "WorldGroupRole"
             }
           },
-          "ownershipPolicy": {
-            "description": "The loot/ownership-distribution policy slot (see WorldGroupOwnershipPolicy).",
-            "enum": [
-              "None",
-              "LeaderDecides",
-              "RoundRobin",
-              "FreeForAll"
-            ],
-            "title": "WorldGroupOwnershipPolicy"
-          },
           "lifetime": {
             "description": "The lifetime/persistence policy (see WorldGroupLifetime) \u2014 runtime groups only.",
             "enum": [
@@ -77,20 +67,11 @@
           "capacity": {
             "description": "The maximum concurrent members a group of this kind admits \u2014 one minor authored field within MaxMembersPerGroup, the population ceiling this substrate is bounded against.",
             "type": "integer"
-          },
-          "sharedStateScope": {
-            "description": "The name of a declared state row this kind\u0027s groups share, or null for none. Validated to reference an existing row (refused by name otherwise, the same cell-existence discipline the world-rules operand walk enforces) \u2014 the deeper \u0022every member reads/writes this row together\u0022 semantic belongs to a later lane; this head only pins the reference honest.",
-            "type": [
-              "string",
-              "null"
-            ],
-            "default": null
           }
         },
         "required": [
           "name",
           "roles",
-          "ownershipPolicy",
           "lifetime",
           "evictionPolicy",
           "capacity"
@@ -103,7 +84,7 @@
       "description": "The group roster \u2014 authored and runtime rows in one list (see WorldGroup).",
       "type": "array",
       "items": {
-        "description": "One group row \u2014 a roster of principals under a kind. One shape whether the row was boot-authored (present in the server\u0027s own base document \u2014 re-seeded on every world.reset/.load/.reload) or formed live by WorldMutation.FormGroup (never written back to the base, so a whole-document rebuild simply does not carry it forward \u2014 the party-vs-roster split falls out of the ordinary document-swap machinery, not a bespoke flag on this type).",
+        "description": "One group row \u2014 a roster of typed members under a kind. One shape whether the row was boot-authored (present in the server\u0027s own base document \u2014 re-seeded on every world.reset/.load/.reload) or formed live by WorldMutation.FormGroup (never written back to the base, so a whole-document rebuild simply does not carry it forward \u2014 the party-vs-roster split falls out of the ordinary document-swap machinery, not a bespoke flag on this type).",
         "type": [
           "object",
           "null"
@@ -119,11 +100,99 @@
             "type": "string"
           },
           "members": {
-            "description": "The current membership \u2014 flat only: every entry is a principal, never a group (a Group entry is refused by name \u2014 a member holding another group\u0027s memberships by proxy is exactly what flat membership forbids), and never World/ Document (neither is a real actor a hold could ever reach). Bounded by the kind\u0027s own Capacity.",
+            "description": "The current flat membership rows. Each row is a local actor or verified external identity, with role, stable join ordinal, and optional tags. Group refs are refused; the roster is bounded by the kind\u0027s own Capacity.",
             "type": "array",
             "items": {
-              "title": "WorldPrincipal",
-              "type": "string"
+              "description": "One member of a group\u0027s roster, including its declared role, stable succession ordinal, and optional tags used by membership selectors.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "ref": {
+                  "description": "The local or verified member identity.",
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "description": "The populated payload arm.",
+                      "enum": [
+                        "Local",
+                        "Verified"
+                      ],
+                      "title": "MemberRefKind"
+                    },
+                    "principal": {
+                      "description": "The local principal, only for Local.",
+                      "title": "WorldPrincipal",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "verified": {
+                      "description": "The verified identity, only for Verified.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "issuer": {
+                          "description": "The identity issuer. It is non-empty and free of control characters.",
+                          "type": "string"
+                        },
+                        "subject": {
+                          "description": "The issuer\u0027s subject claim. It is non-empty and free of control characters.",
+                          "type": "string"
+                        },
+                        "world": {
+                          "description": "The optional validated world name for which the claim was attested.",
+                          "title": "SafeName",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false,
+                      "title": "WorldMemberIdentity"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "title": "WorldMemberRef"
+                },
+                "role": {
+                  "description": "The declared role name, or null for no role-scoped capability; validators must not infer a role.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "joinOrdinal": {
+                  "description": "The monotonic succession ordinal assigned when this member joined the group.",
+                  "type": "integer"
+                },
+                "tags": {
+                  "description": "Optional non-empty tags attached to this member.",
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "default": null
+                }
+              },
+              "required": [
+                "ref",
+                "role",
+                "joinOrdinal"
+              ],
+              "additionalProperties": false,
+              "title": "WorldGroupMember"
             }
           },
           "tags": {
@@ -139,6 +208,16 @@
               ]
             },
             "default": null
+          },
+          "revision": {
+            "description": "The monotonic revision, incremented by each accepted membership mutation.",
+            "type": "integer",
+            "default": 0
+          },
+          "nextJoinOrdinal": {
+            "description": "The next never-reused join ordinal; it remains advanced after a member leaves and is not derived from Revision.",
+            "type": "integer",
+            "default": 0
           }
         },
         "required": [

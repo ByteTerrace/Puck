@@ -16,7 +16,10 @@ internal static class DeepEqual {
     public static string LastMismatchPath { get; private set; } = string.Empty;
 
     public static bool Compare(object? a, object? b, string path = "$") {
-        if (ReferenceEquals(objA: a, objB: b)) {
+        if (ReferenceEquals(
+            objA: a,
+            objB: b
+        )) {
             return true;
         }
         if (

@@ -9,7 +9,6 @@ namespace Puck.State;
 /// <param name="Max">The greatest value the symbol accepts.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PatternSymbol(CellName Name, decimal Min, decimal Max);
-
 /// <summary>The closed pattern vocabulary over a row's cell values, matched against the whole word. Complement and
 /// intersection are first-class, so "no two adjacent kings" and "holds a 2 and a 5" are single patterns rather than
 /// rule arithmetic.</summary>
@@ -56,7 +55,6 @@ public abstract record PatternNode {
     /// <summary>The item between <paramref name="Min"/> and <paramref name="Max"/> times.</summary>
     public sealed record Repeat(PatternNode Item, int Min, int Max) : PatternNode;
 }
-
 /// <summary>One row of the <c>patterns</c> section: a regular language over cell values, compiled once to a
 /// deterministic table the <c>$match:</c> operand runs allocation-free, one indexed step per token.</summary>
 /// <param name="Name">The pattern name a rule references.</param>
@@ -79,19 +77,18 @@ public sealed record PatternRow(
     int MaxStates = PatternCapacity.DefaultStates,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Value = null
 );
-
 /// <summary>Representation ceilings for the pattern section.</summary>
 public static class PatternCapacity {
-    /// <summary>The most pattern rows a document declares.</summary>
-    public const int MaxRows = 64;
-    /// <summary>The longest word one read walks: every source row fits, so a read is always decided.</summary>
-    public const int MaxWord = TopologyCompilation.MaxCells;
-    /// <summary>The most named symbols in one alphabet.</summary>
-    public const int MaxSymbols = 32;
-    /// <summary>The most times a <c>repeat</c> node may unroll its item.</summary>
-    public const int MaxRepeat = 64;
-    /// <summary>The state ceiling any row may budget: 256 states over 64 letters is a 64 KiB table.</summary>
-    public const int MaxStates = 256;
     /// <summary>The state budget a row that declares none gets.</summary>
     public const int DefaultStates = 64;
+    /// <summary>The most times a <c>repeat</c> node may unroll its item.</summary>
+    public const int MaxRepeat = 64;
+    /// <summary>The most pattern rows a document declares.</summary>
+    public const int MaxRows = 64;
+    /// <summary>The state ceiling any row may budget: 256 states over 64 letters is a 64 KiB table.</summary>
+    public const int MaxStates = 256;
+    /// <summary>The most named symbols in one alphabet.</summary>
+    public const int MaxSymbols = 32;
+    /// <summary>The longest word one read walks: every source row fits, so a read is always decided.</summary>
+    public const int MaxWord = TopologyCompilation.MaxCells;
 }

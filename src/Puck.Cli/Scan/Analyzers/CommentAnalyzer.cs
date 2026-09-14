@@ -26,7 +26,10 @@ internal sealed class CommentAnalyzer : ISourceAnalyzer {
                 var kind = trivia.Kind();
                 var isSingle = (kind == SyntaxKind.SingleLineCommentTrivia);
 
-                if (!isSingle && (kind != SyntaxKind.MultiLineCommentTrivia)) {
+                if (
+                    !isSingle &&
+                    (kind != SyntaxKind.MultiLineCommentTrivia)
+                ) {
                     continue;
                 }
 
@@ -37,7 +40,9 @@ internal sealed class CommentAnalyzer : ISourceAnalyzer {
                     .Append(value: "\"file\":").Append(value: ScanJsonl.JsonString(value: relative)).Append(value: ',')
                     .Append(value: "\"line\":").Append(value: startLine).Append(value: ',')
                     .Append(value: "\"endLine\":").Append(value: endLine).Append(value: ',')
-                    .Append(value: "\"kind\":").Append(value: (isSingle ? "\"single\"" : "\"multi\"")).Append(value: ',')
+                    .Append(value: "\"kind\":").Append(value: (isSingle
+                    ? "\"single\""
+                    : "\"multi\"")).Append(value: ',')
                     .Append(value: "\"text\":").Append(value: ScanJsonl.JsonString(value: text))
                     .Append(value: "}\n");
 
@@ -49,7 +54,10 @@ internal sealed class CommentAnalyzer : ISourceAnalyzer {
 
                 perFile[relative] = (perFile.GetValueOrDefault(key: relative) + 1);
 
-                if (!byFile.TryGetValue(key: relative, value: out var lines)) {
+                if (!byFile.TryGetValue(
+                    key: relative,
+                    value: out var lines
+                )) {
                     lines = [];
                     byFile[relative] = lines;
                 }
@@ -60,13 +68,15 @@ internal sealed class CommentAnalyzer : ISourceAnalyzer {
 
         var total = (single + multi);
 
-        Console.Error.WriteLine(
-            value: $"scan[comments]: {total} inline comments ({single} single-line, {multi} block) across {perFile.Count} files (of {corpus.FileCount} scanned).");
+        Console.Error.WriteLine(value: $"scan[comments]: {total} inline comments ({single} single-line, {multi} block) across {perFile.Count} files (of {corpus.FileCount} scanned).");
 
         foreach (var line in ScanJsonl.TopFiles(perFile: perFile)) {
             Console.Error.WriteLine(value: line);
         }
 
-        return (jsonl.ToString(), ScanJsonl.BuildGroupedChunks(byFile: byFile, maxPerChunk: options.MaxPerChunk));
+        return (jsonl.ToString(), ScanJsonl.BuildGroupedChunks(
+            byFile: byFile,
+            maxPerChunk: options.MaxPerChunk
+        ));
     }
 }

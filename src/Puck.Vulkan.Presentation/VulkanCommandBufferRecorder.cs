@@ -106,7 +106,8 @@ public sealed class VulkanCommandBufferRecorder : IVulkanCommandBufferRecorder {
         foreach (var drawCommand in drawCommands) {
             var pipelineId = ((drawCommand.PipelineId == default)
                 ? primaryPipeline.Key
-                : drawCommand.PipelineId);
+                : drawCommand.PipelineId
+            );
             var selectedPipeline = SelectPipeline(
                 graphicsPipelines: graphicsPipelines,
                 pipelineId: pipelineId

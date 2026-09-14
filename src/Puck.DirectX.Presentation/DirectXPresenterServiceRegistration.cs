@@ -33,9 +33,7 @@ public static class DirectXPresenterServiceRegistration {
         services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<DirectXDeviceContext>());
 
         services.TryAddSingleton<IDirectXVertexBufferApi>(implementationFactory: static _ => new DirectXNativeVertexBufferApi());
-        services.TryAddSingleton<IDirectXVertexBufferFactory>(implementationFactory: static sp => new DirectXVertexBufferFactory(
-            vertexBufferApi: sp.GetRequiredService<IDirectXVertexBufferApi>()
-        ));
+        services.TryAddSingleton<IDirectXVertexBufferFactory>(implementationFactory: static sp => new DirectXVertexBufferFactory(vertexBufferApi: sp.GetRequiredService<IDirectXVertexBufferApi>()));
         services.TryAddSingleton<IDirectXShaderCompilerApi>(implementationFactory: static _ => new DirectXNativeShaderCompilerApi());
 
         services.TryAddSingleton<IGpuCommandRecorder>(implementationFactory: static _ => new DirectXGpuCommandRecorder());
@@ -49,9 +47,7 @@ public static class DirectXPresenterServiceRegistration {
         // Optional capability: Direct3D 12 can export a shared texture for another backend on the same adapter to
         // import zero-copy. A host resolves this when present and falls back to the CPU-pixel transport otherwise.
         services.TryAddSingleton<IGpuSurfaceExportFactory>(implementationFactory: static _ => new DirectXGpuSurfaceExportFactory());
-        services.TryAddSingleton<IGpuVertexBufferFactory>(implementationFactory: static sp => new DirectXGpuVertexBufferFactory(
-            vertexBufferFactory: sp.GetRequiredService<IDirectXVertexBufferFactory>()
-        ));
+        services.TryAddSingleton<IGpuVertexBufferFactory>(implementationFactory: static sp => new DirectXGpuVertexBufferFactory(vertexBufferFactory: sp.GetRequiredService<IDirectXVertexBufferFactory>()));
 
         // Neutral presentation preferences (present mode + surface format); a consumer may register its own
         // before calling this to override the defaults (Vsync + R8G8B8A8).

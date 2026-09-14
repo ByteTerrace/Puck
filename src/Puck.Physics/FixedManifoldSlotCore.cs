@@ -71,50 +71,6 @@ internal static class FixedManifoldSlotCore {
     // The largest anchor movement, squared, that still reads as the same contact point rather than a new one.
     private static readonly FixedQ4816 MatchRadiusSquared = FixedQ4816.FromDouble(value: 0.09d);
 
-    private static int FindMatch<TSlot, TCandidate>(TSlot[] slots, bool[] claimed, in TCandidate candidate, int capacity)
-        where TSlot : struct, IManifoldSlot<TCandidate>
-        where TCandidate : struct, IManifoldCandidate {
-        var best = -1;
-        var bestDistance = FixedQ4816.MaxValue;
-        var candidateFeatureId = candidate.FeatureId;
-        var candidateSourceId = candidate.SourceId;
-        var candidateNormal = candidate.Normal;
-
-        for (var index = 0; (index < capacity); ++index) {
-            ref var slot = ref slots[index];
-
-            if (
-                !slot.Occupied ||
-                claimed[index] ||
-                (slot.FeatureId != candidateFeatureId) ||
-                (slot.SourceId != candidateSourceId) ||
-                (FixedVector3.Dot(
-                left: slot.Normal,
-                right: candidateNormal
-            ) < NormalAgreement)
-            ) {
-                continue;
-            }
-
-            if (!slot.TryMatchDistance(
-                candidate: in candidate,
-                distanceSquared: out var distance,
-                matchRadiusSquared: MatchRadiusSquared
-            )) {
-                continue;
-            }
-
-            // Nearest witness wins; the lowest slot index breaks an exact tie, so the winner never depends on which
-            // slot happened to be visited first.
-            if (distance < bestDistance) {
-                best = index;
-                bestDistance = distance;
-            }
-        }
-
-        return best;
-    }
-
     /// <summary>Counts the slots associated with a candidate on the most recent step.</summary>
     /// <param name="slots">The slot array.</param>
     /// <param name="capacity">The number of slots to scan.</param>
@@ -332,5 +288,49 @@ internal static class FixedManifoldSlotCore {
                 slot = default;
             }
         }
+    }
+
+    private static int FindMatch<TSlot, TCandidate>(TSlot[] slots, bool[] claimed, in TCandidate candidate, int capacity)
+        where TSlot : struct, IManifoldSlot<TCandidate>
+        where TCandidate : struct, IManifoldCandidate {
+        var best = -1;
+        var bestDistance = FixedQ4816.MaxValue;
+        var candidateFeatureId = candidate.FeatureId;
+        var candidateSourceId = candidate.SourceId;
+        var candidateNormal = candidate.Normal;
+
+        for (var index = 0; (index < capacity); ++index) {
+            ref var slot = ref slots[index];
+
+            if (
+                !slot.Occupied ||
+                claimed[index] ||
+                (slot.FeatureId != candidateFeatureId) ||
+                (slot.SourceId != candidateSourceId) ||
+                (FixedVector3.Dot(
+                left: slot.Normal,
+                right: candidateNormal
+            ) < NormalAgreement)
+            ) {
+                continue;
+            }
+
+            if (!slot.TryMatchDistance(
+                candidate: in candidate,
+                distanceSquared: out var distance,
+                matchRadiusSquared: MatchRadiusSquared
+            )) {
+                continue;
+            }
+
+            // Nearest witness wins; the lowest slot index breaks an exact tie, so the winner never depends on which
+            // slot happened to be visited first.
+            if (distance < bestDistance) {
+                best = index;
+                bestDistance = distance;
+            }
+        }
+
+        return best;
     }
 }

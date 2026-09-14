@@ -13,24 +13,26 @@ internal sealed class QueuedHostAudioStage : IPostStage<PostContext> {
     private const int RequestedSampleRate = 32_000;
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "queued-host-audio";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyAudio(
             attached: () => new MachineHost(
+                bootMode: MachineBootMode.Fast,
                 model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create(),
                 audioSampleRate: RequestedSampleRate
             ),
             detached: () => new MachineHost(
+                bootMode: MachineBootMode.Fast,
                 model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create()
             ),
@@ -39,6 +41,7 @@ internal sealed class QueuedHostAudioStage : IPostStage<PostContext> {
 
         return (result.Passed
             ? PostStageOutcome.Pass(detail: result.Detail)
-            : PostStageOutcome.Fail(detail: result.Detail));
+            : PostStageOutcome.Fail(detail: result.Detail)
+        );
     }
 }

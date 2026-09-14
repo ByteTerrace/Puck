@@ -46,25 +46,6 @@ public sealed class PeerIdentity : IDisposable {
     /// <summary>Generates a fresh P-256 identity.</summary>
     /// <returns>The new identity.</returns>
     public static PeerIdentity Create() => new(key: ECDsa.Create(curve: ECCurve.NamedCurves.nistP256));
-    /// <summary>Rebuilds an identity from a previously exported PKCS8 private key, through
-    /// <see cref="AttestationKeys.ImportPkcs8PrivateKey"/>: the whole span must be exactly one key, and the key
-    /// must be on P-256.</summary>
-    /// <param name="pkcs8PrivateKey">The bytes <see cref="ExportPkcs8PrivateKey"/> produced.</param>
-    /// <returns>The identity, carrying the same <see cref="Id"/> it had when exported.</returns>
-    /// <exception cref="ArgumentException">The bytes carry trailing data after the key, or the key is not on P-256.</exception>
-    /// <exception cref="CryptographicException">The bytes do not decode as a PKCS8 private key.</exception>
-    public static PeerIdentity FromPkcs8PrivateKey(ReadOnlySpan<byte> pkcs8PrivateKey) => new(key: AttestationKeys.ImportPkcs8PrivateKey(
-        algorithm: AttestationAlgorithms.EcdsaP256Sha256,
-        pkcs8: pkcs8PrivateKey
-    ));
-    /// <summary>Loads an identity a prior <see cref="Save(string)"/> persisted.</summary>
-    /// <param name="path">The key file's path.</param>
-    /// <returns>The identity.</returns>
-    /// <exception cref="ArgumentException">The file carries trailing data after the key, or the key is not on P-256.</exception>
-    /// <exception cref="CryptographicException">The file does not decode as a PKCS8 private key.</exception>
-    /// <exception cref="IOException">The file or its directory does not exist, or the file could not be read.</exception>
-    /// <exception cref="UnauthorizedAccessException">The caller may not read the file.</exception>
-    public static PeerIdentity Load(string path) => FromPkcs8PrivateKey(pkcs8PrivateKey: File.ReadAllBytes(path: path));
     /// <summary>Mints a self-signed X.509 certificate over this identity's own key — the credential a TLS-bearing
     /// transport presents, whose public key a remote peer's handshake compares against the identity this side
     /// offers. Server- and client-authentication usages are both asserted because a peer plays either TLS role.
@@ -105,11 +86,32 @@ public sealed class PeerIdentity : IDisposable {
             password: null
         );
     }
+    /// <inheritdoc/>
+    public void Dispose() => m_key.Dispose();
     /// <summary>Exports this identity's private key so it can be reloaded later with the same <see cref="Id"/>.
     /// The bytes are an unencrypted PKCS8 <c>PrivateKeyInfo</c>; a caller that needs an encrypted form wraps
     /// them itself, since none is offered here.</summary>
     /// <returns>The PKCS8 private key bytes.</returns>
     public byte[] ExportPkcs8PrivateKey() => m_key.ExportPkcs8PrivateKey();
+    /// <summary>Rebuilds an identity from a previously exported PKCS8 private key, through
+    /// <see cref="AttestationKeys.ImportPkcs8PrivateKey"/>: the whole span must be exactly one key, and the key
+    /// must be on P-256.</summary>
+    /// <param name="pkcs8PrivateKey">The bytes <see cref="ExportPkcs8PrivateKey"/> produced.</param>
+    /// <returns>The identity, carrying the same <see cref="Id"/> it had when exported.</returns>
+    /// <exception cref="ArgumentException">The bytes carry trailing data after the key, or the key is not on P-256.</exception>
+    /// <exception cref="CryptographicException">The bytes do not decode as a PKCS8 private key.</exception>
+    public static PeerIdentity FromPkcs8PrivateKey(ReadOnlySpan<byte> pkcs8PrivateKey) => new(key: AttestationKeys.ImportPkcs8PrivateKey(
+        algorithm: AttestationAlgorithms.EcdsaP256Sha256,
+        pkcs8: pkcs8PrivateKey
+    ));
+    /// <summary>Loads an identity a prior <see cref="Save(string)"/> persisted.</summary>
+    /// <param name="path">The key file's path.</param>
+    /// <returns>The identity.</returns>
+    /// <exception cref="ArgumentException">The file carries trailing data after the key, or the key is not on P-256.</exception>
+    /// <exception cref="CryptographicException">The file does not decode as a PKCS8 private key.</exception>
+    /// <exception cref="IOException">The file or its directory does not exist, or the file could not be read.</exception>
+    /// <exception cref="UnauthorizedAccessException">The caller may not read the file.</exception>
+    public static PeerIdentity Load(string path) => FromPkcs8PrivateKey(pkcs8PrivateKey: File.ReadAllBytes(path: path));
     /// <summary>Persists this identity's private key to a file <see cref="Load(string)"/> can read back. The file
     /// holds the unencrypted private key, so possession of it is the whole identity: it is written to a sibling
     /// <c>.tmp</c> file created fresh (owner read/write only on Unix), flushed to disk, and then moved over
@@ -181,6 +183,4 @@ public sealed class PeerIdentity : IDisposable {
             subject: Id.Subject!
         );
     }
-    /// <inheritdoc/>
-    public void Dispose() => m_key.Dispose();
 }

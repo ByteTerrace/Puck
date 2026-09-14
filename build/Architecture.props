@@ -110,7 +110,7 @@
         would reopen the hole through the .Presentation row, letting an engine service reach a backend by
         referencing a presentation wrapper.
 
-        MEASURED, 2026-08-14: zero exceptions across the live graph. Puck.Post was the sole exception before
+        Empirically verified: zero exceptions across the live graph. Puck.Post was the sole exception before
         its quarantine; experimental projects are now structurally outside this gate, so retaining that entry
         would be dead policy for an assembly the build does not produce. The absent finding remains load-bearing:
         the report proves no Engine-services project reaches a backend, rather than producing an empty sheet by
@@ -214,7 +214,7 @@
         <!-- The headless P1 split's server row (docs/project-map.md's Puck.World.Server row) — everything
              Puck.World.Protocol's profile carries (Server references both Schema and Protocol), plus Puck.Storage
              (the owned-world cloud sync substrate WorldOwnedWorldSync reads through). Puck.Attestation also arrives
-             directly (WorldTcpHost/WorldTcpWireFormat frame the admission handshake's attestation bytes).
+             directly (WorldPeerHost/WorldPeerWireFormat frame the admission handshake's attestation bytes).
              Puck.Shaders arrives for WorldProbeKinds (the probe-kind manifest scan) and Puck.SignedDistance for the
              solid-field bake (WorldColliderSet/WorldSolidField) — neither is the emulator/renderer surface this row
              is deliberately WITHOUT: the screen-machine host (WorldMachineHost) and its shipped engines
@@ -241,15 +241,16 @@
         <!-- The addon guest host, split out of Puck.World.Server so the authoritative server carries no
              WASM/Wasmtime surface of its own — everything Puck.World.Server's profile carries (Addons references
              Server directly), plus Puck.Scripting itself (the guest ABI AddonSimulationPump, hosted directly in
-             this project, validates against) and Puck.Assets (the module bytes a mount reads). The screen-machine
-             host also lives here (Machines/WorldMachineHost, Machines/WorldScreenMachineEngines), which is why the
-             emulator cores (Puck.AdvancedGamingBrick, Puck.AdvancedGamingBrick.Forge, Puck.HumbleGamingBrick,
-             Puck.HumbleGamingBrick.Forge, and
-             their own Puck.GamingBricks/Puck.GamingBricks.Forge transitive edges) arrive here rather than Server —
-             a machine is a mounted guest, like a WASM addon. No Puck.SdfVm (the machine host never touches the
-             renderer) and no Puck.Input: the source-id vocabulary AddonSimulationPump's predecessor once read moved
-             to Puck.World, not here. Same absence enforced: no Backends row, no Presentation row, no Puck.Overlays. -->
-        <PuckArchitectureProfile Include="Puck.World.Addons" Closure="Puck.Abstractions;Puck.AdvancedGamingBrick.Forge;Puck.AdvancedGamingBrick;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.HumbleGamingBrick.Forge;Puck.GamingBricks.Forge;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Scripting;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
+             this project, validates against) and Puck.Assets (the module bytes a mount reads). Dedicated strictly to
+             WASM scripting guests. No Puck.SdfVm and no Puck.Input: the source-id vocabulary AddonSimulationPump's
+             predecessor once read moved to Puck.World, not here. Same absence enforced: no Backends row, no Presentation
+             row, no Puck.Overlays. -->
+        <PuckArchitectureProfile Include="Puck.World.Addons" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Scripting;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
+        <!-- The screen-machine host, split out of Puck.World.Addons so Addons remains strictly dedicated to
+             WASM scripting guests — everything Puck.World.Server's profile carries (Machines references
+             Server directly), plus Puck.Abstractions' machine and content-provider contracts. Content parsing,
+             compilation, and symbols are extension-owned; neither a forge nor concrete emulator is referenced. -->
+        <PuckArchitectureProfile Include="Puck.World.Machines" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
         <!-- The control plane that follows the authority (docs/project-map.md's Puck.World.Console row):
              IWorldConsoleAuthority and the server-only console modules moved out of Puck.World (world.grant/
              .revoke/.grants/.why, world.groups/.ownership, world.looks/.population.spawn, world.market, world.peers,
@@ -319,8 +320,8 @@
         consumers in the tree, holding internals access to a composition root. They were also exactly what an
         analyzer-hosted gate could not have seen, since analyzer injection is off for $(IsFileBasedProgram),
         and a gate whose coverage silently excludes its most privileged consumers is worse than no gate. That
-        argument is why the gate hooks where it does and is kept for it. Both grants are GONE as of the
-        2026-08-02 quarantine: the scripts left the build, so the privilege was dead config that this ledger
+        argument is why the gate hooks where it does and is kept for it. Both grants were removed under the
+        quarantine: the scripts left the build, so the privilege was dead config that this ledger
         would have kept blessing. If those proofs are ever re-homed in a real project, the grant is re-issued
         to THAT assembly and named here — never restored to a file name.
 

@@ -33,7 +33,11 @@ public sealed class ProbeSocketClassJsonConverter : JsonConverter<ProbeSocketCla
         writer.WriteStringValue(value: value switch {
             ProbeSocketClass.Frame => "frame",
             ProbeSocketClass.StrobePair => "strobePair",
-            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "The probe socket class is not defined."),
+            _ => throw new ArgumentOutOfRangeException(
+            nameof(value),
+            value,
+            "The probe socket class is not defined."
+        ),
         });
     }
 }
@@ -64,7 +68,11 @@ public sealed class ProbeKindClassJsonConverter : JsonConverter<ProbeKindClass> 
         writer.WriteStringValue(value: value switch {
             ProbeKindClass.Kernel => "kernel",
             ProbeKindClass.Model => "model",
-            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "The probe kind class is not defined."),
+            _ => throw new ArgumentOutOfRangeException(
+            nameof(value),
+            value,
+            "The probe kind class is not defined."
+        ),
         });
     }
 }
@@ -88,7 +96,7 @@ public sealed record ProbeKindOutput(string Of, string Format = ProbeKindOutput.
 /// <param name="Finalize">The single-dispatch entry point that writes the reading's channels.</param>
 public sealed record ProbeKindKernel(string Source, string Accumulate, string Finalize);
 /// <summary>
-/// A <c>puck.probe.v1</c> probe kind manifest: one <c>&lt;id&gt;.puck.probe.json</c> declaring an probe's
+/// A <c>puck.probe.manifest.v1</c> probe kind manifest: one <c>&lt;id&gt;.puck.probe.json</c> declaring an probe's
 /// input, its channels, and — for a <see cref="ProbeKindClass.Kernel"/> kind — the HLSL source and entry points a
 /// kernel host compiles and runs. Registered exactly the way a <see cref="ShaderSetManifest"/> registers a shader
 /// set: a document names a kind by id, and shipping the manifest beside its kernel source (when it has one) IS
@@ -132,7 +140,11 @@ public sealed partial record ProbeKindManifest(
             }
 
             for (var index = 0; (index < Inputs.Count); index++) {
-                if (string.Equals(a: Inputs[index].Name, b: Trigger, comparisonType: StringComparison.Ordinal)) {
+                if (string.Equals(
+                    a: Inputs[index].Name,
+                    b: Trigger,
+                    comparisonType: StringComparison.Ordinal
+                )) {
                     return index;
                 }
             }
@@ -144,7 +156,7 @@ public sealed partial record ProbeKindManifest(
     /// <summary>The file suffix every manifest carries; the text before it is the kind's id.</summary>
     public const string FileSuffix = ".puck.probe.json";
     /// <summary>The required <c>$schema</c> value of every <see cref="ProbeKindManifest"/> document.</summary>
-    public const string SchemaTag = "puck.probe.v1";
+    public const string SchemaTag = "puck.probe.manifest.v1";
     /// <summary>The channel-count ceiling — matches <c>Puck.Platform.Probes.ProbeReadingLimits.MaxChannels</c>,
     /// the fixed slot count a <c>ProbeReading</c> carries; keep the two in sync.</summary>
     public const int MaxChannels = 8;
@@ -164,32 +176,61 @@ public sealed partial record ProbeKindManifest(
     /// <exception cref="InvalidDataException">The manifest is malformed under any rule above.</exception>
     public static ProbeKindManifest Load(string manifestPath) {
         if (!File.Exists(path: manifestPath)) {
-            throw new FileNotFoundException(fileName: manifestPath, message: $"Probe kind manifest not found: {manifestPath}");
+            throw new FileNotFoundException(
+                fileName: manifestPath,
+                message: $"Probe kind manifest not found: {manifestPath}"
+            );
         }
 
         ProbeKindManifest manifest;
 
         try {
-            manifest = (JsonSerializer.Deserialize(json: File.ReadAllText(path: manifestPath), jsonTypeInfo: ProbeKindManifestJsonContext.Default.ProbeKindManifest)
+            manifest = (JsonSerializer.Deserialize(
+                json: File.ReadAllText(path: manifestPath),
+                jsonTypeInfo: ProbeKindManifestJsonContext.Default.ProbeKindManifest
+            )
                 ?? throw new InvalidDataException(message: $"Probe kind manifest is empty or 'null': {manifestPath}"));
         } catch (JsonException exception) {
-            throw new InvalidDataException(message: $"Probe kind manifest '{manifestPath}' is malformed: {exception.Message}", innerException: exception);
+            throw new InvalidDataException(
+                message: $"Probe kind manifest '{manifestPath}' is malformed: {exception.Message}",
+                innerException: exception
+            );
         }
 
-        if (!string.Equals(a: manifest.Schema, b: SchemaTag, comparisonType: StringComparison.Ordinal)) {
+        if (!string.Equals(
+            a: manifest.Schema,
+            b: SchemaTag,
+            comparisonType: StringComparison.Ordinal
+        )) {
             throw new InvalidDataException(message: $"Probe kind manifest '{manifestPath}' declares '$schema' = '{manifest.Schema}'; expected '{SchemaTag}'.");
         }
 
         var fileName = Path.GetFileName(path: manifestPath);
-        var stem = (fileName.EndsWith(comparisonType: StringComparison.Ordinal, value: FileSuffix) ? fileName[..^FileSuffix.Length] : null);
+        var stem = (fileName.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: FileSuffix
+        )
+            ? fileName[..^FileSuffix.Length]
+            : null
+        );
 
-        if ((stem is null) || !string.Equals(a: stem, b: manifest.Name, comparisonType: StringComparison.Ordinal)) {
+        if (
+            (stem is null) ||
+            !string.Equals(
+            a: stem,
+            b: manifest.Name,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
             throw new InvalidDataException(message: $"Probe kind manifest '{manifestPath}' is named '{manifest.Name}'; the file must be '{manifest.Name}{FileSuffix}'.");
         }
 
         var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: manifestPath)) ?? "");
 
-        if ((manifest.Inputs is null) || (manifest.Inputs.Count == 0)) {
+        if (
+            (manifest.Inputs is null) ||
+            (manifest.Inputs.Count == 0)
+        ) {
             throw new InvalidDataException(message: $"'{manifest.Name}' manifest declares no inputs.");
         }
         if (manifest.Inputs.Count > MaxSockets) {
@@ -214,7 +255,11 @@ public sealed partial record ProbeKindManifest(
             if (!socketNames.Contains(item: output.Of)) {
                 throw new InvalidDataException(message: $"'{manifest.Name}' manifest's output.of '{output.Of}' does not name a declared socket.");
             }
-            if (!string.Equals(a: output.Format, b: ProbeKindOutput.Rgba8, comparisonType: StringComparison.Ordinal)) {
+            if (!string.Equals(
+                a: output.Format,
+                b: ProbeKindOutput.Rgba8,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 throw new InvalidDataException(message: $"'{manifest.Name}' manifest's output format '{output.Format}' is not {ProbeKindOutput.Rgba8}.");
             }
         }
@@ -237,7 +282,10 @@ public sealed partial record ProbeKindManifest(
             if (channel.Min > channel.Max) {
                 throw new InvalidDataException(message: $"'{manifest.Name}' manifest's channel '{channel.Name}' has min {Format(value: channel.Min)} above max {Format(value: channel.Max)}.");
             }
-            if ((channel.Neutral < channel.Min) || (channel.Neutral > channel.Max)) {
+            if (
+                (channel.Neutral < channel.Min) ||
+                (channel.Neutral > channel.Max)
+            ) {
                 throw new InvalidDataException(message: $"'{manifest.Name}' manifest's channel '{channel.Name}' has neutral {Format(value: channel.Neutral)} outside [{Format(value: channel.Min)}, {Format(value: channel.Max)}].");
             }
         }
@@ -249,18 +297,30 @@ public sealed partial record ProbeKindManifest(
             if (string.IsNullOrEmpty(value: kernel.Source)) {
                 throw new InvalidDataException(message: $"'{manifest.Name}' manifest's kernel.source is empty.");
             }
-            if (string.IsNullOrEmpty(value: kernel.Accumulate) || string.IsNullOrEmpty(value: kernel.Finalize)) {
+            if (
+                string.IsNullOrEmpty(value: kernel.Accumulate) ||
+                string.IsNullOrEmpty(value: kernel.Finalize)
+            ) {
                 throw new InvalidDataException(message: $"'{manifest.Name}' manifest's kernel accumulate/finalize entry points must be non-empty.");
             }
 
-            var sourcePath = Path.Combine(path1: directory, path2: kernel.Source);
+            var sourcePath = Path.Combine(
+                path1: directory,
+                path2: kernel.Source
+            );
 
             if (!File.Exists(path: sourcePath)) {
-                throw new FileNotFoundException(fileName: sourcePath, message: $"'{manifest.Name}' manifest's kernel source '{kernel.Source}' does not exist beside the manifest.");
+                throw new FileNotFoundException(
+                    fileName: sourcePath,
+                    message: $"'{manifest.Name}' manifest's kernel source '{kernel.Source}' does not exist beside the manifest."
+                );
             }
         }
 
-        ShaderConfigBinding.ValidateSchema(schema: manifest.Config, ownerName: manifest.Name);
+        ShaderConfigBinding.ValidateSchema(
+            schema: manifest.Config,
+            ownerName: manifest.Name
+        );
 
         return (manifest with { Directory = directory });
     }
@@ -269,7 +329,11 @@ public sealed partial record ProbeKindManifest(
     /// <returns>The bound values, every absent field at its default.</returns>
     /// <exception cref="InvalidOperationException">The configuration is invalid.</exception>
     public ShaderConfigValues BindConfig(JsonElement? config) {
-        return (TryBindConfig(config: config, reason: out var reason, values: out var values)
+        return (TryBindConfig(
+            config: config,
+            reason: out var reason,
+            values: out var values
+        )
             ? values
             : throw new InvalidOperationException(message: $"'{Name}' config is invalid: {reason}")
         );
@@ -277,7 +341,10 @@ public sealed partial record ProbeKindManifest(
     /// <summary>Emits this kind's config schema as a JSON Schema object.</summary>
     /// <returns>The schema node.</returns>
     public JsonObject ConfigJsonSchema() =>
-        ShaderConfigBinding.JsonSchema(schema: Config, description: Description);
+        ShaderConfigBinding.JsonSchema(
+            schema: Config,
+            description: Description
+        );
     /// <summary>Validates a document's <c>config</c> against this kind's config schema and resolves every absent
     /// field to its default.</summary>
     /// <param name="config">The authored configuration, or <see langword="null"/> when the document supplied none.</param>
@@ -285,7 +352,13 @@ public sealed partial record ProbeKindManifest(
     /// <param name="reason">The refusal reason naming the field, set only when this returns <see langword="false"/>.</param>
     /// <returns><see langword="true"/> when <paramref name="config"/> is valid.</returns>
     public bool TryBindConfig(JsonElement? config, out ShaderConfigValues values, out string reason) =>
-        ShaderConfigBinding.TryBind(schema: Config, config: config, ownerName: Name, values: out values, reason: out reason);
+        ShaderConfigBinding.TryBind(
+            schema: Config,
+            config: config,
+            ownerName: Name,
+            values: out values,
+            reason: out reason
+        );
 
     /// <summary>The constant-buffer size granule: a Direct3D 11 constant buffer's byte width must be a multiple of
     /// 16, so <see cref="ConstantsBlock"/> pads the packed fields up to it.</summary>
@@ -312,12 +385,19 @@ public sealed partial record ProbeKindManifest(
             index++;
         }
 
-        var offsets = ShaderPushConstantLayout.ComputeOffsets(sizeBytes: out _, types: types);
+        var offsets = ShaderPushConstantLayout.ComputeOffsets(
+            sizeBytes: out _,
+            types: types
+        );
 
         index = 0;
 
         foreach (var (name, candidate) in Config) {
-            if (string.Equals(a: name, b: field, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(
+                a: name,
+                b: field,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 offset = ((int)offsets[index]);
                 type = candidate.Type;
 
@@ -353,7 +433,10 @@ public sealed partial record ProbeKindManifest(
             index++;
         }
 
-        var offsets = ShaderPushConstantLayout.ComputeOffsets(sizeBytes: out var sizeBytes, types: types);
+        var offsets = ShaderPushConstantLayout.ComputeOffsets(
+            sizeBytes: out var sizeBytes,
+            types: types
+        );
         var paddedSize = (((((int)sizeBytes) + (ConstantsBlockAlignment - 1)) / ConstantsBlockAlignment) * ConstantsBlockAlignment);
         var block = new byte[paddedSize];
 

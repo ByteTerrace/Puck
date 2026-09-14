@@ -16,7 +16,10 @@ public sealed class InputSourceVocabularyCaseTests {
             kind: out var kind,
             sourceId: sourceId
         ));
-        Assert.Equal(actual: kind, expected: CommandValueKind.Digital);
+        Assert.Equal(
+            actual: kind,
+            expected: CommandValueKind.Digital
+        );
         Assert.True(condition: InputSourceVocabulary.IsKnownSourceId(sourceId: sourceId));
     }
     [InlineData("Keyboard.A")]

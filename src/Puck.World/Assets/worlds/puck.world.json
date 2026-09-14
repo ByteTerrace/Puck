@@ -123,7 +123,7 @@
           }
         ],
         "modifiers": [],
-        "version": "puck.bindings.v1"
+        "version": "puck.input.bindings.v1"
       },
       "id": "bare"
     }
@@ -146,7 +146,7 @@
       "operations": [
         "ProduceSteeringIntent"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Motion",
@@ -162,7 +162,7 @@
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Producer",
@@ -175,7 +175,7 @@
         "$type": "designated",
         "register": "companion"
       },
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Producer",
@@ -183,7 +183,7 @@
       "operations": [
         "ProduceFlockIntent"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Producer",
@@ -191,7 +191,7 @@
       "operations": [
         "ProduceFlockIntent"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Producer",
@@ -206,7 +206,7 @@
         "domain": "deck",
         "register": "quarry"
       },
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     },
     {
       "kind": "Motion",
@@ -222,7 +222,7 @@
         "IntegratePlanarAndVerticalVelocity",
         "CommitPose"
       ],
-      "version": "puck.body-motion.v1"
+      "version": "puck.body.program.v1"
     }
   ],
   "cameras": [
@@ -257,11 +257,11 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.9
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -295,11 +295,11 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -333,11 +333,11 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -371,11 +371,11 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -409,11 +409,11 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -447,11 +447,11 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -485,11 +485,11 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -523,11 +523,11 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -561,11 +561,11 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -599,11 +599,11 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -637,11 +637,11 @@
             }
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "fieldOfViewRadians": 0.85
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     },
     {
@@ -653,7 +653,7 @@
         "name": "district-select",
         "operations": [
           {
-            "$type": "select",
+            "$type": "selectProgram",
             "cases": [
               {
                 "program": "plaza-cam",
@@ -704,7 +704,7 @@
             "key": "state.captureStation"
           }
         ],
-        "version": "puck.camera.v1"
+        "version": "puck.camera.program.v1"
       }
     }
   ],
@@ -7846,12 +7846,12 @@
         "palette": [
           {
             "color": "state.fishColors.body",
-            "shininess": 40,
+            "roughness": 0.613,
             "specular": 0.3
           },
           {
             "color": "state.fishColors.tail",
-            "shininess": 40,
+            "roughness": 0.613,
             "specular": 0.3
           }
         ],
@@ -8202,17 +8202,17 @@
         "palette": [
           {
             "color": "state.islandColors.meadow",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.04
           },
           {
             "color": "state.islandColors.plaza",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.08
           },
           {
             "color": "state.islandColors.soil",
-            "shininess": 6,
+            "roughness": 0.875,
             "specular": 0.03
           }
         ],
@@ -8285,12 +8285,12 @@
         "palette": [
           {
             "color": "state.islandColors.meadow",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.04
           },
           {
             "color": "state.islandColors.soil",
-            "shininess": 6,
+            "roughness": 0.875,
             "specular": 0.03
           }
         ],
@@ -8350,12 +8350,12 @@
         "palette": [
           {
             "color": "state.islandColors.rock",
-            "shininess": 10,
+            "roughness": 0.823,
             "specular": 0.05
           },
           {
             "color": "state.islandColors.rockDeep",
-            "shininess": 10,
+            "roughness": 0.823,
             "specular": 0.05
           }
         ],
@@ -8576,12 +8576,12 @@
         "palette": [
           {
             "color": "state.islandColors.rock",
-            "shininess": 10,
+            "roughness": 0.823,
             "specular": 0.05
           },
           {
             "color": "state.islandColors.meadow",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.04
           }
         ],
@@ -8678,12 +8678,12 @@
         "palette": [
           {
             "color": "state.islandColors.rock",
-            "shininess": 6,
+            "roughness": 0.875,
             "specular": 0.05
           },
           {
             "color": "state.islandColors.rockDeep",
-            "shininess": 10,
+            "roughness": 0.823,
             "specular": 0.08
           }
         ],
@@ -8753,19 +8753,19 @@
         "palette": [
           {
             "color": "state.islandColors.archStone",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.2
           },
           {
             "color": "state.islandColors.archScreen",
             "emissive": 0.12,
-            "shininess": 24,
+            "roughness": 0.706,
             "specular": 0.4
           },
           {
             "color": "state.districtColors.dive",
             "emissive": 0.55,
-            "shininess": 18,
+            "roughness": 0.749,
             "specular": 0.3
           }
         ],
@@ -8904,19 +8904,19 @@
         "palette": [
           {
             "color": "state.islandColors.archStone",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.2
           },
           {
             "color": "state.islandColors.archScreen",
             "emissive": 0.12,
-            "shininess": 24,
+            "roughness": 0.706,
             "specular": 0.4
           },
           {
             "color": "state.districtColors.kart",
             "emissive": 0.55,
-            "shininess": 18,
+            "roughness": 0.749,
             "specular": 0.3
           }
         ],
@@ -9055,19 +9055,19 @@
         "palette": [
           {
             "color": "state.islandColors.archStone",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.2
           },
           {
             "color": "state.islandColors.archScreen",
             "emissive": 0.12,
-            "shininess": 24,
+            "roughness": 0.706,
             "specular": 0.4
           },
           {
             "color": "state.districtColors.jump",
             "emissive": 0.55,
-            "shininess": 18,
+            "roughness": 0.749,
             "specular": 0.3
           }
         ],
@@ -9206,19 +9206,19 @@
         "palette": [
           {
             "color": "state.islandColors.archStone",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.2
           },
           {
             "color": "state.islandColors.archScreen",
             "emissive": 0.12,
-            "shininess": 24,
+            "roughness": 0.706,
             "specular": 0.4
           },
           {
             "color": "state.districtColors.studio",
             "emissive": 0.55,
-            "shininess": 18,
+            "roughness": 0.749,
             "specular": 0.3
           }
         ],
@@ -9348,7 +9348,7 @@
         "palette": [
           {
             "color": "state.islandColors.plaza",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.08
           }
         ],
@@ -9383,17 +9383,17 @@
         "palette": [
           {
             "color": "state.islandColors.plaza",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.08
           },
           {
             "color": "state.islandColors.timber",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.05
           },
           {
             "color": "state.islandColors.roof",
-            "shininess": 6,
+            "roughness": 0.875,
             "specular": 0.04
           }
         ],
@@ -10153,7 +10153,7 @@
       "name": "seat2-studio-look-cycle"
     }
   ],
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "seatDefaults": {
     "seatCameraFeel": {
       "gyro": {
@@ -10661,14 +10661,14 @@
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "eventSeq",
-        "nonNegative": true,
         "value": 0
       },
       {
         "kind": "Int",
+        "min": 0,
         "name": "claimSeq",
-        "nonNegative": true,
         "value": 0
       },
       {
@@ -10702,7 +10702,6 @@
         "max": 50400,
         "min": 0,
         "name": "claimTicks",
-        "nonNegative": true,
         "value": 0
       },
       {
@@ -10818,8 +10817,8 @@
       {
         "capacity": 64,
         "kind": "Int",
-        "name": "boneHolderClaimMark",
-        "nonNegative": true
+        "min": 0,
+        "name": "boneHolderClaimMark"
       },
       {
         "cells": [
@@ -10996,7 +10995,7 @@
           "worldAxes": false
         },
         {
-          "$type": "fov",
+          "$type": "fieldOfView",
           "fieldOfViewRadians": 0.9599311
         },
         {
@@ -11004,7 +11003,7 @@
           "row": "chase"
         }
       ],
-      "version": "puck.camera.v1"
+      "version": "puck.camera.program.v1"
     }
   },
   "references": [

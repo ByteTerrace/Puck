@@ -32,6 +32,12 @@ namespace Puck.World;
 /// <param name="Genlock">The external-clock election policy (shape-only validation; the registry interprets the id), or <see langword="null"/> for automatic election.</param>
 /// <param name="Listen">The effective QUIC listen endpoint (<c>host:port</c>), or <see langword="null"/> to stay
 /// loopback-only.</param>
+/// <param name="Title">The authored window title, or <see langword="null"/> for the engine's own. Pure author
+/// branding: durable configuration with no CLI reflection, because nothing about a single run wants a different
+/// caption.</param>
+/// <param name="Icon">The authored window-icon path AS WRITTEN in the document (document-relative unless rooted), or
+/// <see langword="null"/> for the host executable's own icon. Resolved to an absolute path at the composition root,
+/// where the document's location is known — the platform backend never learns what a world document is.</param>
 internal sealed record WorldHostSettings(
     WorldHostPresentation Presentation,
     bool HostsOnDirectX,
@@ -49,7 +55,9 @@ internal sealed record WorldHostSettings(
     bool RayQuery,
     bool Timing,
     string? Genlock,
-    string? Listen
+    string? Listen,
+    string? Title,
+    string? Icon
 ) {
     /// <summary>Whether this boot composes the authoritative core alone — no window, no GPU device, no swapchain, no
     /// audio device. One of the three predicates <c>Program.cs</c> branches boot-shape registration on.</summary>
@@ -147,7 +155,9 @@ internal sealed record WorldHostSettings(
             RayQuery: defaults.RayQuery,
             Timing: defaults.Timing,
             Genlock: defaults.Genlock,
-            Listen: (listenOverride ?? defaults.Listen)
+            Listen: (listenOverride ?? defaults.Listen),
+            Title: defaults.Title,
+            Icon: defaults.Icon
         );
     }
 }

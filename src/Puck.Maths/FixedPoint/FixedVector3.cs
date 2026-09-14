@@ -217,10 +217,25 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             paramName: nameof(maxDelta)
         );
 
-        var (separationX, targetGreaterX) = FixedVectorMath.RawSeparation(currentRaw: current.X.Value, targetRaw: target.X.Value);
-        var (separationY, targetGreaterY) = FixedVectorMath.RawSeparation(currentRaw: current.Y.Value, targetRaw: target.Y.Value);
-        var (separationZ, targetGreaterZ) = FixedVectorMath.RawSeparation(currentRaw: current.Z.Value, targetRaw: target.Z.Value);
-        var maxSeparation = Math.Max(val1: separationX, val2: Math.Max(val1: separationY, val2: separationZ));
+        var (separationX, targetGreaterX) = FixedVectorMath.RawSeparation(
+            currentRaw: current.X.Value,
+            targetRaw: target.X.Value
+        );
+        var (separationY, targetGreaterY) = FixedVectorMath.RawSeparation(
+            currentRaw: current.Y.Value,
+            targetRaw: target.Y.Value
+        );
+        var (separationZ, targetGreaterZ) = FixedVectorMath.RawSeparation(
+            currentRaw: current.Z.Value,
+            targetRaw: target.Z.Value
+        );
+        var maxSeparation = Math.Max(
+            val1: separationX,
+            val2: Math.Max(
+                val1: separationY,
+                val2: separationZ
+            )
+        );
 
         if (maxSeparation <= ((ulong)long.MaxValue)) {
             var delta = (target - current);
@@ -238,11 +253,24 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
         // reconstruction) per-axis separations. The addition below cannot overflow: the true separation on every axis
         // that moves is strictly larger than that axis's own step, so the landed point stays strictly between
         // current and target on the real line, a range both endpoints already witness is representable.
-        var dx = FixedVectorMath.SignedFromMagnitude(magnitude: (separationX >> 1), negative: !targetGreaterX);
-        var dy = FixedVectorMath.SignedFromMagnitude(magnitude: (separationY >> 1), negative: !targetGreaterY);
-        var dz = FixedVectorMath.SignedFromMagnitude(magnitude: (separationZ >> 1), negative: !targetGreaterZ);
+        var dx = FixedVectorMath.SignedFromMagnitude(
+            magnitude: (separationX >> 1),
+            negative: !targetGreaterX
+        );
+        var dy = FixedVectorMath.SignedFromMagnitude(
+            magnitude: (separationY >> 1),
+            negative: !targetGreaterY
+        );
+        var dz = FixedVectorMath.SignedFromMagnitude(
+            magnitude: (separationZ >> 1),
+            negative: !targetGreaterZ
+        );
 
-        var (unitX, unitY, unitZ) = FixedVectorMath.Normalize(x: dx, y: dy, z: dz);
+        var (unitX, unitY, unitZ) = FixedVectorMath.Normalize(
+            x: dx,
+            y: dy,
+            z: dz
+        );
         var stepX = (FixedQ4816.FromRawBits(value: unitX) * maxDelta);
         var stepY = (FixedQ4816.FromRawBits(value: unitY) * maxDelta);
         var stepZ = (FixedQ4816.FromRawBits(value: unitZ) * maxDelta);

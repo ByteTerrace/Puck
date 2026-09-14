@@ -15,17 +15,66 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed class MotionScalarPositivityLawTests {
     [Fact]
+    public void IdentityMoveSpeedSetterAcceptsPositive() {
+        var identity = WorldIdentity.Pinned(
+            name: "law",
+            moveSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 6.0),
+            turnSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 3.0),
+            defaults: Fixtures.BuildDocument().PlayerDefaults
+        );
+
+        identity.SetMoveSpeed(value: 4.5f);
+
+        Assert.NotNull(@object: identity.FixedMoveSpeed);
+        Assert.Equal(
+            expected: 4.5f,
+            actual: ((float)((double)identity.FixedMoveSpeed!.Value)),
+            precision: 3
+        );
+    }
+    [Fact]
+    public void IdentityMoveSpeedSetterThrowsOnNonPositive() {
+        var identity = WorldIdentity.Pinned(
+            name: "law",
+            moveSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 6.0),
+            turnSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 3.0),
+            defaults: Fixtures.BuildDocument().PlayerDefaults
+        );
+
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.SetMoveSpeed(value: -5f));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.SetMoveSpeed(value: 0f));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.SetTurnSpeed(value: float.NaN));
+    }
+    [Fact]
     public void NegativeEnvelopeMinRefusesByName() {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
         var motion = kit.Motion;
         var negative = document with {
-            KitRowsRaw = [kit with { Motion = motion with { Speed = motion.Speed with { Envelope = new MotionScalarEnvelope(Max: 10f, Min: -100f) } } }],
+            KitRowsRaw = [kit with { Motion = motion with { Speed = motion.Speed with { Envelope = new MotionScalarEnvelope(
+                Max: 10f,
+                Min: -100f
+            ) } } }],
         };
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: negative, neighbours: null, reason: out var reason), userMessage: "a [-100, 10] envelope was expected to refuse");
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "speed.envelope.min");
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "-100");
+        Assert.False(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: negative,
+                neighbours: null,
+                reason: out var reason
+            ),
+            userMessage: "a [-100, 10] envelope was expected to refuse"
+        );
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "speed.envelope.min"
+        );
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "-100"
+        );
     }
     [Fact]
     public void NonNegativeEnvelopeValidates() {
@@ -34,26 +83,19 @@ public sealed class MotionScalarPositivityLawTests {
         var motion = kit.Motion;
         // Min 0 is the legitimate edge (full slowdown admitted); the kit's own speed.value must sit inside the bound.
         var control = document with {
-            KitRowsRaw = [kit with { Motion = motion with { Speed = motion.Speed with { Envelope = new MotionScalarEnvelope(Min: 0f, Max: (motion.Speed.Value + 1f)) } } }],
+            KitRowsRaw = [kit with { Motion = motion with { Speed = motion.Speed with { Envelope = new MotionScalarEnvelope(
+                Min: 0f,
+                Max: (motion.Speed.Value + 1f)
+            ) } } }],
         };
 
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, neighbours: null, reason: out var reason), userMessage: reason);
-    }
-    [Fact]
-    public void IdentityMoveSpeedSetterThrowsOnNonPositive() {
-        var identity = WorldIdentity.Pinned(name: "law", moveSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 6.0), turnSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 3.0), defaults: Fixtures.BuildDocument().PlayerDefaults);
-
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.SetMoveSpeed(value: -5f));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.SetMoveSpeed(value: 0f));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.SetTurnSpeed(value: float.NaN));
-    }
-    [Fact]
-    public void IdentityMoveSpeedSetterAcceptsPositive() {
-        var identity = WorldIdentity.Pinned(name: "law", moveSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 6.0), turnSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 3.0), defaults: Fixtures.BuildDocument().PlayerDefaults);
-
-        identity.SetMoveSpeed(value: 4.5f);
-
-        Assert.NotNull(@object: identity.FixedMoveSpeed);
-        Assert.Equal(expected: 4.5f, actual: ((float)((double)identity.FixedMoveSpeed!.Value)), precision: 3);
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: control,
+                neighbours: null,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
     }
 }

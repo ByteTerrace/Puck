@@ -11,114 +11,6 @@ namespace Puck.HumbleGamingBrick.Post;
 /// deliberately omits (<c>XOAM</c>, <c>RTC</c>, <c>HUC3</c>, <c>TPP1</c>, <c>MBC7</c>, <c>SGB</c>).
 /// </summary>
 internal static class BessExporter {
-    /// <summary>Exports a BESS-compliant file for a machine's current state.</summary>
-    /// <param name="instance">The machine to export.</param>
-    /// <param name="model">The emulated model.</param>
-    /// <returns>The file bytes and the scope this export captured (for a self-consistency check).</returns>
-    public static (byte[] File, BessScopeCapture Scope) Export(MachineInstance instance, ConsoleModel model) {
-        var capture = BessScope.Capture(
-            instance: instance,
-            model: model
-        );
-        var cartridge = instance.GetRequiredService<ICartridge>();
-        var rom = (instance.Configuration.CartridgeRom ?? throw new InvalidOperationException(message: "The machine has no cartridge ROM to describe."));
-        var file = new List<byte>(capacity: 16_384);
-
-        var ramOffset = file.Count;
-
-        file.AddRange(collection: capture.Ram);
-        var vramOffset = file.Count;
-
-        file.AddRange(collection: capture.Vram);
-        var mbcRamOffset = file.Count;
-
-        file.AddRange(collection: capture.MbcRam);
-        var oamOffset = file.Count;
-
-        file.AddRange(collection: capture.Oam);
-        var hramOffset = file.Count;
-
-        file.AddRange(collection: capture.Hram);
-        var backgroundPaletteOffset = file.Count;
-
-        file.AddRange(collection: capture.BackgroundPalette);
-        var objectPaletteOffset = file.Count;
-
-        file.AddRange(collection: capture.ObjectPalette);
-
-        var firstBlockOffset = file.Count;
-
-        Bess.WriteBlock(
-            destination: file,
-            payload: "Puck.HumbleGamingBrick 1.0"u8,
-            tag: "NAME"
-        );
-        Bess.WriteBlock(
-            destination: file,
-            tag: "INFO",
-            payload: BuildInfoBlock(rom: rom)
-        );
-        Bess.WriteBlock(
-            destination: file,
-            tag: "CORE",
-            payload: BuildCoreBlock(
-                backgroundPaletteOffset: backgroundPaletteOffset,
-                capture: capture,
-                hramOffset: hramOffset,
-                mbcRamOffset: mbcRamOffset,
-                model: model,
-                oamOffset: oamOffset,
-                objectPaletteOffset: objectPaletteOffset,
-                ramOffset: ramOffset,
-                vramOffset: vramOffset
-            )
-        );
-
-        if (cartridge.Header.Mapper != MapperKind.RomOnly) {
-            Bess.WriteBlock(
-                destination: file,
-                tag: "MBC ",
-                payload: BuildMbcBlock(cartridge: cartridge)
-            );
-        }
-
-        Bess.WriteBlock(
-            destination: file,
-            payload: [],
-            tag: "END "
-        );
-        Bess.WriteFooter(
-            destination: file,
-            firstBlockOffset: ((uint)firstBlockOffset)
-        );
-
-        return (file.ToArray(), capture);
-    }
-
-    private static byte[] BuildInfoBlock(byte[] rom) {
-        var block = new byte[0x12];
-
-        if (rom.Length >= 0x144) {
-            rom.AsSpan(
-                length: 16,
-                start: 0x134
-            ).CopyTo(destination: block.AsSpan(
-                length: 16,
-                start: 0x00
-            ));
-        }
-        if (rom.Length >= 0x150) {
-            rom.AsSpan(
-                length: 2,
-                start: 0x14E
-            ).CopyTo(destination: block.AsSpan(
-                length: 2,
-                start: 0x10
-            ));
-        }
-
-        return block;
-    }
     private static byte[] BuildCoreBlock(BessScopeCapture capture, ConsoleModel model, int ramOffset, int vramOffset, int mbcRamOffset, int oamOffset, int hramOffset, int backgroundPaletteOffset, int objectPaletteOffset) {
         var block = new byte[Bess.CoreBlockLength];
 
@@ -214,18 +106,29 @@ internal static class BessExporter {
 
         return block;
     }
-    // tableOffset is relative to Bess.BufferTableOffset (0x98): each entry is a (size, file-offset) UInt32 pair.
-    private static void WriteBufferEntry(byte[] block, int tableOffset, int size, int fileOffset) {
-        var absolute = (Bess.BufferTableOffset + tableOffset);
+    private static byte[] BuildInfoBlock(byte[] rom) {
+        var block = new byte[0x12];
 
-        BinaryPrimitives.WriteUInt32LittleEndian(
-            destination: block.AsSpan(start: absolute),
-            value: ((uint)size)
-        );
-        BinaryPrimitives.WriteUInt32LittleEndian(
-            destination: block.AsSpan(start: (absolute + 4)),
-            value: ((uint)fileOffset)
-        );
+        if (rom.Length >= 0x144) {
+            rom.AsSpan(
+                length: 16,
+                start: 0x134
+            ).CopyTo(destination: block.AsSpan(
+                length: 16,
+                start: 0x00
+            ));
+        }
+        if (rom.Length >= 0x150) {
+            rom.AsSpan(
+                length: 2,
+                start: 0x14E
+            ).CopyTo(destination: block.AsSpan(
+                length: 2,
+                start: 0x10
+            ));
+        }
+
+        return block;
     }
     // A mapper-neutral, best-effort register-write reconstruction: the ROM/RAM bank numbers this cartridge's own
     // ComputeRomWindows/TryComputeRamWindow already derive, replayed as writes through the mapper's OWN WriteControl —
@@ -284,5 +187,102 @@ internal static class BessExporter {
         }
 
         return entries.ToArray();
+    }
+    // tableOffset is relative to Bess.BufferTableOffset (0x98): each entry is a (size, file-offset) UInt32 pair.
+    private static void WriteBufferEntry(byte[] block, int tableOffset, int size, int fileOffset) {
+        var absolute = (Bess.BufferTableOffset + tableOffset);
+
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: block.AsSpan(start: absolute),
+            value: ((uint)size)
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: block.AsSpan(start: (absolute + 4)),
+            value: ((uint)fileOffset)
+        );
+    }
+
+    /// <summary>Exports a BESS-compliant file for a machine's current state.</summary>
+    /// <param name="instance">The machine to export.</param>
+    /// <param name="model">The emulated model.</param>
+    /// <returns>The file bytes and the scope this export captured (for a self-consistency check).</returns>
+    public static (byte[] File, BessScopeCapture Scope) Export(MachineInstance instance, ConsoleModel model) {
+        var capture = BessScope.Capture(
+            instance: instance,
+            model: model
+        );
+        var cartridge = instance.GetRequiredService<ICartridge>();
+        var rom = (instance.Configuration.CartridgeRom ?? throw new InvalidOperationException(message: "The machine has no cartridge ROM to describe."));
+        var file = new List<byte>(capacity: 16_384);
+
+        var ramOffset = file.Count;
+
+        file.AddRange(collection: capture.Ram);
+        var vramOffset = file.Count;
+
+        file.AddRange(collection: capture.Vram);
+        var mbcRamOffset = file.Count;
+
+        file.AddRange(collection: capture.MbcRam);
+        var oamOffset = file.Count;
+
+        file.AddRange(collection: capture.Oam);
+        var hramOffset = file.Count;
+
+        file.AddRange(collection: capture.Hram);
+        var backgroundPaletteOffset = file.Count;
+
+        file.AddRange(collection: capture.BackgroundPalette);
+        var objectPaletteOffset = file.Count;
+
+        file.AddRange(collection: capture.ObjectPalette);
+
+        var firstBlockOffset = file.Count;
+
+        Bess.WriteBlock(
+            destination: file,
+            payload: "Puck.HumbleGamingBrick 1.0"u8,
+            tag: "NAME"
+        );
+        Bess.WriteBlock(
+            destination: file,
+            tag: "INFO",
+            payload: BuildInfoBlock(rom: rom)
+        );
+        Bess.WriteBlock(
+            destination: file,
+            tag: "CORE",
+            payload: BuildCoreBlock(
+                backgroundPaletteOffset: backgroundPaletteOffset,
+                capture: capture,
+                hramOffset: hramOffset,
+                mbcRamOffset: mbcRamOffset,
+                model: model,
+                oamOffset: oamOffset,
+                objectPaletteOffset: objectPaletteOffset,
+                ramOffset: ramOffset,
+                vramOffset: vramOffset
+            )
+        );
+
+        if (cartridge.Header.Mapper != MapperKind.RomOnly) {
+            Bess.WriteBlock(
+                destination: file,
+                tag: "MBC ",
+                payload: BuildMbcBlock(cartridge: cartridge)
+            );
+        }
+
+        Bess.WriteBlock(
+            destination: file,
+            payload: [],
+            tag: "END "
+        );
+        Bess.WriteFooter(
+            destination: file,
+            firstBlockOffset: ((uint)firstBlockOffset)
+        );
+
+        return (file.ToArray(), capture);
     }
 }

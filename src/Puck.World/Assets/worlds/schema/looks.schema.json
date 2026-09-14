@@ -155,6 +155,29 @@
                     "null"
                   ]
                 }
+              },
+              "poses": {
+                "description": "A creation frame name to state.\u003Crow\u003E[.\u003Ckey\u003E] map ($body in the key is the wearing body\u0027s index): the frame holds while its cell\u0027s stored value is nonzero, and the first holding frame in declaration order overrides the cue and replay cursor \u2014 a blink, a wince, a mouth shape the simulation schedules. Legitimate only on a creation source.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "lanes": {
+                "description": "Up to four optional expressions, in x/y/z/w order. Missing entries read zero. Expressions read eased state; each consumer defines its own numeric range.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/ValueExpression"
+                }
               }
             },
             "additionalProperties": false,

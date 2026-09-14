@@ -135,25 +135,6 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         );
     }
 
-    private static long LandRotorLane(Int128 value, int shift) {
-        var negative = (value < Int128.Zero);
-
-        return FusedArithmetic.ScaleProductSum(
-            shift: shift,
-            value: (negative, ((UInt128)(negative ? -value : value)))
-        );
-    }
-    private static UInt128 MagnitudeOf(Int128 value) =>
-        ((UInt128)((value < Int128.Zero) ? -value : value));
-    private static ulong MaximumRawMagnitude(FixedVector3 vector) =>
-        Math.Max(
-            val1: Math.Max(
-                val1: FusedArithmetic.RawMagnitude(value: vector.X.Value),
-                val2: FusedArithmetic.RawMagnitude(value: vector.Y.Value)
-            ),
-            val2: FusedArithmetic.RawMagnitude(value: vector.Z.Value)
-        );
-
     // Norm of a vector part at full precision, saturating only when the scalar carrier cannot represent it.
     internal static FixedQ4816 VectorNorm(long x, long y, long z) =>
         (FixedVectorMath.TryMagnitude(
@@ -164,6 +145,29 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         )
             ? magnitude
             : FixedQ4816.MaxValue
+        );
+
+    private static long LandRotorLane(Int128 value, int shift) {
+        var negative = (value < Int128.Zero);
+
+        return FusedArithmetic.ScaleProductSum(
+            shift: shift,
+            value: (negative, ((UInt128)(negative
+            ? -value
+            : value)))
+        );
+    }
+    private static UInt128 MagnitudeOf(Int128 value) =>
+        ((UInt128)((value < Int128.Zero)
+            ? -value
+            : value));
+    private static ulong MaximumRawMagnitude(FixedVector3 vector) =>
+        Math.Max(
+            val1: Math.Max(
+                val1: FusedArithmetic.RawMagnitude(value: vector.X.Value),
+                val2: FusedArithmetic.RawMagnitude(value: vector.Y.Value)
+            ),
+            val2: FusedArithmetic.RawMagnitude(value: vector.Z.Value)
         );
 
     /// <summary>Returns the conjugate — the inverse rotation for a unit quaternion.</summary>
@@ -288,12 +292,30 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         // the inputs to unit Q16 first would quantize a 179° rotor's axis to about a tenth of a degree.
         var fromShift = FixedVectorMath.DirectionShift(rawMagnitude: MaximumRawMagnitude(vector: from));
         var toShift = FixedVectorMath.DirectionShift(rawMagnitude: MaximumRawMagnitude(vector: to));
-        var fx = FixedVectorMath.ScaleRaw(shift: fromShift, value: from.X.Value);
-        var fy = FixedVectorMath.ScaleRaw(shift: fromShift, value: from.Y.Value);
-        var fz = FixedVectorMath.ScaleRaw(shift: fromShift, value: from.Z.Value);
-        var tx = FixedVectorMath.ScaleRaw(shift: toShift, value: to.X.Value);
-        var ty = FixedVectorMath.ScaleRaw(shift: toShift, value: to.Y.Value);
-        var tz = FixedVectorMath.ScaleRaw(shift: toShift, value: to.Z.Value);
+        var fx = FixedVectorMath.ScaleRaw(
+            shift: fromShift,
+            value: from.X.Value
+        );
+        var fy = FixedVectorMath.ScaleRaw(
+            shift: fromShift,
+            value: from.Y.Value
+        );
+        var fz = FixedVectorMath.ScaleRaw(
+            shift: fromShift,
+            value: from.Z.Value
+        );
+        var tx = FixedVectorMath.ScaleRaw(
+            shift: toShift,
+            value: to.X.Value
+        );
+        var ty = FixedVectorMath.ScaleRaw(
+            shift: toShift,
+            value: to.Y.Value
+        );
+        var tz = FixedVectorMath.ScaleRaw(
+            shift: toShift,
+            value: to.Z.Value
+        );
         // Every landed raw is below 2^46, so each product is below 2^92 and each sum of three below 2^94.
         var crossX = ((((Int128)fy) * tz) - (((Int128)fz) * ty));
         var crossY = ((((Int128)fz) * tx) - (((Int128)fx) * tz));
@@ -316,10 +338,22 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         // Land the rotor's largest component in [2^45, 2^46), carrying |f||t| through the same shift so the
         // antiparallel test below compares like with like.
         var rotorShift = (46 - FusedArithmetic.BitLength(value: rotorMagnitude));
-        var cx = LandRotorLane(shift: rotorShift, value: crossX);
-        var cy = LandRotorLane(shift: rotorShift, value: crossY);
-        var cz = LandRotorLane(shift: rotorShift, value: crossZ);
-        var cw = LandRotorLane(shift: rotorShift, value: scalar);
+        var cx = LandRotorLane(
+            shift: rotorShift,
+            value: crossX
+        );
+        var cy = LandRotorLane(
+            shift: rotorShift,
+            value: crossY
+        );
+        var cz = LandRotorLane(
+            shift: rotorShift,
+            value: crossZ
+        );
+        var cw = LandRotorLane(
+            shift: rotorShift,
+            value: scalar
+        );
 
         // The rotor's norm is 2·|f||t|·cos(θ/2); it counts as antiparallel below AntiparallelThreshold/One of |f||t|.
         // Carried through the rotor's own shift, |f||t| either fits a machine word — then the squared comparison runs

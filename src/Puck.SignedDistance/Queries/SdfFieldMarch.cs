@@ -12,7 +12,6 @@ internal enum MarchOutcome {
     Hit = 1,
     Exhausted = 2,
 }
-
 // The field a march reads. A sample is either EXACT (the program's own value at the point) or a BOUND (any value at
 // or below the exact one, never above it), and the sampler decides which it may answer from the radius the march is
 // sweeping: a bound is admissible only where it cannot change the march's accept or stop decisions, which the
@@ -20,7 +19,6 @@ internal enum MarchOutcome {
 internal interface ISdfMarchSampler {
     bool TrySample(FixedPosition position, FixedQ4816 radius, out FixedQ4816 distance, out int material, out bool exact);
 }
-
 // The one stepped sphere-trace march every query verb runs, shared by the exact evaluator and the banded one so the
 // two never diverge in their accept and advance rules. Two asymmetric uses of the field value, and they are NOT
 // interchangeable:
@@ -91,19 +89,18 @@ internal static class SdfFieldMarch {
                 // cannot express, which proves neither hit nor miss.
                 return (hasShape
                     ? Exhaust(
-                    hit: out hit,
-                    material: lastMaterial,
-                    position: position,
-                    traveled: traveled
-                )
+                        hit: out hit,
+                        material: lastMaterial,
+                        position: position,
+                        traveled: traveled
+                    )
                     : MarchOutcome.Miss
                 );
             }
 
             if (exact
                 ? (exactSamples >= exactBudget)
-                : (boundSamples >= boundBudget)
-            ) {
+                : (boundSamples >= boundBudget)) {
                 return Exhaust(
                     hit: out hit,
                     material: lastMaterial,

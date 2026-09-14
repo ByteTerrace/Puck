@@ -1,0 +1,36 @@
+schema: "puck.world.def.v1"
+basis: "../../../../../src/Puck.World/Assets/worlds/avatars/moth.world.json"
+documentId: "eval-hull-seam"
+
+placements {
+}
+
+prototypes {
+    prototype "subject" {
+        document {
+            schema: "puck.creation.v1"
+            name: "subject"
+            palette [
+                { color: "#7C828A" specular: 0.25 roughness: 0.4 }
+            ]
+            shape Superellipsoid "hullLeft" {
+                material: 0
+                position [-0.2, 1.2, 0]
+                scale [0.22, 0.14, 0.14]
+                exponent: 3
+            }
+            shape Superellipsoid "hullRight" {
+                material: 0
+                position [0.2, 1.2, 0]
+                scale [0.22, 0.14, 0.14]
+                exponent: 3
+            }
+            shape Box "seamCutter" {
+                material: 0
+                blend: "Subtraction"
+                position [0, 1.2, 0]
+                scale [0.02, 0.16, 0.16]
+            }
+        }
+    }
+}

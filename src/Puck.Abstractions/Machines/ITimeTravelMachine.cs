@@ -27,9 +27,9 @@ public readonly record struct TimeTravelStatus(
     int FastForwardFactor
 );
 /// <summary>
-/// Optional time-travel capability for an <see cref="IScreenMachine"/> — machine-neutral rewind, runahead, and
+/// Optional time-travel capability for an <see cref="IMachineRuntime"/> — machine-neutral rewind, runahead, and
 /// fast-forward built once over the snapshot surface every deterministic core already exposes, mirroring
-/// <see cref="IQueuedScreenMachine"/>'s and <see cref="IAudioMachine"/>'s optional-capability precedent. Rewind restores
+/// <see cref="IQueuedMachineRuntime"/>'s and <see cref="IAudioMachine"/>'s optional-capability precedent. Rewind restores
 /// the nearest keyframe and deterministically replays recorded input to land on any frame in a bounded ring; runahead
 /// keeps one persistent lookahead fork advanced ahead of the authoritative machine on predicted input; fast-forward
 /// repeats each exact tick segment while skipping intermediate presentation frames — a host-level knob, never a timing

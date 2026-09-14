@@ -21,89 +21,6 @@ public static unsafe class VulkanProcResolver {
     private static delegate* unmanaged[Cdecl]<nint, byte*, nint> CachedGetDeviceProcAddr;
     private static delegate* unmanaged[Cdecl]<nint, byte*, nint> CachedGetInstanceProcAddr;
 
-    /// <summary>Resolves a required export from the Vulkan loader.</summary>
-    /// <param name="functionName">The name of the exported function to resolve (for example, <c>vkCreateInstance</c>).</param>
-    /// <returns>The address of the exported function.</returns>
-    /// <exception cref="ArgumentException"><paramref name="functionName"/> is <see langword="null"/>, empty, or white space.</exception>
-    /// <exception cref="EntryPointNotFoundException">The loader does not export <paramref name="functionName"/>.</exception>
-    public static nint ResolveExport(string functionName) {
-        return VulkanNativeLibrary.GetExport(functionName: functionName);
-    }
-    /// <summary>Resolves an optional export from the Vulkan loader, returning <c>0</c> when it is absent.</summary>
-    /// <param name="functionName">The name of the exported function to resolve (for example, <c>vkEnumerateInstanceVersion</c>).</param>
-    /// <returns>The address of the exported function, or <c>0</c> when the loader does not export it.</returns>
-    /// <exception cref="ArgumentException"><paramref name="functionName"/> is <see langword="null"/>, empty, or white space.</exception>
-    public static nint ResolveOptionalExport(string functionName) {
-        try {
-            return VulkanNativeLibrary.GetExport(functionName: functionName);
-        } catch (EntryPointNotFoundException) {
-            // A pre-1.1 loader (or one missing an extension export) lacks the symbol; the optional contract is 0.
-            return 0;
-        }
-    }
-    /// <summary>Resolves a required instance-level procedure through <c>vkGetInstanceProcAddr</c>.</summary>
-    /// <param name="instanceHandle">The native <c>VkInstance</c> handle the procedure is scoped to.</param>
-    /// <param name="functionName">The UTF-8 name of the procedure (for example, <c>"vkCreateDevice"u8</c>).</param>
-    /// <returns>The address of the resolved procedure.</returns>
-    /// <exception cref="InvalidOperationException">The instance does not expose <paramref name="functionName"/>.</exception>
-    public static nint ResolveInstanceProc(nint instanceHandle, ReadOnlySpan<byte> functionName) {
-        var proc = ResolveOptionalInstanceProc(
-            functionName: functionName,
-            instanceHandle: instanceHandle
-        );
-
-        if (0 == proc) {
-            throw new InvalidOperationException(message: $"The Vulkan instance procedure '{Decode(utf8: functionName)}' is not available.");
-        }
-
-        return proc;
-    }
-    /// <summary>Resolves an optional instance-level procedure through <c>vkGetInstanceProcAddr</c>, returning <c>0</c> when it is absent.</summary>
-    /// <param name="instanceHandle">The native <c>VkInstance</c> handle the procedure is scoped to.</param>
-    /// <param name="functionName">The UTF-8 name of the procedure (for example, <c>"vkCreateDebugUtilsMessengerEXT"u8</c>).</param>
-    /// <returns>The address of the resolved procedure, or <c>0</c> when the instance does not expose it.</returns>
-    public static nint ResolveOptionalInstanceProc(nint instanceHandle, ReadOnlySpan<byte> functionName) {
-        var getInstanceProcAddr = GetInstanceProcAddr();
-
-        fixed (byte* pName = functionName) {
-            return getInstanceProcAddr(
-                instanceHandle,
-                pName
-            );
-        }
-    }
-    /// <summary>Resolves a required device-level procedure through <c>vkGetDeviceProcAddr</c>.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle the procedure is scoped to.</param>
-    /// <param name="functionName">The UTF-8 name of the procedure (for example, <c>"vkCreateBuffer"u8</c>).</param>
-    /// <returns>The address of the resolved procedure.</returns>
-    /// <exception cref="InvalidOperationException">The device does not expose <paramref name="functionName"/>.</exception>
-    public static nint ResolveDeviceProc(nint deviceHandle, ReadOnlySpan<byte> functionName) {
-        var proc = ResolveOptionalDeviceProc(
-            deviceHandle: deviceHandle,
-            functionName: functionName
-        );
-
-        if (0 == proc) {
-            throw new InvalidOperationException(message: $"The Vulkan device procedure '{Decode(utf8: functionName)}' is not available.");
-        }
-
-        return proc;
-    }
-    /// <summary>Resolves an optional device-level procedure through <c>vkGetDeviceProcAddr</c>, returning <c>0</c> when it is absent.</summary>
-    /// <param name="deviceHandle">The native <c>VkDevice</c> handle the procedure is scoped to.</param>
-    /// <param name="functionName">The UTF-8 name of the procedure (for example, <c>"vkCmdTraceRaysKHR"u8</c>).</param>
-    /// <returns>The address of the resolved procedure, or <c>0</c> when the device does not expose it.</returns>
-    public static nint ResolveOptionalDeviceProc(nint deviceHandle, ReadOnlySpan<byte> functionName) {
-        var getDeviceProcAddr = GetDeviceProcAddr();
-
-        fixed (byte* pName = functionName) {
-            return getDeviceProcAddr(
-                deviceHandle,
-                pName
-            );
-        }
-    }
-
     private static string Decode(ReadOnlySpan<byte> utf8) {
         return Encoding.UTF8.GetString(bytes: utf8);
     }
@@ -123,6 +40,89 @@ public static unsafe class VulkanProcResolver {
             }
 
             return CachedGetInstanceProcAddr;
+        }
+    }
+
+    /// <summary>Resolves a required device-level procedure through <c>vkGetDeviceProcAddr</c>.</summary>
+    /// <param name="deviceHandle">The native <c>VkDevice</c> handle the procedure is scoped to.</param>
+    /// <param name="functionName">The UTF-8 name of the procedure (for example, <c>"vkCreateBuffer"u8</c>).</param>
+    /// <returns>The address of the resolved procedure.</returns>
+    /// <exception cref="InvalidOperationException">The device does not expose <paramref name="functionName"/>.</exception>
+    public static nint ResolveDeviceProc(nint deviceHandle, ReadOnlySpan<byte> functionName) {
+        var proc = ResolveOptionalDeviceProc(
+            deviceHandle: deviceHandle,
+            functionName: functionName
+        );
+
+        if (0 == proc) {
+            throw new InvalidOperationException(message: $"The Vulkan device procedure '{Decode(utf8: functionName)}' is not available.");
+        }
+
+        return proc;
+    }
+    /// <summary>Resolves a required export from the Vulkan loader.</summary>
+    /// <param name="functionName">The name of the exported function to resolve (for example, <c>vkCreateInstance</c>).</param>
+    /// <returns>The address of the exported function.</returns>
+    /// <exception cref="ArgumentException"><paramref name="functionName"/> is <see langword="null"/>, empty, or white space.</exception>
+    /// <exception cref="EntryPointNotFoundException">The loader does not export <paramref name="functionName"/>.</exception>
+    public static nint ResolveExport(string functionName) {
+        return VulkanNativeLibrary.GetExport(functionName: functionName);
+    }
+    /// <summary>Resolves a required instance-level procedure through <c>vkGetInstanceProcAddr</c>.</summary>
+    /// <param name="instanceHandle">The native <c>VkInstance</c> handle the procedure is scoped to.</param>
+    /// <param name="functionName">The UTF-8 name of the procedure (for example, <c>"vkCreateDevice"u8</c>).</param>
+    /// <returns>The address of the resolved procedure.</returns>
+    /// <exception cref="InvalidOperationException">The instance does not expose <paramref name="functionName"/>.</exception>
+    public static nint ResolveInstanceProc(nint instanceHandle, ReadOnlySpan<byte> functionName) {
+        var proc = ResolveOptionalInstanceProc(
+            functionName: functionName,
+            instanceHandle: instanceHandle
+        );
+
+        if (0 == proc) {
+            throw new InvalidOperationException(message: $"The Vulkan instance procedure '{Decode(utf8: functionName)}' is not available.");
+        }
+
+        return proc;
+    }
+    /// <summary>Resolves an optional device-level procedure through <c>vkGetDeviceProcAddr</c>, returning <c>0</c> when it is absent.</summary>
+    /// <param name="deviceHandle">The native <c>VkDevice</c> handle the procedure is scoped to.</param>
+    /// <param name="functionName">The UTF-8 name of the procedure (for example, <c>"vkCmdTraceRaysKHR"u8</c>).</param>
+    /// <returns>The address of the resolved procedure, or <c>0</c> when the device does not expose it.</returns>
+    public static nint ResolveOptionalDeviceProc(nint deviceHandle, ReadOnlySpan<byte> functionName) {
+        var getDeviceProcAddr = GetDeviceProcAddr();
+
+        fixed (byte* pName = functionName) {
+            return getDeviceProcAddr(
+                deviceHandle,
+                pName
+            );
+        }
+    }
+    /// <summary>Resolves an optional export from the Vulkan loader, returning <c>0</c> when it is absent.</summary>
+    /// <param name="functionName">The name of the exported function to resolve (for example, <c>vkEnumerateInstanceVersion</c>).</param>
+    /// <returns>The address of the exported function, or <c>0</c> when the loader does not export it.</returns>
+    /// <exception cref="ArgumentException"><paramref name="functionName"/> is <see langword="null"/>, empty, or white space.</exception>
+    public static nint ResolveOptionalExport(string functionName) {
+        try {
+            return VulkanNativeLibrary.GetExport(functionName: functionName);
+        } catch (EntryPointNotFoundException) {
+            // A pre-1.1 loader (or one missing an extension export) lacks the symbol; the optional contract is 0.
+            return 0;
+        }
+    }
+    /// <summary>Resolves an optional instance-level procedure through <c>vkGetInstanceProcAddr</c>, returning <c>0</c> when it is absent.</summary>
+    /// <param name="instanceHandle">The native <c>VkInstance</c> handle the procedure is scoped to.</param>
+    /// <param name="functionName">The UTF-8 name of the procedure (for example, <c>"vkCreateDebugUtilsMessengerEXT"u8</c>).</param>
+    /// <returns>The address of the resolved procedure, or <c>0</c> when the instance does not expose it.</returns>
+    public static nint ResolveOptionalInstanceProc(nint instanceHandle, ReadOnlySpan<byte> functionName) {
+        var getInstanceProcAddr = GetInstanceProcAddr();
+
+        fixed (byte* pName = functionName) {
+            return getInstanceProcAddr(
+                instanceHandle,
+                pName
+            );
         }
     }
 }

@@ -4,10 +4,12 @@ namespace Puck.Shaders;
 
 /// <summary>
 /// The backend-neutral GPU services a <see cref="FullscreenPassNode"/> draws through: one fullscreen-triangle
-/// graphics pass over an inner render node's output. Not <see cref="IGpuComputeServices"/>, which carries no graphics
+/// graphics pass over an inner render node's output. It also carries the cohesive compute bundle used by the canonical pipeline adapter; the
 /// pipeline factory. A composition root resolves every member from the one backend it registered.
 /// </summary>
 public interface IFullscreenPassServices {
+    /// <summary>Gets the cohesive compute services used by the canonical shader-pipeline executor.</summary>
+    IGpuComputeServices? ComputeServices => null;
     /// <summary>Gets the command recorder the pass draws through.</summary>
     IGpuCommandRecorder CommandRecorder { get; }
     /// <summary>Gets the factory for the render target the pass draws into, at the pass's own size; the pass disposes

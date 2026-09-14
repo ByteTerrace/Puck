@@ -268,7 +268,9 @@ public sealed partial class WorldBody {
 
         ApplyRawState(
             reason: "tether.mode",
-            requested: FixedQ4816.FromInteger(value: (m_tether is not null ? 1L : 0L)).Value,
+            requested: FixedQ4816.FromInteger(value: ((m_tether is not null)
+            ? 1L
+            : 0L)).Value,
             slot: slot,
             writer: "tether"
         );

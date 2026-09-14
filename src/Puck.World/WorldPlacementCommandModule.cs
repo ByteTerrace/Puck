@@ -582,7 +582,10 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                     return CommandResult.Error(output: "[world.faces: no instance-addressed form — screens are the boot instance's own; see world.inhabitants/world.attachments/world.portals/world.destinations for instance:<name>]");
                 }
 
-                return CommandResult.RequireNoArguments(args: args, verb: "world.faces")!.Value;
+                return CommandResult.RequireNoArguments(
+                    args: args,
+                    verb: "world.faces"
+                )!.Value;
             }
         );
         yield return CommandDefinition.WithWireArgs(

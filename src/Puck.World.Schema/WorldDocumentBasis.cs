@@ -510,193 +510,6 @@ public static class WorldDocumentBasis {
             target[propertyName: name] = value.DeepClone();
         }
     }
-    private static void RefuseRowMarkers(JsonNode? node, string path, string context) {
-        if (node is not JsonObject row) {
-            return;
-        }
-
-        if (row.ContainsKey(propertyName: DropMemberName)) {
-            throw new JsonException(message: $"{path} carries '{DropMemberName}', but {context}.");
-        }
-
-        if (row.ContainsKey(propertyName: ReplaceMemberName)) {
-            throw new JsonException(message: $"{path} carries '{ReplaceMemberName}', but {context}.");
-        }
-    }
-    private static void RequireTombstoneShape(JsonObject row, string key, string path) {
-        if (!IsTrue(node: row[propertyName: DropMemberName])) {
-            throw new JsonException(message: $"{path} carries '{DropMemberName}' with a value other than true — a tombstone is exactly {{\"{key}\": …, \"{DropMemberName}\": true}}.");
-        }
-
-        foreach (var (name, _) in row) {
-            if (
-                !string.Equals(
-                a: name,
-                b: key,
-                comparisonType: StringComparison.Ordinal
-            ) &&
-                !string.Equals(
-                a: name,
-                b: DropMemberName,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                throw new JsonException(message: $"{path} is a tombstone carrying member '{name}' — a tombstone carries only its identity key and '{DropMemberName}'; content on a dropped row is content lost silently.");
-            }
-        }
-    }
-    private static bool TryFindRowKey(JsonArray basis, JsonArray overlay, out string key, out string ambiguity) {
-        key = string.Empty;
-        ambiguity = string.Empty;
-
-        foreach (var candidate in RowKeyPrecedence) {
-            if (
-                !ListCarriesKey(
-                key: candidate,
-                list: basis
-            ) ||
-                !ListCarriesKey(
-                key: candidate,
-                list: overlay
-            )
-            ) {
-                continue;
-            }
-
-            if (HasDuplicateKey(
-                duplicate: out var basisDuplicate,
-                key: candidate,
-                list: basis
-            )) {
-                ambiguity = $"cannot merge by '{candidate}': the basis list carries it more than once ({basisDuplicate}).";
-
-                return false;
-            }
-
-            if (HasDuplicateKey(
-                duplicate: out var overlayDuplicate,
-                key: candidate,
-                list: overlay
-            )) {
-                ambiguity = $"cannot merge by '{candidate}': the derived list carries it more than once ({overlayDuplicate}).";
-
-                return false;
-            }
-
-            key = candidate;
-
-            return true;
-        }
-
-        return false;
-    }
-    private static bool TypeDiscriminatorsDiffer(JsonObject basis, JsonObject overlay) {
-        return (
-            (basis[propertyName: "$type"] is { } basisType) &&
-            (overlay[propertyName: "$type"] is { } overlayType) &&
-            !JsonNode.DeepEquals(
-            node1: basisType,
-            node2: overlayType
-        )
-        );
-    }
-
-    /// <summary>Computes the minimal delta tree whose <see cref="TryMerge"/> over <paramref name="basis"/> reproduces
-    /// <paramref name="target"/> — member-wise for objects, by identity key (tombstones and appends) for keyed lists,
-    /// an explicit <c>null</c> for a removed member, and a <c>$replace</c>-marked wholesale list where a keyed
-    /// reconstruction cannot express the target's row order. Pure and refusal-free: an inexpressible shape degrades
-    /// to a wholesale form, never an error. The caller owns the round-trip proof (see the type remarks).</summary>
-    /// <param name="basis">The basis document's tree.</param>
-    /// <param name="target">The tree the delta must reproduce over <paramref name="basis"/>.</param>
-    /// <returns>The delta tree — empty when <paramref name="target"/> already equals <paramref name="basis"/>.</returns>
-    public static JsonObject Diff(JsonObject basis, JsonObject target) {
-        ArgumentNullException.ThrowIfNull(argument: basis);
-        ArgumentNullException.ThrowIfNull(argument: target);
-
-        return DiffObject(
-            basis: basis,
-            target: target
-        );
-    }
-    /// <summary>Merges <paramref name="overlay"/> (the derived document's tree, its <c>basis</c> member already
-    /// removed) over <paramref name="basis"/> under the rules in the type remarks, returning the composed tree.
-    /// Neither input is mutated.</summary>
-    /// <param name="basis">The basis document's tree.</param>
-    /// <param name="overlay">The derived document's tree.</param>
-    /// <param name="composed">The composed tree on success; <see langword="null"/> on refusal.</param>
-    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
-    /// <returns><see langword="true"/> when the merge composed.</returns>
-    public static bool TryMerge(JsonObject basis, JsonObject overlay, out JsonObject? composed, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: basis);
-        ArgumentNullException.ThrowIfNull(argument: overlay);
-
-        try {
-            var target = ((JsonObject)basis.DeepClone());
-
-            MergeObject(
-                overlay: overlay,
-                path: "$",
-                target: target
-            );
-
-            composed = target;
-            reason = string.Empty;
-
-            return true;
-        } catch (JsonException exception) {
-            composed = null;
-            reason = exception.Message;
-
-            return false;
-        }
-    }
-    /// <summary>Folds <paramref name="imports"/> — each already the FULL recursively composed tree of one imported
-    /// fragment, in authored list order — into one layer, refusing a genuine authorship collision between two
-    /// imports unless <paramref name="restated"/> (the importing file's own body, basis/imports members already
-    /// stripped) also declares the same path, row, or list: the explicit resolution the type remarks describe.
-    /// Two imports agreeing on a value at the same path (most commonly because they share a common ancestor
-    /// somewhere in their own basis/import graphs) never collide — only a genuine disagreement, which can only arise
-    /// from each side's own authored content actually diverging, does. An object member merges member-wise
-    /// (recursing when both sides carry an object, so disjoint nested members from two imports combine rather than
-    /// colliding on their shared parent); a row list keyed by the settled identity vocabulary unions by row (a key
-    /// only one side carries appends; the same key on both sides collides exactly like a leaf, checked against
-    /// <paramref name="restated"/>'s own row); any other shared list or scalar collides wholesale.</summary>
-    /// <param name="imports">Each import's display name (for the refusal message) paired with its fully composed
-    /// tree, in authored order.</param>
-    /// <param name="restated">The importing file's own body — the sole exemption from a sibling collision.</param>
-    /// <param name="composed">The folded layer on success; <see langword="null"/> on refusal.</param>
-    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
-    /// <returns><see langword="true"/> when every import folded without an unresolved collision.</returns>
-    public static bool TryMergeImports(IReadOnlyList<(string Name, JsonObject Tree)> imports, JsonObject restated, out JsonObject? composed, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: imports);
-        ArgumentNullException.ThrowIfNull(argument: restated);
-
-        var target = new JsonObject();
-        var owners = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-        try {
-            foreach (var (name, tree) in imports) {
-                MergeSiblingObject(
-                    overlay: tree,
-                    overlayName: name,
-                    owners: owners,
-                    path: "$",
-                    restated: restated,
-                    target: target
-                );
-            }
-
-            composed = target;
-            reason = string.Empty;
-
-            return true;
-        } catch (JsonException exception) {
-            composed = null;
-            reason = exception.Message;
-
-            return false;
-        }
-    }
     private static JsonArray MergeSiblingArray(JsonArray existing, JsonArray overlay, JsonNode? restated, string overlayName, Dictionary<string, string> owners, string path) {
         if (!TryFindRowKey(
             ambiguity: out var ambiguity,
@@ -880,6 +693,86 @@ public static class WorldDocumentBasis {
             }
         }
     }
+    private static void RefuseRowMarkers(JsonNode? node, string path, string context) {
+        if (node is not JsonObject row) {
+            return;
+        }
+
+        if (row.ContainsKey(propertyName: DropMemberName)) {
+            throw new JsonException(message: $"{path} carries '{DropMemberName}', but {context}.");
+        }
+
+        if (row.ContainsKey(propertyName: ReplaceMemberName)) {
+            throw new JsonException(message: $"{path} carries '{ReplaceMemberName}', but {context}.");
+        }
+    }
+    private static void RequireTombstoneShape(JsonObject row, string key, string path) {
+        if (!IsTrue(node: row[propertyName: DropMemberName])) {
+            throw new JsonException(message: $"{path} carries '{DropMemberName}' with a value other than true — a tombstone is exactly {{\"{key}\": …, \"{DropMemberName}\": true}}.");
+        }
+
+        foreach (var (name, _) in row) {
+            if (
+                !string.Equals(
+                a: name,
+                b: key,
+                comparisonType: StringComparison.Ordinal
+            ) &&
+                !string.Equals(
+                a: name,
+                b: DropMemberName,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                throw new JsonException(message: $"{path} is a tombstone carrying member '{name}' — a tombstone carries only its identity key and '{DropMemberName}'; content on a dropped row is content lost silently.");
+            }
+        }
+    }
+    private static bool TryFindRowKey(JsonArray basis, JsonArray overlay, out string key, out string ambiguity) {
+        key = string.Empty;
+        ambiguity = string.Empty;
+
+        foreach (var candidate in RowKeyPrecedence) {
+            if (
+                !ListCarriesKey(
+                key: candidate,
+                list: basis
+            ) ||
+                !ListCarriesKey(
+                key: candidate,
+                list: overlay
+            )
+            ) {
+                continue;
+            }
+
+            if (HasDuplicateKey(
+                duplicate: out var basisDuplicate,
+                key: candidate,
+                list: basis
+            )) {
+                ambiguity = $"cannot merge by '{candidate}': the basis list carries it more than once ({basisDuplicate}).";
+
+                return false;
+            }
+
+            if (HasDuplicateKey(
+                duplicate: out var overlayDuplicate,
+                key: candidate,
+                list: overlay
+            )) {
+                ambiguity = $"cannot merge by '{candidate}': the derived list carries it more than once ({overlayDuplicate}).";
+
+                return false;
+            }
+
+            key = candidate;
+
+            return true;
+        }
+
+        return false;
+    }
     private static bool TryFindSingleListRowKey(JsonArray list, out string key) {
         foreach (var candidate in RowKeyPrecedence) {
             if (ListCarriesKey(
@@ -895,5 +788,112 @@ public static class WorldDocumentBasis {
         key = string.Empty;
 
         return false;
+    }
+    private static bool TypeDiscriminatorsDiffer(JsonObject basis, JsonObject overlay) {
+        return (
+            (basis[propertyName: "$type"] is { } basisType) &&
+            (overlay[propertyName: "$type"] is { } overlayType) &&
+            !JsonNode.DeepEquals(
+            node1: basisType,
+            node2: overlayType
+        )
+        );
+    }
+
+    /// <summary>Computes the minimal delta tree whose <see cref="TryMerge"/> over <paramref name="basis"/> reproduces
+    /// <paramref name="target"/> — member-wise for objects, by identity key (tombstones and appends) for keyed lists,
+    /// an explicit <c>null</c> for a removed member, and a <c>$replace</c>-marked wholesale list where a keyed
+    /// reconstruction cannot express the target's row order. Pure and refusal-free: an inexpressible shape degrades
+    /// to a wholesale form, never an error. The caller owns the round-trip proof (see the type remarks).</summary>
+    /// <param name="basis">The basis document's tree.</param>
+    /// <param name="target">The tree the delta must reproduce over <paramref name="basis"/>.</param>
+    /// <returns>The delta tree — empty when <paramref name="target"/> already equals <paramref name="basis"/>.</returns>
+    public static JsonObject Diff(JsonObject basis, JsonObject target) {
+        ArgumentNullException.ThrowIfNull(argument: basis);
+        ArgumentNullException.ThrowIfNull(argument: target);
+
+        return DiffObject(
+            basis: basis,
+            target: target
+        );
+    }
+    /// <summary>Merges <paramref name="overlay"/> (the derived document's tree, its <c>basis</c> member already
+    /// removed) over <paramref name="basis"/> under the rules in the type remarks, returning the composed tree.
+    /// Neither input is mutated.</summary>
+    /// <param name="basis">The basis document's tree.</param>
+    /// <param name="overlay">The derived document's tree.</param>
+    /// <param name="composed">The composed tree on success; <see langword="null"/> on refusal.</param>
+    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <returns><see langword="true"/> when the merge composed.</returns>
+    public static bool TryMerge(JsonObject basis, JsonObject overlay, out JsonObject? composed, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: basis);
+        ArgumentNullException.ThrowIfNull(argument: overlay);
+
+        try {
+            var target = ((JsonObject)basis.DeepClone());
+
+            MergeObject(
+                overlay: overlay,
+                path: "$",
+                target: target
+            );
+
+            composed = target;
+            reason = string.Empty;
+
+            return true;
+        } catch (JsonException exception) {
+            composed = null;
+            reason = exception.Message;
+
+            return false;
+        }
+    }
+    /// <summary>Folds <paramref name="imports"/> — each already the FULL recursively composed tree of one imported
+    /// fragment, in authored list order — into one layer, refusing a genuine authorship collision between two
+    /// imports unless <paramref name="restated"/> (the importing file's own body, basis/imports members already
+    /// stripped) also declares the same path, row, or list: the explicit resolution the type remarks describe.
+    /// Two imports agreeing on a value at the same path (most commonly because they share a common ancestor
+    /// somewhere in their own basis/import graphs) never collide — only a genuine disagreement, which can only arise
+    /// from each side's own authored content actually diverging, does. An object member merges member-wise
+    /// (recursing when both sides carry an object, so disjoint nested members from two imports combine rather than
+    /// colliding on their shared parent); a row list keyed by the settled identity vocabulary unions by row (a key
+    /// only one side carries appends; the same key on both sides collides exactly like a leaf, checked against
+    /// <paramref name="restated"/>'s own row); any other shared list or scalar collides wholesale.</summary>
+    /// <param name="imports">Each import's display name (for the refusal message) paired with its fully composed
+    /// tree, in authored order.</param>
+    /// <param name="restated">The importing file's own body — the sole exemption from a sibling collision.</param>
+    /// <param name="composed">The folded layer on success; <see langword="null"/> on refusal.</param>
+    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <returns><see langword="true"/> when every import folded without an unresolved collision.</returns>
+    public static bool TryMergeImports(IReadOnlyList<(string Name, JsonObject Tree)> imports, JsonObject restated, out JsonObject? composed, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: imports);
+        ArgumentNullException.ThrowIfNull(argument: restated);
+
+        var target = new JsonObject();
+        var owners = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        try {
+            foreach (var (name, tree) in imports) {
+                MergeSiblingObject(
+                    overlay: tree,
+                    overlayName: name,
+                    owners: owners,
+                    path: "$",
+                    restated: restated,
+                    target: target
+                );
+            }
+
+            composed = target;
+            reason = string.Empty;
+
+            return true;
+        } catch (JsonException exception) {
+            composed = null;
+            reason = exception.Message;
+
+            return false;
+        }
     }
 }

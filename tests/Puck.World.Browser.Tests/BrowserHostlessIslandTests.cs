@@ -9,21 +9,24 @@ namespace Puck.World.Browser.Tests;
 /// (<c>PhysicsQuiescentOperand</c> among them) that only <see cref="BrowserRuleReader"/>'s own hostless answers make
 /// judgeable at all (see that type's own remarks, and the project README's "Verified scope boundary").</summary>
 public sealed class BrowserHostlessIslandTests {
-    private static string RepositoryRoot() {
-        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
-
-        while ((directory is not null) && !File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(@object: directory);
-
-        return directory!.FullName;
-    }
     private static byte[] ComposedPuckWorldBytes() {
-        var path = Path.Combine(RepositoryRoot(), "src", "Puck.World", "Assets", "worlds", "puck.world.json");
+        var path = Path.Combine(
+            RepositoryRoot(),
+            "src",
+            "Puck.World",
+            "Assets",
+            "worlds",
+            "puck.world.json"
+        );
 
-        Assert.True(condition: WorldDefinitionFileSource.TryComposeDocumentTree(path: path, tree: out var tree, reason: out var reason), userMessage: reason);
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
+                path: path,
+                tree: out var tree,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
 
         return Encoding.UTF8.GetBytes(s: tree!.ToJsonString());
     }
@@ -31,11 +34,58 @@ public sealed class BrowserHostlessIslandTests {
         var errors = new List<string>();
         var deferred = new List<string>();
 
-        Assert.True(condition: BrowserParser.TryParseAndValidate(utf8Json: ComposedPuckWorldBytes(), errors: errors, deferred: deferred, definition: out var definition, compilation: out var compilation), userMessage: string.Join(separator: "; ", values: errors));
+        Assert.True(
+            condition: BrowserParser.TryParseAndValidate(
+                utf8Json: ComposedPuckWorldBytes(),
+                errors: errors,
+                deferred: deferred,
+                definition: out var definition,
+                compilation: out var compilation
+            ),
+            userMessage: string.Join(
+                separator: "; ",
+                values: errors
+            )
+        );
 
-        return new BrowserSession(definition: definition!, compilation: compilation!);
+        return new BrowserSession(
+            definition: definition!,
+            compilation: compilation!
+        );
+    }
+    private static string RepositoryRoot() {
+        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
+
+        while (
+            (directory is not null) &&
+            !File.Exists(path: Path.Combine(
+            path1: directory.FullName,
+            path2: "Puck.slnx"
+        ))
+        ) {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(@object: directory);
+
+        return directory!.FullName;
     }
 
+    [Fact]
+    public void Judge_over_the_composed_island_is_deterministic_across_two_independent_sessions() {
+        var sessionA = NewIslandSession();
+        var sessionB = NewIslandSession();
+
+        for (var tick = 1UL; (tick <= 3UL); tick++) {
+            sessionA.Judge(tick: tick);
+            sessionB.Judge(tick: tick);
+        }
+
+        Assert.Equal(
+            expected: sessionA.StateHash(),
+            actual: sessionB.StateHash()
+        );
+    }
     [Fact]
     public void Judge_over_the_composed_island_runs_ticks_1_through_3_without_throwing_and_names_a_host_fact() {
         var session = NewIslandSession();
@@ -48,18 +98,15 @@ public sealed class BrowserHostlessIslandTests {
         }
 
         Assert.NotEmpty(collection: hostFacts);
-        Assert.Contains(collection: hostFacts, filter: fact => (fact.Operand.Contains(value: "Physics", comparisonType: StringComparison.Ordinal) || fact.Operand.Contains(value: "Body", comparisonType: StringComparison.Ordinal)));
-    }
-    [Fact]
-    public void Judge_over_the_composed_island_is_deterministic_across_two_independent_sessions() {
-        var sessionA = NewIslandSession();
-        var sessionB = NewIslandSession();
-
-        for (var tick = 1UL; (tick <= 3UL); tick++) {
-            sessionA.Judge(tick: tick);
-            sessionB.Judge(tick: tick);
-        }
-
-        Assert.Equal(expected: sessionA.StateHash(), actual: sessionB.StateHash());
+        Assert.Contains(
+            collection: hostFacts,
+            filter: fact => (fact.Operand.Contains(
+                value: "Physics",
+                comparisonType: StringComparison.Ordinal
+            ) || fact.Operand.Contains(
+                value: "Body",
+                comparisonType: StringComparison.Ordinal
+            ))
+        );
     }
 }

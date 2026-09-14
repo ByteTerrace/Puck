@@ -10,12 +10,12 @@ namespace Puck.World.Server;
 /// Terminal entries are retained for deduplication; a full journal refuses admission rather than forgetting history.
 /// The host decides retention/rotation and must not reuse an operation id after rotating its history.</remarks>
 public sealed class WorldExternalOperationJournal {
-    private readonly IObjectBlobStore m_store;
-    private readonly ObjectStorageTarget m_target;
     private readonly ObjectBlobAddress m_address;
-    private readonly int m_maximumEntries;
     private readonly int m_maximumBytes;
     private readonly int m_maximumConflicts;
+    private readonly int m_maximumEntries;
+    private readonly IObjectBlobStore m_store;
+    private readonly ObjectStorageTarget m_target;
 
     /// <summary>Creates a journal with explicit host storage and capacity policy.</summary>
     /// <param name="store">The existing routed blob store.</param>
@@ -41,13 +41,124 @@ public sealed class WorldExternalOperationJournal {
         m_maximumConflicts = maximumConflicts;
     }
 
-    /// <summary>Reads detached entries for recovery, reconciliation, or host read-back.</summary>
-    /// <param name="cancellationToken">Cancels storage work.</param>
-    /// <returns>The persisted operations in commit order.</returns>
-    /// <exception cref="InvalidDataException">The journal is malformed, oversized, or lacks a CAS token.</exception>
-    /// <exception cref="JsonException">The JSON does not satisfy the strict journal schema.</exception>
-    public async ValueTask<IReadOnlyList<WorldExternalOperationEntry>> ReadAsync(CancellationToken cancellationToken = default) =>
-        (await LoadAsync(cancellationToken).ConfigureAwait(false)).Entries;
+    internal async ValueTask<bool> TryTransitionAsync(WorldExternalOperationEntry expected,
+        WorldExternalOperationResult result, CancellationToken cancellationToken) {
+        for (var attempt = 0; (attempt < m_maximumConflicts); attempt++) {
+            var snapshot = await LoadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            var index = Array.FindIndex(
+                array: snapshot.Entries,
+                match: entry => (entry.Operation.Id == expected.Operation.Id)
+            );
+
+            if (index < 0) { return false; }
+            var current = snapshot.Entries[index];
+
+            if (current != expected) {
+                // A concurrent status poll must not discard a late execution result. In particular, an
+                // accepted asynchronous response can carry the only durable continuation. It may replace
+                // uncertainty about the original claim, but never a newer running or terminal observation.
+                var definitive = (result.Status is WorldExternalOperationStatus.Succeeded or WorldExternalOperationStatus.Failed);
+                var acceptedClaim = ((expected.Status == WorldExternalOperationStatus.Dispatching) &&
+                    (result.Status == WorldExternalOperationStatus.Running) && (current.Status == WorldExternalOperationStatus.Unknown));
+
+                if (
+                    (!definitive && !acceptedClaim) ||
+                    (current.Status is WorldExternalOperationStatus.Pending or WorldExternalOperationStatus.Succeeded or
+                    WorldExternalOperationStatus.Failed) ||
+                    (current.Operation != expected.Operation) ||
+                    (current.Cause != expected.Cause)
+                ) {
+                    return false;
+                }
+            }
+            snapshot.Entries[index] = current with { Status = result.Status, Result = result.Result };
+            if (await WriteAsync(
+                snapshot,
+                snapshot.Entries,
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false)) { return true; }
+        }
+        throw new IOException(message: "External operation transition exceeded its conflict budget; reconcile before retrying.");
+    }
+
+    private async ValueTask<Snapshot> LoadAsync(CancellationToken cancellationToken) {
+        var content = await m_store.ReadAsync(
+            address: m_address,
+            cancellationToken: cancellationToken,
+            target: m_target
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (content is not { } blob) { return new Snapshot(
+            Entries: [],
+            Exists: false,
+            Version: null
+        ); }
+        if (
+            (blob.Content.Length > m_maximumBytes) ||
+            string.IsNullOrEmpty(value: blob.VersionToken)
+        ) {
+            throw new InvalidDataException(message: "An operation journal exceeds its byte limit or lacks a CAS version token.");
+        }
+        var document = (JsonSerializer.Deserialize(
+            blob.Content.Span,
+            WorldExternalOperationJsonContext.Default.WorldExternalOperationDocument
+        )
+            ?? throw new InvalidDataException(message: "An operation journal cannot be null."));
+
+        if (
+            (document.Version != 1) ||
+            (document.Entries is null) ||
+            (document.Entries.Length > m_maximumEntries)
+        ) {
+            throw new InvalidDataException(message: "Unsupported or oversized operation journal.");
+        }
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var entry in document.Entries) {
+            if (
+                (entry?.Operation is not { } operation) ||
+                string.IsNullOrWhiteSpace(operation.Id) ||
+                string.IsNullOrWhiteSpace(operation.Binding) ||
+                string.IsNullOrWhiteSpace(operation.BindingIdentity) ||
+                (operation.Payload is null) ||
+                string.IsNullOrWhiteSpace(entry.Cause) ||
+                (entry.Result is null) ||
+                !Enum.IsDefined(entry.Status) ||
+                !ids.Add(operation.Id)
+            ) {
+                throw new InvalidDataException(message: "Malformed or duplicate operation journal entry.");
+            }
+        }
+        return new Snapshot(
+            document.Entries,
+            blob.VersionToken,
+            true
+        );
+    }
+    private async ValueTask<bool> WriteAsync(Snapshot snapshot, WorldExternalOperationEntry[] entries,
+        CancellationToken cancellationToken) {
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(
+            new WorldExternalOperationDocument(
+                Entries: entries,
+                Version: 1
+            ),
+            WorldExternalOperationJsonContext.Default.WorldExternalOperationDocument
+        );
+
+        if (bytes.Length > m_maximumBytes) { throw new InvalidOperationException(message: "The external operation journal byte budget is exhausted."); }
+        var result = await m_store.WriteAsync(
+            m_target,
+            m_address,
+            bytes,
+            (snapshot.Exists
+            ? ObjectBlobWriteMode.Overwrite
+            : ObjectBlobWriteMode.CreateOnly),
+            snapshot.Version,
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return result.Succeeded;
+    }
 
     /// <summary>Commits the request and its causal recovery evidence together. Repeating an identical request
     /// returns its existing entry; reusing an id with different input refuses.</summary>
@@ -65,89 +176,46 @@ public sealed class WorldExternalOperationJournal {
         ArgumentException.ThrowIfNullOrWhiteSpace(operation.BindingIdentity);
         ArgumentNullException.ThrowIfNull(operation.Payload);
         ArgumentException.ThrowIfNullOrWhiteSpace(cause);
-        for (var attempt = 0; attempt < m_maximumConflicts; attempt++) {
-            var snapshot = await LoadAsync(cancellationToken).ConfigureAwait(false);
-            var previous = snapshot.Entries.FirstOrDefault(entry => entry.Operation.Id == operation.Id);
+        for (var attempt = 0; (attempt < m_maximumConflicts); attempt++) {
+            var snapshot = await LoadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            var previous = snapshot.Entries.FirstOrDefault(predicate: entry => (entry.Operation.Id == operation.Id));
+
             if (previous is not null) {
                 if (previous.Operation != operation) {
-                    throw new InvalidOperationException("An external operation id was reused with different input.");
+                    throw new InvalidOperationException(message: "An external operation id was reused with different input.");
                 }
                 return previous;
             }
             if (snapshot.Entries.Length >= m_maximumEntries) {
-                throw new InvalidOperationException("The external operation journal is full.");
+                throw new InvalidOperationException(message: "The external operation journal is full.");
             }
-            var entry = new WorldExternalOperationEntry(operation, cause);
-            if (await WriteAsync(snapshot, [.. snapshot.Entries, entry], cancellationToken).ConfigureAwait(false)) {
+            var entry = new WorldExternalOperationEntry(
+                operation,
+                cause
+            );
+
+            if (await WriteAsync(
+                snapshot,
+                [.. snapshot.Entries, entry],
+                cancellationToken
+            ).ConfigureAwait(continueOnCapturedContext: false)) {
                 return entry;
             }
         }
-        throw new IOException("External operation commit exceeded its conflict budget; read back before retrying.");
+        throw new IOException(message: "External operation commit exceeded its conflict budget; read back before retrying.");
     }
-
-    internal async ValueTask<bool> TryTransitionAsync(WorldExternalOperationEntry expected,
-        WorldExternalOperationResult result, CancellationToken cancellationToken) {
-        for (var attempt = 0; attempt < m_maximumConflicts; attempt++) {
-            var snapshot = await LoadAsync(cancellationToken).ConfigureAwait(false);
-            var index = Array.FindIndex(snapshot.Entries, entry => entry.Operation.Id == expected.Operation.Id);
-            if (index < 0) { return false; }
-            var current = snapshot.Entries[index];
-            if (current != expected) {
-                // A concurrent status poll must not discard a late execution result. In particular, an
-                // accepted asynchronous response can carry the only durable continuation. It may replace
-                // uncertainty about the original claim, but never a newer running or terminal observation.
-                var definitive = result.Status is WorldExternalOperationStatus.Succeeded or WorldExternalOperationStatus.Failed;
-                var acceptedClaim = expected.Status == WorldExternalOperationStatus.Dispatching &&
-                    result.Status == WorldExternalOperationStatus.Running && current.Status == WorldExternalOperationStatus.Unknown;
-                if ((!definitive && !acceptedClaim) || current.Status is WorldExternalOperationStatus.Pending or WorldExternalOperationStatus.Succeeded or
-                    WorldExternalOperationStatus.Failed || current.Operation != expected.Operation || current.Cause != expected.Cause) {
-                    return false;
-                }
-            }
-            snapshot.Entries[index] = current with { Status = result.Status, Result = result.Result };
-            if (await WriteAsync(snapshot, snapshot.Entries, cancellationToken).ConfigureAwait(false)) { return true; }
-        }
-        throw new IOException("External operation transition exceeded its conflict budget; reconcile before retrying.");
-    }
-
-    private async ValueTask<Snapshot> LoadAsync(CancellationToken cancellationToken) {
-        var content = await m_store.ReadAsync(m_target, m_address, cancellationToken).ConfigureAwait(false);
-        if (content is not { } blob) { return new Snapshot([], null, false); }
-        if (blob.Content.Length > m_maximumBytes || string.IsNullOrEmpty(blob.VersionToken)) {
-            throw new InvalidDataException("An operation journal exceeds its byte limit or lacks a CAS version token.");
-        }
-        var document = JsonSerializer.Deserialize(blob.Content.Span, WorldExternalOperationJsonContext.Default.WorldExternalOperationDocument)
-            ?? throw new InvalidDataException("An operation journal cannot be null.");
-        if (document.Version != 1 || document.Entries is null || document.Entries.Length > m_maximumEntries) {
-            throw new InvalidDataException("Unsupported or oversized operation journal.");
-        }
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var entry in document.Entries) {
-            if (entry?.Operation is not { } operation || string.IsNullOrWhiteSpace(operation.Id) ||
-                string.IsNullOrWhiteSpace(operation.Binding) || string.IsNullOrWhiteSpace(operation.BindingIdentity) || operation.Payload is null ||
-                string.IsNullOrWhiteSpace(entry.Cause) || entry.Result is null || !Enum.IsDefined(entry.Status) || !ids.Add(operation.Id)) {
-                throw new InvalidDataException("Malformed or duplicate operation journal entry.");
-            }
-        }
-        return new Snapshot(document.Entries, blob.VersionToken, true);
-    }
-
-    private async ValueTask<bool> WriteAsync(Snapshot snapshot, WorldExternalOperationEntry[] entries,
-        CancellationToken cancellationToken) {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(new WorldExternalOperationDocument(1, entries),
-            WorldExternalOperationJsonContext.Default.WorldExternalOperationDocument);
-        if (bytes.Length > m_maximumBytes) { throw new InvalidOperationException("The external operation journal byte budget is exhausted."); }
-        var result = await m_store.WriteAsync(m_target, m_address, bytes,
-            snapshot.Exists ? ObjectBlobWriteMode.Overwrite : ObjectBlobWriteMode.CreateOnly,
-            snapshot.Version, cancellationToken).ConfigureAwait(false);
-        return result.Succeeded;
-    }
+    /// <summary>Reads detached entries for recovery, reconciliation, or host read-back.</summary>
+    /// <param name="cancellationToken">Cancels storage work.</param>
+    /// <returns>The persisted operations in commit order.</returns>
+    /// <exception cref="InvalidDataException">The journal is malformed, oversized, or lacks a CAS token.</exception>
+    /// <exception cref="JsonException">The JSON does not satisfy the strict journal schema.</exception>
+    public async ValueTask<IReadOnlyList<WorldExternalOperationEntry>> ReadAsync(CancellationToken cancellationToken = default) =>
+        (await LoadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false)).Entries;
 
     private sealed record Snapshot(WorldExternalOperationEntry[] Entries, string? Version, bool Exists);
 }
 
 internal sealed record WorldExternalOperationDocument(int Version, WorldExternalOperationEntry[] Entries);
-
-[JsonSourceGenerationOptions(UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
 [JsonSerializable(typeof(WorldExternalOperationDocument))]
+[JsonSourceGenerationOptions(UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow)]
 internal sealed partial class WorldExternalOperationJsonContext : JsonSerializerContext;

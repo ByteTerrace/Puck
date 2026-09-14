@@ -18,26 +18,49 @@ public sealed class WorldRenderFarDistanceLawTests {
     );
     private static bool ValidatesWith(float? farDistance) => TryValidateLocal(definition: (Fixtures.BuildDocument() with { RenderRaw = Render(farDistance: farDistance) }));
 
+    [Fact]
+    public void Absent_ResolvesToTheEngineDefaultBitExact() {
+        Assert.Null(@object: WorldRenderDefaults.Absent.FarDistance);
+        Assert.Equal(
+            expected: SdfFrame.DefaultFarDistance,
+            actual: WorldRenderFarDistance.Resolve(defaults: WorldRenderDefaults.Absent)
+        );
+        Assert.Equal(
+            expected: 40f,
+            actual: WorldRenderFarDistance.Resolve(defaults: Fixtures.BuildDocument().Render)
+        );
+    }
+    [Fact]
+    public void Authored_ThreadsThroughUntouched() {
+        Assert.Equal(
+            expected: 200f,
+            actual: WorldRenderFarDistance.Resolve(defaults: Render(farDistance: 200f))
+        );
+        Assert.Equal(
+            expected: WorldRenderDefaults.MaxFarDistance,
+            actual: WorldRenderFarDistance.Resolve(defaults: Render(farDistance: WorldRenderDefaults.MaxFarDistance))
+        );
+    }
+    [InlineData(WorldRenderDefaults.MinFarDistance)]
+    [InlineData(WorldRenderDefaults.MaxFarDistance)]
+    [InlineData(200f)]
     [Theory]
+    public void FarDistance_InsideTheBand_Validates(float farDistance) {
+        Assert.True(condition: ValidatesWith(farDistance: farDistance));
+    }
     [InlineData(0f, "render.far-distance-zero")]
     [InlineData(-1f, "render.far-distance-negative")]
     [InlineData(0.5f, "render.far-distance-below-floor")]
     [InlineData(8193f, "render.far-distance-above-ceiling")]
     [InlineData(float.NaN, "render.far-distance-nan")]
     [InlineData(float.PositiveInfinity, "render.far-distance-infinite")]
+    [Theory]
     public void FarDistance_OutsideTheBand_RefusesByName_ControlDefaultClean(float farDistance, string lawId) {
         Laws.RefusalWithControl(
             lawId: lawId,
             deniedOutcome: () => ValidatesWith(farDistance: farDistance),
             controlOutcome: static () => ValidatesWith(farDistance: SdfFrame.DefaultFarDistance)
         );
-    }
-    [Theory]
-    [InlineData(WorldRenderDefaults.MinFarDistance)]
-    [InlineData(WorldRenderDefaults.MaxFarDistance)]
-    [InlineData(200f)]
-    public void FarDistance_InsideTheBand_Validates(float farDistance) {
-        Assert.True(condition: ValidatesWith(farDistance: farDistance));
     }
     [Fact]
     public void FarDistance_Refusal_NamesTheField() {
@@ -48,19 +71,10 @@ public sealed class WorldRenderFarDistanceLawTests {
         );
 
         Assert.False(condition: admitted);
-        Assert.Contains(expectedSubstring: "render.farDistance", actualString: reason);
-    }
-
-    [Fact]
-    public void Absent_ResolvesToTheEngineDefaultBitExact() {
-        Assert.Null(@object: WorldRenderDefaults.Absent.FarDistance);
-        Assert.Equal(expected: SdfFrame.DefaultFarDistance, actual: WorldRenderFarDistance.Resolve(defaults: WorldRenderDefaults.Absent));
-        Assert.Equal(expected: 40f, actual: WorldRenderFarDistance.Resolve(defaults: Fixtures.BuildDocument().Render));
-    }
-    [Fact]
-    public void Authored_ThreadsThroughUntouched() {
-        Assert.Equal(expected: 200f, actual: WorldRenderFarDistance.Resolve(defaults: Render(farDistance: 200f)));
-        Assert.Equal(expected: WorldRenderDefaults.MaxFarDistance, actual: WorldRenderFarDistance.Resolve(defaults: Render(farDistance: WorldRenderDefaults.MaxFarDistance)));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "render.farDistance"
+        );
     }
     [Fact]
     public void Frame_RefusesANonPositiveFarDistance_ControlDefaultClean() {
@@ -70,12 +84,18 @@ public sealed class WorldRenderFarDistanceLawTests {
         var frame = new SdfFrame(
             Program: null!,
             ProgramChanged: false,
-            Views: [],
             Time: 0f,
+            Views: [],
             WarpAmount: 0f
         );
 
-        Assert.Equal(expected: 40f, actual: frame.FarDistance);
-        Assert.Equal(expected: 40f, actual: SdfFrame.DefaultFarDistance);
+        Assert.Equal(
+            expected: 40f,
+            actual: frame.FarDistance
+        );
+        Assert.Equal(
+            actual: SdfFrame.DefaultFarDistance,
+            expected: 40f
+        );
     }
 }

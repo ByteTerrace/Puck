@@ -107,25 +107,25 @@ public static class WorldCameraRigCompiler {
                 (m_rig is { } rig) &&
                 (m_interactive == interactive) &&
                 ReferenceEquals(
-                    objA: m_program,
-                    objB: program
-                ) &&
+                objA: m_program,
+                objB: program
+            ) &&
                 ReferenceEquals(
-                    objA: m_cameras,
-                    objB: definition.Cameras
-                ) &&
+                objA: m_cameras,
+                objB: definition.Cameras
+            ) &&
                 ReferenceEquals(
-                    objA: m_curves,
-                    objB: definition.Curves
-                ) &&
+                objA: m_curves,
+                objB: definition.Curves
+            ) &&
                 ReferenceEquals(
-                    objA: m_dynamics,
-                    objB: definition.Dynamics
-                ) &&
+                objA: m_dynamics,
+                objB: definition.Dynamics
+            ) &&
                 ReferenceEquals(
-                    objA: m_views,
-                    objB: definition.ViewsRaw
-                )
+                objA: m_views,
+                objB: definition.ViewsRaw
+            )
             ) {
                 rig.Retarget(definition: definition);
 
@@ -162,32 +162,49 @@ public static class WorldCameraRigCompiler {
         public List<ScalarSource> ScalarSources { get; } = [];
         public List<SubjectSource> SubjectSources { get; } = [];
 
-        public int Translate(WorldCameraProgram program) {
-            var name = (program.Name ?? string.Empty);
-
-            if (m_indexByName.TryGetValue(
-                key: name,
-                value: out var existing
-            )) {
-                return existing;
+        // The document-wide camera-program name table a blend op resolves against: views.seatRig, views.cameraRig,
+        // and every cameras[].rig — the same namespace WorldDefinitionValidator walks for dangling names and cycles.
+        private WorldCameraProgram? ResolveProgram(string name) {
+            if (string.IsNullOrEmpty(value: name)) {
+                return null;
             }
 
-            var index = Programs.Count;
+            var views = definition.ViewsRaw;
 
-            m_indexByName[name] = index;
-            // Reserve the slot BEFORE walking, so a blend reaching back into this program resolves to it.
-            Programs.Add(item: new SdfCameraProgram(
-                Name: name,
-                Operations: []
-            ));
-            Programs[index] = new SdfCameraProgram(
-                Name: name,
-                Operations: TranslateOperations(program: program)
-            );
+            if (
+                (views?.SeatRig is { } seatRig) &&
+                string.Equals(
+                a: seatRig.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                return seatRig;
+            }
 
-            return index;
+            if (
+                (views?.CameraRig is { } cameraRig) &&
+                string.Equals(
+                a: cameraRig.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                return cameraRig;
+            }
+
+            foreach (var camera in definition.Cameras) {
+                if (string.Equals(
+                    a: camera.Rig.Name,
+                    b: name,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    return camera.Rig;
+                }
+            }
+
+            return null;
         }
-
         private SdfCameraScalar Scalar(BindableScalar scalar, float fallback) {
             if (scalar.Binding is null) {
                 return SdfCameraScalar.FromLiteral(value: (((scalar.Literal is { } literal) && float.IsFinite(f: literal))
@@ -325,7 +342,7 @@ public static class WorldCameraRigCompiler {
                         ));
 
                         break;
-                    case WorldCameraProgramOp.Fov fov:
+                    case WorldCameraProgramOp.FieldOfView fov:
                         operations.Add(item: new SdfCameraOp.Fov(FieldOfViewRadians: Scalar(
                             fallback: OrbitRig.DefaultFieldOfViewRadians,
                             scalar: fov.FieldOfViewRadians
@@ -351,7 +368,7 @@ public static class WorldCameraRigCompiler {
                         }
 
                         break;
-                    case WorldCameraProgramOp.Select selectOp:
+                    case WorldCameraProgramOp.SelectProgram selectOp:
                         // Same conservative rule as Blend: a document a live mutation left mid-transition can only
                         // transiently miss a resolved name (the validator refuses one dangling at author time), and
                         // dropping the whole op there beats resolving into a pose nothing authored.
@@ -394,48 +411,31 @@ public static class WorldCameraRigCompiler {
 
             return operations;
         }
-        // The document-wide camera-program name table a blend op resolves against: views.seatRig, views.cameraRig,
-        // and every cameras[].rig — the same namespace WorldDefinitionValidator walks for dangling names and cycles.
-        private WorldCameraProgram? ResolveProgram(string name) {
-            if (string.IsNullOrEmpty(value: name)) {
-                return null;
+
+        public int Translate(WorldCameraProgram program) {
+            var name = (program.Name ?? string.Empty);
+
+            if (m_indexByName.TryGetValue(
+                key: name,
+                value: out var existing
+            )) {
+                return existing;
             }
 
-            var views = definition.ViewsRaw;
+            var index = Programs.Count;
 
-            if (
-                (views?.SeatRig is { } seatRig) &&
-                string.Equals(
-                    a: seatRig.Name,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                )
-            ) {
-                return seatRig;
-            }
+            m_indexByName[name] = index;
+            // Reserve the slot BEFORE walking, so a blend reaching back into this program resolves to it.
+            Programs.Add(item: new SdfCameraProgram(
+                Name: name,
+                Operations: []
+            ));
+            Programs[index] = new SdfCameraProgram(
+                Name: name,
+                Operations: TranslateOperations(program: program)
+            );
 
-            if (
-                (views?.CameraRig is { } cameraRig) &&
-                string.Equals(
-                    a: cameraRig.Name,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                )
-            ) {
-                return cameraRig;
-            }
-
-            foreach (var camera in definition.Cameras) {
-                if (string.Equals(
-                    a: camera.Rig.Name,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    return camera.Rig;
-                }
-            }
-
-            return null;
+            return index;
         }
     }
     private sealed class CompiledRig : IWorldCameraProgramRig {
@@ -463,20 +463,6 @@ public static class WorldCameraRigCompiler {
         }
         public float Spread { get; set; }
 
-        public void Retarget(WorldDefinition definition) {
-            ArgumentNullException.ThrowIfNull(argument: definition);
-
-            m_definition = definition;
-        }
-        public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) {
-            Refresh(tick: clock.AuthoritativeTick);
-
-            return m_rig.Resolve(
-                anchor: in anchor,
-                clock: in clock
-            );
-        }
-
         // Refills the evaluator's per-frame slots from the live document. Runs inside Resolve so no caller can
         // evaluate against a stale binding by forgetting an ordering step.
         private void Refresh(ulong tick) {
@@ -503,20 +489,34 @@ public static class WorldCameraRigCompiler {
             for (var index = 0; (index < m_subjectSources.Count); index++) {
                 subjects[index] = (m_subjectSources[index].Subject switch {
                     WorldCameraSubject.Placement placement => new SdfAnchor(
-                        Orientation: Quaternion.Identity,
-                        Position: WorldAnchorGeometry.StaticPlacementPosition(
-                            definition: m_definition,
-                            placementId: placement.PlacementId,
-                            shapeId: placement.ShapeId
-                        )
-                    ),
+                    Orientation: Quaternion.Identity,
+                    Position: WorldAnchorGeometry.StaticPlacementPosition(
+                        definition: m_definition,
+                        placementId: placement.PlacementId,
+                        shapeId: placement.ShapeId
+                    )
+                ),
                     WorldCameraSubject.WorldPoint worldPoint => new SdfAnchor(
-                        Orientation: Quaternion.Identity,
-                        Position: worldPoint.Point.Value
-                    ),
+                    Orientation: Quaternion.Identity,
+                    Position: worldPoint.Point.Value
+                ),
                     _ => default,
                 });
             }
+        }
+
+        public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) {
+            Refresh(tick: clock.AuthoritativeTick);
+
+            return m_rig.Resolve(
+                anchor: in anchor,
+                clock: in clock
+            );
+        }
+        public void Retarget(WorldDefinition definition) {
+            ArgumentNullException.ThrowIfNull(argument: definition);
+
+            m_definition = definition;
         }
     }
 }

@@ -26,9 +26,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         ) {
             reader.Fail(
                 detail: (WorldWireTags.IsRetiredCapabilityWire(wire: wire)
-                    ? $"{nameof(WorldCapability)} wire value {wire} is retired"
-                    : $"{nameof(WorldCapability)} wire value {wire} is not declared"
-                ),
+                ? $"{nameof(WorldCapability)} wire value {wire} is retired"
+                : $"{nameof(WorldCapability)} wire value {wire} is not declared"),
                 refusal: WireRefusal.EnumValueUnknown
             );
         }
@@ -192,10 +191,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.Budgets,
             writeItem: static (w, row) => {
                 WriteGrantKey(
-                    writer: w,
-                    principal: row.Principal,
                     capability: row.Capability,
-                    subject: row.Subject
+                    principal: row.Principal,
+                    subject: row.Subject,
+                    writer: w
                 );
                 w.WriteInt32(value: row.Budget);
             }
@@ -205,10 +204,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.EventBudgets,
             writeItem: static (w, row) => {
                 WriteGrantKey(
-                    writer: w,
-                    principal: row.Principal,
                     capability: row.Capability,
-                    subject: row.Subject
+                    principal: row.Principal,
+                    subject: row.Subject,
+                    writer: w
                 );
                 w.WriteInt32(value: row.Budget);
             }
@@ -218,10 +217,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.HoldCeilings,
             writeItem: static (w, row) => {
                 WriteGrantKey(
-                    writer: w,
-                    principal: row.Principal,
                     capability: row.Capability,
-                    subject: row.Subject
+                    principal: row.Principal,
+                    subject: row.Subject,
+                    writer: w
                 );
                 w.WriteInt64(value: row.Ceiling);
             }
@@ -231,10 +230,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.ChannelReach,
             writeItem: static (w, row) => {
                 WriteGrantKey(
-                    writer: w,
-                    principal: row.Principal,
                     capability: row.Capability,
-                    subject: row.Subject
+                    principal: row.Principal,
+                    subject: row.Subject,
+                    writer: w
                 );
                 w.WriteUInt64(value: row.Bits);
             }
@@ -244,10 +243,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.PoolCeilings,
             writeItem: static (w, row) => {
                 WriteGrantKey(
-                    writer: w,
-                    principal: row.Principal,
                     capability: row.Capability,
-                    subject: row.Subject
+                    principal: row.Principal,
+                    subject: row.Subject,
+                    writer: w
                 );
                 WriteArray(
                     writer: w,
@@ -264,10 +263,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.KindMasks,
             writeItem: static (w, row) => {
                 WriteGrantKey(
-                    writer: w,
-                    principal: row.Principal,
                     capability: row.Capability,
-                    subject: row.Subject
+                    principal: row.Principal,
+                    subject: row.Subject,
+                    writer: w
                 );
                 WriteUInt128(
                     value: row.Bits,
@@ -280,10 +279,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.WriteMasks,
             writeItem: static (w, row) => {
                 WriteGrantKey(
-                    writer: w,
-                    principal: row.Principal,
                     capability: row.Capability,
-                    subject: row.Subject
+                    principal: row.Principal,
+                    subject: row.Subject,
+                    writer: w
                 );
                 w.WriteUInt64(value: row.Bits);
             }
@@ -293,10 +292,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.SeededSections,
             writeItem: static (w, row) => {
                 WriteGrantKey(
-                    writer: w,
-                    principal: row.Principal,
                     capability: row.Capability,
-                    subject: row.Subject
+                    principal: row.Principal,
+                    subject: row.Subject,
+                    writer: w
                 );
             }
         );

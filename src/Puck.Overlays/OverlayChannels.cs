@@ -179,17 +179,50 @@ public sealed class OverlayChannelLeases {
     /// channels' summed reservation exceeds a backstop — the message names the resource, the summed reservation,
     /// and the backstop.</exception>
     public OverlayChannelLeases(OverlayCapacity capacity) {
-        RequireNonNegative(count: capacity.Seats, name: nameof(OverlayCapacity.Seats));
-        RequireNonNegative(count: capacity.HudPanels, name: nameof(OverlayCapacity.HudPanels));
-        RequireNonNegative(count: capacity.HudElementsPerPanel, name: nameof(OverlayCapacity.HudElementsPerPanel));
-        RequireNonNegative(count: capacity.HudSeatPanelsPerSeat, name: nameof(OverlayCapacity.HudSeatPanelsPerSeat));
-        RequireNonNegative(count: capacity.HudElementsPerSeatPanel, name: nameof(OverlayCapacity.HudElementsPerSeatPanel));
-        RequireNonNegative(count: capacity.BindingBarMaxBanks, name: nameof(OverlayCapacity.BindingBarMaxBanks));
-        RequireNonNegative(count: capacity.BindingBarMaxSlotsPerBank, name: nameof(OverlayCapacity.BindingBarMaxSlotsPerBank));
-        RequireNonNegative(count: capacity.BindingBarMaxModifiers, name: nameof(OverlayCapacity.BindingBarMaxModifiers));
-        RequireNonNegative(count: capacity.MarkerMaxChipsPerSeat, name: nameof(OverlayCapacity.MarkerMaxChipsPerSeat));
-        RequireNonNegative(count: capacity.WheelMaxRings, name: nameof(OverlayCapacity.WheelMaxRings));
-        RequireNonNegative(count: capacity.WheelMaxSectorsPerRing, name: nameof(OverlayCapacity.WheelMaxSectorsPerRing));
+        RequireNonNegative(
+            count: capacity.Seats,
+            name: nameof(OverlayCapacity.Seats)
+        );
+        RequireNonNegative(
+            count: capacity.HudPanels,
+            name: nameof(OverlayCapacity.HudPanels)
+        );
+        RequireNonNegative(
+            count: capacity.HudElementsPerPanel,
+            name: nameof(OverlayCapacity.HudElementsPerPanel)
+        );
+        RequireNonNegative(
+            count: capacity.HudSeatPanelsPerSeat,
+            name: nameof(OverlayCapacity.HudSeatPanelsPerSeat)
+        );
+        RequireNonNegative(
+            count: capacity.HudElementsPerSeatPanel,
+            name: nameof(OverlayCapacity.HudElementsPerSeatPanel)
+        );
+        RequireNonNegative(
+            count: capacity.BindingBarMaxBanks,
+            name: nameof(OverlayCapacity.BindingBarMaxBanks)
+        );
+        RequireNonNegative(
+            count: capacity.BindingBarMaxSlotsPerBank,
+            name: nameof(OverlayCapacity.BindingBarMaxSlotsPerBank)
+        );
+        RequireNonNegative(
+            count: capacity.BindingBarMaxModifiers,
+            name: nameof(OverlayCapacity.BindingBarMaxModifiers)
+        );
+        RequireNonNegative(
+            count: capacity.MarkerMaxChipsPerSeat,
+            name: nameof(OverlayCapacity.MarkerMaxChipsPerSeat)
+        );
+        RequireNonNegative(
+            count: capacity.WheelMaxRings,
+            name: nameof(OverlayCapacity.WheelMaxRings)
+        );
+        RequireNonNegative(
+            count: capacity.WheelMaxSectorsPerRing,
+            name: nameof(OverlayCapacity.WheelMaxSectorsPerRing)
+        );
 
         // The public host counts are ints, but their products are not allowed to wrap before the backstop check.
         // UInt128 covers the largest possible product here (three non-negative Int32 counts times a small writer
@@ -234,10 +267,30 @@ public sealed class OverlayChannelLeases {
             totalTextWords += reservation.TextWords;
         }
 
-        RequireWithinBackstop(resource: "clip-table rects", total: totalClips, backstop: OverlayFrameBuilder.MaxClips, backstopName: nameof(OverlayFrameBuilder.MaxClips));
-        RequireWithinBackstop(resource: "element records", total: totalElements, backstop: OverlayFrameBuilder.MaxElements, backstopName: nameof(OverlayFrameBuilder.MaxElements));
-        RequireWithinBackstop(resource: "panel records", total: totalPanels, backstop: OverlayFrameBuilder.MaxPanels, backstopName: nameof(OverlayFrameBuilder.MaxPanels));
-        RequireWithinBackstop(resource: "glyph-code words", total: totalTextWords, backstop: OverlayFrameBuilder.TextWordCapacity, backstopName: nameof(OverlayFrameBuilder.TextWordCapacity));
+        RequireWithinBackstop(
+            resource: "clip-table rects",
+            total: totalClips,
+            backstop: OverlayFrameBuilder.MaxClips,
+            backstopName: nameof(OverlayFrameBuilder.MaxClips)
+        );
+        RequireWithinBackstop(
+            resource: "element records",
+            total: totalElements,
+            backstop: OverlayFrameBuilder.MaxElements,
+            backstopName: nameof(OverlayFrameBuilder.MaxElements)
+        );
+        RequireWithinBackstop(
+            resource: "panel records",
+            total: totalPanels,
+            backstop: OverlayFrameBuilder.MaxPanels,
+            backstopName: nameof(OverlayFrameBuilder.MaxPanels)
+        );
+        RequireWithinBackstop(
+            resource: "glyph-code words",
+            total: totalTextWords,
+            backstop: OverlayFrameBuilder.TextWordCapacity,
+            backstopName: nameof(OverlayFrameBuilder.TextWordCapacity)
+        );
 
         TotalClips = ((int)totalClips);
         TotalElements = ((int)totalElements);

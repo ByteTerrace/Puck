@@ -7,6 +7,40 @@ namespace Puck.Vulkan;
 /// adapting the pool-size and sampler parameters to their Vulkan-specific forms.
 /// </summary>
 public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator allocator) : IGpuDescriptorAllocator {
+    private static ReadOnlyMemory<VulkanDescriptorPoolSize> BuildPoolSizes(uint combinedImageSamplerCount, uint storageBufferCount, uint storageImageCount, uint accelerationStructureCount) {
+        var sizes = new List<VulkanDescriptorPoolSize>(capacity: 4);
+
+        if (combinedImageSamplerCount > 0) {
+            sizes.Add(item: new VulkanDescriptorPoolSize(
+                DescriptorCount: combinedImageSamplerCount,
+                DescriptorType: VulkanDescriptorType.CombinedImageSampler
+            ));
+        }
+
+        if (storageBufferCount > 0) {
+            sizes.Add(item: new VulkanDescriptorPoolSize(
+                DescriptorCount: storageBufferCount,
+                DescriptorType: VulkanDescriptorType.StorageBuffer
+            ));
+        }
+
+        if (storageImageCount > 0) {
+            sizes.Add(item: new VulkanDescriptorPoolSize(
+                DescriptorCount: storageImageCount,
+                DescriptorType: VulkanDescriptorType.StorageImage
+            ));
+        }
+
+        if (accelerationStructureCount > 0) {
+            sizes.Add(item: new VulkanDescriptorPoolSize(
+                DescriptorCount: accelerationStructureCount,
+                DescriptorType: VulkanDescriptorType.AccelerationStructure
+            ));
+        }
+
+        return sizes.ToArray();
+    }
+
     /// <inheritdoc/>
     public nint AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) =>
         allocator.AllocateSet(
@@ -31,7 +65,10 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
     }
     /// <inheritdoc/>
     public nint CreateSampler(nint deviceHandle, GpuSamplerFilter filter = GpuSamplerFilter.Linear) {
-        var vulkanFilter = ((filter == GpuSamplerFilter.Nearest) ? VulkanFilter.Nearest : VulkanFilter.Linear);
+        var vulkanFilter = ((filter == GpuSamplerFilter.Nearest)
+            ? VulkanFilter.Nearest
+            : VulkanFilter.Linear
+        );
 
         return allocator.CreateSampler(request: new VulkanSamplerCreateRequest(
             AddressModeU: VulkanSamplerAddressMode.ClampToEdge,
@@ -64,6 +101,15 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
         allocator.DestroySampler(
             deviceHandle: deviceHandle,
             samplerHandle: samplerHandle
+        );
+    /// <inheritdoc/>
+    public void WriteAccelerationStructure(nint deviceHandle, nint descriptorSetHandle, uint binding, nint accelerationStructureReference) =>
+        // The reference is the Vulkan VkAccelerationStructureKHR handle directly.
+        allocator.WriteAccelerationStructure(
+            accelerationStructureHandle: accelerationStructureReference,
+            binding: binding,
+            descriptorSetHandle: descriptorSetHandle,
+            deviceHandle: deviceHandle
         );
     /// <inheritdoc/>
     public void WriteCombinedImageSampler(nint deviceHandle, nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle, nint samplerHandle) =>
@@ -114,35 +160,4 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
             deviceHandle: deviceHandle,
             imageViewHandle: imageViewHandle
         );
-    /// <inheritdoc/>
-    public void WriteAccelerationStructure(nint deviceHandle, nint descriptorSetHandle, uint binding, nint accelerationStructureReference) =>
-        // The reference is the Vulkan VkAccelerationStructureKHR handle directly.
-        allocator.WriteAccelerationStructure(
-            accelerationStructureHandle: accelerationStructureReference,
-            binding: binding,
-            descriptorSetHandle: descriptorSetHandle,
-            deviceHandle: deviceHandle
-        );
-
-    private static ReadOnlyMemory<VulkanDescriptorPoolSize> BuildPoolSizes(uint combinedImageSamplerCount, uint storageBufferCount, uint storageImageCount, uint accelerationStructureCount) {
-        var sizes = new List<VulkanDescriptorPoolSize>(capacity: 4);
-
-        if (combinedImageSamplerCount > 0) {
-            sizes.Add(item: new VulkanDescriptorPoolSize(DescriptorCount: combinedImageSamplerCount, DescriptorType: VulkanDescriptorType.CombinedImageSampler));
-        }
-
-        if (storageBufferCount > 0) {
-            sizes.Add(item: new VulkanDescriptorPoolSize(DescriptorCount: storageBufferCount, DescriptorType: VulkanDescriptorType.StorageBuffer));
-        }
-
-        if (storageImageCount > 0) {
-            sizes.Add(item: new VulkanDescriptorPoolSize(DescriptorCount: storageImageCount, DescriptorType: VulkanDescriptorType.StorageImage));
-        }
-
-        if (accelerationStructureCount > 0) {
-            sizes.Add(item: new VulkanDescriptorPoolSize(DescriptorCount: accelerationStructureCount, DescriptorType: VulkanDescriptorType.AccelerationStructure));
-        }
-
-        return sizes.ToArray();
-    }
 }

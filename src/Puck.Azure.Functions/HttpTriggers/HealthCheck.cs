@@ -20,9 +20,7 @@ public sealed record class HealthCheckResponse(
     string Status,
     TimeSpan TotalDuration
 );
-
-public sealed class HealthCheck(HealthCheckService healthCheckService, ILogger<HealthCheck> logger)
-{
+public sealed class HealthCheck(HealthCheckService healthCheckService, ILogger<HealthCheck> logger) {
     private const string UnhandledExceptionMessage = "Unhandled exception while executing health check.";
 
     [FeatureGate(features: nameof(HealthCheck))]

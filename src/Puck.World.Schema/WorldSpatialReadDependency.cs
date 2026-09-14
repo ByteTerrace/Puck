@@ -24,17 +24,32 @@ public sealed record WorldSpatialReadDependency(
 ) {
     /// <summary>Gets the exact region re-read at commit.</summary>
     [JsonIgnore]
-    public WorldSpatialReadRegion Region => new(MinXRaw, MinZRaw, MaxXRaw, MaxZRaw, MinYRaw, MaxYRaw);
+    public WorldSpatialReadRegion Region => new(
+        MinXRaw,
+        MinZRaw,
+        MaxXRaw,
+        MaxZRaw,
+        MinYRaw,
+        MaxYRaw
+    );
+
     /// <summary>Validates the wire shape without reading the world document.</summary>
     public bool TryValidate(out string reason) {
-        if (MinXRaw > MaxXRaw || MinYRaw > MaxYRaw || MinZRaw > MaxZRaw ||
-            (Int128)MaxXRaw - MinXRaw > (Int128)long.MaxValue * 2 ||
-            (Int128)MaxYRaw - MinYRaw > (Int128)long.MaxValue * 2 ||
-            (Int128)MaxZRaw - MinZRaw > (Int128)long.MaxValue * 2) {
+        if (
+            (MinXRaw > MaxXRaw) ||
+            (MinYRaw > MaxYRaw) ||
+            (MinZRaw > MaxZRaw) ||
+            ((((Int128)MaxXRaw) - MinXRaw) > (((Int128)long.MaxValue) * 2)) ||
+            ((((Int128)MaxYRaw) - MinYRaw) > (((Int128)long.MaxValue) * 2)) ||
+            ((((Int128)MaxZRaw) - MinZRaw) > (((Int128)long.MaxValue) * 2))
+        ) {
             reason = "a spatial read region must have ordered bounds";
             return false;
         }
-        if (Fingerprint is not { Length: 64 } || Fingerprint.Any(c => !char.IsAsciiHexDigit(c))) {
+        if (
+            (Fingerprint is not { Length: 64 }) ||
+            Fingerprint.Any(predicate: c => !char.IsAsciiHexDigit(c: c))
+        ) {
             reason = "a spatial read fingerprint must be a SHA-256 hex value";
             return false;
         }

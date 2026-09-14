@@ -28,7 +28,8 @@ internal static partial class Oracles {
 
                 sum += ((0 == (BitOperations.PopCount(value: ((uint)(index & k))) & 1))
                     ? term
-                    : -term);
+                    : -term
+                );
             }
 
             result[k] = sum;
@@ -54,6 +55,7 @@ internal static partial class Oracles {
 
             for (var i = 0; (i < n); ++i) {
                 var j = ((((k - i) % n) + n) % n);
+
                 var (leftReal, leftImaginary) = left[i];
                 var (rightReal, rightImaginary) = right[j];
 
@@ -62,8 +64,14 @@ internal static partial class Oracles {
             }
 
             result[k] = (
-                Real: RoundDyadic(exact: real, shift: 16),
-                Imaginary: RoundDyadic(exact: imaginary, shift: 16)
+                Real: RoundDyadic(
+                exact: real,
+                shift: 16
+            ),
+                Imaginary: RoundDyadic(
+                exact: imaginary,
+                shift: 16
+            )
             );
         }
 

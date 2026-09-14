@@ -39,6 +39,7 @@ internal static class RenderHashProbe {
 
         return ((hash == expected)
             ? (true, hash, "frame hash matches floor")
-            : (false, hash, $"frame hash 0x{hash:X16} != floor 0x{expected:X16}"));
+            : (false, hash, $"frame hash 0x{hash:X16} != floor 0x{expected:X16}")
+        );
     }
 }

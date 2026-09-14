@@ -15,7 +15,7 @@ public sealed class BodyMotionProgramWireShapeLawTests {
     private const string CurveFollowProducerJson = """
 {
   "name": "track",
-  "version": "puck.body-motion.v1",
+  "version": "puck.body.program.v1",
   "kind": "Producer",
   "operations": [
     "SenseNearestInCone",
@@ -31,7 +31,7 @@ public sealed class BodyMotionProgramWireShapeLawTests {
     private const string SensedProducerJson = """
 {
   "name": "steering",
-  "version": "puck.body-motion.v1",
+  "version": "puck.body.program.v1",
   "kind": "Producer",
   "operations": [
     "SenseNearestInCone",
@@ -132,7 +132,7 @@ public sealed class BodyMotionProgramWireShapeLawTests {
     [Fact]
     public void OpcodeNamesAreRefusedAsNumbers() {
         _ = Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(
-            json: """{"name":"n","version":"puck.body-motion.v1","kind":"Motion","operations":[0]}""",
+            json: """{"name":"n","version":"puck.body.program.v1","kind":"Motion","operations":[0]}""",
             jsonTypeInfo: WorldJsonContext.Default.BodyMotionProgram
         ));
     }

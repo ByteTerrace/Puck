@@ -38,13 +38,13 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
     private int m_programWordCapacity;
     private int m_revision;
 
+    /// <summary>The currently loaded document's content hash (FNV-1a over its received UTF-8 bytes, computed before
+    /// decode), or <see langword="null"/> when no document has loaded successfully yet.</summary>
+    public ulong? ContentHash => m_program?.ContentHash;
     /// <summary>The currently loaded document (or <see langword="null"/> when none has loaded successfully yet) —
     /// read by <c>WorldFramePresenter</c>'s composed measurer so a scene mutation is checked
     /// against whatever this emitter is actually holding, never a stale or assumed value.</summary>
     public SdfDocumentProgram? CurrentProgram => m_program;
-    /// <summary>The currently loaded document's content hash (FNV-1a over its received UTF-8 bytes, computed before
-    /// decode), or <see langword="null"/> when no document has loaded successfully yet.</summary>
-    public ulong? ContentHash => m_program?.ContentHash;
     /// <inheritdoc/>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>

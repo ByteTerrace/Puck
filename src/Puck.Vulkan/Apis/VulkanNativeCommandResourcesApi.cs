@@ -18,6 +18,28 @@ public unsafe sealed class VulkanNativeCommandResourcesApi : IVulkanCommandResou
     private const uint StructureTypeCommandBufferAllocateInfo = 40;
     private const uint StructureTypeCommandPoolCreateInfo = 39;
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
+
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                AllocateCommandBuffers = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkAllocateCommandBuffers"u8
+            )),
+                CreateCommandPool = ((delegate* unmanaged[Cdecl]<nint, in VkCommandPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateCommandPool"u8
+            )),
+                DestroyCommandPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyCommandPool"u8
+            )),
+            }
+        );
+    }
+
     /// <inheritdoc/>
     public VkResult AllocateCommandBuffers(VulkanCommandBufferAllocateRequest request, nint buffer, uint commandBufferCount) {
         VulkanArgument.RequireHandle(
@@ -84,18 +106,5 @@ public unsafe sealed class VulkanNativeCommandResourcesApi : IVulkanCommandResou
         public delegate* unmanaged[Cdecl]<nint, in VkCommandBufferAllocateInfo, nint, VkResult> AllocateCommandBuffers;
         public delegate* unmanaged[Cdecl]<nint, in VkCommandPoolCreateInfo, nint, out nint, VkResult> CreateCommandPool;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyCommandPool;
-    }
-
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                AllocateCommandBuffers = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateCommandBuffers"u8)),
-                CreateCommandPool = ((delegate* unmanaged[Cdecl]<nint, in VkCommandPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateCommandPool"u8)),
-                DestroyCommandPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyCommandPool"u8)),
-            }
-        );
     }
 }

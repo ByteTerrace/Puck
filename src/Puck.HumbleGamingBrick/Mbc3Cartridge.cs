@@ -61,19 +61,151 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
         m_romBank = 1;
     }
 
-    /// <inheritdoc/>
-    public ClockDomain Domain =>
-        ClockDomain.Lcd;
+    private bool RtcRegisterSelected =>
+        (m_ramBankOrRtcRegister >= 0x08);
 
     /// <inheritdoc/>
     protected override bool RamAccessible =>
         (Header.HasRam && m_ramEnabled);
 
     /// <inheritdoc/>
+    public ClockDomain Domain =>
+        ClockDomain.Lcd;
+    /// <inheritdoc/>
     /// <remarks>This MBC3 always emulates the clock (the header's TIMER distinction is not modeled), so every MBC3
     /// battery save carries the footer — a timer-less variant just persists an untouched clock.</remarks>
     public override int PersistentClockByteCount =>
         PersistentClockFooterByteCount;
+
+    private void AdvanceOneSecond() {
+        if (++m_seconds < 60) {
+            return;
+        }
+
+        m_seconds = 0;
+
+        if (++m_minutes < 60) {
+            return;
+        }
+
+        m_minutes = 0;
+
+        if (++m_hours < 24) {
+            return;
+        }
+
+        m_hours = 0;
+
+        if (++m_dayCounter <= 0x1FF) {
+            return;
+        }
+
+        // The day counter is nine bits; overflow past 511 wraps to zero and latches the sticky day-carry flag.
+        m_dayCounter = 0;
+        m_dayCarry = 1;
+    }
+    private void LatchClock() {
+        m_latchedSeconds = m_seconds;
+        m_latchedMinutes = m_minutes;
+        m_latchedHours = m_hours;
+        m_latchedDayCounter = m_dayCounter;
+        m_latchedDayCarry = m_dayCarry;
+    }
+    private static uint PackDayHigh(int dayCounter, bool halted, int dayCarry) =>
+        ((uint)(((dayCounter >> 8) & 0x01) | (halted
+            ? 0x40
+            : 0x00) | ((dayCarry & 0x01) << 7)));
+    private byte ReadRtcRegister() =>
+        m_ramBankOrRtcRegister switch {
+            0x08 => ((byte)m_latchedSeconds),
+            0x09 => ((byte)m_latchedMinutes),
+            0x0A => ((byte)m_latchedHours),
+            0x0B => ((byte)m_latchedDayCounter),
+            0x0C => ((byte)(((m_latchedDayCounter >> 8) & 0x01) | (m_halted
+            ? 0x40
+            : 0x00) | (m_latchedDayCarry << 7))),
+            _ => 0xFF,
+        };
+    private void WriteRtcRegister(byte value) {
+        // A write updates the live counter directly; the day-high register also carries the halt and day-carry flags.
+        switch (m_ramBankOrRtcRegister) {
+            case 0x08:
+                m_seconds = value & 0x3F;
+                // Writing the seconds register resets the sub-second accumulator, as the hardware's prescaler does.
+                m_dotAccumulator = 0;
+
+                break;
+            case 0x09:
+                m_minutes = value & 0x3F;
+
+                break;
+            case 0x0A:
+                m_hours = value & 0x1F;
+
+                break;
+            case 0x0B:
+                m_dayCounter = (m_dayCounter & 0x100) | value;
+
+                break;
+            case 0x0C:
+                m_dayCounter = (m_dayCounter & 0x0FF) | ((value & 0x01) << 8);
+                m_halted = ((value & 0x40) != 0);
+                m_dayCarry = (value >> 7) & 0x01;
+
+                break;
+            default:
+                break;
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override void LoadRegisters(StateReader reader) {
+        m_ramEnabled = reader.ReadBoolean();
+        m_romBank = reader.ReadInt32();
+        m_ramBankOrRtcRegister = reader.ReadInt32();
+        m_latchTrigger = reader.ReadByte();
+        m_halted = reader.ReadBoolean();
+        m_dotAccumulator = reader.ReadInt32();
+        m_seconds = reader.ReadInt32();
+        m_minutes = reader.ReadInt32();
+        m_hours = reader.ReadInt32();
+        m_dayCounter = reader.ReadInt32();
+        m_dayCarry = reader.ReadInt32();
+        m_latchedSeconds = reader.ReadInt32();
+        m_latchedMinutes = reader.ReadInt32();
+        m_latchedHours = reader.ReadInt32();
+        m_latchedDayCounter = reader.ReadInt32();
+        m_latchedDayCarry = reader.ReadInt32();
+    }
+    /// <inheritdoc/>
+    protected override int MapRamOffset(ushort address) =>
+        (((m_ramBankOrRtcRegister & 0x03) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
+    /// <inheritdoc/>
+    protected override int MapRomOffset(ushort address) =>
+        MapStandardRomOffset(
+            address: address,
+            bankSize: RomBankSize,
+            romBank: m_romBank
+        );
+    /// <inheritdoc/>
+    protected override void SaveRegisters(StateWriter writer) {
+        writer.WriteBoolean(value: m_ramEnabled);
+        writer.WriteInt32(value: m_romBank);
+        writer.WriteInt32(value: m_ramBankOrRtcRegister);
+        writer.WriteByte(value: m_latchTrigger);
+        writer.WriteBoolean(value: m_halted);
+        writer.WriteInt32(value: m_dotAccumulator);
+        writer.WriteInt32(value: m_seconds);
+        writer.WriteInt32(value: m_minutes);
+        writer.WriteInt32(value: m_hours);
+        writer.WriteInt32(value: m_dayCounter);
+        writer.WriteInt32(value: m_dayCarry);
+        writer.WriteInt32(value: m_latchedSeconds);
+        writer.WriteInt32(value: m_latchedMinutes);
+        writer.WriteInt32(value: m_latchedHours);
+        writer.WriteInt32(value: m_latchedDayCounter);
+        writer.WriteInt32(value: m_latchedDayCarry);
+    }
 
     /// <inheritdoc/>
     public override byte[] ExportPersistentClock(long unixTimestampSeconds) {
@@ -165,15 +297,19 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
         m_latchedDayCarry = ((int)((latchedDayHigh >> 7) & 0x01));
         m_dotAccumulator = 0;
     }
+    /// <summary>Reads from the external window: an RTC register when one is selected, otherwise banked RAM.</summary>
+    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
+    /// <returns>The selected RTC register's latched value, the RAM byte, or open-bus <c>0xFF</c> while disabled.</returns>
+    public override byte ReadRam(ushort address) {
+        if (!m_ramEnabled) {
+            return 0xFF;
+        }
 
-    private static uint PackDayHigh(int dayCounter, bool halted, int dayCarry) =>
-        ((uint)(((dayCounter >> 8) & 0x01) | (halted
-        ? 0x40
-        : 0x00) | ((dayCarry & 0x01) << 7)));
-
-    private bool RtcRegisterSelected =>
-        (m_ramBankOrRtcRegister >= 0x08);
-
+        return (RtcRegisterSelected
+            ? ReadRtcRegister()
+            : base.ReadRam(address: address)
+        );
+    }
     /// <inheritdoc/>
     public void Tick() {
         // Determinism: the sole time source is the emulated LCD clock. A halted clock (day-high bit 6 set) freezes.
@@ -188,6 +324,15 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
         m_dotAccumulator = 0;
 
         AdvanceOneSecond();
+    }
+    /// <inheritdoc/>
+    /// <remarks>Overridden: the window is mode-selected between banked RAM and an RTC register, and reading the
+    /// latched RTC registers is a mode decision, not a plain array offset — it stays on the interface path.</remarks>
+    public override bool TryComputeRamWindow(out int offset, out int length) {
+        offset = 0;
+        length = 0;
+
+        return false;
     }
     /// <inheritdoc/>
     public override void WriteControl(ushort address, byte value) {
@@ -221,18 +366,6 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
                 break;
         }
     }
-    /// <summary>Reads from the external window: an RTC register when one is selected, otherwise banked RAM.</summary>
-    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
-    /// <returns>The selected RTC register's latched value, the RAM byte, or open-bus <c>0xFF</c> while disabled.</returns>
-    public override byte ReadRam(ushort address) {
-        if (!m_ramEnabled) {
-            return 0xFF;
-        }
-
-        return (RtcRegisterSelected
-            ? ReadRtcRegister()
-            : base.ReadRam(address: address));
-    }
     /// <summary>Writes to the external window: an RTC register when one is selected, otherwise banked RAM.</summary>
     /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
     /// <param name="value">The value to store.</param>
@@ -251,140 +384,5 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
             address: address,
             value: value
         );
-    }
-    /// <inheritdoc/>
-    /// <remarks>Overridden: the window is mode-selected between banked RAM and an RTC register, and reading the
-    /// latched RTC registers is a mode decision, not a plain array offset — it stays on the interface path.</remarks>
-    public override bool TryComputeRamWindow(out int offset, out int length) {
-        offset = 0;
-        length = 0;
-
-        return false;
-    }
-
-    /// <inheritdoc/>
-    protected override int MapRomOffset(ushort address) =>
-        MapStandardRomOffset(
-            address: address,
-            bankSize: RomBankSize,
-            romBank: m_romBank
-        );
-    /// <inheritdoc/>
-    protected override int MapRamOffset(ushort address) =>
-        (((m_ramBankOrRtcRegister & 0x03) * RamBankSize) + (address - MemoryMap.ExternalRamStart));
-    /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_romBank);
-        writer.WriteInt32(value: m_ramBankOrRtcRegister);
-        writer.WriteByte(value: m_latchTrigger);
-        writer.WriteBoolean(value: m_halted);
-        writer.WriteInt32(value: m_dotAccumulator);
-        writer.WriteInt32(value: m_seconds);
-        writer.WriteInt32(value: m_minutes);
-        writer.WriteInt32(value: m_hours);
-        writer.WriteInt32(value: m_dayCounter);
-        writer.WriteInt32(value: m_dayCarry);
-        writer.WriteInt32(value: m_latchedSeconds);
-        writer.WriteInt32(value: m_latchedMinutes);
-        writer.WriteInt32(value: m_latchedHours);
-        writer.WriteInt32(value: m_latchedDayCounter);
-        writer.WriteInt32(value: m_latchedDayCarry);
-    }
-    /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_ramEnabled = reader.ReadBoolean();
-        m_romBank = reader.ReadInt32();
-        m_ramBankOrRtcRegister = reader.ReadInt32();
-        m_latchTrigger = reader.ReadByte();
-        m_halted = reader.ReadBoolean();
-        m_dotAccumulator = reader.ReadInt32();
-        m_seconds = reader.ReadInt32();
-        m_minutes = reader.ReadInt32();
-        m_hours = reader.ReadInt32();
-        m_dayCounter = reader.ReadInt32();
-        m_dayCarry = reader.ReadInt32();
-        m_latchedSeconds = reader.ReadInt32();
-        m_latchedMinutes = reader.ReadInt32();
-        m_latchedHours = reader.ReadInt32();
-        m_latchedDayCounter = reader.ReadInt32();
-        m_latchedDayCarry = reader.ReadInt32();
-    }
-
-    private void AdvanceOneSecond() {
-        if (++m_seconds < 60) {
-            return;
-        }
-
-        m_seconds = 0;
-
-        if (++m_minutes < 60) {
-            return;
-        }
-
-        m_minutes = 0;
-
-        if (++m_hours < 24) {
-            return;
-        }
-
-        m_hours = 0;
-
-        if (++m_dayCounter <= 0x1FF) {
-            return;
-        }
-
-        // The day counter is nine bits; overflow past 511 wraps to zero and latches the sticky day-carry flag.
-        m_dayCounter = 0;
-        m_dayCarry = 1;
-    }
-    private void LatchClock() {
-        m_latchedSeconds = m_seconds;
-        m_latchedMinutes = m_minutes;
-        m_latchedHours = m_hours;
-        m_latchedDayCounter = m_dayCounter;
-        m_latchedDayCarry = m_dayCarry;
-    }
-    private byte ReadRtcRegister() =>
-        m_ramBankOrRtcRegister switch {
-            0x08 => ((byte)m_latchedSeconds),
-            0x09 => ((byte)m_latchedMinutes),
-            0x0A => ((byte)m_latchedHours),
-            0x0B => ((byte)m_latchedDayCounter),
-            0x0C => ((byte)(((m_latchedDayCounter >> 8) & 0x01) | (m_halted
-        ? 0x40
-        : 0x00) | (m_latchedDayCarry << 7))),
-            _ => 0xFF,
-        };
-    private void WriteRtcRegister(byte value) {
-        // A write updates the live counter directly; the day-high register also carries the halt and day-carry flags.
-        switch (m_ramBankOrRtcRegister) {
-            case 0x08:
-                m_seconds = value & 0x3F;
-                // Writing the seconds register resets the sub-second accumulator, as the hardware's prescaler does.
-                m_dotAccumulator = 0;
-
-                break;
-            case 0x09:
-                m_minutes = value & 0x3F;
-
-                break;
-            case 0x0A:
-                m_hours = value & 0x1F;
-
-                break;
-            case 0x0B:
-                m_dayCounter = (m_dayCounter & 0x100) | value;
-
-                break;
-            case 0x0C:
-                m_dayCounter = (m_dayCounter & 0x0FF) | ((value & 0x01) << 8);
-                m_halted = ((value & 0x40) != 0);
-                m_dayCarry = (value >> 7) & 0x01;
-
-                break;
-            default:
-                break;
-        }
     }
 }

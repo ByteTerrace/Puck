@@ -21,9 +21,9 @@ namespace Puck.World.Tests;
 /// <c>IntegrateLocalAttitude</c> already built.
 /// </summary>
 public sealed class LocalAttitudeHoldLawTests {
+    private const int DashOrdinal = 6;
     private const int PitchOrdinal = 2;
     private const int RollOrdinal = 3;
-    private const int DashOrdinal = 6;
 
     // Per tick: orientation W/X/Y/Z, then position Y — the raw FixedQ4816 storage in hex. A body spinning under
     // IntegrateLocalAttitude while a one-tick dash kicks its Lift row's own carried residual (m_verticalVelocity):
@@ -46,17 +46,45 @@ public sealed class LocalAttitudeHoldLawTests {
 
     private static WorldDefinition BuildLocalAttitudeHoldDocument(float rise = 14f) {
         var channels = new WorldChannel[] {
-            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
-            new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
-            new(Name: "pitch", Shape: ChannelShape.Bipolar, Role: ChannelRole.Pitch),
-            new(Name: "roll", Shape: ChannelShape.Bipolar, Role: ChannelRole.Roll),
-            new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
-            new(Name: "up", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveUp),
-            new(Name: "dash", Shape: ChannelShape.Binary, Composition: true),
+            new(
+            Name: "forward",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveAdvance
+        ),
+            new(
+            Name: "strafe",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveStrafe
+        ),
+            new(
+            Name: "pitch",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.Pitch
+        ),
+            new(
+            Name: "roll",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.Roll
+        ),
+            new(
+            Name: "turn",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.Turn
+        ),
+            new(
+            Name: "up",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveUp
+        ),
+            new(
+            Name: "dash",
+            Shape: ChannelShape.Binary,
+            Composition: true
+        ),
         };
         var free = new BodyMotionProgram(
             Name: "free",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.IntegrateLocalAttitude,
@@ -68,7 +96,12 @@ public sealed class LocalAttitudeHoldLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(
+            Name: "roam",
+            Version: "puck.body.program.v1",
+            Kind: BodyProgramKind.Producer,
+            Operations: [BodyMotionOp.ProduceSteeringIntent]
+        );
         var kit = new WorldKit(
             Name: "flyer-test",
             BodyMotionProgram: "free",
@@ -78,7 +111,10 @@ public sealed class LocalAttitudeHoldLawTests {
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
-                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: rise),
+                        Gravity: new WorldHoldGravity(
+                            Fall: 23f,
+                            Rise: rise
+                        ),
                         Hold: BodyHoldKind.Lift,
                         Lift: 1f,
                         Name: "air"
@@ -91,7 +127,14 @@ public sealed class LocalAttitudeHoldLawTests {
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["roam"] = Fixtures.TravelerRoamParameters,
             },
-            Collider: new WorldCollider.Capsule(Endpoint: new Vector3(x: 0f, y: 1f, z: 0f), Radius: 0.35f)
+            Collider: new WorldCollider.Capsule(
+                Endpoint: new Vector3(
+                    x: 0f,
+                    y: 1f,
+                    z: 0f
+                ),
+                Radius: 0.35f
+            )
         );
 
         return Fixtures.BuildDocument() with {
@@ -101,20 +144,20 @@ public sealed class LocalAttitudeHoldLawTests {
             KitRowsRaw = [kit],
         };
     }
-    private static string Hex(FixedQ4816 value) => value.Value.ToString(format: "x16", provider: CultureInfo.InvariantCulture);
-    private static string TraceLine(WorldBody body) {
-        var orientation = body.FixedOrientation;
-
-        return string.Join(separator: ' ', values: [
-            Hex(value: orientation.W), Hex(value: orientation.X), Hex(value: orientation.Y), Hex(value: orientation.Z),
-            Hex(value: body.FixedPosition.Y),
-        ]);
-    }
+    private static string Hex(FixedQ4816 value) => value.Value.ToString(
+        format: "x16",
+        provider: CultureInfo.InvariantCulture
+    );
     private static string[] LocalAttitudeTrace(WorldDefinition definition, int ticks) {
         using var fixture = Fixtures.FreshServer(definition: definition);
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var body = fixture.Server.Body(index: actor.Index)!;
         var trace = new string[ticks];
@@ -124,11 +167,20 @@ public sealed class LocalAttitudeHoldLawTests {
             // m_verticalVelocity a real residual for the Lift row's own decay to bleed — pitch/roll keep integrating
             // every tick alongside it.
             var intent = default(PlayerIntent)
-                .WithChannel(ordinal: PitchOrdinal, value: FixedQ4816.One)
-                .WithChannel(ordinal: RollOrdinal, value: FixedQ4816.One);
+                .WithChannel(
+                ordinal: PitchOrdinal,
+                value: FixedQ4816.One
+            )
+                .WithChannel(
+                ordinal: RollOrdinal,
+                value: FixedQ4816.One
+            );
 
             if (tick == 0) {
-                intent = intent.WithChannel(ordinal: DashOrdinal, value: FixedQ4816.One);
+                intent = intent.WithChannel(
+                    ordinal: DashOrdinal,
+                    value: FixedQ4816.One
+                );
             }
 
             body.SubmitIntent(intent: intent);
@@ -139,12 +191,53 @@ public sealed class LocalAttitudeHoldLawTests {
 
         return trace;
     }
+    private static string TraceLine(WorldBody body) {
+        var orientation = body.FixedOrientation;
 
+        return string.Join(
+            separator: ' ',
+            values: [
+            Hex(value: orientation.W), Hex(value: orientation.X), Hex(value: orientation.Y), Hex(value: orientation.Z),
+            Hex(value: body.FixedPosition.Y),
+        ]
+        );
+    }
+
+    [Fact]
+    public void ALocalAttitudeProgramWithALiveCollider_ReproducesTheRecordedTrace_WhereRiseChangedDiverges() {
+        var ticks = RecordedTrace.Length;
+        var trace = LocalAttitudeTrace(
+            definition: BuildLocalAttitudeHoldDocument(),
+            ticks: ticks
+        );
+
+        Assert.Equal(
+            actual: trace,
+            expected: RecordedTrace
+        );
+        Assert.NotEqual(
+            expected: RecordedTrace,
+            actual: LocalAttitudeTrace(
+                definition: BuildLocalAttitudeHoldDocument(rise: 20f),
+                ticks: ticks
+            )
+        );
+
+        // The composed orientation carries the integrated pitch/roll (a nonzero X and Z) rather than the yaw-only
+        // shape SnapFacing would have left it in — the fold this trace exists to prove.
+        Assert.NotEqual(
+            expected: FixedQ4816.Zero,
+            actual: FixedQ4816.FromRawBits(value: Convert.ToInt64(
+                value: trace[^1].Split(separator: ' ')[1],
+                fromBase: 16
+            ))
+        );
+    }
     [Fact]
     public void OwnsVerticalContactState_ExcludesALocalAttitudeProgram_WhereAnOrdinaryHoldProgramOwnsIt() {
         var localAttitude = BodyMotionProgramFactory.Compile(program: new BodyMotionProgram(
             Name: "free-test",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.IntegrateLocalAttitude,
@@ -157,7 +250,7 @@ public sealed class LocalAttitudeHoldLawTests {
         ));
         var ordinary = BodyMotionProgramFactory.Compile(program: new BodyMotionProgram(
             Name: "grounded-test",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
@@ -172,18 +265,5 @@ public sealed class LocalAttitudeHoldLawTests {
 
         Assert.False(condition: localAttitude.OwnsVerticalContactState);
         Assert.True(condition: ordinary.OwnsVerticalContactState);
-    }
-
-    [Fact]
-    public void ALocalAttitudeProgramWithALiveCollider_ReproducesTheRecordedTrace_WhereRiseChangedDiverges() {
-        var ticks = RecordedTrace.Length;
-        var trace = LocalAttitudeTrace(definition: BuildLocalAttitudeHoldDocument(), ticks: ticks);
-
-        Assert.Equal(expected: RecordedTrace, actual: trace);
-        Assert.NotEqual(expected: RecordedTrace, actual: LocalAttitudeTrace(definition: BuildLocalAttitudeHoldDocument(rise: 20f), ticks: ticks));
-
-        // The composed orientation carries the integrated pitch/roll (a nonzero X and Z) rather than the yaw-only
-        // shape SnapFacing would have left it in — the fold this trace exists to prove.
-        Assert.NotEqual(expected: FixedQ4816.Zero, actual: FixedQ4816.FromRawBits(value: Convert.ToInt64(value: trace[^1].Split(separator: ' ')[1], fromBase: 16)));
     }
 }

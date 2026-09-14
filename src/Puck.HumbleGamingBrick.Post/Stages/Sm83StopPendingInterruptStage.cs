@@ -18,28 +18,30 @@ internal sealed class Sm83StopPendingInterruptStage : IPostStage<PostContext> {
     private static readonly byte[] Program = [0x10, 0x00];
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "sm83-stop-pending-interrupt";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
-    /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        if (RunNoPendingLeg() is { } noPendingFailure) {
-            return PostStageOutcome.Fail(detail: noPendingFailure);
-        }
+    // A bare monochrome machine (no boot ROM, seeded post-boot handoff) isolates STOP's pad-byte decision from the
+    // Color speed-switch branch (KEY1), which is a separate, already-covered path.
+    private static MachineInstance BuildMachine() {
+        var rom = new byte[0x8000];
 
-        if (RunPendingLeg() is { } pendingFailure) {
-            return PostStageOutcome.Fail(detail: pendingFailure);
-        }
+        Program.CopyTo(
+            array: rom,
+            index: 0x0100
+        );
 
-        return PostStageOutcome.Pass(detail: "STOP consumes its pad byte (PC+2) with no interrupt pending, and leaves it for the next fetch (PC+1, then executed as PC+2) with IE&IF already latched and IME disabled");
+        return PostMachine.Build(
+            model: ConsoleModel.DmgC,
+            rom: rom
+        );
     }
-
     // No interrupt pending: STOP's one dispatch consumes both bytes (PC 0x0100 -> 0x0102) and the (monochrome) CPU
     // parks — a second step, still with nothing pending, must not move PC further.
     private static string? RunNoPendingLeg() {
@@ -55,7 +57,8 @@ internal sealed class Sm83StopPendingInterruptStage : IPostStage<PostContext> {
 
         return ((machine.GetRequiredService<ICpu>().ProgramCounter == 0x0102)
             ? null
-            : $"no-pending STOP: PC=0x{machine.GetRequiredService<ICpu>().ProgramCounter:X4} after a second step; expected 0x0102 (still parked)");
+            : $"no-pending STOP: PC=0x{machine.GetRequiredService<ICpu>().ProgramCounter:X4} after a second step; expected 0x0102 (still parked)"
+        );
     }
     // An interrupt already latched (IE & IF both set) with IME disabled — never serviced, so it stays pending across
     // both steps: STOP's dispatch must leave PC at 0x0101 (pad byte NOT consumed), and the NEXT step must decode that
@@ -83,21 +86,20 @@ internal sealed class Sm83StopPendingInterruptStage : IPostStage<PostContext> {
 
         return ((machine.GetRequiredService<ICpu>().ProgramCounter == 0x0102)
             ? null
-            : $"pending STOP: PC=0x{machine.GetRequiredService<ICpu>().ProgramCounter:X4} after the follow-up step; expected 0x0102 (pad byte executed as the next instruction)");
+            : $"pending STOP: PC=0x{machine.GetRequiredService<ICpu>().ProgramCounter:X4} after the follow-up step; expected 0x0102 (pad byte executed as the next instruction)"
+        );
     }
-    // A bare monochrome machine (no boot ROM, seeded post-boot handoff) isolates STOP's pad-byte decision from the
-    // Color speed-switch branch (KEY1), which is a separate, already-covered path.
-    private static MachineInstance BuildMachine() {
-        var rom = new byte[0x8000];
 
-        Program.CopyTo(
-            array: rom,
-            index: 0x0100
-        );
+    /// <inheritdoc/>
+    public PostStageOutcome Run(PostContext context) {
+        if (RunNoPendingLeg() is { } noPendingFailure) {
+            return PostStageOutcome.Fail(detail: noPendingFailure);
+        }
 
-        return PostMachine.Build(
-            model: ConsoleModel.DmgC,
-            rom: rom
-        );
+        if (RunPendingLeg() is { } pendingFailure) {
+            return PostStageOutcome.Fail(detail: pendingFailure);
+        }
+
+        return PostStageOutcome.Pass(detail: "STOP consumes its pad byte (PC+2) with no interrupt pending, and leaves it for the next fetch (PC+1, then executed as PC+2) with IE&IF already latched and IME disabled");
     }
 }

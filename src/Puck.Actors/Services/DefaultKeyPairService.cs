@@ -4,28 +4,23 @@ using System.Security.Cryptography;
 
 namespace Puck.Actors.Services;
 
-public interface IKeyPairService
-{
+public interface IKeyPairService {
     Task<GenerateKeyPairResponse> GenerateAsync(
         GenerateKeyPairRequest request,
         string? userObjectId,
         CancellationToken cancellationToken
     );
 }
-
-public sealed class GenerateKeyPairRequest
-{
+public sealed class GenerateKeyPairRequest {
     public string? Type { get; set; }
 }
-
 public sealed record class GenerateKeyPairResponse(
     string Fingerprint,
     string Id,
     byte[] ProtectedPassword,
     byte[] ProtectedPrivateKey,
     byte[] PublicKey
-)
-{
+) {
     public async Task ExportToUserBlobStorageAsync(
         BlobContainerClient userBlobContainerClient,
         IDictionary<string, string>? tags,
@@ -38,38 +33,38 @@ public sealed record class GenerateKeyPairResponse(
         var privateKeyUpload = userBlobContainerClient
             .GetBlobClient(blobName: $"private/{keyPath}/private.pem")
             .UploadAsync(
-                cancellationToken: cancellationToken,
-                content: BinaryData.FromBytes(data: PemEncoding.WriteUtf8(
-                    data: ProtectedPrivateKey,
-                    utf8Label: "ENCRYPTED PRIVATE KEY"u8
-                )),
-                options: new() {
-                    HttpHeaders = new() {
-                        ContentDisposition = $"attachment; filename*=UTF-8''{Fingerprint}-private.pem",
-                        ContentType = "application/x-pem-file",
-                    },
-                    Metadata = new Dictionary<string, string> {
+            cancellationToken: cancellationToken,
+            content: BinaryData.FromBytes(data: PemEncoding.WriteUtf8(
+                data: ProtectedPrivateKey,
+                utf8Label: "ENCRYPTED PRIVATE KEY"u8
+            )),
+            options: new() {
+                HttpHeaders = new() {
+                    ContentDisposition = $"attachment; filename*=UTF-8''{Fingerprint}-private.pem",
+                    ContentType = "application/x-pem-file",
+                },
+                Metadata = new Dictionary<string, string> {
                         { "KeyProtector", Convert.ToBase64String(inArray: ProtectedPassword) },
                     },
-                    Tags = tags,
-                }
-            );
+                Tags = tags,
+            }
+        );
         var publicKeyUpload = userBlobContainerClient
             .GetBlobClient(blobName: $"private/{keyPath}/public.pem")
             .UploadAsync(
-                cancellationToken: cancellationToken,
-                content: BinaryData.FromBytes(data: PemEncoding.WriteUtf8(
-                    data: PublicKey,
-                    utf8Label: "PUBLIC KEY"u8
-                )),
-                options: new() {
-                    HttpHeaders = new() {
-                        ContentDisposition = $"attachment; filename*=UTF-8''{Fingerprint}-public.pem",
-                        ContentType = "application/x-pem-file",
-                    },
-                    Tags = tags,
-                }
-            );
+            cancellationToken: cancellationToken,
+            content: BinaryData.FromBytes(data: PemEncoding.WriteUtf8(
+                data: PublicKey,
+                utf8Label: "PUBLIC KEY"u8
+            )),
+            options: new() {
+                HttpHeaders = new() {
+                    ContentDisposition = $"attachment; filename*=UTF-8''{Fingerprint}-public.pem",
+                    ContentType = "application/x-pem-file",
+                },
+                Tags = tags,
+            }
+        );
 
         await Task.WhenAll(
             privateKeyUpload,
@@ -77,9 +72,7 @@ public sealed record class GenerateKeyPairResponse(
         );
     }
 }
-
-public sealed class DefaultKeyPairService(IDataProtectionProvider dataProtectionProvider) : IKeyPairService
-{
+public sealed class DefaultKeyPairService(IDataProtectionProvider dataProtectionProvider) : IKeyPairService {
     private static ECAlgorithm CreateAlgorithm(string algorithmType) {
         return algorithmType switch {
             "ecdh" => ECDiffieHellman.Create(curve: ECCurve.NamedCurves.nistP256),

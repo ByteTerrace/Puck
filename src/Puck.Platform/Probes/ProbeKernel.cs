@@ -15,7 +15,10 @@ public abstract record ProbeKernelInput {
         var count = 0;
 
         for (var index = 0; (index < inputs.Count); index++) {
-            count += ((inputs[index] is StrobePair) ? 2 : 1);
+            count += ((inputs[index] is StrobePair)
+                ? 2
+                : 1
+            );
         }
 
         return count;
@@ -39,7 +42,7 @@ public abstract record ProbeKernelInput {
     /// <summary>An optional socket left unbound — one register, always a null SRV.</summary>
     public sealed record Unbound() : ProbeKernelInput;
 }
-/// <summary>The declared socket ceiling for one kernel request (<c>puck.probe.v1</c>: 1..8 sockets) and the derived
+/// <summary>The declared socket ceiling for one kernel request (<c>puck.probe.manifest.v1</c>: 1..8 sockets) and the derived
 /// t-register ceiling once a <see cref="ProbeKernelInput.StrobePair"/> socket's two registers are counted.</summary>
 public static class ProbeKernelInputLimits {
     /// <summary>The maximum number of declared sockets.</summary>

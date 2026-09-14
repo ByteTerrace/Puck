@@ -22,6 +22,8 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
         "VK_LAYER_KHRONOS_validation",
     ];
 
+    private readonly IVulkanInstanceApi m_instanceApi;
+
     private IReadOnlyList<string> BuildExtensionNames(NativeDisplayKind displayKind) {
         string[] surfaceExtensions = displayKind switch {
             NativeDisplayKind.Vi => [.. CommonExtensions, "VK_NN_vi_surface",],
@@ -33,18 +35,8 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
 
         return (m_instanceApi.HasInstanceExtension(extensionName: DebugUtilsExtension)
             ? [.. surfaceExtensions, DebugUtilsExtension]
-            : surfaceExtensions);
-    }
-
-    private readonly IVulkanInstanceApi m_instanceApi;
-
-    /// <summary>Initializes a new instance of the <see cref="VulkanInstanceFactory"/> class.</summary>
-    /// <param name="instanceApi">The instance API used to create and own the underlying instance.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="instanceApi"/> is <see langword="null"/>.</exception>
-    public VulkanInstanceFactory(IVulkanInstanceApi instanceApi) {
-        ArgumentNullException.ThrowIfNull(argument: instanceApi);
-
-        m_instanceApi = instanceApi;
+            : surfaceExtensions
+        );
     }
 
     /// <inheritdoc/>
@@ -61,8 +53,8 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
             EnableValidation: enableValidation,
             ExtensionNames: BuildExtensionNames(displayKind: displayKind),
             LayerNames: (enableValidation
-                ? ValidationLayers
-                : [])
+            ? ValidationLayers
+            : [])
         );
         var result = m_instanceApi.CreateInstance(
             instanceHandle: out var instanceHandle,
@@ -79,7 +71,8 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
         // with the Direct3D 12 info-queue drain. Best-effort: a zero handle just means no messenger.
         var debugMessengerHandle = (enableValidation
             ? m_instanceApi.CreateDebugMessenger(instanceHandle: instanceHandle)
-            : 0);
+            : 0
+        );
 
         return new(
             debugMessengerHandle: debugMessengerHandle,
@@ -89,5 +82,14 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
             instanceApi: m_instanceApi,
             instanceHandle: instanceHandle
         );
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanInstanceFactory"/> class.</summary>
+    /// <param name="instanceApi">The instance API used to create and own the underlying instance.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="instanceApi"/> is <see langword="null"/>.</exception>
+    public VulkanInstanceFactory(IVulkanInstanceApi instanceApi) {
+        ArgumentNullException.ThrowIfNull(argument: instanceApi);
+
+        m_instanceApi = instanceApi;
     }
 }

@@ -53,19 +53,34 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
             // ID3D11Device1 carries OpenSharedResource1 (the NT-handle open).
             var device1Iid = ID3D11Device1.IID_Guid;
 
-            Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(ppvObject: out var device1, riid: in device1Iid), operation: "QueryInterface(ID3D11Device1)");
+            Win32D3D11.ThrowIfFailed(
+                hr: ((IUnknown*)device)->QueryInterface(
+                    ppvObject: out var device1,
+                    riid: in device1Iid
+                ),
+                operation: "QueryInterface(ID3D11Device1)"
+            );
             m_device1 = ((ID3D11Device1*)device1);
 
             var multithreadIid = ID3D10Multithread.IID_Guid;
 
-            Win32D3D11.ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(ppvObject: out var multithread, riid: in multithreadIid), operation: "QueryInterface(ID3D10Multithread)");
+            Win32D3D11.ThrowIfFailed(
+                hr: ((IUnknown*)device)->QueryInterface(
+                    ppvObject: out var multithread,
+                    riid: in multithreadIid
+                ),
+                operation: "QueryInterface(ID3D10Multithread)"
+            );
             m_multithread = ((ID3D10Multithread*)multithread);
 
             // The event query CopyToTarget spins on: signaled when everything submitted before End has completed.
             var queryDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
             ID3D11Query* query;
 
-            device->CreateQuery(pQueryDesc: &queryDesc, ppQuery: &query);
+            device->CreateQuery(
+                pQueryDesc: &queryDesc,
+                ppQuery: &query
+            );
             m_query = query;
         } finally {
             _ = adapter->Release();
@@ -100,7 +115,10 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
             pSrcBox: null,
             pSrcResource: ((ID3D11Resource*)sourceTexture)
         );
-        Win32D3D11.WaitForCompletion(context: context, query: m_query);
+        Win32D3D11.WaitForCompletion(
+            context: context,
+            query: m_query
+        );
     }
     /// <summary>Opens a consumer-provisioned shared texture (an NT handle) on this device; the caller owns the returned
     /// <c>ID3D11Texture2D*</c> and must release it via <see cref="ReleaseTexture"/>.</summary>
@@ -109,7 +127,10 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
     public nint OpenSharedTexture(nint sharedHandle) {
         // A non-owning SafeHandle wrapper: the NT handle belongs to the consumer's exportable texture. The generated
         // wrapper throws on failure (the raw HRESULT rides in the exception).
-        using var handle = new SafeFileHandle(ownsHandle: false, preexistingHandle: sharedHandle);
+        using var handle = new SafeFileHandle(
+            ownsHandle: false,
+            preexistingHandle: sharedHandle
+        );
 
         m_device1->OpenSharedResource1(
             hResource: handle,
@@ -126,7 +147,11 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
     public nint CreateShaderResourceView(nint texture) {
         ID3D11ShaderResourceView* view = null;
 
-        m_device->CreateShaderResourceView(pDesc: null, pResource: ((ID3D11Resource*)texture), ppSRView: &view);
+        m_device->CreateShaderResourceView(
+            pDesc: null,
+            pResource: ((ID3D11Resource*)texture),
+            ppSRView: &view
+        );
 
         return ((nint)view);
     }

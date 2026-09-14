@@ -1,3 +1,4 @@
+using System.CommandLine;
 using Puck.Cli.Canary;
 
 namespace Puck.Cli.Landing;
@@ -17,18 +18,98 @@ namespace Puck.Cli.Landing;
 /// against the tip being landed on, which is the one thing nobody was running.</para>
 /// </remarks>
 internal static class LandingCommand {
-    public static int Run(string[] args) {
-        if ((args.Length == 0) || (Array.IndexOf(array: args, value: "-h") >= 0) || (Array.IndexOf(array: args, value: "--help") >= 0)) {
-            return Usage();
+    private static string Clip(string text) {
+        var trimmed = text.Trim();
+
+        return ((trimmed.Length <= 100)
+            ? trimmed
+            : (trimmed[..100] + "…")
+        );
+    }
+    // The refusal names the COMMITS whose content is being dropped, not just the lines: "you deleted 306 lines" is a
+    // puzzle, "you are dropping <hash> The mouse learns to pick things up" is an instruction.
+    private static int Refuse(string tip, string authoringBase, IReadOnlyDictionary<string, List<string>> unaccounted) {
+        var lines = 0;
+
+        Console.Error.WriteLine(value: $"landing: HEAD onto {tip[..12]}, authored from {authoringBase[..12]}.");
+        Console.Error.WriteLine(value: string.Empty);
+
+        foreach (var entry in unaccounted.OrderBy(
+            keySelector: static entry => entry.Key,
+            comparer: StringComparer.Ordinal
+        )) {
+            lines += entry.Value.Count;
+
+            Console.Error.WriteLine(value: $"  {entry.Key}: {entry.Value.Count} unaccounted deletion(s)");
+
+            foreach (var commit in LandingDiff.CommitsBetween(
+                from: authoringBase,
+                to: tip,
+                path: entry.Key
+            )) {
+                Console.Error.WriteLine(value: $"      dropping work from {commit}");
+            }
+
+            foreach (var line in entry.Value.Take(count: 3)) {
+                Console.Error.WriteLine(value: $"      - {Clip(text: line)}");
+            }
+
+            if (entry.Value.Count > 3) {
+                Console.Error.WriteLine(value: $"      … and {(entry.Value.Count - 3)} more");
+            }
         }
 
-        if (!TryParse(against: out var against, args: args, baseRef: out var baseRef, error: out var parseError)) {
-            Console.Error.WriteLine(value: $"ERROR: {parseError}");
+        Console.Error.WriteLine(value: string.Empty);
+        Console.Error.WriteLine(value: $"FAIL: {lines} line(s) exist on the tip, are not deleted by your own change set, and would be lost.");
+        Console.Error.WriteLine(value: "      Rebase onto the tip and re-apply your work, or (if the tree was re-parented) rebuild it:");
+        Console.Error.WriteLine(value: "      base a tree on the tip, apply diff(base..HEAD), and commit that.");
 
-            return 2;
+        return 1;
+    }
+    // A base cannot be GUESSED. The obvious automatic answer — merge-base(tip, HEAD) — is worse than none: for the
+    // failure this verb exists to catch it returns the tip itself, so the two diffs become identical, every deletion
+    // reads as intended, and the verb blesses the exact bug with a green light on top. The reflog knows the real
+    // answer, so it is offered as a SUGGESTION the human confirms, never as a default the tool assumes.
+    private static int RefuseMissingBase(string tip) {
+        Console.Error.WriteLine(value: "ERROR: --base is required.");
+        Console.Error.WriteLine(value: string.Empty);
+        Console.Error.WriteLine(value: "  The base is the commit your work was AUTHORED FROM — for rebased work the ORIGINAL base,");
+        Console.Error.WriteLine(value: "  never the new parent a rebase gave you (that pairing is vacuous and is refused).");
+        Console.Error.WriteLine(value: "  It is NOT derivable: merge-base(tip, HEAD) returns the tip for a re-parented tree, which");
+        Console.Error.WriteLine(value: "  makes every deletion look intended and hides precisely the failure this verb catches.");
+        Console.Error.WriteLine(value: string.Empty);
+
+        if (LandingReflog.TrySuggestBase(
+            suggestion: out var suggestion,
+            when: out var when
+        )) {
+            Console.Error.WriteLine(value: $"  Your reflog's most recent rebase base is {suggestion} ({when}).");
+            Console.Error.WriteLine(value: $"  If that is the tree you worked from:  puck landing --against {tip[..12]} --base {suggestion}");
+        } else {
+            Console.Error.WriteLine(value: "  No rebase entry was found in this branch's reflog; supply the base yourself.");
         }
 
-        if (!Git.TryResolve(error: out var tipError, resolved: out var tip, revision: against)) {
+        return 2;
+    }
+    private static void ReportGitAccept(string tip, string authoringBase, IReadOnlyDictionary<string, List<string>> intended) {
+        var files = 0;
+        var lines = 0;
+
+        foreach (var entry in intended) {
+            files++;
+            lines += entry.Value.Count;
+        }
+
+        Console.WriteLine(value: $"landing: HEAD onto {tip[..12]}, authored from {authoringBase[..12]}.");
+        Console.WriteLine(value: $"landing: {lines} deleted line(s) across {files} file(s) — every one accounted for by this landing's own change set.");
+        Console.WriteLine(value: $"landing git component: clean given base {authoringBase[..12]}; running the automatic canary set next.");
+    }
+    private static int Run(string against, string? baseRef) {
+        if (!Git.TryResolve(
+            error: out var tipError,
+            resolved: out var tip,
+            revision: against
+        )) {
             Console.Error.WriteLine(value: $"ERROR: --against '{against}': {tipError}");
 
             return 2;
@@ -38,7 +119,11 @@ internal static class LandingCommand {
             return RefuseMissingBase(tip: tip);
         }
 
-        if (!Git.TryResolve(error: out var baseError, resolved: out var authoringBase, revision: baseRef)) {
+        if (!Git.TryResolve(
+            error: out var baseError,
+            resolved: out var authoringBase,
+            revision: baseRef
+        )) {
             Console.Error.WriteLine(value: $"ERROR: --base '{baseRef}': {baseError}");
 
             return 2;
@@ -54,7 +139,11 @@ internal static class LandingCommand {
         // DO NOT OVERCLAIM THIS EITHER. It does not catch the re-parenting shape this verb was written for — there
         // the base is a genuine distinct ancestor, so the pairing is unequal and this refusal never fires. It closes
         // one arithmetic hole; the required-and-refused base design is what closes the other.
-        if (string.Equals(a: authoringBase, b: tip, comparisonType: StringComparison.Ordinal)) {
+        if (string.Equals(
+            a: authoringBase,
+            b: tip,
+            comparisonType: StringComparison.Ordinal
+        )) {
             Console.Error.WriteLine(value: $"ERROR: --base and --against are the same commit ({tip[..12]}).");
             Console.Error.WriteLine(value: string.Empty);
             Console.Error.WriteLine(value: "  That comparison is vacuous: both deletion sets come from the same range, so their");
@@ -77,7 +166,10 @@ internal static class LandingCommand {
         // ancestry and still blesses the bug (see RefuseMissingBase). This catches wrong bases, not dishonest ones.
         // The verdict remains conditional on an honestly-supplied base, which is inherent — the tool cannot know
         // what you built on except by asking, and that conditionality is stated in the PASS line rather than hidden.
-        if (!Git.IsAncestor(candidate: authoringBase, descendant: "HEAD")) {
+        if (!Git.IsAncestor(
+            candidate: authoringBase,
+            descendant: "HEAD"
+        )) {
             Console.Error.WriteLine(value: $"ERROR: --base {authoringBase[..12]} is not an ancestor of HEAD.");
             Console.Error.WriteLine(value: string.Empty);
             Console.Error.WriteLine(value: "  Your work cannot have been built on a commit it does not descend from, so the two");
@@ -88,21 +180,38 @@ internal static class LandingCommand {
 
         // The whole check, in two diffs. What the author MEANT to delete is what their work deletes relative to the
         // tree they actually worked from; anything else the landing removes came from a commit they never had.
-        var againstTip = LandingDiff.DeletedLines(from: tip, to: "HEAD");
-        var againstBase = LandingDiff.DeletedLines(from: authoringBase, to: "HEAD");
-        var unaccounted = LandingDiff.Subtract(left: againstTip, right: againstBase);
+        var againstTip = LandingDiff.DeletedLines(
+            from: tip,
+            to: "HEAD"
+        );
+        var againstBase = LandingDiff.DeletedLines(
+            from: authoringBase,
+            to: "HEAD"
+        );
+        var unaccounted = LandingDiff.Subtract(
+            left: againstTip,
+            right: againstBase
+        );
 
         if (unaccounted.Count != 0) {
-            return Refuse(authoringBase: authoringBase, tip: tip, unaccounted: unaccounted);
+            return Refuse(
+                authoringBase: authoringBase,
+                tip: tip,
+                unaccounted: unaccounted
+            );
         }
 
-        ReportGitAccept(authoringBase: authoringBase, intended: againstBase, tip: tip);
+        ReportGitAccept(
+            authoringBase: authoringBase,
+            intended: againstBase,
+            tip: tip
+        );
 
         // HEAD-BINDING HOLE, deliberately not solved here: this source integration cannot prove the invoked puck
         // assembly was built from the checkout's HEAD. A stale published puck.exe can retain the old git-only
         // landing command and never enter this code, so external enforcement must bind the executable to HEAD.
         // Recording that limit is in scope; adding a second bootstrap/update mechanism is not.
-        var canaryExit = CanaryCommand.Run(args: []);
+        var canaryExit = CanaryCommand.RunAutomatic();
 
         if (canaryExit == 0) {
             Console.WriteLine(value: $"PASS: landing accepted — git-loss check and automatic canaries passed given base {authoringBase[..12]}.");
@@ -121,152 +230,41 @@ internal static class LandingCommand {
         return 2;
     }
 
-    // A base cannot be GUESSED. The obvious automatic answer — merge-base(tip, HEAD) — is worse than none: for the
-    // failure this verb exists to catch it returns the tip itself, so the two diffs become identical, every deletion
-    // reads as intended, and the verb blesses the exact bug with a green light on top. The reflog knows the real
-    // answer, so it is offered as a SUGGESTION the human confirms, never as a default the tool assumes.
-    private static int RefuseMissingBase(string tip) {
-        Console.Error.WriteLine(value: "ERROR: --base is required.");
-        Console.Error.WriteLine(value: string.Empty);
-        Console.Error.WriteLine(value: "  The base is the commit your work was AUTHORED FROM — for rebased work the ORIGINAL base,");
-        Console.Error.WriteLine(value: "  never the new parent a rebase gave you (that pairing is vacuous and is refused).");
-        Console.Error.WriteLine(value: "  It is NOT derivable: merge-base(tip, HEAD) returns the tip for a re-parented tree, which");
-        Console.Error.WriteLine(value: "  makes every deletion look intended and hides precisely the failure this verb catches.");
-        Console.Error.WriteLine(value: string.Empty);
+    public static Command Create() {
+        var againstOption = new Option<string>(name: "--against") { Description = "The commit you are landing ONTO (e.g. origin/features/x).", Required = true };
+        // Optional at the parser, refused with a reflog suggestion at the verb: the refusal needs the resolved tip
+        // to print a runnable command, which only exists after --against resolves.
+        var baseOption = new Option<string>(name: "--base") { Description = "The commit your work was AUTHORED FROM. For rebased work this is the ORIGINAL base, never the new parent: a rebase moves your parent to the tip, so passing the parent makes --base and --against equal and the check vacuous. That pairing is refused." };
+        var command = new Command(
+            description: """
+            Refuse a commit that drops someone else's landing.
 
-        if (LandingReflog.TrySuggestBase(suggestion: out var suggestion, when: out var when)) {
-            Console.Error.WriteLine(value: $"  Your reflog's most recent rebase base is {suggestion} ({when}).");
-            Console.Error.WriteLine(value: $"  If that is the tree you worked from:  puck landing --against {tip[..12]} --base {suggestion}");
-        } else {
-            Console.Error.WriteLine(value: "  No rebase entry was found in this branch's reflog; supply the base yourself.");
-        }
+            Compares the lines HEAD deletes relative to <tip> against the lines it deletes relative
+            to <base>. The first set is what the push would remove; the second is what your own work
+            removes. Anything in the first and not the second arrived on the tip while you were
+            working and would be silently lost.
 
-        return 2;
-    }
-    private static void ReportGitAccept(string tip, string authoringBase, IReadOnlyDictionary<string, List<string>> intended) {
-        var files = 0;
-        var lines = 0;
+            There is no ignore list and no override, deliberately: deleting someone's landing ON
+            PURPOSE means having rebased onto it, which puts it in <base>, which accounts for the
+            deletion automatically. Intent is derived, never declared.
 
-        foreach (var entry in intended) {
-            files++;
-            lines += entry.Value.Count;
-        }
+            <base> is required. It cannot be guessed — merge-base(tip, HEAD) returns the tip itself
+            for a re-parented tree, which would make every deletion look intended. A <base> equal
+            to <tip>, or one HEAD does not descend from, is refused for the same reason: both would
+            report a PASS that measured nothing.
 
-        Console.WriteLine(value: $"landing: HEAD onto {tip[..12]}, authored from {authoringBase[..12]}.");
-        Console.WriteLine(value: $"landing: {lines} deleted line(s) across {files} file(s) — every one accounted for by this landing's own change set.");
-        Console.WriteLine(value: $"landing git component: clean given base {authoringBase[..12]}; running the automatic canary set next.");
-    }
-    // The refusal names the COMMITS whose content is being dropped, not just the lines: "you deleted 306 lines" is a
-    // puzzle, "you are dropping <hash> The mouse learns to pick things up" is an instruction.
-    private static int Refuse(string tip, string authoringBase, IReadOnlyDictionary<string, List<string>> unaccounted) {
-        var lines = 0;
+            After every git check passes, runs the nonempty automatic canary set. There is no skip flag.
 
-        Console.Error.WriteLine(value: $"landing: HEAD onto {tip[..12]}, authored from {authoringBase[..12]}.");
-        Console.Error.WriteLine(value: string.Empty);
+            Exit codes: 0 both components passed, 1 unaccounted deletions or observed canary failure,
+            2 usage, manifest, build, or canary infrastructure refusal.
+            """,
+            name: "landing"
+        ) { againstOption, baseOption };
 
-        foreach (var entry in unaccounted.OrderBy(keySelector: static entry => entry.Key, comparer: StringComparer.Ordinal)) {
-            lines += entry.Value.Count;
-
-            Console.Error.WriteLine(value: $"  {entry.Key}: {entry.Value.Count} unaccounted deletion(s)");
-
-            foreach (var commit in LandingDiff.CommitsBetween(from: authoringBase, to: tip, path: entry.Key)) {
-                Console.Error.WriteLine(value: $"      dropping work from {commit}");
-            }
-
-            foreach (var line in entry.Value.Take(count: 3)) {
-                Console.Error.WriteLine(value: $"      - {Clip(text: line)}");
-            }
-
-            if (entry.Value.Count > 3) {
-                Console.Error.WriteLine(value: $"      … and {(entry.Value.Count - 3)} more");
-            }
-        }
-
-        Console.Error.WriteLine(value: string.Empty);
-        Console.Error.WriteLine(value: $"FAIL: {lines} line(s) exist on the tip, are not deleted by your own change set, and would be lost.");
-        Console.Error.WriteLine(value: "      Rebase onto the tip and re-apply your work, or (if the tree was re-parented) rebuild it:");
-        Console.Error.WriteLine(value: "      base a tree on the tip, apply diff(base..HEAD), and commit that.");
-
-        return 1;
-    }
-    private static string Clip(string text) {
-        var trimmed = text.Trim();
-
-        return ((trimmed.Length <= 100) ? trimmed : (trimmed[..100] + "…"));
-    }
-    private static bool TryParse(string[] args, out string against, out string? baseRef, out string error) {
-        against = string.Empty;
-        baseRef = null;
-        error = string.Empty;
-
-        for (var index = 0; (index < args.Length); index++) {
-            switch (args[index]) {
-                case "--against":
-                case "--base": {
-                        var name = args[index];
-
-                        if ((index + 1) >= args.Length) {
-                            error = $"{name} needs a value.";
-
-                            return false;
-                        }
-
-                        if (name == "--against") {
-                            against = args[++index];
-                        } else {
-                            baseRef = args[++index];
-                        }
-
-                        break;
-                    }
-                default:
-                    error = $"unknown argument '{args[index]}'.";
-
-                    return false;
-            }
-        }
-
-        if (against.Length == 0) {
-            error = "--against <tip> is required (the commit you are landing onto, e.g. origin/main).";
-
-            return false;
-        }
-
-        return true;
-    }
-    private static int Usage() {
-        Console.Error.WriteLine(
-            value:
-                """
-                landing --against <tip> --base <ref>   refuse a commit that drops someone else's landing
-
-                  --against <tip>   the commit you are landing ONTO (e.g. origin/features/x)
-                  --base <ref>      the commit your work was AUTHORED FROM. For rebased work this is the
-                                    ORIGINAL base, never the new parent: a rebase moves your parent to
-                                    the tip, so passing the parent makes --base and --against equal and
-                                    the check vacuous. That pairing is refused.
-                  -h / --help       this text
-
-                Compares the lines HEAD deletes relative to <tip> against the lines it deletes relative
-                to <base>. The first set is what the push would remove; the second is what your own work
-                removes. Anything in the first and not the second arrived on the tip while you were
-                working and would be silently lost.
-
-                There is no ignore list and no override, deliberately: deleting someone's landing ON
-                PURPOSE means having rebased onto it, which puts it in <base>, which accounts for the
-                deletion automatically. Intent is derived, never declared.
-
-                <base> is required. It cannot be guessed — merge-base(tip, HEAD) returns the tip itself
-                for a re-parented tree, which would make every deletion look intended. A <base> equal
-                to <tip>, or one HEAD does not descend from, is refused for the same reason: both would
-                report a PASS that measured nothing.
-
-                After every git check passes, runs the nonempty automatic canary set. There is no skip flag.
-
-                Exit codes: 0 both components passed, 1 unaccounted deletions or observed canary failure,
-                2 usage, manifest, build, or canary infrastructure refusal.
-                """);
-
-        return 2;
+        command.SetAction(action: parseResult => Run(
+            against: parseResult.GetRequiredValue(option: againstOption),
+            baseRef: parseResult.GetValue(option: baseOption)
+        ));
+        return command;
     }
 }

@@ -36,13 +36,12 @@ public sealed partial class InputRouter {
     // by advancing the head instead. Storage grows on demand up to the cap rather than being reserved up front.
     private sealed class CaptureQueue<T>(int capacity) where T : struct, ICaptured {
         private readonly int m_capacity = capacity;
-
-        private int m_count;
-        private int m_head;
-
         private T[] m_items = [];
 
         internal long DroppedCount;
+
+        private int m_count;
+        private int m_head;
 
         internal void Add(in T item) {
             if (m_count == m_capacity) {

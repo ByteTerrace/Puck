@@ -10,11 +10,11 @@ namespace Puck.HumbleGamingBrick;
 /// returns the fork to the core's bounded instance pool.
 /// </summary>
 internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachinePadState> {
+    private readonly IFramebuffer m_framebuffer;
     private readonly MachineFork m_instance;
     private readonly IJoypad m_joypad;
-    private readonly ITiltSensor m_tiltSensor;
-    private readonly IFramebuffer m_framebuffer;
     private readonly ulong m_oneFrameCycles;
+    private readonly ITiltSensor m_tiltSensor;
 
     public HumbleGamingBrickLookahead(MachineFork instance, ulong oneFrameCycles) {
         m_instance = instance;
@@ -25,19 +25,12 @@ internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachineP
     }
 
     /// <inheritdoc/>
-    public long NativeFrameIndex =>
-        ((long)(m_instance.Machine.Clock.CycleCount / m_oneFrameCycles));
-    /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_framebuffer.Pixels;
-
     /// <inheritdoc/>
-    public void RestoreState(byte[] buffer, int length) =>
-        m_instance.Machine.RestoreState(reader: new StateReader(
-        buffer: buffer,
-        length: length,
-        start: 0
-    ));
+    public long NativeFrameIndex =>
+        ((long)(m_instance.Machine.Clock.CycleCount / m_oneFrameCycles));
+
     /// <inheritdoc/>
     public void ApplyInput(in MachinePadState input) =>
         BrickPad.Apply(
@@ -46,9 +39,16 @@ internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachineP
             tiltSensor: m_tiltSensor
         );
     /// <inheritdoc/>
-    public void RunFrame() =>
-        m_instance.Machine.Run(tCycles: m_oneFrameCycles);
-    /// <inheritdoc/>
     public void Dispose() =>
         m_instance.Dispose();
+    /// <inheritdoc/>
+    public void RestoreState(byte[] buffer, int length) =>
+        m_instance.Machine.RestoreState(reader: new StateReader(
+            buffer: buffer,
+            length: length,
+            start: 0
+        ));
+    /// <inheritdoc/>
+    public void RunFrame() =>
+        m_instance.Machine.Run(tCycles: m_oneFrameCycles);
 }

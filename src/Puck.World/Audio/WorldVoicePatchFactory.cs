@@ -3,8 +3,8 @@ using Puck.Assets.Documents;
 
 namespace Puck.World.Audio;
 
-/// <summary>Converts a normalized <c>puck.synth.v1</c> document into <see cref="Puck.Audio.Mixing.VoicePatch"/> —
-/// the one place a <c>puck.synth.v1</c> document crosses into <c>Puck.Audio</c>, which itself parses no document.</summary>
+/// <summary>Converts a normalized <c>puck.synthesizer-patch.v1</c> document into <see cref="Puck.Audio.Mixing.VoicePatch"/> —
+/// the one place a <c>puck.synthesizer-patch.v1</c> document crosses into <c>Puck.Audio</c>, which itself parses no document.</summary>
 public static class WorldVoicePatchFactory {
     // Puck.Assets.Documents.SynthOscillator and Puck.Audio.Mixing.SynthOscillator declare the SAME oscillator
     // kinds in the SAME ordinal order (KEEP IN SYNC) — the two cannot share one type across the layering

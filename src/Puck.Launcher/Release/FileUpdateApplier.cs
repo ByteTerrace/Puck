@@ -9,27 +9,57 @@ namespace Puck.Launcher.Release;
 /// swap rather than an in-place executable/DLL replacement.
 /// </summary>
 public sealed class FileUpdateApplier : IUpdateApplier {
+    private static void WriteTextAtomic(string path, string content) {
+        var directory = Path.GetDirectoryName(path: path)!;
+        var tmpPath = Path.Combine(
+            path1: directory,
+            path2: $"{Guid.NewGuid():n}.tmp"
+        );
+
+        Directory.CreateDirectory(path: directory);
+        File.WriteAllText(
+            contents: content,
+            path: tmpPath
+        );
+        File.Move(
+            destFileName: path,
+            overwrite: true,
+            sourceFileName: tmpPath
+        );
+    }
+
     /// <inheritdoc/>
     public UpdateApplyResult Apply(ReleaseManifest manifest, string rid, string cacheRoot) {
         ArgumentNullException.ThrowIfNull(argument: manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: rid);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: cacheRoot);
 
-        var payload = manifest.Payloads.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Rid, b: rid, comparisonType: StringComparison.Ordinal));
+        var payload = manifest.Payloads.FirstOrDefault(predicate: candidate => string.Equals(
+            a: candidate.Rid,
+            b: rid,
+            comparisonType: StringComparison.Ordinal
+        ));
 
         if (payload is null) {
             return UpdateApplyResult.Refuse(reason: $"manifest for version '{manifest.Version}' declares no payload for rid '{rid}'");
         }
 
         var root = Path.GetFullPath(path: cacheRoot);
-        var versionDirectory = Path.Combine(path1: root, path2: "versions", path3: manifest.Version);
+        var versionDirectory = Path.Combine(
+            path1: root,
+            path2: "versions",
+            path3: manifest.Version
+        );
 
         if (!Directory.Exists(path: versionDirectory)) {
             return UpdateApplyResult.Refuse(reason: $"'{versionDirectory}' is not staged — stage before applying");
         }
 
         foreach (var file in payload.Files) {
-            var filePath = Path.Combine(path1: versionDirectory, path2: file.Path.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'));
+            var filePath = Path.Combine(
+                path1: versionDirectory,
+                path2: file.Path
+            );
 
             if (!File.Exists(path: filePath)) {
                 return UpdateApplyResult.Refuse(reason: $"staged file '{file.Path}' is missing from '{versionDirectory}' — refused rather than applied");
@@ -37,31 +67,51 @@ public sealed class FileUpdateApplier : IUpdateApplier {
 
             var actualHash = $"sha256/{ContentAddressedStore.ComputeHash(content: File.ReadAllBytes(path: filePath))}";
 
-            if (!string.Equals(a: actualHash, b: file.Hash, comparisonType: StringComparison.Ordinal)) {
+            if (!string.Equals(
+                a: actualHash,
+                b: file.Hash,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return UpdateApplyResult.Refuse(reason: $"staged file '{file.Path}' hash {actualHash} does not match the manifest's {file.Hash} — refused rather than applied");
             }
         }
 
-        WriteTextAtomic(path: Path.Combine(path1: versionDirectory, path2: "state-generation"), content: manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture));
+        WriteTextAtomic(
+            path: Path.Combine(
+                path1: versionDirectory,
+                path2: "state-generation"
+            ),
+            content: manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture)
+        );
 
-        var currentPath = Path.Combine(path1: root, path2: "current");
-        var previousVersion = (File.Exists(path: currentPath) ? File.ReadAllText(path: currentPath).Trim() : null);
+        var currentPath = Path.Combine(
+            path1: root,
+            path2: "current"
+        );
+        var previousVersion = (File.Exists(path: currentPath)
+            ? File.ReadAllText(path: currentPath).Trim()
+            : null
+        );
 
         if (previousVersion is { Length: > 0 }) {
-            WriteTextAtomic(path: Path.Combine(path1: root, path2: "last-good"), content: previousVersion);
+            WriteTextAtomic(
+                path: Path.Combine(
+                    path1: root,
+                    path2: "last-good"
+                ),
+                content: previousVersion
+            );
         }
 
-        WriteTextAtomic(path: currentPath, content: manifest.Version);
+        WriteTextAtomic(
+            path: currentPath,
+            content: manifest.Version
+        );
 
-        return new UpdateApplyResult(Applied: true, PreviousVersion: previousVersion, RefusalReason: null);
-    }
-
-    private static void WriteTextAtomic(string path, string content) {
-        var directory = Path.GetDirectoryName(path: path)!;
-        var tmpPath = Path.Combine(path1: directory, path2: $"{Guid.NewGuid():n}.tmp");
-
-        Directory.CreateDirectory(path: directory);
-        File.WriteAllText(contents: content, path: tmpPath);
-        File.Move(destFileName: path, overwrite: true, sourceFileName: tmpPath);
+        return new UpdateApplyResult(
+            Applied: true,
+            PreviousVersion: previousVersion,
+            RefusalReason: null
+        );
     }
 }

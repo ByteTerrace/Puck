@@ -49,6 +49,9 @@ public sealed class BodyMotionProgramException : ArgumentException {
 public sealed class CompiledBodyMotionProgram {
     private const int MaxOperations = 32;
 
+    /// <summary>Gets the instruction-set version this compiler accepts.</summary>
+    public const string SupportedVersion = "puck.body.program.v1";
+
     private readonly HashSet<BodyMotionOp> m_operations;
 
     private CompiledBodyMotionProgram(string name, BodyProgramKind kind, BodyProgramAdmission admissionMask, BodyMotionOp[][] phases, HashSet<BodyMotionOp> operations) {
@@ -76,9 +79,6 @@ public sealed class CompiledBodyMotionProgram {
     public bool OwnsVerticalContactState => (Contains(operation: BodyMotionOp.ApplyHold) && !Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity));
     /// <summary>Gets the operations grouped by their intrinsic host phase.</summary>
     public BodyMotionOp[][] Phases { get; }
-
-    /// <summary>Gets the instruction-set version this compiler accepts.</summary>
-    public const string SupportedVersion = "puck.body-motion.v1";
 
     private static BodyProgramAdmission AdmissionFor(BodyProgramKind kind) => kind switch {
         BodyProgramKind.Motion => (BodyProgramAdmission.Channels | BodyProgramAdmission.Pose | BodyProgramAdmission.Velocity | BodyProgramAdmission.ActionState),

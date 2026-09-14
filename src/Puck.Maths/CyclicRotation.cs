@@ -52,6 +52,16 @@ public static class CyclicRotation {
             plane: plane,
             tick: tick
         ));
+    /// <summary>Rotates a vector by a plane's rotation at a tick.</summary>
+    /// <param name="plane">The rotation plane, in <c>[0, <see cref="PlaneCount"/>)</c>.</param>
+    /// <param name="tick">The tick; any value, positive or negative, reduces modulo <see cref="Period"/>.</param>
+    /// <param name="vector">The vector to rotate.</param>
+    /// <returns>The vector turned by the plane's current rotation; unchanged (bit-identical) at every multiple of <see cref="Period"/>.</returns>
+    public static FixedVector2 Rotate(int plane, long tick, FixedVector2 vector) =>
+        At(
+            plane: plane,
+            tick: tick
+        ).Rotate(vector: vector);
     /// <summary>Returns the unit rotation of a whole number of 12° steps, the table entry <see cref="At(int, long)"/>
     /// selects once a plane's step count is known.</summary>
     /// <param name="step">The step count; any value, positive or negative, reduces modulo <see cref="Period"/>.</param>
@@ -76,18 +86,9 @@ public static class CyclicRotation {
 
         return ((order == Period)
             ? Rotors[((int)index)]
-            : FixedComplex.FromAngle(angle: FixedQ4816.FromRawBits(value: ((TurnRawQ16 * index) / order))));
+            : FixedComplex.FromAngle(angle: FixedQ4816.FromRawBits(value: ((TurnRawQ16 * index) / order)))
+        );
     }
-    /// <summary>Rotates a vector by a plane's rotation at a tick.</summary>
-    /// <param name="plane">The rotation plane, in <c>[0, <see cref="PlaneCount"/>)</c>.</param>
-    /// <param name="tick">The tick; any value, positive or negative, reduces modulo <see cref="Period"/>.</param>
-    /// <param name="vector">The vector to rotate.</param>
-    /// <returns>The vector turned by the plane's current rotation; unchanged (bit-identical) at every multiple of <see cref="Period"/>.</returns>
-    public static FixedVector2 Rotate(int plane, long tick, FixedVector2 vector) =>
-        At(
-            plane: plane,
-            tick: tick
-        ).Rotate(vector: vector);
     /// <summary>Returns how many 12° steps a plane has advanced at a tick.</summary>
     /// <param name="plane">The rotation plane, in <c>[0, <see cref="PlaneCount"/>)</c>.</param>
     /// <param name="tick">The tick; any value, positive or negative, reduces modulo <see cref="Period"/>.</param>

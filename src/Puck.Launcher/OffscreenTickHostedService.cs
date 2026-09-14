@@ -24,10 +24,10 @@ public sealed class OffscreenTickHostedService : BackgroundService {
     private readonly ILogger<OffscreenTickHostedService> m_logger;
     private readonly LauncherOptions m_options;
     private readonly IPrecisionWaiter? m_precisionWaiter;
+    private readonly CommandRegistry m_registry;
     private readonly OffscreenRenderOptions m_renderOptions;
     private readonly IRenderNode m_root;
     private readonly IHostContext m_rootHostContext;
-    private readonly CommandRegistry m_registry;
     private readonly IFixedStepSimulation? m_simulation;
     private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;
     private readonly TerminalControl m_terminal;

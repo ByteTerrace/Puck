@@ -617,7 +617,16 @@ public sealed partial class WorldInstanceHost {
         );
     }
     /// <inheritdoc/>
-    public bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
+    public bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) =>
+        TryForwardSubmission(
+            mobility: in mobility,
+            operationId: Guid.Empty,
+            payload: payload,
+            reason: out reason,
+            result: out result,
+            source: source
+        );
+    public bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
         if (!m_forwardedBodies.TryGetValue(
             key: (source, mobility.Incarnation),
             value: out var route
@@ -633,7 +642,8 @@ public sealed partial class WorldInstanceHost {
                 bodyIndex: route.BodyIndex
             ),
             result: out result,
-            reason: out reason
+            reason: out reason,
+            operationId: operationId
         );
 
         if (
@@ -641,7 +651,7 @@ public sealed partial class WorldInstanceHost {
             (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
             (result is WorldSubmissionResult.Session { Reply.Accepted: true })
         ) {
-            RetireForwardedTraveler(in mobility);
+            RetireForwardedTraveler(mobility: in mobility);
         }
         return accepted;
     }

@@ -326,23 +326,6 @@ public static class SymmetryLattice {
         // Both nodes are stored doubled, so the summed products carry a factor of four.
         return (product / 4);
     }
-    /// <summary>Returns a node of a ring by position around it: position zero is the ring's lowest node index and each
-    /// following position is one <see cref="Cycle(int)"/> step on, so a ring reads as thirty consecutive positions.</summary>
-    /// <param name="ring">The ring, in <c>[0, <see cref="RingCount"/>)</c>.</param>
-    /// <param name="position">The position around the ring; any value, positive or negative, reduces modulo <see cref="RingSize"/>.</param>
-    /// <returns>The node at that position of the ring.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="ring"/> is outside the ring range.</exception>
-    public static int RingNode(int ring, long position) {
-        if (((uint)ring) >= ((uint)RingCount)) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: ring,
-                message: $"the ring index must be in [0, {RingCount})",
-                paramName: nameof(ring)
-            );
-        }
-
-        return RingNodes[((ring * RingSize) + ((int)position.FloorModulo(modulus: ((long)RingSize))))];
-    }
     /// <summary>Projects a node onto the plane where the 240 nodes resolve into eight concentric rings of thirty.</summary>
     /// <param name="node">The node, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
     /// <returns>The projected point; its ring is <see cref="Ring(int)"/> and one <see cref="Cycle(int)"/> step turns it 12°.</returns>
@@ -409,6 +392,23 @@ public static class SymmetryLattice {
         );
 
         return RingMap[node];
+    }
+    /// <summary>Returns a node of a ring by position around it: position zero is the ring's lowest node index and each
+    /// following position is one <see cref="Cycle(int)"/> step on, so a ring reads as thirty consecutive positions.</summary>
+    /// <param name="ring">The ring, in <c>[0, <see cref="RingCount"/>)</c>.</param>
+    /// <param name="position">The position around the ring; any value, positive or negative, reduces modulo <see cref="RingSize"/>.</param>
+    /// <returns>The node at that position of the ring.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="ring"/> is outside the ring range.</exception>
+    public static int RingNode(int ring, long position) {
+        if (((uint)ring) >= ((uint)RingCount)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: ring,
+                message: $"the ring index must be in [0, {RingCount})",
+                paramName: nameof(ring)
+            );
+        }
+
+        return RingNodes[((ring * RingSize) + ((int)position.FloorModulo(modulus: ((long)RingSize))))];
     }
 
     /// <summary>Gets the number of verified factors of <c>t^15 + 1</c> governing the order-15 action induced on

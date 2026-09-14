@@ -8,7 +8,7 @@ namespace Puck.World.Tests;
 /// The administration-authority law (a denial paired with a control, actor always distinct from the target, so a
 /// check that consults the wrong principal is caught), as an in-process substrate law directly against <see cref="Puck.World.Server.WorldServer.Grant"/>'s actor check
 /// (<c>WorldGrants.HoldsForAdministration</c>): a <see cref="PrincipalKind.Seat"/> actor may administer a grant row
-/// ONLY when the row's SUBJECT is its own body — <c>IsOwnSeatBody</c>'s rule, the narrowed 2026-08 posture the
+/// ONLY when the row's SUBJECT is its own body — <c>IsOwnSeatBody</c>'s rule, the invariant posture the
 /// runner's own <c>03-assign.txt</c>/<c>05-disengage.txt</c> cases exist to keep closed (a handler that consults
 /// the wrong principal, or the wrong subject, is the exact defect class both name). Administering a grant over a
 /// DIFFERENT body — one the acting seat does not itself occupy — refuses; the identical call naming the actor's
@@ -19,6 +19,26 @@ namespace Puck.World.Tests;
 /// its own (it starts with neither — seats seed Drive over their OWN body index only).
 /// </summary>
 public sealed class AuthorityAdministrationLawTests {
+    private static bool GrantAndObserveHeld(WorldFixture fixture, WorldPrincipal actor, WorldPrincipal recipient, GrantSubject subject) {
+        var grant = new WorldGrant(
+            Principal: recipient,
+            Capability: WorldCapability.Drive,
+            Subject: subject,
+            Exclusive: false
+        );
+
+        fixture.Server.Grant(
+            grant: grant,
+            actor: actor
+        );
+
+        return fixture.Server.Grants.Allows(
+            capability: WorldCapability.Drive,
+            principal: recipient,
+            subject: subject
+        );
+    }
+
     [Fact]
     public void SeatAdministersOnlyItsOwnBody_OtherBodyRefused_OwnBodySucceeds() {
         using var fixture = Fixtures.FreshServer();
@@ -32,15 +52,18 @@ public sealed class AuthorityAdministrationLawTests {
 
         Laws.RefusalWithControl(
             lawId: "authority.grant-administration-own-body-only",
-            deniedOutcome: () => GrantAndObserveHeld(actor: actor, fixture: fixture, recipient: recipient, subject: otherBody),
-            controlOutcome: () => GrantAndObserveHeld(actor: actor, fixture: fixture, recipient: recipient, subject: ownBody));
-    }
-
-    private static bool GrantAndObserveHeld(WorldFixture fixture, WorldPrincipal actor, WorldPrincipal recipient, GrantSubject subject) {
-        var grant = new WorldGrant(Principal: recipient, Capability: WorldCapability.Drive, Subject: subject, Exclusive: false);
-
-        fixture.Server.Grant(grant: grant, actor: actor);
-
-        return fixture.Server.Grants.Allows(capability: WorldCapability.Drive, principal: recipient, subject: subject);
+            deniedOutcome: () => GrantAndObserveHeld(
+                actor: actor,
+                fixture: fixture,
+                recipient: recipient,
+                subject: otherBody
+            ),
+            controlOutcome: () => GrantAndObserveHeld(
+                actor: actor,
+                fixture: fixture,
+                recipient: recipient,
+                subject: ownBody
+            )
+        );
     }
 }

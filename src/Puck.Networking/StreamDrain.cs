@@ -16,11 +16,18 @@ public static class StreamDrain {
         ArgumentNullException.ThrowIfNull(stream);
         try {
             if (stream is PeerStream peerStream) {
-                await peerStream.DrainUntilClosedAsync(ct).ConfigureAwait(false);
+                await peerStream.DrainUntilClosedAsync(ct: ct).ConfigureAwait(continueOnCapturedContext: false);
                 return;
             }
             var sink = new byte[256];
-            while (!ct.IsCancellationRequested && await stream.ReadAsync(sink, ct).ConfigureAwait(false) > 0) { }
-        } catch (Exception exception) when (exception is IOException or ObjectDisposedException or OperationCanceledException) { }
+
+            while (
+                !ct.IsCancellationRequested &&
+                (await stream.ReadAsync(
+                buffer: sink,
+                cancellationToken: ct
+            ).ConfigureAwait(continueOnCapturedContext: false) > 0)
+            ) { }
+        } catch (Exception exception) when ((exception is IOException or ObjectDisposedException or OperationCanceledException)) { }
     }
 }

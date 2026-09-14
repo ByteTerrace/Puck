@@ -1,37 +1,46 @@
-name: Install Puck CLI
-description: Install this run's candidate artifact, the pinned official tool, or an explicitly requested source bootstrap.
+description: Install this run's candidate Puck CLI into .tmp/puck-ci from a downloaded artifact, a local package directory, or a pack of this checkout, and export it on PATH.
 inputs:
   artifact:
-    description: Install the candidate package from this run's producer artifact; never compile.
-    default: ''
-  candidate:
-    description: Build this checkout's CLI for source-dependent commands.
-    default: 'false'
+    default: ""
+    description: The name of this run's artifact holding the ByteTerrace.Puck.Cli package; downloaded, never compiled.
+  directory:
+    default: ""
+    description: A local directory already holding the ByteTerrace.Puck.Cli package.
+name: Install Puck CLI
 runs:
-  using: composite
   steps:
-    - name: Install pinned DXC
-      if: inputs.artifact == ''
-      shell: bash
-      run: dotnet run -c Release --file build/InstallDxc.cs
-    - name: Install Puck CLI
-      if: inputs.artifact == ''
-      shell: bash
-      env:
-        CANDIDATE: ${{ inputs.candidate }}
-      run: |
-        if [[ "$CANDIDATE" == true ]]; then
-          dotnet run -c Release --file build/Toolchain.cs -- candidate
-        else
-          dotnet run -c Release --file build/Toolchain.cs -- setup
-        fi
-    - name: Download the candidate CLI package
+    - if: inputs.artifact != ''
+      name: Download the candidate CLI package
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      if: inputs.artifact != ''
       with:
         name: ${{ inputs.artifact }}
         path: artifacts/cli-feed
-    - name: Install the already-built candidate CLI
-      if: inputs.artifact != ''
+    - env:
+        DIRECTORY: ${{ inputs.artifact != '' && 'artifacts/cli-feed' || inputs.directory }}
+      name: Install the candidate CLI in isolation
+      run: |
+        set -euo pipefail
+        tool=.tmp/puck-ci
+        if [[ -e "$tool" ]]; then echo "Use a fresh tool directory: $tool" >&2; exit 1; fi
+        if [[ -z "$DIRECTORY" ]]; then
+          DIRECTORY=.tmp/puck-pack
+          dotnet restore src/Puck.Cli --locked-mode
+          dotnet pack src/Puck.Cli -c Release --no-restore --output "$DIRECTORY"
+        fi
+        package=$(ls "$DIRECTORY"/ByteTerrace.Puck.Cli.*.nupkg)
+        [[ $(wc -l <<< "$package") -eq 1 ]] || { echo "Expected exactly one ByteTerrace.Puck.Cli package in $DIRECTORY" >&2; exit 1; }
+        version=$(basename "$package" .nupkg); version=${version#ByteTerrace.Puck.Cli.}
+        # An exclusive feed and a private package cache keep a same-version official package from replacing the artifact.
+        source=$(mktemp -d)
+        feed=$(cd "$DIRECTORY" && pwd)
+        cache=$source/packages
+        # File contents are not argument-translated, so the feed and cache are spelled natively.
+        if [[ "$RUNNER_OS" == Windows ]]; then feed=$(cygpath -w "$feed"); cache=$(cygpath -w "$cache"); fi
+        printf '<configuration><packageSources><clear /><add key="candidate" value="%s" /></packageSources><config><add key="globalPackagesFolder" value="%s" /></config></configuration>' "$feed" "$cache" > "$source/nuget.config"
+        dotnet tool install byteterrace.puck.cli --version "$version" --tool-path "$tool" --configfile "$source/nuget.config" --no-http-cache
+        installed=$("$tool/puck" --version)
+        [[ "$installed" == "$version" || "$installed" == "$version+"* ]] || { echo "Installed CLI reports $installed; expected $version" >&2; exit 1; }
+        echo "Puck CLI $installed"
+        echo "$GITHUB_WORKSPACE/$tool" >> "$GITHUB_PATH"
       shell: bash
-      run: dotnet run -c Release --file build/Toolchain.cs -- install-candidate artifacts/cli-feed
+  using: composite

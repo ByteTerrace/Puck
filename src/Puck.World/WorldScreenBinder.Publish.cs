@@ -161,27 +161,43 @@ internal sealed partial class WorldScreenBinder {
         var windowCaptureTicks = 0L;
         var patternTicks = 0L;
 
-        foreach (var slot in m_slots.Values) {
-            if (m_machines.MachineAt(index: slot.Index) is { } machine) {
-                phaseStart = (timingEnabled
-                    ? Stopwatch.GetTimestamp()
-                    : 0L
-                );
-                machine.PublishFrame(
-                    deviceContext: deviceContext,
-                    gpu: gpu
-                );
-                machineTicks += (timingEnabled
-                    ? (Stopwatch.GetTimestamp() - phaseStart)
-                    : 0L
-                );
+        m_publishedMachineOutputs.Clear();
 
+        foreach (var slot in m_slots.Values) {
+            if (slot.MachineSource is { } source) {
+                if (
+                    (m_machines.VideoOutput(
+                    instance: source.Instance,
+                    output: source.Output
+                ) is { } machine) &&
+                    m_publishedMachineOutputs.Add(item: (source.Instance, source.Output))
+                ) {
+                    phaseStart = (timingEnabled
+                        ? Stopwatch.GetTimestamp()
+                        : 0L
+                    );
+                    machine.PublishFrame(
+                        deviceContext: deviceContext,
+                        gpu: gpu
+                    );
+                    machineTicks += (timingEnabled
+                        ? (Stopwatch.GetTimestamp() - phaseStart)
+                        : 0L
+                    );
+
+                }
+
+                // A named output is one producer shared by every display that references it. Once the first
+                // consumer has published the current frame, the remaining consumers only resolve that same handle.
                 continue;
             }
 
             // The shared webcam and every probe output are published once (in CaptureCamera and ServiceProbeFeeds
             // above), so their screens only ride those feeds.
-            if ((slot.CameraSeat is not null) || (slot.Probe is not null)) {
+            if (
+                (slot.CameraSeat is not null) ||
+                (slot.Probe is not null)
+            ) {
                 continue;
             }
 

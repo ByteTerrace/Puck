@@ -21,52 +21,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </para>
 /// </summary>
 internal sealed class ScriptedTradeDriver {
-    // --- Tunables (authored/verified with --trade-run against the trade cart, USA) ---
-
-    /// <summary>Side B's receptionist mash lags side A's by this many frames — the mandated rendezvous symmetry-break.</summary>
-    public const int RendezvousStaggerFrames = 97;
-    /// <summary>Side B's persistent DIV head start (T-cycles) applied before the cable connects — half a DIV bit-7 period
-    /// so the two machines always read opposite DIV bit 7 at WaitForLinkedFriend's jitter check, breaking the master/slave
-    /// symmetry. The DIV counter's bit 7 (of the visible register) toggles every 32768 T-cycles.</summary>
-    public const ulong RendezvousDivOffsetCycles = 32768;
-
-    // A-mash cadence: press MashPress frames, release the rest of a MashPeriod window, so the cart's edge-triggered menus see
-    // one clean press per period (a held button registers a single edge; mash = alternating press/release).
-    private const int MashPeriod = 8;
-    private const int MashPress = 2;
-    // Per-phase frame budgets — generous ceilings (the machine runs ~250 fps headless, so long waits are cheap); a phase
-    // that blows its ceiling without meeting its peek condition is a livelock/desync, failed fast.
-    private const int ContinueBudget = 900;
-    private const int FaceUpBudget = 40;
-    // The overworld loads its map by ~frame 450 but is still fading in / not accepting input for a while after; the
-    // player can only be turned once it has settled (verified with --trade-talk: ~600 frames of settle before the tap-UP
-    // takes). The Continue phase holds until both machines pass this frame.
-    private const int ContinueSettleFrame = 600;
-    // wPlayerDirection ($D205) reads 4 when the player faces UP toward the attendant (0 = DOWN, the crafted default).
-    private const byte PlayerDirectionUp = 4;
     private const int ApproachBudget = 400;
-    private const int ReceptionistBudget = 12000;
-    // TRADE_CENTER seat geometry: the two console bg_events on row Y=4 are (4,4) BGEVENT_RIGHT and (5,4) BGEVENT_LEFT;
-    // a directional bg_event fires when the player stands on the tile adjacent to the console and faces it, and
-    // (4,4)/(5,4) are solid furniture. So each side stands on the CHRIS-avatar tile its map callback vacated: the
-    // external-clock side ($01, side A) has CHRIS2 removed from (6,4) and stands there facing left (facing tile
-    // (5,4) → its BGEVENT_LEFT); the internal-clock side ($02, side B) has CHRIS1 removed from (3,4) and stands
-    // there facing right (facing tile (4,4)).
-    private const byte SeatY = 4;
-    private const byte CorridorY = 5;
-    private const byte FacingLeft = 0x08;
-    private const byte FacingRight = 0x0C;
-    private const byte SideASeatX = 6;
-    private const byte SideBSeatX = 3;
-    private const ushort WXCoordAddress = 0xDA03;
-    private const ushort WYCoordAddress = 0xDA02;
-    // Firing the console: the seat A-press only registers once the tap-turn's animation has finished (a press mid-turn
-    // is eaten), so the Console phase MASHES A per side until that side's script engine is actually running — pressing
-    // anything else before then risks turning/walking off the seat (the exact failure a blind fixed cycle produced).
-    private const int ConsoleBudget = 900;
-    // The whole in-`special TradeCenter` interaction (block exchange, party menu, submenu, confirm, animation, auto-save)
-    // ceiling — generous; the phase ends early the frame the leads swap.
-    private const int TradeMenuBudget = 6000;
     // Cancelling out: the post-trade animation + auto-save + re-entry into the party menu run for hundreds of frames
     // (the engine sprinkles 100-frame delays) before any input registers, then BOTH sides must select the CANCEL footer
     // (LinkTradeOTPartymonMenuCheckCancel holds each side until the partner also sends the $F cancel action).
@@ -76,269 +31,71 @@ internal sealed class ScriptedTradeDriver {
     // (the cancel handshake exchanges a sync nybble and each side re-arms until BOTH have sent $F). The trade menu's
     // joypad filter is A|UP|DOWN — B does nothing here, which is why a B-mash never exits.
     private const int CancelCycle = 90;
+    // Firing the console: the seat A-press only registers once the tap-turn's animation has finished (a press mid-turn
+    // is eaten), so the Console phase MASHES A per side until that side's script engine is actually running — pressing
+    // anything else before then risks turning/walking off the seat (the exact failure a blind fixed cycle produced).
+    private const int ConsoleBudget = 900;
+    // Per-phase frame budgets — generous ceilings (the machine runs ~250 fps headless, so long waits are cheap); a phase
+    // that blows its ceiling without meeting its peek condition is a livelock/desync, failed fast.
+    private const int ContinueBudget = 900;
+    // The overworld loads its map by ~frame 450 but is still fading in / not accepting input for a while after; the
+    // player can only be turned once it has settled (verified with --trade-talk: ~600 frames of settle before the tap-UP
+    // takes). The Continue phase holds until both machines pass this frame.
+    private const int ContinueSettleFrame = 600;
+    private const byte CorridorY = 5;
+    private const int FaceUpBudget = 40;
+    private const byte FacingLeft = 0x08;
+    private const byte FacingRight = 0x0C;
+    // wLinkMode == LINK_TRADECENTER (2) once both sides confirm they're in the same room — the link is fully established.
+    private const byte LinkTradeCenter = 2;
+    // A-mash cadence: press MashPress frames, release the rest of a MashPeriod window, so the cart's edge-triggered menus see
+    // one clean press per period (a held button registers a single edge; mash = alternating press/release).
+    private const int MashPeriod = 8;
+    private const int MashPress = 2;
+    // wPlayerDirection ($D205) reads 4 when the player faces UP toward the attendant (0 = DOWN, the crafted default).
+    private const byte PlayerDirectionUp = 4;
+    private const int ReceptionistBudget = 12000;
+    // TRADE_CENTER seat geometry: the two console bg_events on row Y=4 are (4,4) BGEVENT_RIGHT and (5,4) BGEVENT_LEFT;
+    // a directional bg_event fires when the player stands on the tile adjacent to the console and faces it, and
+    // (4,4)/(5,4) are solid furniture. So each side stands on the CHRIS-avatar tile its map callback vacated: the
+    // external-clock side ($01, side A) has CHRIS2 removed from (6,4) and stands there facing left (facing tile
+    // (5,4) → its BGEVENT_LEFT); the internal-clock side ($02, side B) has CHRIS1 removed from (3,4) and stands
+    // there facing right (facing tile (4,4)).
+    private const byte SeatY = 4;
+    private const ushort SerialControlAddress = 0xFF02;
+    private const byte SideASeatX = 6;
+    private const byte SideBSeatX = 3;
+    // TRADE_CENTER is map group 20 / map 2 — the console room the room-match warp lands both players in.
+    private const byte TradeCenterGroup = 20;
+    private const byte TradeCenterMap = 2;
+    // The whole in-`special TradeCenter` interaction (block exchange, party menu, submenu, confirm, animation, auto-save)
+    // ceiling — generous; the phase ends early the frame the leads swap.
+    private const int TradeMenuBudget = 6000;
     // The trade-menu input cycle (frames): tap A (open the party-mon submenu / advance / confirm), settle, tap RIGHT (move
     // the STATS|TRADE cursor to TRADE), settle, tap A (select TRADE), then a long settle for the block exchange + partner
     // nybble sync + trade animation. Cycling makes it robust to those data-dependent waits.
     private const int TradeMenuCycle = 90;
-    private const ushort SerialControlAddress = 0xFF02;
-    // TRADE_CENTER is map group 20 / map 2 — the console room the room-match warp lands both players in.
-    private const byte TradeCenterGroup = 20;
-    private const byte TradeCenterMap = 2;
-    // wLinkMode == LINK_TRADECENTER (2) once both sides confirm they're in the same room — the link is fully established.
-    private const byte LinkTradeCenter = 2;
+    private const ushort WXCoordAddress = 0xDA03;
+    private const ushort WYCoordAddress = 0xDA02;
 
-    /// <summary>Builds and runs the full scripted trade to completion (or the first phase that fails its peek condition),
-    /// returning the states observed, both sides' serial-traffic fingerprints, and both final snapshots. The optional
-    /// <paramref name="churnAtStep"/> injects a credit-preserving suspend/snapshot/restore/reconnect at that global frame
-    /// (which must be transfer-idle), proving the trade is transparent to a snapshot cycle; <paramref name="probes"/>, when
-    /// supplied, is filled with a per-frame idle/phase probe so a caller can pick a mid-trade idle churn boundary.</summary>
-    /// <param name="rom">The trade-cart ROM image used by both machines.</param>
-    /// <param name="churnAtStep">The global frame at which to suspend, snapshot, restore, and reconnect, or -1 to
-    /// disable churn.</param>
-    /// <param name="probes">An optional destination for per-frame idle and phase observations.</param>
-    /// <param name="onFrame">An optional callback invoked for each observed frame.</param>
-    /// <param name="attemptTrade">When <see langword="true"/> (the <c>link-lock</c> gate and the interactive
-    /// <c>--trade-run</c> explorer) the driver continues past the established link into the TRADE_CENTER console
-    /// navigation + full mon-selection trade, through the post-trade CANCEL back out of the link; when
-    /// <see langword="false"/> it stops after both machines establish the Trade Center link.</param>
-    public static TradeResult Run(
-        byte[] rom,
-        int churnAtStep = -1,
-        List<TradeProbe>? probes = null,
-        Action<TradeFrame>? onFrame = null,
-        bool attemptTrade = true
-    ) {
-        var driver = new ScriptedTradeDriver(
-            attemptTrade: attemptTrade,
-            rom: rom
-        );
+    /// <summary>Side B's persistent DIV head start (T-cycles) applied before the cable connects — half a DIV bit-7 period
+    /// so the two machines always read opposite DIV bit 7 at WaitForLinkedFriend's jitter check, breaking the master/slave
+    /// symmetry. The DIV counter's bit 7 (of the visible register) toggles every 32768 T-cycles.</summary>
+    public const ulong RendezvousDivOffsetCycles = 32768;
+    // --- Tunables (authored/verified with --trade-run against the trade cart, USA) ---
 
-        return driver.Drive(
-            churnAtStep: churnAtStep,
-            onFrame: onFrame,
-            probes: probes
-        );
-    }
+    /// <summary>Side B's receptionist mash lags side A's by this many frames — the mandated rendezvous symmetry-break.</summary>
+    public const int RendezvousStaggerFrames = 97;
 
+    private readonly bool m_attemptTrade;
     private readonly byte[] m_rom;
 
     private MachineInstance m_a;
     private MachineInstance m_b;
-
-    private readonly TrafficTally m_tallyA = new();
-    private readonly TrafficTally m_tallyB = new();
-
-    private readonly bool m_attemptTrade;
-
-    private Phase m_phase = Phase.Continue;
-
     private int m_phaseStart;
-
-    private byte m_roleA = ScriptedTradeHarness.ConnectionNotEstablished;
-    private byte m_roleB = ScriptedTradeHarness.ConnectionNotEstablished;
-
-    private bool m_rolesSeen;
     private bool m_reachedTradeCenter;
+    private bool m_rolesSeen;
 
-    private ScriptedTradeDriver(byte[] rom, bool attemptTrade) {
-        m_rom = rom;
-        m_attemptTrade = attemptTrade;
-        m_a = ScriptedTradeHarness.Build(
-            rom: rom,
-            trainer: TradeSaveFactory.SideA
-        );
-        m_b = ScriptedTradeHarness.Build(
-            rom: rom,
-            trainer: TradeSaveFactory.SideB
-        );
-    }
-
-    private TradeResult Drive(int churnAtStep, List<TradeProbe>? probes, Action<TradeFrame>? onFrame) {
-        var continueScript = ScriptedTradeHarness.ContinueScript();
-        var expectedLeadA = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideA));
-        var expectedLeadB = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideB));
-
-        Observe(
-            instance: m_a,
-            tally: m_tallyA
-        );
-        Observe(
-            instance: m_b,
-            tally: m_tallyB
-        );
-
-        // Required symmetry break: two identical Cgb machines connected at identical post-boot state, and
-        // then pair-stepped to equal cumulative CycleCount by the SerialLinkSession, have identical free-running DIV
-        // counters for the whole run — so WaitForLinkedFriend's rDIV-jitter (each side spins on DIV bit 7 before asserting
-        // its clock role) breaks the two sides identically and they livelock, both landing on USING_EXTERNAL_CLOCK, never
-        // one master + one slave. Advancing side B by half a DIV bit-7 period (32768 T-cycles) before connecting gives it a
-        // persistent DIV offset the session preserves (it re-anchors targets at connect, so the head start carries), so the
-        // two sides read opposite DIV bit 7 at the jitter check and the rendezvous resolves to exactly one $01 and one $02.
-        // A frame stagger alone does not work: the session balances CycleCount, erasing any frame-level lead.
-        m_b.Machine.Run(tCycles: RendezvousDivOffsetCycles);
-
-        var session = new SerialLinkSession(
-            first: m_a,
-            second: m_b
-        );
-
-        try {
-            for (var frame = 0; ((m_phase != Phase.Done) && (m_phase != Phase.Failed)); ++frame) {
-                var localFrame = (frame - m_phaseStart);
-
-                probes?.Add(item: new TradeProbe(
-                    Phase: m_phase,
-                    Idle: IsIdle(),
-                    Completed: m_tallyA.Completions
-                ));
-
-                if (frame == churnAtStep) {
-                    if (!IsIdle()) {
-                        throw new InvalidOperationException(message: $"the churn boundary at frame {frame} is not transfer-idle on both ports.");
-                    }
-
-                    session = Churn(session: session);
-                }
-
-                var (buttonsA, buttonsB) = Inputs(
-                    continueScript: continueScript,
-                    frame: frame,
-                    localFrame: localFrame
-                );
-
-                m_a.GetRequiredService<IJoypad>().SetButtons(pressed: buttonsA);
-                m_b.GetRequiredService<IJoypad>().SetButtons(pressed: buttonsB);
-                session.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
-
-                CaptureRoles();
-                onFrame?.Invoke(obj: new TradeFrame(
-                    ButtonsA: buttonsA,
-                    ButtonsB: buttonsB,
-                    Driver: this,
-                    Frame: frame,
-                    LocalFrame: localFrame,
-                    Phase: m_phase
-                ));
-                Advance(
-                    expectedLeadA: expectedLeadA,
-                    expectedLeadB: expectedLeadB,
-                    frame: frame,
-                    localFrame: localFrame
-                );
-            }
-
-            return new TradeResult(
-                Completed: (m_phase == Phase.Done),
-                ReachedTradeCenter: m_reachedTradeCenter,
-                LinkModeA: ScriptedTradeHarness.Peek(
-                    address: ScriptedTradeHarness.LinkModeAddress,
-                    machine: m_a
-                ),
-                LinkModeB: ScriptedTradeHarness.Peek(
-                    address: ScriptedTradeHarness.LinkModeAddress,
-                    machine: m_b
-                ),
-                RolesResolved: (m_rolesSeen && (((m_roleA == ScriptedTradeHarness.UsingExternalClock) && (m_roleB == ScriptedTradeHarness.UsingInternalClock)) || ((m_roleA == ScriptedTradeHarness.UsingInternalClock) && (m_roleB == ScriptedTradeHarness.UsingExternalClock)))),
-                RoleA: m_roleA,
-                RoleB: m_roleB,
-                LeadA: TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: m_a)),
-                LeadB: TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: m_b)),
-                ChecksumOkA: TradeSaveFactory.VerifyChecksum(sram: ScriptedTradeHarness.ExportSram(machine: m_a)),
-                ChecksumOkB: TradeSaveFactory.VerifyChecksum(sram: ScriptedTradeHarness.ExportSram(machine: m_b)),
-                TrafficA: m_tallyA.ToTraffic(),
-                TrafficB: m_tallyB.ToTraffic(),
-                StateA: m_a.Machine.Snapshot(),
-                StateB: m_b.Machine.Snapshot(),
-                SramA: ScriptedTradeHarness.ExportSram(machine: m_a),
-                SramB: ScriptedTradeHarness.ExportSram(machine: m_b)
-            );
-        } finally {
-            session.Dispose();
-            m_a.Dispose();
-            m_b.Dispose();
-        }
-    }
-    // Suspend at a transfer-idle instant, snapshot both machines, restore into fresh machines, reconnect with the token —
-    // the credit-preserving reconnect. Phase state is host-side (this driver), so it survives the swap; the
-    // traffic tallies survive by being re-attached to the fresh ports around the same accumulators.
-    private SerialLinkSession Churn(SerialLinkSession session) {
-        var token = session.Suspend();
-        var stateA = m_a.Machine.Snapshot();
-        var stateB = m_b.Machine.Snapshot();
-        var freshA = ScriptedTradeHarness.Build(
-            rom: m_rom,
-            trainer: TradeSaveFactory.SideA
-        );
-        var freshB = ScriptedTradeHarness.Build(
-            rom: m_rom,
-            trainer: TradeSaveFactory.SideB
-        );
-
-        freshA.Machine.Restore(snapshot: stateA);
-        freshB.Machine.Restore(snapshot: stateB);
-        m_a.Dispose();
-        m_b.Dispose();
-        m_a = freshA;
-        m_b = freshB;
-        Observe(
-            instance: m_a,
-            tally: m_tallyA
-        );
-        Observe(
-            instance: m_b,
-            tally: m_tallyB
-        );
-
-        return new SerialLinkSession(
-            first: m_a,
-            resumeToken: token,
-            second: m_b
-        );
-    }
-    // The per-side held-button state for a frame, dispatched on the current phase. Directional turns are single-press
-    // windows; dialogue/menu advances are edge-mashed; the receptionist rendezvous staggers side B behind side A.
-    private (JoypadButtons A, JoypadButtons B) Inputs(int frame, int localFrame, LinkInputScript continueScript) =>
-        m_phase switch {
-            Phase.Continue => (continueScript.ButtonsAt(frame: frame), continueScript.ButtonsAt(frame: frame)),
-            // Tap UP briefly (the first two local frames) to TURN toward the attendant, then release — a held direction
-            // walks/bumps; a tap turns in place. The overworld must have settled first (see the Continue transition).
-            Phase.FaceUp => (FaceTap(localFrame: localFrame), FaceTap(localFrame: localFrame)),
-            Phase.Receptionist => (MashA(localFrame: localFrame), MashA(localFrame: (localFrame - RendezvousStaggerFrames))),
-            // Each side walks onto its vacated-CHRIS seat tile on row Y=4 and turns to the bg_event's required facing
-            // (side A: (6,4) facing LEFT toward console (5,4); side B: (3,4) facing RIGHT toward console (4,4)). Facing
-            // any other way does NOT fire the console — a directional bg_event only matches its own facing. The A-press
-            // that fires `special TradeCenter` is the Console phase's mash, once BOTH sides are seated.
-            Phase.Approach => (ApproachSide(
-        localFrame: localFrame,
-        machine: m_a,
-        seatX: SideASeatX,
-        wantDir: FacingLeft
-    ), ApproachSide(
-        localFrame: localFrame,
-        machine: m_b,
-        seatX: SideBSeatX,
-        wantDir: FacingRight
-    )),
-            // Seated and facing the console: mash A (only) until this side's script engine reports the console script
-            // running — the press that lands after the turn animation settles fires `special TradeCenter`.
-            Phase.Console => (ConsoleSide(
-        localFrame: localFrame,
-        machine: m_a
-    ), ConsoleSide(
-        localFrame: localFrame,
-        machine: m_b
-    )),
-            // `special TradeCenter` runs the block exchange and the party-selection / confirm UI internally. Plain A-mash
-            // does not trade: pressing A on a party mon opens a horizontal STATS|TRADE submenu with the cursor on STATS, so
-            // A there just opens the stats screen and loops (the cart's link menu loop). The trade is
-            // reached only by RIGHT (cursor -> TRADE) then A. This cyclic A -> RIGHT -> A pattern
-            // drives: party-menu A (open submenu) -> RIGHT (to TRADE) -> A (select) -> and the "mon for mon TRADE/CANCEL?"
-            // confirm popup (cursor defaults to TRADE) -> A. It cycles so it is robust to the block-exchange + partner-sync
-            // waits (presses on a not-yet-ready menu are no-ops).
-            Phase.TradeMenu => (TradeMenu(localFrame: localFrame), TradeMenu(localFrame: localFrame)),
-            Phase.Cancel => (CancelDrive(localFrame: localFrame), CancelDrive(localFrame: localFrame)),
-            _ => (JoypadButtons.None, JoypadButtons.None),
-        };
     // Evaluates the current phase's peek condition and either advances to the next phase or fails when its frame ceiling
     // is blown without the condition being met.
     private void Advance(int frame, int localFrame, byte expectedLeadA, byte expectedLeadB) {
@@ -491,75 +248,6 @@ internal sealed class ScriptedTradeDriver {
                 break;
         }
     }
-    private void Transition(Phase next, int frame) {
-        m_phase = next;
-        m_phaseStart = (frame + 1);
-    }
-    // The rendezvous roles once WaitForLinkedFriend resolves: $01 on exactly one machine, $02 on the other. Captured the
-    // first frame a valid (external, internal) pair appears and held (later phases overwrite $FFCD).
-    private void CaptureRoles() {
-        if (m_rolesSeen) {
-            return;
-        }
-
-        var a = ScriptedTradeHarness.ConnectionStatus(machine: m_a);
-        var b = ScriptedTradeHarness.ConnectionStatus(machine: m_b);
-
-        if (
-            ((a == ScriptedTradeHarness.UsingExternalClock) && (b == ScriptedTradeHarness.UsingInternalClock)) ||
-            ((a == ScriptedTradeHarness.UsingInternalClock) && (b == ScriptedTradeHarness.UsingExternalClock))
-        ) {
-            m_roleA = a;
-            m_roleB = b;
-            m_rolesSeen = true;
-        }
-    }
-    private bool TradeCommitted(byte expectedLeadA, byte expectedLeadB) {
-        var leadA = TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: m_a));
-        var leadB = TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: m_b));
-
-        return (
-            (leadA == expectedLeadB) &&
-            (leadB == expectedLeadA)
-        );
-    }
-    private static bool AtTradeCenter(MachineInstance machine) =>
-        ((ScriptedTradeHarness.LiveMapGroup(machine: machine) == TradeCenterGroup) && (ScriptedTradeHarness.LiveMapNumber(machine: machine) == TradeCenterMap));
-    private bool IsIdle() =>
-        (((m_a.GetRequiredService<ISystemBus>().ReadByte(address: SerialControlAddress) & 0x80) == 0)
-            && ((m_b.GetRequiredService<ISystemBus>().ReadByte(address: SerialControlAddress) & 0x80) == 0));
-    // Tap UP on the first two local frames of the FaceUp phase, then release — a brief tap turns in place toward the
-    // attendant (a held direction would walk or bump-shuffle).
-    private static JoypadButtons FaceTap(int localFrame) =>
-        ((localFrame < 2)
-        ? JoypadButtons.Up
-        : JoypadButtons.None);
-    private static JoypadButtons MashA(int localFrame) =>
-        (((localFrame >= 0) && ((localFrame % MashPeriod) < MashPress))
-        ? JoypadButtons.A
-        : JoypadButtons.None);
-    // One cycle of the trade-menu drive: A (0..2) -> settle -> RIGHT (30..32) -> settle -> A (45..47) -> long settle.
-    private static JoypadButtons TradeMenu(int localFrame) {
-        var phase = (localFrame % TradeMenuCycle);
-
-        return phase switch {
-            >= 0 and < 3 => JoypadButtons.A,
-            >= 30 and < 33 => JoypadButtons.Right,
-            >= 45 and < 48 => JoypadButtons.A,
-            _ => JoypadButtons.None,
-        };
-    }
-    // One cycle of the cancel drive: DOWN (0..2) -> settle -> DOWN (20..22) -> settle -> A (40..42) -> long settle.
-    private static JoypadButtons CancelDrive(int localFrame) {
-        var phase = (localFrame % CancelCycle);
-
-        return phase switch {
-            >= 0 and < 3 => JoypadButtons.Down,
-            >= 20 and < 23 => JoypadButtons.Down,
-            >= 40 and < 43 => JoypadButtons.A,
-            _ => JoypadButtons.None,
-        };
-    }
     // Peek-gated navigation to one side's trade console seat: climb off the exit-warp row to the corridor, align to the
     // seat column, step straight up onto the seat tile (Y=4), then tap-turn to the required facing. Per-machine peeks
     // make it robust to the entry position and step timing; the console A-press belongs to the Console phase. This walk
@@ -612,11 +300,13 @@ internal sealed class ScriptedTradeDriver {
             // the console without a bump. Mirrors FaceUp's FaceTap.
             var turn = ((wantDir == FacingLeft)
                 ? JoypadButtons.Left
-                : JoypadButtons.Right);
+                : JoypadButtons.Right
+            );
 
             return (((localFrame % MashPeriod) < MashPress)
                 ? turn
-                : JoypadButtons.None);
+                : JoypadButtons.None
+            );
         }
 
         // Seated and facing the console: HOLD (no A). The A-press that fires `special TradeCenter` is deferred to the
@@ -624,37 +314,347 @@ internal sealed class ScriptedTradeDriver {
         // special while the other is still walking (a one-sided special desyncs the link).
         return JoypadButtons.None;
     }
+    private static bool AtTradeCenter(MachineInstance machine) =>
+        ((ScriptedTradeHarness.LiveMapGroup(machine: machine) == TradeCenterGroup) && (ScriptedTradeHarness.LiveMapNumber(machine: machine) == TradeCenterMap));
+    // One cycle of the cancel drive: DOWN (0..2) -> settle -> DOWN (20..22) -> settle -> A (40..42) -> long settle.
+    private static JoypadButtons CancelDrive(int localFrame) {
+        var phase = (localFrame % CancelCycle);
+
+        return phase switch {
+            >= 0 and < 3 => JoypadButtons.Down,
+            >= 20 and < 23 => JoypadButtons.Down,
+            >= 40 and < 43 => JoypadButtons.A,
+            _ => JoypadButtons.None,
+        };
+    }
+    // The rendezvous roles once WaitForLinkedFriend resolves: $01 on exactly one machine, $02 on the other. Captured the
+    // first frame a valid (external, internal) pair appears and held (later phases overwrite $FFCD).
+    private void CaptureRoles() {
+        if (m_rolesSeen) {
+            return;
+        }
+
+        var a = ScriptedTradeHarness.ConnectionStatus(machine: m_a);
+        var b = ScriptedTradeHarness.ConnectionStatus(machine: m_b);
+
+        if (
+            ((a == ScriptedTradeHarness.UsingExternalClock) && (b == ScriptedTradeHarness.UsingInternalClock)) ||
+            ((a == ScriptedTradeHarness.UsingInternalClock) && (b == ScriptedTradeHarness.UsingExternalClock))
+        ) {
+            m_roleA = a;
+            m_roleB = b;
+            m_rolesSeen = true;
+        }
+    }
+    // Suspend at a transfer-idle instant, snapshot both machines, restore into fresh machines, reconnect with the token —
+    // the credit-preserving reconnect. Phase state is host-side (this driver), so it survives the swap; the
+    // traffic tallies survive by being re-attached to the fresh ports around the same accumulators.
+    private SerialLinkSession Churn(SerialLinkSession session) {
+        var token = session.Suspend();
+        var stateA = m_a.Machine.Snapshot();
+        var stateB = m_b.Machine.Snapshot();
+        var freshA = ScriptedTradeHarness.Build(
+            rom: m_rom,
+            trainer: TradeSaveFactory.SideA
+        );
+        var freshB = ScriptedTradeHarness.Build(
+            rom: m_rom,
+            trainer: TradeSaveFactory.SideB
+        );
+
+        freshA.Machine.Restore(snapshot: stateA);
+        freshB.Machine.Restore(snapshot: stateB);
+        m_a.Dispose();
+        m_b.Dispose();
+        m_a = freshA;
+        m_b = freshB;
+        Observe(
+            instance: m_a,
+            tally: m_tallyA
+        );
+        Observe(
+            instance: m_b,
+            tally: m_tallyB
+        );
+
+        return new SerialLinkSession(
+            first: m_a,
+            resumeToken: token,
+            second: m_b
+        );
+    }
     // Mash A until this side's console script fires (a press mid-turn-animation is eaten; once the trade UI opens,
     // further presses stop so the menu drive begins from a quiet pad).
     private static JoypadButtons ConsoleSide(MachineInstance machine, int localFrame) =>
         (TradeUiOpen(machine: machine)
-        ? JoypadButtons.None
-        : MashA(localFrame: localFrame));
-    // `special TradeCenter` disables overworld sprite updates for its whole run — the discriminator that the console
-    // fired and the trade UI owns the machine.
-    private static bool TradeUiOpen(MachineInstance machine) =>
-        (ScriptedTradeHarness.Peek(
-        address: ScriptedTradeHarness.SpriteUpdatesEnabledAddress,
-        machine: machine
-    ) == 0);
-    private bool Seated(MachineInstance machine, byte seatX, byte wantDir) =>
-        ((ScriptedTradeHarness.Peek(
-        address: WXCoordAddress,
-        machine: machine
-    ) == seatX)
-            && (ScriptedTradeHarness.Peek(
-        address: WYCoordAddress,
-        machine: machine
-    ) == SeatY)
-            && (ScriptedTradeHarness.Peek(
-        address: ScriptedTradeHarness.PlayerDirectionAddress,
-        machine: machine
-    ) == wantDir));
+            ? JoypadButtons.None
+            : MashA(localFrame: localFrame)
+        );
+    private TradeResult Drive(int churnAtStep, List<TradeProbe>? probes, Action<TradeFrame>? onFrame) {
+        var continueScript = ScriptedTradeHarness.ContinueScript();
+        var expectedLeadA = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideA));
+        var expectedLeadB = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideB));
+
+        Observe(
+            instance: m_a,
+            tally: m_tallyA
+        );
+        Observe(
+            instance: m_b,
+            tally: m_tallyB
+        );
+
+        // Required symmetry break: two identical Cgb machines connected at identical post-boot state, and
+        // then pair-stepped to equal cumulative CycleCount by the SerialLinkSession, have identical free-running DIV
+        // counters for the whole run — so WaitForLinkedFriend's rDIV-jitter (each side spins on DIV bit 7 before asserting
+        // its clock role) breaks the two sides identically and they livelock, both landing on USING_EXTERNAL_CLOCK, never
+        // one master + one slave. Advancing side B by half a DIV bit-7 period (32768 T-cycles) before connecting gives it a
+        // persistent DIV offset the session preserves (it re-anchors targets at connect, so the head start carries), so the
+        // two sides read opposite DIV bit 7 at the jitter check and the rendezvous resolves to exactly one $01 and one $02.
+        // A frame stagger alone does not work: the session balances CycleCount, erasing any frame-level lead.
+        m_b.Machine.Run(tCycles: RendezvousDivOffsetCycles);
+
+        var session = new SerialLinkSession(
+            first: m_a,
+            second: m_b
+        );
+
+        try {
+            for (var frame = 0; ((m_phase != Phase.Done) && (m_phase != Phase.Failed)); ++frame) {
+                var localFrame = (frame - m_phaseStart);
+
+                probes?.Add(item: new TradeProbe(
+                    Phase: m_phase,
+                    Idle: IsIdle(),
+                    Completed: m_tallyA.Completions
+                ));
+
+                if (frame == churnAtStep) {
+                    if (!IsIdle()) {
+                        throw new InvalidOperationException(message: $"the churn boundary at frame {frame} is not transfer-idle on both ports.");
+                    }
+
+                    session = Churn(session: session);
+                }
+
+                var (buttonsA, buttonsB) = Inputs(
+                    continueScript: continueScript,
+                    frame: frame,
+                    localFrame: localFrame
+                );
+
+                m_a.GetRequiredService<IJoypad>().SetButtons(pressed: buttonsA);
+                m_b.GetRequiredService<IJoypad>().SetButtons(pressed: buttonsB);
+                session.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
+
+                CaptureRoles();
+                onFrame?.Invoke(obj: new TradeFrame(
+                    ButtonsA: buttonsA,
+                    ButtonsB: buttonsB,
+                    Driver: this,
+                    Frame: frame,
+                    LocalFrame: localFrame,
+                    Phase: m_phase
+                ));
+                Advance(
+                    expectedLeadA: expectedLeadA,
+                    expectedLeadB: expectedLeadB,
+                    frame: frame,
+                    localFrame: localFrame
+                );
+            }
+
+            return new TradeResult(
+                Completed: (m_phase == Phase.Done),
+                ReachedTradeCenter: m_reachedTradeCenter,
+                LinkModeA: ScriptedTradeHarness.Peek(
+                    address: ScriptedTradeHarness.LinkModeAddress,
+                    machine: m_a
+                ),
+                LinkModeB: ScriptedTradeHarness.Peek(
+                    address: ScriptedTradeHarness.LinkModeAddress,
+                    machine: m_b
+                ),
+                RolesResolved: (m_rolesSeen && (((m_roleA == ScriptedTradeHarness.UsingExternalClock) && (m_roleB == ScriptedTradeHarness.UsingInternalClock)) || ((m_roleA == ScriptedTradeHarness.UsingInternalClock) && (m_roleB == ScriptedTradeHarness.UsingExternalClock)))),
+                RoleA: m_roleA,
+                RoleB: m_roleB,
+                LeadA: TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: m_a)),
+                LeadB: TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: m_b)),
+                ChecksumOkA: TradeSaveFactory.VerifyChecksum(sram: ScriptedTradeHarness.ExportSram(machine: m_a)),
+                ChecksumOkB: TradeSaveFactory.VerifyChecksum(sram: ScriptedTradeHarness.ExportSram(machine: m_b)),
+                TrafficA: m_tallyA.ToTraffic(),
+                TrafficB: m_tallyB.ToTraffic(),
+                StateA: m_a.Machine.Snapshot(),
+                StateB: m_b.Machine.Snapshot(),
+                SramA: ScriptedTradeHarness.ExportSram(machine: m_a),
+                SramB: ScriptedTradeHarness.ExportSram(machine: m_b)
+            );
+        } finally {
+            session.Dispose();
+            m_a.Dispose();
+            m_b.Dispose();
+        }
+    }
+    // Tap UP on the first two local frames of the FaceUp phase, then release — a brief tap turns in place toward the
+    // attendant (a held direction would walk or bump-shuffle).
+    private static JoypadButtons FaceTap(int localFrame) =>
+        ((localFrame < 2)
+            ? JoypadButtons.Up
+            : JoypadButtons.None
+        );
+    // The per-side held-button state for a frame, dispatched on the current phase. Directional turns are single-press
+    // windows; dialogue/menu advances are edge-mashed; the receptionist rendezvous staggers side B behind side A.
+    private (JoypadButtons A, JoypadButtons B) Inputs(int frame, int localFrame, LinkInputScript continueScript) =>
+        m_phase switch {
+            Phase.Continue => (continueScript.ButtonsAt(frame: frame), continueScript.ButtonsAt(frame: frame)),
+            // Tap UP briefly (the first two local frames) to TURN toward the attendant, then release — a held direction
+            // walks/bumps; a tap turns in place. The overworld must have settled first (see the Continue transition).
+            Phase.FaceUp => (FaceTap(localFrame: localFrame), FaceTap(localFrame: localFrame)),
+            Phase.Receptionist => (MashA(localFrame: localFrame), MashA(localFrame: (localFrame - RendezvousStaggerFrames))),
+            // Each side walks onto its vacated-CHRIS seat tile on row Y=4 and turns to the bg_event's required facing
+            // (side A: (6,4) facing LEFT toward console (5,4); side B: (3,4) facing RIGHT toward console (4,4)). Facing
+            // any other way does NOT fire the console — a directional bg_event only matches its own facing. The A-press
+            // that fires `special TradeCenter` is the Console phase's mash, once BOTH sides are seated.
+            Phase.Approach => (ApproachSide(
+            localFrame: localFrame,
+            machine: m_a,
+            seatX: SideASeatX,
+            wantDir: FacingLeft
+        ), ApproachSide(
+            localFrame: localFrame,
+            machine: m_b,
+            seatX: SideBSeatX,
+            wantDir: FacingRight
+        )),
+            // Seated and facing the console: mash A (only) until this side's script engine reports the console script
+            // running — the press that lands after the turn animation settles fires `special TradeCenter`.
+            Phase.Console => (ConsoleSide(
+            localFrame: localFrame,
+            machine: m_a
+        ), ConsoleSide(
+            localFrame: localFrame,
+            machine: m_b
+        )),
+            // `special TradeCenter` runs the block exchange and the party-selection / confirm UI internally. Plain A-mash
+            // does not trade: pressing A on a party mon opens a horizontal STATS|TRADE submenu with the cursor on STATS, so
+            // A there just opens the stats screen and loops (the cart's link menu loop). The trade is
+            // reached only by RIGHT (cursor -> TRADE) then A. This cyclic A -> RIGHT -> A pattern
+            // drives: party-menu A (open submenu) -> RIGHT (to TRADE) -> A (select) -> and the "mon for mon TRADE/CANCEL?"
+            // confirm popup (cursor defaults to TRADE) -> A. It cycles so it is robust to the block-exchange + partner-sync
+            // waits (presses on a not-yet-ready menu are no-ops).
+            Phase.TradeMenu => (TradeMenu(localFrame: localFrame), TradeMenu(localFrame: localFrame)),
+            Phase.Cancel => (CancelDrive(localFrame: localFrame), CancelDrive(localFrame: localFrame)),
+            _ => (JoypadButtons.None, JoypadButtons.None),
+        };
+    private bool IsIdle() =>
+        (((m_a.GetRequiredService<ISystemBus>().ReadByte(address: SerialControlAddress) & 0x80) == 0)
+            && ((m_b.GetRequiredService<ISystemBus>().ReadByte(address: SerialControlAddress) & 0x80) == 0));
+    private static JoypadButtons MashA(int localFrame) =>
+        (((localFrame >= 0) && ((localFrame % MashPeriod) < MashPress))
+            ? JoypadButtons.A
+            : JoypadButtons.None
+        );
     private static void Observe(MachineInstance instance, TrafficTally tally) {
         var port = instance.GetRequiredService<SerialComponent>();
 
         port.ByteTransmitted = tally.OnSend;
         port.TransferCompleted = tally.OnComplete;
+    }
+    private bool Seated(MachineInstance machine, byte seatX, byte wantDir) =>
+        ((ScriptedTradeHarness.Peek(
+            address: WXCoordAddress,
+            machine: machine
+        ) == seatX)
+            && (ScriptedTradeHarness.Peek(
+            address: WYCoordAddress,
+            machine: machine
+        ) == SeatY)
+            && (ScriptedTradeHarness.Peek(
+            address: ScriptedTradeHarness.PlayerDirectionAddress,
+            machine: machine
+        ) == wantDir));
+    private bool TradeCommitted(byte expectedLeadA, byte expectedLeadB) {
+        var leadA = TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: m_a));
+        var leadB = TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: m_b));
+
+        return (
+            (leadA == expectedLeadB) &&
+            (leadB == expectedLeadA)
+        );
+    }
+    // One cycle of the trade-menu drive: A (0..2) -> settle -> RIGHT (30..32) -> settle -> A (45..47) -> long settle.
+    private static JoypadButtons TradeMenu(int localFrame) {
+        var phase = (localFrame % TradeMenuCycle);
+
+        return phase switch {
+            >= 0 and < 3 => JoypadButtons.A,
+            >= 30 and < 33 => JoypadButtons.Right,
+            >= 45 and < 48 => JoypadButtons.A,
+            _ => JoypadButtons.None,
+        };
+    }
+    // `special TradeCenter` disables overworld sprite updates for its whole run — the discriminator that the console
+    // fired and the trade UI owns the machine.
+    private static bool TradeUiOpen(MachineInstance machine) =>
+        (ScriptedTradeHarness.Peek(
+            address: ScriptedTradeHarness.SpriteUpdatesEnabledAddress,
+            machine: machine
+        ) == 0);
+    private void Transition(Phase next, int frame) {
+        m_phase = next;
+        m_phaseStart = (frame + 1);
+    }
+
+    /// <summary>Builds and runs the full scripted trade to completion (or the first phase that fails its peek condition),
+    /// returning the states observed, both sides' serial-traffic fingerprints, and both final snapshots. The optional
+    /// <paramref name="churnAtStep"/> injects a credit-preserving suspend/snapshot/restore/reconnect at that global frame
+    /// (which must be transfer-idle), proving the trade is transparent to a snapshot cycle; <paramref name="probes"/>, when
+    /// supplied, is filled with a per-frame idle/phase probe so a caller can pick a mid-trade idle churn boundary.</summary>
+    /// <param name="rom">The trade-cart ROM image used by both machines.</param>
+    /// <param name="churnAtStep">The global frame at which to suspend, snapshot, restore, and reconnect, or -1 to
+    /// disable churn.</param>
+    /// <param name="probes">An optional destination for per-frame idle and phase observations.</param>
+    /// <param name="onFrame">An optional callback invoked for each observed frame.</param>
+    /// <param name="attemptTrade">When <see langword="true"/> (the <c>link-lock</c> gate and the interactive
+    /// <c>--trade-run</c> explorer) the driver continues past the established link into the TRADE_CENTER console
+    /// navigation + full mon-selection trade, through the post-trade CANCEL back out of the link; when
+    /// <see langword="false"/> it stops after both machines establish the Trade Center link.</param>
+    public static TradeResult Run(
+        byte[] rom,
+        int churnAtStep = -1,
+        List<TradeProbe>? probes = null,
+        Action<TradeFrame>? onFrame = null,
+        bool attemptTrade = true
+    ) {
+        var driver = new ScriptedTradeDriver(
+            attemptTrade: attemptTrade,
+            rom: rom
+        );
+
+        return driver.Drive(
+            churnAtStep: churnAtStep,
+            onFrame: onFrame,
+            probes: probes
+        );
+    }
+
+    private readonly TrafficTally m_tallyA = new();
+    private readonly TrafficTally m_tallyB = new();
+    private Phase m_phase = Phase.Continue;
+    private byte m_roleA = ScriptedTradeHarness.ConnectionNotEstablished;
+    private byte m_roleB = ScriptedTradeHarness.ConnectionNotEstablished;
+
+    private ScriptedTradeDriver(byte[] rom, bool attemptTrade) {
+        m_rom = rom;
+        m_attemptTrade = attemptTrade;
+        m_a = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideA
+        );
+        m_b = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideB
+        );
     }
 
     /// <summary>The current side-A machine (explorer diagnostics only).</summary>
@@ -691,10 +691,10 @@ internal sealed class ScriptedTradeDriver {
             ++MasterSends;
         public LinkSideTraffic ToTraffic() =>
             new(
-            MasterSends: MasterSends,
-            Completions: Completions,
-            TrafficHash: Hash.Value
-        );
+                MasterSends: MasterSends,
+                Completions: Completions,
+                TrafficHash: Hash.Value
+            );
     }
 }
 /// <summary>A per-frame observation the trade explorer logs: the driver's phase, the buttons applied, and the driver so a

@@ -1,0 +1,9 @@
+.git/**
+.vscode/**
+node_modules/**
+src/**
+test/**
+extension.js
+package-lock.json
+*.vsix
+container-colors.js

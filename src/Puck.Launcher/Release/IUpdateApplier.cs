@@ -7,7 +7,11 @@ namespace Puck.Launcher.Release;
 /// <param name="RefusalReason">Why apply refused, when <paramref name="Applied"/> is <see langword="false"/>.</param>
 public sealed record UpdateApplyResult(bool Applied, string? PreviousVersion, string? RefusalReason) {
     /// <summary>Builds a refused result.</summary>
-    public static UpdateApplyResult Refuse(string reason) => new(Applied: false, PreviousVersion: null, RefusalReason: reason);
+    public static UpdateApplyResult Refuse(string reason) => new(
+        Applied: false,
+        PreviousVersion: null,
+        RefusalReason: reason
+    );
 }
 /// <summary>
 /// Applies an already-staged version: re-verifies its files by hash (never trusts an unverified directory), writes

@@ -10,11 +10,14 @@ public sealed partial class WorldServer {
         if (m_transferEscrow.Counts != default) {
             return "transfer transactions or mobility credentials depend on this timeline — replay in an isolated session";
         }
-        for (var index = 0; index < m_population.Capacity; index++) {
-            if (m_population.IsAdmittedPeer(index) || m_population.PeerAuthorityTransferred(index)) {
+        for (var index = 0; (index < m_population.Capacity); index++) {
+            if (
+                m_population.IsAdmittedPeer(bodyIndex: index) ||
+                m_population.PeerAuthorityTransferred(bodyIndex: index)
+            ) {
                 return "a remote connection or transferred body depends on this timeline — replay in an isolated session";
             }
         }
-        return TransferForwarder?.TimelineResetRefusal(this);
+        return TransferForwarder?.TimelineResetRefusal(source: this);
     }
 }

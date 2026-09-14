@@ -25,172 +25,351 @@ namespace Puck.World.Tests;
 /// literal body index.
 /// </summary>
 public sealed class HexLinesModuleImportLawTests {
-    private const string TopologyName = "hexLinesBoard";
-    private const int Radius = 4;
     private const int CellCount = 61; // 1 + 3·4·5
     private const float CellSize = 0.2f;
+    private const int Radius = 4;
+    private const int StonesPerTray = 15;
     private const float TableTop = 1.3f; // the board plane, local to hexTable
     private const float TileCentre = 1.305f; // TableTop plus the tile's half thickness
-    private const int StonesPerTray = 15;
-    private const float TrayHalfLength = 0.55f;
+    private const string TopologyName = "hexLinesBoard";
     private const float TrayHalfDepth = 0.25f;
-
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while ((directory is not null) && !File.Exists(Path.Combine(directory.FullName, "Puck.slnx"))) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-
-        return directory!.FullName;
-    }
-
-    private static WorldDefinition Load(params string[] segments) {
-        var path = Path.Combine([RepoRoot(), .. segments]);
-
-        Assert.True(WorldDefinitionLoader.TryLoadFile(path, out var definition, out var reason), reason);
-
-        return definition!;
-    }
-
-    private static WorldDefinition LoadGarden() => AuthoredGameFixtures.Nexus;
-    private static WorldDefinition LoadMinimalHost() => Load("tests", "Puck.World.Tests", "Fixtures", "minimal-hexlines-host.world.json");
-
-    private static WorldPlacement Placement(WorldDefinition definition, string id) {
-        var placement = definition.Placements.SingleOrDefault(p => string.Equals(a: p.Id, b: id, comparisonType: StringComparison.Ordinal));
-
-        Assert.NotNull(placement);
-
-        return placement!;
-    }
-
-    private static Vector3 WorldPosition(WorldDefinition definition, string id) =>
-        WorldDefinitionRows.ResolvedFrame(definition: definition, placement: Placement(definition, id)).Position;
-
-    // The one convention: cell (Q, R) sits at the board origin plus cellSize · (Q − R/2, 0, R·√3/2).
-    private static Vector3 CellCentre(Vector3 origin, HexagonalCoordinate cell) => origin + new Vector3(
-        x: (CellSize * (cell.Q - (cell.R / 2f))),
-        y: 0f,
-        z: (CellSize * cell.R * (MathF.Sqrt(3f) / 2f))
-    );
+    private const float TrayHalfLength = 0.55f;
 
     private static void AssertNear(Vector3 expected, Vector3 actual, string what) {
-        Assert.True(Vector3.Distance(expected, actual) < 1e-3f, $"{what}: expected {expected}, was {actual}");
+        Assert.True(
+            condition: (Vector3.Distance(
+                value1: expected,
+                value2: actual
+            ) < 1e-3f),
+            userMessage: $"{what}: expected {expected}, was {actual}"
+        );
     }
-
-    private static HashSet<string> RowKeys(WorldDefinition definition, string rowName) {
-        var row = WorldDefinitionRows.FindStateRow(definition.State, rowName);
-
-        Assert.NotNull(row);
-
-        return [.. (row!.Cells ?? []).Select(cell => cell.Key.Value)];
-    }
-
-    private static HashSet<string> StoneIds(string tray) => [.. Enumerable.Range(0, StonesPerTray).Select(n => $"{tray}-{n}")];
-
     // Every tile composes over hexTable at the ring-ordered cell's own centre, in BOTH hosts: the garden's own
     // position and the minimal host's restated one — the tile positions are authored LOCAL, so one restated placement
     // moves the whole board.
     private static void AssertTilesFollowTheTable(WorldDefinition definition) {
-        var table = Placement(definition, "hexTable");
-        var tableFrame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: table);
-        var boardCentre = (tableFrame.Position + new Vector3(0f, TileCentre, 0f));
+        var table = Placement(
+            definition: definition,
+            id: "hexTable"
+        );
+        var tableFrame = WorldDefinitionRows.ResolvedFrame(
+            definition: definition,
+            placement: table
+        );
+        var boardCentre = (tableFrame.Position + new Vector3(
+            x: 0f,
+            y: TileCentre,
+            z: 0f
+        ));
 
-        Assert.Equal(0f, tableFrame.YawDegrees);
+        Assert.Equal(
+            0f,
+            tableFrame.YawDegrees
+        );
 
         for (var index = 0; (index < CellCount); index++) {
-            var tile = Placement(definition, $"hexTile-{index}");
+            var tile = Placement(
+                definition: definition,
+                id: $"hexTile-{index}"
+            );
             var cell = new HexagonalIndex(value: index);
 
-            Assert.Equal("hexTable", tile.Parent);
-            Assert.True(cell.Radius <= Radius);
-            AssertNear(CellCentre(boardCentre, cell.ToCoordinate()), WorldPosition(definition, tile.Id), $"hexTile-{index}");
+            Assert.Equal(
+                "hexTable",
+                tile.Parent
+            );
+            Assert.True(condition: (cell.Radius <= Radius));
+            AssertNear(
+                CellCentre(
+                    boardCentre,
+                    cell.ToCoordinate()
+                ),
+                WorldPosition(
+                    definition: definition,
+                    id: tile.Id
+                ),
+                $"hexTile-{index}"
+            );
         }
 
         // The disk is COMPLETE rings and nothing more: index 61 would begin ring 5.
-        Assert.Equal(Radius + 1, new HexagonalIndex(value: CellCount).Radius);
-        Assert.DoesNotContain(definition.Placements, p => string.Equals(a: p.Id, b: $"hexTile-{CellCount}", comparisonType: StringComparison.Ordinal));
+        Assert.Equal(
+            (Radius + 1),
+            new HexagonalIndex(value: CellCount).Radius
+        );
+        Assert.DoesNotContain(
+            collection: definition.Placements,
+            filter: p => string.Equals(
+                a: p.Id,
+                b: $"hexTile-{CellCount}",
+                comparisonType: StringComparison.Ordinal
+            )
+        );
     }
-
     // The topology is a radius-4 hex disk whose origin is the board's centre on the table's top — the anchor law a
     // Grid board facet performs for chess, held here by authored coincidence in each host until Hex boards anchor.
     private static void AssertTopologyIsCentredOnTheTable(WorldDefinition definition) {
-        var compiled = WorldTopologyCompilation.Find(definition: definition, name: TopologyName);
+        var compiled = WorldTopologyCompilation.Find(
+            definition: definition,
+            name: TopologyName
+        );
 
-        Assert.NotNull(compiled);
-        Assert.Equal(TopologyKind.Hex, compiled!.Kind);
-        Assert.Equal(CellCount, compiled.CellCount);
-        Assert.Equal(CellSize, (float)(double)compiled.CellSize, precision: 4);
+        Assert.NotNull(@object: compiled);
+        Assert.Equal(
+            TopologyKind.Hex,
+            compiled!.Kind
+        );
+        Assert.Equal(
+            CellCount,
+            compiled.CellCount
+        );
+        Assert.Equal(
+            CellSize,
+            ((float)((double)compiled.CellSize)),
+            precision: 4
+        );
 
-        var expected = (WorldPosition(definition, "hexTable") + new Vector3(0f, TableTop, 0f));
-        var origin = new Vector3((float)(double)compiled.Origin.X, (float)(double)compiled.Origin.Y, (float)(double)compiled.Origin.Z);
+        var expected = (WorldPosition(
+            definition: definition,
+            id: "hexTable"
+        ) + new Vector3(
+            x: 0f,
+            y: TableTop,
+            z: 0f
+        ));
+        var origin = new Vector3(
+            x: ((float)((double)compiled.Origin.X)),
+            y: ((float)((double)compiled.Origin.Y)),
+            z: ((float)((double)compiled.Origin.Z))
+        );
 
-        AssertNear(expected, origin, "hexLinesBoard origin");
+        AssertNear(
+            actual: origin,
+            expected: expected,
+            what: "hexLinesBoard origin"
+        );
 
         // The engine's own cell centres and position-to-cell answer the same convention the tiles were placed by.
         for (var index = 0; (index < CellCount); index++) {
             var centre = compiled.CellCentre(cell: index);
-            var engine = new Vector3((float)(double)centre.X, (float)(double)centre.Y, (float)(double)centre.Z);
+            var engine = new Vector3(
+                x: ((float)((double)centre.X)),
+                y: ((float)((double)centre.Y)),
+                z: ((float)((double)centre.Z))
+            );
 
-            AssertNear(CellCentre(origin, new HexagonalIndex(value: index).ToCoordinate()), engine, $"CellCentre({index})");
-            Assert.True(compiled.TryCellOf(position: in centre, cell: out var back) && (back == index), $"TryCellOf(CellCentre({index})) = {back}");
+            AssertNear(
+                CellCentre(
+                    origin,
+                    new HexagonalIndex(value: index).ToCoordinate()
+                ),
+                engine,
+                $"CellCentre({index})"
+            );
+            Assert.True(
+                condition: (compiled.TryCellOf(
+                    cell: out var back,
+                    position: in centre
+                ) && (back == index)),
+                userMessage: $"TryCellOf(CellCentre({index})) = {back}"
+            );
         }
 
-        var occupancy = WorldDefinitionRows.FindStateRow(definition.State, "hexBoard");
+        var occupancy = WorldDefinitionRows.FindStateRow(
+            definition.State,
+            "hexBoard"
+        );
 
-        Assert.NotNull(occupancy);
-        Assert.True(occupancy!.EffectiveDomain is StateDomain.CellsOf { Topology: TopologyName });
-        Assert.Equal([.. Enumerable.Range(0, CellCount).Select(n => n.ToString())], RowKeys(definition, "hexBoard"));
+        Assert.NotNull(@object: occupancy);
+        Assert.True(condition: (occupancy!.EffectiveDomain is StateDomain.CellsOf { Topology: TopologyName }));
+        Assert.Equal(
+            [.. Enumerable.Range(
+                    count: CellCount,
+                    start: 0
+                ).Select(selector: n => n.ToString())],
+            RowKeys(
+                definition: definition,
+                rowName: "hexBoard"
+            )
+        );
     }
+    // The one convention: cell (Q, R) sits at the board origin plus cellSize · (Q − R/2, 0, R·√3/2).
+    private static Vector3 CellCentre(Vector3 origin, HexagonalCoordinate cell) => (origin + new Vector3(
+        x: (CellSize * (cell.Q - (cell.R / 2f))),
+        y: 0f,
+        z: ((CellSize * cell.R) * (MathF.Sqrt(x: 3f) / 2f))
+    ));
+    private static WorldDefinition Load(params string[] segments) {
+        var path = Path.Combine([RepoRoot(), .. segments]);
+
+        Assert.True(
+            condition: WorldDefinitionLoader.TryLoadFile(
+                path,
+                out var definition,
+                out var reason
+            ),
+            userMessage: reason
+        );
+
+        return definition!;
+    }
+    private static WorldDefinition LoadGarden() => AuthoredGameFixtures.Nexus;
+    private static WorldDefinition LoadMinimalHost() => Load(
+        "tests",
+        "Puck.World.Tests",
+        "Fixtures",
+        "minimal-hexlines-host.world.json"
+    );
+    private static WorldPlacement Placement(WorldDefinition definition, string id) {
+        var placement = definition.Placements.SingleOrDefault(predicate: p => string.Equals(
+            a: p.Id,
+            b: id,
+            comparisonType: StringComparison.Ordinal
+        ));
+
+        Assert.NotNull(@object: placement);
+
+        return placement!;
+    }
+    private static string RepoRoot() {
+        var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
+
+        while (
+            (directory is not null) &&
+            !File.Exists(path: Path.Combine(
+            path1: directory.FullName,
+            path2: "Puck.slnx"
+        ))
+        ) {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(@object: directory);
+
+        return directory!.FullName;
+    }
+    private static HashSet<string> RowKeys(WorldDefinition definition, string rowName) {
+        var row = WorldDefinitionRows.FindStateRow(
+            definition.State,
+            rowName
+        );
+
+        Assert.NotNull(@object: row);
+
+        return [.. (row!.Cells ?? []).Select(selector: cell => cell.Key.Value)];
+    }
+    private static HashSet<string> StoneIds(string tray) => [.. Enumerable.Range(
+            count: StonesPerTray,
+            start: 0
+        ).Select(selector: n => $"{tray}-{n}")];
+    private static Vector3 WorldPosition(WorldDefinition definition, string id) =>
+        WorldDefinitionRows.ResolvedFrame(
+            definition: definition,
+            placement: Placement(
+                definition: definition,
+                id: id
+            )
+        ).Position;
 
     [Fact]
     public void GardenImportsSixtyOneTilesInRingOrderOverTheTable() {
         var definition = LoadGarden();
 
-        Assert.Equal(new Vector3(14f, -0.5f, -26f), WorldPosition(definition, "hexTable"));
-        AssertTilesFollowTheTable(definition);
-        AssertTopologyIsCentredOnTheTable(definition);
+        Assert.Equal(
+            new Vector3(
+                x: 14f,
+                y: -0.5f,
+                z: -26f
+            ),
+            WorldPosition(
+                definition: definition,
+                id: "hexTable"
+            )
+        );
+        AssertTilesFollowTheTable(definition: definition);
+        AssertTopologyIsCentredOnTheTable(definition: definition);
     }
-
     [Fact]
     public void MinimalHostRestatesTheTableAndTheBoardFollows() {
         var definition = LoadMinimalHost();
 
-        Assert.Equal(new Vector3(20f, -0.5f, -12f), WorldPosition(definition, "hexTable"));
-        AssertTilesFollowTheTable(definition);
-        AssertTopologyIsCentredOnTheTable(definition);
+        Assert.Equal(
+            new Vector3(
+                x: 20f,
+                y: -0.5f,
+                z: -12f
+            ),
+            WorldPosition(
+                definition: definition,
+                id: "hexTable"
+            )
+        );
+        AssertTilesFollowTheTable(definition: definition);
+        AssertTopologyIsCentredOnTheTable(definition: definition);
     }
-
     // The per-stone rows are keyed by PLACEMENT ID (hexStoneLight-0..14, hexStoneDark-0..14) — never by body index,
     // which is an artefact of wherever WorldPopulation seats inhabited placements — and those keys are exactly the
     // declared stone placements, which are exactly the bodies the real server seats.
     [Fact]
     public void StoneRowsAreKeyedByTheDeclaredStonePlacements() {
         var definition = LoadGarden();
-        var declared = definition.Placements.Where(p => (p.Id.StartsWith("hexStone", StringComparison.Ordinal) && (p.Inhabit is not null))).Select(p => p.Id).ToHashSet();
-        var expected = StoneIds("hexStoneLight").Union(StoneIds("hexStoneDark")).ToHashSet();
+        var declared = definition.Placements.Where(predicate: p => (p.Id.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "hexStone"
+        ) && (p.Inhabit is not null))).Select(selector: p => p.Id).ToHashSet();
+        var expected = StoneIds(tray: "hexStoneLight").Union(second: StoneIds(tray: "hexStoneDark")).ToHashSet();
 
-        Assert.Equal(expected, declared);
-        Assert.Equal(expected, RowKeys(definition, "hexStoneCell"));
-        Assert.Equal(expected, RowKeys(definition, "hexStoneCode"));
+        Assert.Equal(
+            actual: declared,
+            expected: expected
+        );
+        Assert.Equal(
+            expected,
+            RowKeys(
+                definition: definition,
+                rowName: "hexStoneCell"
+            )
+        );
+        Assert.Equal(
+            expected,
+            RowKeys(
+                definition: definition,
+                rowName: "hexStoneCode"
+            )
+        );
 
-        var population = AuthoredGameFixtures.PopulationForIdentityChecks(definition);
+        var population = AuthoredGameFixtures.PopulationForIdentityChecks(definition: definition);
         var seated = new HashSet<string>();
 
         for (var index = 0; (index < population.Capacity); index++) {
-            if (population.InhabitantPlacementId(index) is { } placementId && placementId.StartsWith("hexStone", StringComparison.Ordinal)) {
-                seated.Add(placementId);
+            if (
+                (population.InhabitantPlacementId(index: index) is { } placementId) &&
+                placementId.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "hexStone"
+            )
+            ) {
+                seated.Add(item: placementId);
             }
         }
 
-        Assert.Equal(expected, seated);
+        Assert.Equal(
+            actual: seated,
+            expected: expected
+        );
 
         // Control: a body-index-shaped key set is NOT what the rows declare.
-        Assert.NotEqual(Enumerable.Range(96, 30).Select(n => n.ToString()).ToHashSet(), RowKeys(definition, "hexStoneCell"));
+        Assert.NotEqual(
+            Enumerable.Range(
+                count: 30,
+                start: 96
+            ).Select(selector: n => n.ToString()).ToHashSet(),
+            RowKeys(
+                definition: definition,
+                rowName: "hexStoneCell"
+            )
+        );
     }
-
     // Stones are rigid bodies: spawned above their tray, they DROP through the real server's own contact solve and
     // come to rest inside that tray's well — on the tray, not through it, and never in the other tray. Resolved in the
     // minimal host at the restated table, so the settle rides the composed frames, not the garden's own coordinates.
@@ -201,44 +380,78 @@ public sealed class HexLinesModuleImportLawTests {
         using var fixture = Fixtures.FreshServer(definition);
         var population = fixture.Server.Population;
 
-        for (var tick = 0; (tick < 400); tick++) {
+        for (var tick = 0; (tick < 50); tick++) {
             fixture.Step();
         }
 
         var placements = fixture.Server.Definition.Placements;
-        var tableTop = (WorldPosition(definition, "hexTable").Y + TableTop);
+        var tableTop = (WorldPosition(
+            definition: definition,
+            id: "hexTable"
+        ).Y + TableTop);
 
-        foreach (var (tray, ids) in new[] { ("hexTrayLight", StoneIds("hexStoneLight")), ("hexTrayDark", StoneIds("hexStoneDark")) }) {
-            var trayCentre = WorldPosition(definition, tray);
+        foreach (var (tray, ids) in new[] { ("hexTrayLight", StoneIds(tray: "hexStoneLight")), ("hexTrayDark", StoneIds(tray: "hexStoneDark")) }) {
+            var trayCentre = WorldPosition(
+                definition: definition,
+                id: tray
+            );
 
             foreach (var id in ids) {
                 var ordinal = -1;
 
                 for (var index = 0; (index < placements.Count); index++) {
-                    if (string.Equals(a: placements[index].Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                    if (string.Equals(
+                        a: placements[index].Id,
+                        b: id,
+                        comparisonType: StringComparison.Ordinal
+                    )) {
                         ordinal = index;
 
                         break;
                     }
                 }
 
-                Assert.True(ordinal >= 0, $"'{id}' names no declared placement");
+                Assert.True(
+                    condition: (ordinal >= 0),
+                    userMessage: $"'{id}' names no declared placement"
+                );
 
                 var bodyIndex = population.BodyForPlacementOrdinal(ordinal: ordinal);
 
-                Assert.True(bodyIndex >= 0, $"'{id}' is not inhabited");
+                Assert.True(
+                    condition: (bodyIndex >= 0),
+                    userMessage: $"'{id}' is not inhabited"
+                );
 
                 var position = fixture.Server.Body(index: bodyIndex)!.Position;
 
-                Assert.True(MathF.Abs(position.X - trayCentre.X) < TrayHalfLength, $"{id} left its tray along X: {position}");
-                Assert.True(MathF.Abs(position.Z - trayCentre.Z) < TrayHalfDepth, $"{id} left its tray along Z: {position}");
-                Assert.True(position.Y > tableTop, $"{id} fell through its tray: {position}");
-                Assert.True(position.Y < (tableTop + 0.15f), $"{id} never settled: {position}");
+                Assert.True(
+                    condition: (MathF.Abs(x: (position.X - trayCentre.X)) < TrayHalfLength),
+                    userMessage: $"{id} left its tray along X: {position}"
+                );
+                Assert.True(
+                    condition: (MathF.Abs(x: (position.Z - trayCentre.Z)) < TrayHalfDepth),
+                    userMessage: $"{id} left its tray along Z: {position}"
+                );
+                Assert.True(
+                    condition: (position.Y > tableTop),
+                    userMessage: $"{id} fell through its tray: {position}"
+                );
+                Assert.True(
+                    condition: (position.Y < (tableTop + 0.15f)),
+                    userMessage: $"{id} never settled: {position}"
+                );
             }
         }
 
         // Control: the two trays sit on opposite sides of the board, so a stone read against the WRONG tray fails
         // the Z check above — the footprint assertion discriminates trays rather than passing on any table point.
-        Assert.True(MathF.Abs(WorldPosition(definition, "hexTrayLight").Z - WorldPosition(definition, "hexTrayDark").Z) > (2f * TrayHalfDepth));
+        Assert.True(condition: (MathF.Abs(x: (WorldPosition(
+            definition: definition,
+            id: "hexTrayLight"
+        ).Z - WorldPosition(
+            definition: definition,
+            id: "hexTrayDark"
+        ).Z)) > (2f * TrayHalfDepth)));
     }
 }

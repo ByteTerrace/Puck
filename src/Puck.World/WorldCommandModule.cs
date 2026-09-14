@@ -32,7 +32,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         var builder = new StringBuilder(value: "anchors=[");
 
         for (var index = 0; (index < candidates.Count); index++) {
-            _ = builder.Append(value: ((index == 0) ? "" : ",")).Append(value: CameraAnchorKind(anchor: candidates[index].Anchor));
+            _ = builder.Append(value: ((index == 0)
+                ? ""
+                : ",")).Append(value: CameraAnchorKind(anchor: candidates[index].Anchor));
         }
 
         _ = builder.Append(value: "] winner=");
@@ -52,12 +54,19 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             );
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"{(any ? "," : "")}seat{PlayerRoster.DisplayNumber(slot: slot)}:{((winner >= 0) ? winner.ToString(provider: CultureInfo.InvariantCulture) : "none")}"
+                handler: $"{(any
+                ? ","
+                : "")}seat{PlayerRoster.DisplayNumber(slot: slot)}:{((winner >= 0)
+                ? winner.ToString(provider: CultureInfo.InvariantCulture)
+                : "none")}"
             );
             any = true;
         }
 
-        return (any ? builder.ToString() : builder.Append(value: "none").ToString());
+        return (any
+            ? builder.ToString()
+            : builder.Append(value: "none").ToString()
+        );
     }
     // The anchor keyword for a camera's declared ride — kind plus the target it names, the stable token a piped proof
     // asserts against. An unanchored camera's own offset IS its world position, so it reads 'none'.
@@ -142,59 +151,6 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         }
 
         return new CommandResult(Output: builder.Append(value: ']').ToString());
-    }
-    // The spellings each adaptive lever's exact and fast sides answer to, beside the shared "auto".
-    private static readonly string[] ExactOrQuality = ["exact", "quality"];
-    private static readonly string[] FastOrFleet = ["fast", "fleet"];
-    private static readonly string[] ExactOrGather = ["exact", "gather"];
-    private static readonly string[] CameraTileAliases = ["camera", "camera-tile", "tile"];
-
-    // The one argument grammar every adaptive render-quality lever (world.ao-quality, world.shadow-march,
-    // world.shadow-mask) parses: auto, the exact side, or the fast side — answered as the lever's OWN mode member,
-    // so the value the session lever carries is anchored to the enum declaration, never to a shared ordinal.
-    private static bool TryParseAdaptiveMode<TMode>(in WireArgs args, string[] exact, string[] fast, TMode autoMode, TMode exactMode, TMode fastMode, out TMode mode) where TMode : struct, Enum {
-        if (args.Is(
-            index: 0,
-            value: "auto"
-        )) {
-            mode = autoMode;
-
-            return true;
-        }
-
-        if (MatchesAny(
-            args: in args,
-            spellings: exact
-        )) {
-            mode = exactMode;
-
-            return true;
-        }
-
-        if (MatchesAny(
-            args: in args,
-            spellings: fast
-        )) {
-            mode = fastMode;
-
-            return true;
-        }
-
-        mode = default;
-
-        return false;
-    }
-    private static bool MatchesAny(in WireArgs args, string[] spellings) {
-        foreach (var spelling in spellings) {
-            if (args.Is(
-                index: 0,
-                value: spelling
-            )) {
-                return true;
-            }
-        }
-
-        return false;
     }
     /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
     private string DescribeAdaptiveQuality(string verb, (string Configured, bool? Fast) modes, string exact, string fast) {
@@ -307,13 +263,23 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             : "display (automatic — verified VRR capabilities or active signal timing)"
         );
     }
-    // The world.far-field echo: both isolator lanes (F1 bound, F2 shadow exit) and their on/off state.
+    // The world.far-field echo.
     private static string FarFieldEcho(WorldRenderSettings settings) {
         return $"[world.far-field: bound {(settings.FarBound
             ? "on"
-            : "off")}, shadow {(settings.ShadowFarExit
-            ? "on"
             : "off")}]";
+    }
+    private static bool MatchesAny(in WireArgs args, string[] spellings) {
+        foreach (var spelling in spellings) {
+            if (args.Is(
+                index: 0,
+                value: spelling
+            )) {
+                return true;
+            }
+        }
+
+        return false;
     }
     // Shared on/off token parse for the boolean isolator verbs (null = unrecognized).
     private static bool? ParseOnOff(ReadOnlySpan<char> token) {
@@ -349,7 +315,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     private static string ScreenSourceKind(WorldScreenSource source) {
         return source switch {
             WorldScreenSource.TestPattern => "test-pattern",
-            WorldScreenSource.Machine machine => $"machine:{machine.Engine}",
+            WorldScreenSource.Machine machine => $"machine:{machine.Instance}:{machine.Output}",
             WorldScreenSource.Camera => "camera",
             WorldScreenSource.View => "view",
             WorldScreenSource.Capture => "capture",
@@ -407,16 +373,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
         return new CommandResult(Output: builder.Append(value: ']').ToString());
     }
-    // The world.shadow.accumulate echo.
-    private static string ShadowAccumulationEcho(WorldRenderSettings settings) {
-        return $"[world.shadow.accumulate: {(settings.ShadowAccumulation
-            ? "on"
-            : "off")}]";
-    }
     private static string ShadowEcho(WorldRenderSettings settings) {
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[world.shadows: {ShadowTiers.Name(reach: settings.ShadowReach)} | crowd {settings.ShadowCrowdRadius:0.##}]"
+            handler: $"[world.shadows: {ShadowTiers.Name(reach: settings.ShadowReach)} | crowd {settings.ShadowCrowdRadius:0.##} | gradient-scaled]"
         );
     }
     // The world.shadows echo: continuous reach plus crowd radius; named-notch values render through their facade.
@@ -449,6 +409,41 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         );
 
         return formatEcho();
+    }
+    // The one argument grammar every adaptive render-quality lever (world.ao-quality, world.shadow-march,
+    // world.shadow-mask) parses: auto, the exact side, or the fast side — answered as the lever's OWN mode member,
+    // so the value the session lever carries is anchored to the enum declaration, never to a shared ordinal.
+    private static bool TryParseAdaptiveMode<TMode>(in WireArgs args, string[] exact, string[] fast, TMode autoMode, TMode exactMode, TMode fastMode, out TMode mode) where TMode : struct, Enum {
+        if (args.Is(
+            index: 0,
+            value: "auto"
+        )) {
+            mode = autoMode;
+
+            return true;
+        }
+
+        if (MatchesAny(
+            args: in args,
+            spellings: exact
+        )) {
+            mode = exactMode;
+
+            return true;
+        }
+
+        if (MatchesAny(
+            args: in args,
+            spellings: fast
+        )) {
+            mode = fastMode;
+
+            return true;
+        }
+
+        mode = default;
+
+        return false;
     }
     private static bool TryParseRenderScale(ReadOnlySpan<char> text, out float scale) {
         if (WorldRenderScaleTiers.TryParse(
@@ -627,12 +622,15 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return CommandResult.Error(output: "[world.shaders.reload: renderer not ready]");
                 }
                 try {
-                    if (!node.RequestShaderReload(directory: args.Count == 0 ? null : args.Tail(start: 0))) {
+                    if (!node.RequestShaderReload(directory: ((args.Count == 0)
+                        ? null
+                        : args.Tail(start: 0)))) {
                         return CommandResult.Error(output: "[world.shaders.reload: another request is pending — world.shaders.status]");
                     }
                     var status = node.ShaderReloadStatus;
+
                     return new CommandResult(Output: $"[world.shaders.reload: request={status.RequestId} pending directory={status.Directory}]");
-                } catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException) {
+                } catch (Exception exception) when ((exception is ArgumentException or IOException or UnauthorizedAccessException)) {
                     return CommandResult.Error(output: $"[world.shaders.reload: {exception.Message}]");
                 }
             }
@@ -649,7 +647,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: "[world.shaders.status: renderer not ready]");
                 }
                 var status = node.ShaderReloadStatus;
-                return new CommandResult(Output: $"[world.shaders.status: request={status.RequestId} state={status.State} generation={status.Generation} pipelines={status.ChangedPipelines} directory={status.Directory ?? "default"}{(status.Error is { } error ? $" error={error}" : "")}]");
+
+                return new CommandResult(Output: $"[world.shaders.status: request={status.RequestId} state={status.State} generation={status.Generation} pipelines={status.ChangedPipelines} directory={(status.Directory ?? "default")}{((status.Error is { } error)
+                    ? $" error={error}"
+                    : "")}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -704,7 +705,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 if (args.Count == 0) {
                     return new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion
                         ? "on"
-                        : "off")}]");
+                        : "off")} | gradient-scaled]");
                 }
 
                 var on = ParseOnOff(token: args[0]);
@@ -728,7 +729,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.far-field",
-            description: "Toggles the far-field termination optimizations live (no rebuild) — the isolators for the owner's paired A/B: world.far-field [on|off|status] moves BOTH lanes together; world.far-field bound [on|off] is the F1 beam-published per-tile far bound (output-identical, skips empty-sky march steps); world.far-field shadow [on|off] is the F2 soft-shadow light-side early exit (a march-path change). No argument (or 'status') echoes both. Both ship ON; 'off' is the paired-run baseline.",
+            description: "Toggles the beam-published per-tile far bound live (no rebuild): world.far-field [on|off|status]. Output-identical when on (it skips empty-sky march steps); off is the paired-run baseline. Ships ON.",
             handler: (context, args) => {
                 if (
                     (args.Count == 0) ||
@@ -738,101 +739,19 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 )
                 ) {
                     return new CommandResult(Output: FarFieldEcho(settings: settings));
-                }
-
-                // Lane-scoped form: world.far-field bound|shadow on|off.
-                if (
-                    args.Is(
-                    index: 0,
-                    value: "bound"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "shadow"
-                )
-                ) {
-                    if (
-                        (args.Count < 2) ||
-                        (ParseOnOff(token: args[1]) is not { } laneState)
-                    ) {
-                        return CommandResult.Error(output: $"[world.far-field: expected '{args[0].ToString().ToLowerInvariant()} on|off']");
-                    }
-
-                    if (args.Is(
-                        index: 0,
-                        value: "bound"
-                    )) {
-                        SubmitLever(
-                            principal: context.ActingPrincipal(),
-                            name: WorldSessionLevers.FarBound,
-                            a: (laneState
-                            ? 1.0
-                            : 0.0)
-                        );
-                    } else {
-                        SubmitLever(
-                            principal: context.ActingPrincipal(),
-                            name: WorldSessionLevers.ShadowFarExit,
-                            a: (laneState
-                            ? 1.0
-                            : 0.0)
-                        );
-                    }
-
-                    // Read AFTER the lever above has applied (or been refused) — loopback drains it inline, so this
-                    // is not a stale/racing read.
-                    return new CommandResult(Output: FarFieldEcho(settings: settings));
-                }
-
-                // Bare form: world.far-field on|off drives BOTH lanes.
-                if (ParseOnOff(token: args[0]) is not { } bothState) {
-                    return CommandResult.Error(output: $"[world.far-field: unknown '{args.Tail(start: 0)}' — on|off|status, or bound|shadow on|off]");
-                }
-
-                SubmitLever(
-                    principal: context.ActingPrincipal(),
-                    name: WorldSessionLevers.FarBound,
-                    a: (bothState
-                    ? 1.0
-                    : 0.0)
-                );
-
-                return SubmitLever(
-                    principal: context.ActingPrincipal(),
-                    name: WorldSessionLevers.ShadowFarExit,
-                    a: (bothState
-                    ? 1.0
-                    : 0.0),
-                    formatEcho: () => new CommandResult(Output: FarFieldEcho(settings: settings))
-                );
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.shadow.accumulate",
-            description: "Toggles the area-light shadow estimator's TEMPORAL ACCUMULATION live (no rebuild): world.shadow.accumulate [on|off|status]. On (the default) folds each frame's two sun-disc samples into the reprojected previous value, which is what makes the penumbra smooth; off shades the raw per-frame estimate and is deliberately stippled — an A/B isolator, not a quality tier.",
-            handler: (context, args) => {
-                if (
-                    (args.Count == 0) ||
-                    args.Is(
-                    index: 0,
-                    value: "status"
-                )
-                ) {
-                    return new CommandResult(Output: ShadowAccumulationEcho(settings: settings));
                 }
 
                 if (ParseOnOff(token: args[0]) is not { } state) {
-                    return CommandResult.Error(output: $"[world.shadow.accumulate: unknown '{args.Tail(start: 0)}' — on|off|status]");
+                    return CommandResult.Error(output: $"[world.far-field: unknown '{args.Tail(start: 0)}' — on|off|status]");
                 }
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    name: WorldSessionLevers.ShadowAccumulation,
+                    name: WorldSessionLevers.FarBound,
                     a: (state
                     ? 1.0
                     : 0.0),
-                    formatEcho: () => new CommandResult(Output: ShadowAccumulationEcho(settings: settings))
+                    formatEcho: () => new CommandResult(Output: FarFieldEcho(settings: settings))
                 );
             }
         );
@@ -847,10 +766,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 if (!TryParseAdaptiveMode(
                     args: in args,
-                    exact: ExactOrGather,
-                    fast: CameraTileAliases,
                     autoMode: ShadowMaskMode.Auto,
+                    exact: ExactOrGather,
                     exactMode: ShadowMaskMode.ExactGather,
+                    fast: CameraTileAliases,
                     fastMode: ShadowMaskMode.CameraTile,
                     mode: out var mode
                 )) {
@@ -876,10 +795,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 if (!TryParseAdaptiveMode(
                     args: in args,
-                    exact: ExactOrQuality,
-                    fast: FastOrFleet,
                     autoMode: AmbientOcclusionMode.Auto,
+                    exact: ExactOrQuality,
                     exactMode: AmbientOcclusionMode.Exact,
+                    fast: FastOrFleet,
                     fastMode: AmbientOcclusionMode.Fast,
                     mode: out var mode
                 )) {
@@ -905,10 +824,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 if (!TryParseAdaptiveMode(
                     args: in args,
-                    exact: ExactOrQuality,
-                    fast: FastOrFleet,
                     autoMode: ShadowMarchMode.Auto,
+                    exact: ExactOrQuality,
                     exactMode: ShadowMarchMode.Exact,
+                    fast: FastOrFleet,
                     fastMode: ShadowMarchMode.Fast,
                     mode: out var mode
                 )) {
@@ -1170,4 +1089,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             }
         );
     }
+
+    private static readonly string[] CameraTileAliases = ["camera", "camera-tile", "tile"];
+    private static readonly string[] ExactOrGather = ["exact", "gather"];
+    // The spellings each adaptive lever's exact and fast sides answer to, beside the shared "auto".
+    private static readonly string[] ExactOrQuality = ["exact", "quality"];
+    private static readonly string[] FastOrFleet = ["fast", "fleet"];
 }

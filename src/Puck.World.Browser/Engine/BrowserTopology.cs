@@ -12,7 +12,6 @@ namespace Puck.World.Browser.Engine;
 /// <param name="Y">The cell centre's world-space Y.</param>
 /// <param name="Z">The cell centre's world-space Z.</param>
 public readonly record struct BrowserCellGeometry(int Ordinal, string Key, float X, float Y, float Z);
-
 /// <summary>Compiles a standalone <c>LatticeTopology</c> JSON object into its per-cell world-space geometry — no
 /// document, no session: a topology is self-contained once authored (<c>origin</c>/<c>cellSize</c>/its own shape
 /// fields), so this needs no installed <see cref="BrowserSession"/> to answer.</summary>
@@ -28,7 +27,10 @@ public static class BrowserTopology {
         LatticeTopology? topology;
 
         try {
-            topology = JsonSerializer.Deserialize(json: topologyJson, jsonTypeInfo: WorldJsonContext.Default.LatticeTopology);
+            topology = JsonSerializer.Deserialize(
+                json: topologyJson,
+                jsonTypeInfo: WorldJsonContext.Default.LatticeTopology
+            );
         } catch (JsonException exception) {
             reason = $"the topology is not valid JSON: {exception.Message}";
 
@@ -41,11 +43,17 @@ public static class BrowserTopology {
             return false;
         }
 
-        if (!TopologyCompilation.TryValidate(topology: topology, reason: out reason)) {
+        if (!TopologyCompilation.TryValidate(
+            reason: out reason,
+            topology: topology
+        )) {
             return false;
         }
 
-        var compiled = TopologyCompilation.Compile(topology: topology, anchorOffset: Vector3.Zero);
+        var compiled = TopologyCompilation.Compile(
+            topology: topology,
+            anchorOffset: Vector3.Zero
+        );
         var result = new BrowserCellGeometry[compiled.CellCount];
 
         for (var cell = 0; (cell < compiled.CellCount); cell++) {

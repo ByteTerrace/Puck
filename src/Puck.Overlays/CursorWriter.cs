@@ -19,8 +19,8 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
     /// size is validated against its document band; this is the render-side backstop the host clamps to).</summary>
     public const float MaxSizePx = 64f;
 
-    private readonly OverlayThemeStore m_theme;
     private readonly ICursorSource m_source;
+    private readonly OverlayThemeStore m_theme;
 
     /// <summary>Initializes a new instance of the <see cref="CursorWriter"/> class.</summary>
     /// <param name="source">The cursor snapshot source.</param>

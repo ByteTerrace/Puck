@@ -121,15 +121,6 @@ public sealed class ObjectBlobStoreBackendLawTests {
     }
 
     [Fact]
-    public async Task DirectoryTarget_ObeysCreateOnlyAndIfMatch() {
-        using var directory = new TempWorldDirectory();
-
-        await RunLawsAsync(
-            store: PuckStorageTestComposition.BuildStore(),
-            target: new DirectoryObjectStorageTarget(rootPath: directory.RootPath)
-        );
-    }
-    [Fact]
     public async Task AzureTarget_ObeysCreateOnlyAndIfMatch() {
         var connection = Environment.GetEnvironmentVariable(variable: AzureTargetEnvironmentVariable);
 
@@ -141,6 +132,15 @@ public sealed class ObjectBlobStoreBackendLawTests {
         await RunLawsAsync(
             store: PuckStorageTestComposition.BuildStore(),
             target: AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: connection!)
+        );
+    }
+    [Fact]
+    public async Task DirectoryTarget_ObeysCreateOnlyAndIfMatch() {
+        using var directory = new TempWorldDirectory();
+
+        await RunLawsAsync(
+            store: PuckStorageTestComposition.BuildStore(),
+            target: new DirectoryObjectStorageTarget(rootPath: directory.RootPath)
         );
     }
 }

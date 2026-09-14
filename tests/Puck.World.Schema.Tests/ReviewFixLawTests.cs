@@ -19,42 +19,25 @@ public sealed class ReviewFixLawTests {
         Simulation: new WorldSimulationDefaults(RateHz: 240),
         StateRaw: new WorldStateSection(World: rows)
     );
+    private static string Refusal(WorldDefinition definition) =>
+        (WorldDefinitionValidator.TryValidateLocally(
+            definition: definition,
+            reason: out var reason
+        )
+            ? string.Empty
+            : reason
+        );
     private static WorldStateRow Slot(string name, CellKind kind, long value, StateAdvance? advance = null, StateCycle? cycle = null) => new(
         Name: CellName.Parse(candidate: name),
         Kind: kind,
-        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: value)],
+        Cells: [new StateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: value
+            )],
         Advance: advance,
         Cycle: cycle
     );
-    private static string Refusal(WorldDefinition definition) =>
-        (WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason) ? string.Empty : reason);
 
-    [Fact]
-    public void RuntimeCellValidator_RefusesWhatTheBootWalkRefuses() {
-        // A keyed cell minted beside a row-level advance: the boot walk refuses it, so the live door must too.
-        var keyedBesideAdvance = Definition(rows: [
-            new WorldStateRow(
-                Name: CellName.Parse(candidate: "regen"),
-                Kind: CellKind.Int,
-                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 10), new StateCell(Key: CellName.Parse(candidate: "1"), Value: 5)],
-                Advance: new StateAdvance(RateDenominator: 1, RateNumerator: 1)
-            ),
-        ]);
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidateRuntimeStateCell(definition: keyedBesideAdvance, rowName: "regen", key: "1", reason: out var advanceReason));
-        Assert.Contains(expectedSubstring: "declares advance on a keyed row", actualString: advanceReason);
-
-        // A phase outside the lattice on a node-output cycle row.
-        var badNode = Definition(rows: [Slot(name: "spin", kind: CellKind.Int, value: 240, cycle: new StateCycle(Output: CycleOutput.Node))]);
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidateRuntimeStateCell(definition: badNode, rowName: "spin", key: WorldStateRow.SlotKey.Value, reason: out var nodeReason));
-        Assert.Contains(expectedSubstring: "is not a symmetry-lattice node", actualString: nodeReason);
-
-        // The well-formed write still passes.
-        var fine = Definition(rows: [Slot(name: "spin", kind: CellKind.Int, value: 17, cycle: new StateCycle(Output: CycleOutput.Node))]);
-
-        Assert.True(condition: WorldDefinitionValidator.TryValidateRuntimeStateCell(definition: fine, rowName: "spin", key: WorldStateRow.SlotKey.Value, reason: out var fineReason), userMessage: fineReason);
-    }
     [Fact]
     public void ADriveGateRow_NeverCarriesACyclingCell() {
         var gate = Definition(rows: [
@@ -63,74 +46,130 @@ public sealed class ReviewFixLawTests {
                 Kind: CellKind.Int,
                 Capacity: 4,
                 GatesDrive: true,
-                Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: 0, Cycle: new StateCycle())]
+                Cells: [new StateCell(
+                        Key: CellName.Parse(candidate: "0"),
+                        Value: 0,
+                        Cycle: new StateCycle()
+                    )]
             ),
         ]);
 
-        Assert.Contains(expectedSubstring: "declares cycle on a gatesDrive row", actualString: Refusal(definition: gate));
-    }
-    [Fact]
-    public void PersistedMasks_MustFitTheSitesSource() {
-        static WorldStateRow Site(StateGenerator generator, IReadOnlyList<ClosedBitset256>? masks) => new(
-            Name: CellName.Parse(candidate: "loot"),
-            Kind: CellKind.Int,
-            Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 1)],
-            Draw: new Draw(Generator: generator, Timing: DrawTiming.Event),
-            DrawnMasks: masks
+        Assert.Contains(
+            expectedSubstring: "declares cycle on a gatesDrive row",
+            actualString: Refusal(definition: gate)
         );
-        var bag = new StateGenerator(Source: GeneratorSource.WeightedNumeric, Mode: GeneratorMode.RestartOnExhaustion, Weighted: [new GeneratorWeightedNumeric(Value: 1, Weight: 1UL), new GeneratorWeightedNumeric(Value: 2, Weight: 1UL)]);
-        var plain = new StateGenerator(Source: GeneratorSource.UniformRange, RangeMin: 0, RangeMax: 9);
-
-        Assert.Equal(expected: string.Empty, actual: Refusal(definition: Definition(rows: [Site(generator: bag, masks: [new(Word0: 0b11UL)])])));
-        Assert.Contains(expectedSubstring: "exactly one", actualString: Refusal(definition: Definition(rows: [Site(generator: bag, masks: [new(Word0: 5UL), new(Word0: 0UL), new(Word0: 0UL)])])));
-        Assert.Contains(expectedSubstring: "marks an entry past the 2", actualString: Refusal(definition: Definition(rows: [Site(generator: bag, masks: [new(Word0: 0b101UL)])])));
-        Assert.Contains(expectedSubstring: "never exhausts", actualString: Refusal(definition: Definition(rows: [Site(generator: plain, masks: [new(Word0: 1UL)])])));
-
-        // The engine sheds masks a non-exhausting source cannot own, so a re-authored site self-heals on its next draw.
-        Assert.Null(@object: GeneratorEngine.MasksAfter(generator: plain, fired: null, previous: [new(Word0: 1)]));
-        Assert.Equal(expected: new ClosedBitset256[] { new(Word0: 3) }, actual: GeneratorEngine.MasksAfter(generator: bag, fired: [new(Word0: 3)], previous: [new(Word0: 1)]));
-        Assert.Equal(expected: new ClosedBitset256[] { new(Word0: 1) }, actual: GeneratorEngine.MasksAfter(generator: bag, fired: null, previous: [new(Word0: 1)]));
     }
     [Fact]
     public void AFractionalComparand_LowersToTheExactIntegerGate() {
         static GateToken Compile(ActionStateComparison comparison, decimal literal, CellKind kind = CellKind.Int) {
             var definition = Definition(
-                rows: [Slot(name: "count", kind: kind, value: 2)],
-                rules: [new WorldRule(Name: CellName.Parse(candidate: "probe"), Effects: [new ActionEffect.SetState(State: "count", Value: 1m)], Gate: new ActionPredicate.CompareState(State: "count", Comparison: comparison, Value: literal), Mode: ActionTriggerMode.Edge)]
+                rows: [Slot(
+                        name: "count",
+                        kind: kind,
+                        value: 2
+                    )],
+                rules: [new WorldRule(
+                        Name: CellName.Parse(candidate: "probe"),
+                        Effects: [new ActionEffect.SetState(
+                                State: "count",
+                                Value: 1m
+                            )],
+                        Gate: new ActionPredicate.CompareState(
+                            State: "count",
+                            Comparison: comparison,
+                            Value: literal
+                        ),
+                        Mode: ActionTriggerMode.Edge
+                    )]
             );
 
             return WorldRuleCompiler.CompileAll(definition: definition)[0].Gate[0];
         }
 
-        var greater = Compile(comparison: ActionStateComparison.Greater, literal: 1.5m);
+        var greater = Compile(
+            comparison: ActionStateComparison.Greater,
+            literal: 1.5m
+        );
 
-        Assert.Equal(expected: ActionStateComparison.GreaterOrEqual, actual: greater.Comparison);
-        Assert.Equal(expected: 2L, actual: greater.Value);
+        Assert.Equal(
+            expected: ActionStateComparison.GreaterOrEqual,
+            actual: greater.Comparison
+        );
+        Assert.Equal(
+            expected: 2L,
+            actual: greater.Value
+        );
 
-        var greaterOrEqual = Compile(comparison: ActionStateComparison.GreaterOrEqual, literal: 0.5m);
+        var greaterOrEqual = Compile(
+            comparison: ActionStateComparison.GreaterOrEqual,
+            literal: 0.5m
+        );
 
-        Assert.Equal(expected: ActionStateComparison.GreaterOrEqual, actual: greaterOrEqual.Comparison);
-        Assert.Equal(expected: 1L, actual: greaterOrEqual.Value);
+        Assert.Equal(
+            expected: ActionStateComparison.GreaterOrEqual,
+            actual: greaterOrEqual.Comparison
+        );
+        Assert.Equal(
+            expected: 1L,
+            actual: greaterOrEqual.Value
+        );
 
-        var less = Compile(comparison: ActionStateComparison.Less, literal: 1.5m);
+        var less = Compile(
+            comparison: ActionStateComparison.Less,
+            literal: 1.5m
+        );
 
-        Assert.Equal(expected: ActionStateComparison.LessOrEqual, actual: less.Comparison);
-        Assert.Equal(expected: 1L, actual: less.Value);
+        Assert.Equal(
+            expected: ActionStateComparison.LessOrEqual,
+            actual: less.Comparison
+        );
+        Assert.Equal(
+            expected: 1L,
+            actual: less.Value
+        );
 
-        var equal = Compile(comparison: ActionStateComparison.Equal, literal: 1.5m);
+        var equal = Compile(
+            comparison: ActionStateComparison.Equal,
+            literal: 1.5m
+        );
 
-        Assert.Equal(expected: ActionStateComparison.Greater, actual: equal.Comparison);
-        Assert.Equal(expected: long.MaxValue, actual: equal.Value);
+        Assert.Equal(
+            expected: ActionStateComparison.Greater,
+            actual: equal.Comparison
+        );
+        Assert.Equal(
+            expected: long.MaxValue,
+            actual: equal.Value
+        );
 
-        var integral = Compile(comparison: ActionStateComparison.Greater, literal: 2m);
+        var integral = Compile(
+            comparison: ActionStateComparison.Greater,
+            literal: 2m
+        );
 
-        Assert.Equal(expected: ActionStateComparison.Greater, actual: integral.Comparison);
-        Assert.Equal(expected: 2L, actual: integral.Value);
+        Assert.Equal(
+            expected: ActionStateComparison.Greater,
+            actual: integral.Comparison
+        );
+        Assert.Equal(
+            expected: 2L,
+            actual: integral.Value
+        );
 
-        var fixedGate = Compile(comparison: ActionStateComparison.Greater, literal: 1.5m, kind: CellKind.Fixed);
+        var fixedGate = Compile(
+            comparison: ActionStateComparison.Greater,
+            kind: CellKind.Fixed,
+            literal: 1.5m
+        );
 
-        Assert.Equal(expected: ActionStateComparison.Greater, actual: fixedGate.Comparison);
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 1.5).Value, actual: fixedGate.Value);
+        Assert.Equal(
+            expected: ActionStateComparison.Greater,
+            actual: fixedGate.Comparison
+        );
+        Assert.Equal(
+            expected: FixedQ4816.FromDouble(value: 1.5).Value,
+            actual: fixedGate.Value
+        );
     }
     [Fact]
     public void ARuleGenerate_ReachesALatticeDrawFill() {
@@ -138,18 +177,44 @@ public sealed class ReviewFixLawTests {
             Name: CellName.Parse(candidate: "tiles"),
             Kind: CellKind.Fixed,
             Domain: new StateDomain.CellsOf(Topology: "grid"),
-            Field: new WorldStateFieldTrait(Max: 4f, Paint: [new WorldLatticeFill.Draw(Generator: new StateGenerator(Source: GeneratorSource.UniformRange, RangeMin: 0, RangeMax: 65536))])
+            Field: new WorldStateFieldTrait(
+                Max: 4f,
+                Paint: [new WorldLatticeFill.Draw(Generator: new StateGenerator(
+                        Source: GeneratorSource.UniformRange,
+                        RangeMin: 0,
+                        RangeMax: 65536
+                    ))]
+            )
         );
         var definition = new WorldDefinition(
-            Rules: [new WorldRule(Name: CellName.Parse(candidate: "redraw"), Effects: [new ActionEffect.Generate(Row: "tiles")], Mode: ActionTriggerMode.Edge)],
+            Rules: [new WorldRule(
+                    Name: CellName.Parse(candidate: "redraw"),
+                    Effects: [new ActionEffect.Generate(Row: "tiles")],
+                    Mode: ActionTriggerMode.Edge
+                )],
             Simulation: new WorldSimulationDefaults(RateHz: 240),
             StateRaw: new WorldStateSection(
                 World: [lattice],
-                Lattices: [new WorldFieldTopology(Name: "grid", Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 4, Depth: 1, Layers: 1, StepEveryTicks: 1)]
+                Lattices: [new WorldFieldTopology(
+                        Name: "grid",
+                        Origin: new DocumentVector3(
+                            x: 0f,
+                            y: 0f,
+                            z: 0f
+                        ),
+                        CellSize: 1f,
+                        Width: 4,
+                        Depth: 1,
+                        Layers: 1,
+                        StepEveryTicks: 1
+                    )]
             )
         );
 
-        Assert.Equal(expected: string.Empty, actual: Refusal(definition: definition));
+        Assert.Equal(
+            expected: string.Empty,
+            actual: Refusal(definition: definition)
+        );
         Assert.IsType<GenerateEffect>(@object: WorldRuleCompiler.CompileAll(definition: definition)[0].Effects[0]);
     }
     [Fact]
@@ -157,23 +222,53 @@ public sealed class ReviewFixLawTests {
         var row = new WorldStateRow(
             Name: CellName.Parse(candidate: "gauge"),
             Kind: CellKind.Int,
-            Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 300)],
-            Dynamics: new StateDynamics(Row: "critical", Y0: (300L << FixedQ4816.FractionBitCount), V0: (5L << FixedQ4816.FractionBitCount), EpochTick: 7)
+            Cells: [new StateCell(
+                    Key: WorldStateRow.SlotKey,
+                    Value: 300,
+                    Clock: new StateCellClock(
+                        EpochTick: 7,
+                        V0: (5L << FixedQ4816.FractionBitCount),
+                        Y0: (300L << FixedQ4816.FractionBitCount)
+                    )
+                )],
+            Dynamics: new StateDynamics(Row: "critical")
         );
         var definition = new WorldDefinition(
-            DynamicsRaw: [new DynamicsRow(Damping: 1f, Frequency: 1f, Name: "critical", Response: 0f)],
+            DynamicsRaw: [new DynamicsRow(
+                    Damping: 1f,
+                    Frequency: 1f,
+                    Name: "critical",
+                    Response: 0f
+                )],
             Simulation: new WorldSimulationDefaults(RateHz: 240),
             StateRaw: new WorldStateSection(World: [row])
         );
         var bytes = WorldDefinitionSerialization.Serialize(definition: definition);
         var json = System.Text.Encoding.UTF8.GetString(bytes: bytes);
 
-        Assert.Contains(expectedSubstring: "\"300\"", actualString: json);
-        Assert.DoesNotContain(expectedSubstring: "19660800", actualString: json);
+        Assert.Contains(
+            actualString: json,
+            expectedSubstring: "\"300\""
+        );
+        Assert.DoesNotContain(
+            actualString: json,
+            expectedSubstring: "19660800"
+        );
 
-        var restored = WorldDefinitionSerialization.Deserialize(bytes);
+        var restored = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
+        var restoredRow = WorldDefinitionRows.FindStateRow(
+            rows: restored.State,
+            name: "gauge"
+        )!;
 
-        Assert.Equal(expected: row.Dynamics, actual: WorldDefinitionRows.FindStateRow(rows: restored.State, name: "gauge")!.Dynamics);
+        Assert.Equal(
+            expected: row.Dynamics,
+            actual: restoredRow.Dynamics
+        );
+        Assert.Equal(
+            expected: row.Cells![0].Clock,
+            actual: restoredRow.Cells![0].Clock
+        );
     }
     [Fact]
     public void GroundStick_CompilesIndependentlyOfSpeed_AndDefaultsToTheEngineConstant() {
@@ -193,12 +288,24 @@ public sealed class ReviewFixLawTests {
         // A faster kit's own resolved move speed must never widen the surface catch-up bias: scaling it by speed
         // over-corrects a shallow slope climb (the bias converts to downhill drift under depenetration faster than
         // it converts to held contact).
-        Assert.Equal(expected: slow.GroundStick, actual: fast.GroundStick);
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 2d), actual: slow.GroundStick);
+        Assert.Equal(
+            expected: slow.GroundStick,
+            actual: fast.GroundStick
+        );
+        Assert.Equal(
+            expected: FixedQ4816.FromDouble(value: 2d),
+            actual: slow.GroundStick
+        );
 
-        var authored = Compile(speed: 1f, groundStick: 5f);
+        var authored = Compile(
+            groundStick: 5f,
+            speed: 1f
+        );
 
-        Assert.Equal(expected: FixedQ4816.FromDouble(value: 5d), actual: authored.GroundStick);
+        Assert.Equal(
+            expected: FixedQ4816.FromDouble(value: 5d),
+            actual: authored.GroundStick
+        );
     }
     [Fact]
     public void ObstructionGrace_CompilesDirectlyToExactEngineTicksWithoutFixedPointRounding() {
@@ -213,6 +320,160 @@ public sealed class ReviewFixLawTests {
             simulationRateHz: 240
         );
 
-        Assert.Equal(expected: 5_040UL, actual: tuning.Obstruction.GraceTicks);
+        Assert.Equal(
+            expected: 5_040UL,
+            actual: tuning.Obstruction.GraceTicks
+        );
+    }
+    [Fact]
+    public void PersistedMasks_MustFitTheSitesSource() {
+        static WorldStateRow Site(StateGenerator generator, IReadOnlyList<ClosedBitset256>? masks) => new(
+            Name: CellName.Parse(candidate: "loot"),
+            Kind: CellKind.Int,
+            Cells: [new StateCell(
+                    Key: WorldStateRow.SlotKey,
+                    Value: 1
+                )],
+            Draw: new Draw(
+                Generator: generator,
+                Timing: DrawTiming.Event
+            ),
+            DrawnMasks: masks
+        );
+        var bag = new StateGenerator(
+            Source: GeneratorSource.WeightedNumeric,
+            Mode: GeneratorMode.RestartOnExhaustion,
+            Weighted: [new GeneratorWeightedNumeric(
+                    Value: 1,
+                    Weight: 1UL
+                ), new GeneratorWeightedNumeric(
+                    Value: 2,
+                    Weight: 1UL
+                )]
+        );
+        var plain = new StateGenerator(
+            Source: GeneratorSource.UniformRange,
+            RangeMin: 0,
+            RangeMax: 9
+        );
+
+        Assert.Equal(
+            expected: string.Empty,
+            actual: Refusal(definition: Definition(rows: [Site(
+                    generator: bag,
+                    masks: [new(Word0: 0b11UL)]
+                )]))
+        );
+        Assert.Contains(
+            expectedSubstring: "exactly one",
+            actualString: Refusal(definition: Definition(rows: [Site(
+                    generator: bag,
+                    masks: [new(Word0: 5UL), new(Word0: 0UL), new(Word0: 0UL)]
+                )]))
+        );
+        Assert.Contains(
+            expectedSubstring: "marks an entry past the 2",
+            actualString: Refusal(definition: Definition(rows: [Site(
+                    generator: bag,
+                    masks: [new(Word0: 0b101UL)]
+                )]))
+        );
+        Assert.Contains(
+            expectedSubstring: "never exhausts",
+            actualString: Refusal(definition: Definition(rows: [Site(
+                    generator: plain,
+                    masks: [new(Word0: 1UL)]
+                )]))
+        );
+
+        // The engine sheds masks a non-exhausting source cannot own, so a re-authored site self-heals on its next draw.
+        Assert.Null(@object: GeneratorEngine.MasksAfter(
+            generator: plain,
+            fired: null,
+            previous: [new(Word0: 1)]
+        ));
+        Assert.Equal(
+            expected: new ClosedBitset256[] { new(Word0: 3) },
+            actual: GeneratorEngine.MasksAfter(
+                generator: bag,
+                fired: [new(Word0: 3)],
+                previous: [new(Word0: 1)]
+            )
+        );
+        Assert.Equal(
+            expected: new ClosedBitset256[] { new(Word0: 1) },
+            actual: GeneratorEngine.MasksAfter(
+                generator: bag,
+                fired: null,
+                previous: [new(Word0: 1)]
+            )
+        );
+    }
+    [Fact]
+    public void RuntimeCellValidator_RefusesWhatTheBootWalkRefuses() {
+        // Keyed cells inherit a row-level advance through both the boot and live validation doors.
+        var keyedBesideAdvance = Definition(rows: [
+            new WorldStateRow(
+                Name: CellName.Parse(candidate: "regen"),
+                Kind: CellKind.Int,
+                Capacity: 8,
+                Cells: [new StateCell(
+                        Key: CellName.Parse(candidate: "1"),
+                        Value: 5
+                    )],
+                Advance: new StateAdvance(
+                    PerSecondDenominator: 1,
+                    PerSecondNumerator: 1
+                )
+            ),
+        ]);
+
+        Assert.Empty(collection: Refusal(definition: keyedBesideAdvance));
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateRuntimeStateCell(
+                definition: keyedBesideAdvance,
+                key: "1",
+                reason: out var advanceReason,
+                rowName: "regen"
+            ),
+            userMessage: advanceReason
+        );
+
+        // A phase outside the lattice on a node-output cycle row.
+        var badNode = Definition(rows: [Slot(
+                name: "spin",
+                kind: CellKind.Int,
+                value: 240,
+                cycle: new StateCycle(Output: CycleOutput.Node)
+            )]);
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateRuntimeStateCell(
+            definition: badNode,
+            rowName: "spin",
+            key: WorldStateRow.SlotKey.Value,
+            reason: out var nodeReason
+        ));
+        Assert.Contains(
+            actualString: nodeReason,
+            expectedSubstring: "is not a symmetry-lattice node"
+        );
+
+        // The well-formed write still passes.
+        var fine = Definition(rows: [Slot(
+                name: "spin",
+                kind: CellKind.Int,
+                value: 17,
+                cycle: new StateCycle(Output: CycleOutput.Node)
+            )]);
+
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateRuntimeStateCell(
+                definition: fine,
+                rowName: "spin",
+                key: WorldStateRow.SlotKey.Value,
+                reason: out var fineReason
+            ),
+            userMessage: fineReason
+        );
     }
 }

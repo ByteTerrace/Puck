@@ -59,6 +59,7 @@ public sealed partial class WorldBody {
 
         return true;
     }
+
     // Folds one ordinary Advance's outcome into the idle floor. Called at the end of Advance, after every effect the
     // program could have fired this tick, so "moved" reflects where the body actually ended up.
     private void UpdateSleepEligibility(ulong tick, ulong stepTicks, ulong sleepAfterTicks, ulong contactFieldVersion, bool hadIncomingIntent, bool moved) {

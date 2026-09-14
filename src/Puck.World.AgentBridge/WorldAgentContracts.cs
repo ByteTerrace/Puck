@@ -22,7 +22,6 @@ public enum WorldAgentObservationKind : byte {
     /// <summary>The body's live property set.</summary>
     Properties,
 }
-
 /// <summary>An authoritative body read-back suitable for returning from an AI tool.</summary>
 /// <param name="Kind">The requested observation.</param>
 /// <param name="BodyIndex">The observed 0-based body index.</param>
@@ -34,7 +33,6 @@ public readonly record struct WorldAgentObservation(
     string Text,
     bool Refused
 );
-
 /// <summary>One channel the live world exposes to the controlled body.</summary>
 /// <param name="Name">The authored channel name.</param>
 /// <param name="Ordinal">The deterministic channel ordinal.</param>
@@ -46,7 +44,6 @@ public readonly record struct WorldAgentChannel(
     ChannelShape Shape,
     bool IsMotionRole
 );
-
 /// <summary>The bridge's current body-scoped capability and channel view.</summary>
 /// <param name="Principal">The identity every read and action is attributed to.</param>
 /// <param name="BodyIndex">The controlled body.</param>
@@ -62,7 +59,6 @@ public sealed record WorldAgentAffordances(
     IReadOnlyList<WorldAgentChannel> Channels,
     IReadOnlyList<string> AuthorityText
 );
-
 /// <summary>An honest receipt for an action submitted to Puck authority.</summary>
 /// <param name="Action">The submitted action kind.</param>
 /// <param name="BodyIndex">The target body.</param>

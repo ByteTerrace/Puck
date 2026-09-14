@@ -99,6 +99,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const uint WmRButtonDown = 0x0204;
     private const uint WmRButtonUp = 0x0205;
     private const uint WmSetCursor = 0x0020;
+    private const uint WmSetIcon = 0x0080;
     private const uint WmShowWindow = 0x0018;
     private const uint WmSize = 0x0005;
     private const uint WmSysKeyDown = 0x0104;
@@ -141,6 +142,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private const int SmYVirtualScreen = 77;
     private const int SmCxVirtualScreen = 78;
     private const int SmCyVirtualScreen = 79;
+    // WM_SETICON wParam.
+    private const nint IconBig = 1;
+    private const nint IconSmall = 0;
     private const uint WsOverlappedWindow = 0x00CF0000;
     private const uint WsPopup = 0x80000000;
     private const uint WsVisible = 0x10000000;
@@ -156,7 +160,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private readonly IClipboardService m_clipboardService;
     private readonly NativeWindowOptions m_options;
 
-    private readonly Queue<WindowInputEvent> m_pendingInput = [];
+    private readonly WindowInputQueue m_pendingInput = new();
 
     private readonly GCHandle m_selfHandle;
 
@@ -195,11 +199,11 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     // One physical mouse's accumulated pointer state — see m_rawMouseStates.
     private sealed class RawMouseState {
         public required InputDeviceId DeviceId;
-        public Vector2 Position;
-        public Vector2 PendingDelta;
-        public bool PositionDirty;
         public int? LastAbsoluteX;
         public int? LastAbsoluteY;
+        public Vector2 PendingDelta;
+        public Vector2 Position;
+        public bool PositionDirty;
     }
 
     public Win32NativeWindow(IClipboardService clipboardService, IOptions<NativeWindowOptions> options) {
@@ -212,7 +216,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         Height = m_options.Height;
         m_selfHandle = GCHandle.Alloc(value: this);
 
-        EnsureWindowClassRegistered();
+        EnsureWindowClassRegistered(options: m_options);
         m_windowHandle = CreateWindow(options: m_options);
     }
 
@@ -266,12 +270,12 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         while (
             (m_windowHandle != 0) &&
             User32.PeekMessage(
-                filterMax: 0,
-                filterMin: 0,
-                message: out var message,
-                removeMessage: PmRemove,
-                windowHandle: 0
-            )
+            filterMax: 0,
+            filterMin: 0,
+            message: out var message,
+            removeMessage: PmRemove,
+            windowHandle: 0
+        )
         ) {
             User32.TranslateMessage(message: in message);
             _ = User32.DispatchMessage(message: in message);
@@ -332,13 +336,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             instance: this
         );
 
-        if (m_pendingInput.Count == 0) {
-            inputEvent = default;
-            return false;
-        }
-
-        inputEvent = m_pendingInput.Dequeue();
-        return true;
+        return m_pendingInput.TryDequeue(inputEvent: out inputEvent);
     }
     public void Close() {
         ObjectDisposedException.ThrowIf(
@@ -396,24 +394,34 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         m_disposed = true;
     }
 
-    private static void EnsureWindowClassRegistered() {
+    private static void EnsureWindowClassRegistered(NativeWindowOptions options) {
         lock (RegistrationLock) {
             if (WindowClassRegistered) {
                 return;
             }
 
             InstanceHandleField = Kernel32.GetModuleHandle(moduleName: null);
-            ArrowCursorHandle = User32.LoadCursor(cursorName: IdcArrow, instanceHandle: 0);
+            ArrowCursorHandle = User32.LoadCursor(
+                cursorName: IdcArrow,
+                instanceHandle: 0
+            );
 
             if (ArrowCursorHandle == 0) {
                 throw new InvalidOperationException(message: $"LoadCursorW(IDC_ARROW) failed with Win32 error {Marshal.GetLastWin32Error()}.");
             }
 
+            var icons = Win32IconLoader.GetOrLoadIcons(
+                iconPath: options.IconPath,
+                instanceHandle: InstanceHandleField
+            );
+
             var windowClass = new WindowClassEx {
                 ClassName = WindowClassName,
                 CursorHandle = ArrowCursorHandle,
+                IconHandle = icons.BigIcon,
                 InstanceHandle = InstanceHandleField,
                 Size = ((uint)Marshal.SizeOf<WindowClassEx>()),
+                SmallIconHandle = icons.SmallIcon,
                 WindowProcedure = WndProcDelegate,
             };
 
@@ -480,7 +488,12 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             Top = 0,
         };
 
-        if (!User32.AdjustWindowRectEx(extendedStyle: 0, hasMenu: false, rectangle: ref outer, style: WsOverlappedWindow)) {
+        if (!User32.AdjustWindowRectEx(
+            extendedStyle: 0,
+            hasMenu: false,
+            rectangle: ref outer,
+            style: WsOverlappedWindow
+        )) {
             throw new InvalidOperationException(message: $"AdjustWindowRectEx failed with Win32 error {Marshal.GetLastWin32Error()}.");
         }
 
@@ -501,6 +514,30 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
 
         if (windowHandle == 0) {
             throw new InvalidOperationException(message: $"CreateWindowExW failed with Win32 error {Marshal.GetLastWin32Error()}.");
+        }
+
+        // The class carries only the pair the window that registered it supplied; a later window created against
+        // different options would otherwise wear that one's icon.
+        var icons = Win32IconLoader.GetOrLoadIcons(
+            iconPath: options.IconPath,
+            instanceHandle: InstanceHandleField
+        );
+
+        if (icons.BigIcon != 0) {
+            _ = User32.SendMessage(
+                lParam: icons.BigIcon,
+                message: WmSetIcon,
+                wParam: IconBig,
+                windowHandle: windowHandle
+            );
+        }
+        if (icons.SmallIcon != 0) {
+            _ = User32.SendMessage(
+                lParam: icons.SmallIcon,
+                message: WmSetIcon,
+                wParam: IconSmall,
+                windowHandle: windowHandle
+            );
         }
 
         RegisterRawInput(windowHandle: windowHandle);
@@ -646,19 +683,31 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             case WmMouseHWheel:
                 return HandleMouseHWheel(wParam: wParam);
             case WmLButtonDown:
-                return HandlePointerButtonDown(button: 0, windowHandle: windowHandle);
+                return HandlePointerButtonDown(
+                    button: 0,
+                    windowHandle: windowHandle
+                );
             case WmLButtonUp:
                 return HandlePointerButtonUp(button: 0);
             case WmRButtonDown:
-                return HandlePointerButtonDown(button: 1, windowHandle: windowHandle);
+                return HandlePointerButtonDown(
+                    button: 1,
+                    windowHandle: windowHandle
+                );
             case WmRButtonUp:
                 return HandlePointerButtonUp(button: 1);
             case WmMButtonDown:
-                return HandlePointerButtonDown(button: 2, windowHandle: windowHandle);
+                return HandlePointerButtonDown(
+                    button: 2,
+                    windowHandle: windowHandle
+                );
             case WmMButtonUp:
                 return HandlePointerButtonUp(button: 2);
             case WmXButtonDown:
-                return HandlePointerButtonDown(button: XButtonIndex(wParam: wParam), windowHandle: windowHandle);
+                return HandlePointerButtonDown(
+                    button: XButtonIndex(wParam: wParam),
+                    windowHandle: windowHandle
+                );
             case WmXButtonUp:
                 return HandlePointerButtonUp(button: XButtonIndex(wParam: wParam));
             case WmClose:
@@ -875,8 +924,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 : WindowInputEvent.LetterUp(
                     character: character,
                     deviceId: deviceId
-                )
-            ));
+                )));
 
             return;
         }
@@ -895,8 +943,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 : WindowInputEvent.KeyUp(
                     deviceId: deviceId,
                     key: key
-                )
-            ));
+                )));
         }
     }
     // The single owner of the VK→letter identity BOTH key edges share — a copy-paste slip desyncing the down and up
@@ -945,8 +992,12 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             VkF10 => KeyCode.F10,
             VkF11 => KeyCode.F11,
             VkF12 => KeyCode.F12,
-            VkControl => ((isExtended) ? KeyCode.ControlRight : KeyCode.ControlLeft),
-            VkMenu => ((isExtended) ? KeyCode.AltRight : KeyCode.AltLeft),
+            VkControl => ((isExtended)
+            ? KeyCode.ControlRight
+            : KeyCode.ControlLeft),
+            VkMenu => ((isExtended)
+            ? KeyCode.AltRight
+            : KeyCode.AltLeft),
             VkShift => ResolveShiftSide(scanCode: scanCode),
             VkLWin => KeyCode.SuperLeft,
             VkRWin => KeyCode.SuperRight,
@@ -970,9 +1021,15 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     // the physical scan code is the documented way to recover which physical Shift key fired. Ambiguous or
     // unresolved input (0, or neither VK) defaults to the left key.
     private static KeyCode ResolveShiftSide(byte scanCode) {
-        var resolvedVirtualKey = User32.MapVirtualKey(code: scanCode, mapType: MapvkVscToVkEx);
+        var resolvedVirtualKey = User32.MapVirtualKey(
+            code: scanCode,
+            mapType: MapvkVscToVkEx
+        );
 
-        return ((resolvedVirtualKey == VkRShift) ? KeyCode.ShiftRight : KeyCode.ShiftLeft);
+        return ((resolvedVirtualKey == VkRShift)
+            ? KeyCode.ShiftRight
+            : KeyCode.ShiftLeft
+        );
     }
     private nint HandleRawInput(nint windowHandle, uint message, nint wParam, nint lParam) {
         var size = ((uint)Marshal.SizeOf<RawInput>());
@@ -984,7 +1041,12 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             rawInput: lParam,
             size: ref size
         ) == unchecked((uint)-1)) {
-            return DefaultRawInput(lParam: lParam, message: message, wParam: wParam, windowHandle: windowHandle);
+            return DefaultRawInput(
+                lParam: lParam,
+                message: message,
+                wParam: wParam,
+                windowHandle: windowHandle
+            );
         }
 
         if (raw.Header.Type == RimTypeMouse) {
@@ -1001,7 +1063,12 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         }
 
         // WM_INPUT must always reach DefWindowProc for system cleanup (per the Raw Input contract).
-        return DefaultRawInput(lParam: lParam, message: message, wParam: wParam, windowHandle: windowHandle);
+        return DefaultRawInput(
+            lParam: lParam,
+            message: message,
+            wParam: wParam,
+            windowHandle: windowHandle
+        );
     }
     private nint DefaultRawInput(nint windowHandle, uint message, nint wParam, nint lParam) {
         return User32.DefWindowProc(
@@ -1021,9 +1088,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             state = new RawMouseState {
                 DeviceId = ResolveRawDeviceId(deviceHandle: deviceHandle),
                 Position = new Vector2(
-                    x: (Width / 2f),
-                    y: (Height / 2f)
-                ),
+                x: (Width / 2f),
+                y: (Height / 2f)
+            ),
             };
             m_rawMouseStates[deviceHandle] = state;
         }
@@ -1082,8 +1149,16 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     }
     private Vector2 ClampToClient(Vector2 position) {
         return new Vector2(
-            x: Math.Clamp(value: position.X, min: 0f, max: Width),
-            y: Math.Clamp(value: position.Y, min: 0f, max: Height)
+            x: Math.Clamp(
+                value: position.X,
+                min: 0f,
+                max: Width
+            ),
+            y: Math.Clamp(
+                value: position.Y,
+                min: 0f,
+                max: Height
+            )
         );
     }
     // Maps a RAWMOUSE absolute report (normalized 0..65535) against the primary desktop by default, or the full
@@ -1097,7 +1172,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         );
 
         return Win32RawInput.TranslateAbsolutePointer(
-            clientOrigin: new Vector2(x: clientOrigin.X, y: clientOrigin.Y),
+            clientOrigin: new Vector2(
+                x: clientOrigin.X,
+                y: clientOrigin.Y
+            ),
             primaryDesktop: new Win32DesktopBounds(
                 Left: 0,
                 Top: 0,
@@ -1178,9 +1256,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
                 m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(
                     deviceId: state.DeviceId,
                     notches: new Vector2(
-                    x: notches,
-                    y: 0f
-                )
+                        x: notches,
+                        y: 0f
+                    )
                 ));
             }
         }
@@ -1270,11 +1348,19 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private void EmitRawTypedText(InputDeviceId deviceId, bool isExtended, byte[] keyState, in RawKeyboard keyboard) {
         // Toggle state (bit 0) is a single system-wide fact, not per keyboard — mirrored in from GetKeyState so a
         // Shift+letter or a dead-key sequence resolves against the real CapsLock/NumLock/ScrollLock state.
-        keyState[VkCapital] = ((byte)(((User32.GetKeyState(virtualKey: VkCapital) & 1) != 0) ? 1 : 0));
-        keyState[VkNumLock] = ((byte)(((User32.GetKeyState(virtualKey: VkNumLock) & 1) != 0) ? 1 : 0));
-        keyState[VkScroll] = ((byte)(((User32.GetKeyState(virtualKey: VkScroll) & 1) != 0) ? 1 : 0));
+        keyState[VkCapital] = ((byte)(((User32.GetKeyState(virtualKey: VkCapital) & 1) != 0)
+            ? 1
+            : 0));
+        keyState[VkNumLock] = ((byte)(((User32.GetKeyState(virtualKey: VkNumLock) & 1) != 0)
+            ? 1
+            : 0));
+        keyState[VkScroll] = ((byte)(((User32.GetKeyState(virtualKey: VkScroll) & 1) != 0)
+            ? 1
+            : 0));
 
-        var scanCode = ((uint)(keyboard.MakeCode | (isExtended ? 0x0100u : 0u)));
+        var scanCode = ((uint)(keyboard.MakeCode | (isExtended
+            ? 0x0100u
+            : 0u)));
         var written = User32.ToUnicodeEx(
             bufferCount: m_textBuffer.Length,
             buffer: m_textBuffer,
@@ -1315,7 +1401,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             return cached;
         }
 
-        var resolved = (TryGetRawInputDeviceName(deviceHandle: deviceHandle, name: out var name)
+        var resolved = (TryGetRawInputDeviceName(
+            deviceHandle: deviceHandle,
+            name: out var name
+        )
             ? InputDeviceId.FromKey(key: name)
             : InputDeviceId.FromConnectionKey(key: $"raw-device-{deviceHandle}")
         );
@@ -1411,7 +1500,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         var notches = (GetSignedHighWord(value: wParam) / WheelDelta);
 
         if (notches != 0f) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(notches: new Vector2(x: notches, y: 0f)));
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(notches: new Vector2(
+                x: notches,
+                y: 0f
+            )));
         }
 
         return 0;
@@ -1432,7 +1524,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             _ = User32.SetCapture(windowHandle: windowHandle);
         }
 
-        m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, phase: CommandPhase.Started));
+        m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(
+            button: button,
+            phase: CommandPhase.Started
+        ));
         return 0;
     }
     private nint HandlePointerButtonUp(int button) {
@@ -1444,7 +1539,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             _ = User32.ReleaseCapture();
         }
 
-        m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, phase: CommandPhase.Completed));
+        m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(
+            button: button,
+            phase: CommandPhase.Completed
+        ));
         return 0;
     }
 
@@ -1573,7 +1671,10 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             modifiers |= WindowInputModifiers.Alt;
         }
 
-        if (IsKeyDown(virtualKey: VkLWin) || IsKeyDown(virtualKey: VkRWin)) {
+        if (
+            IsKeyDown(virtualKey: VkLWin) ||
+            IsKeyDown(virtualKey: VkRWin)
+        ) {
             modifiers |= WindowInputModifiers.Super;
         }
 

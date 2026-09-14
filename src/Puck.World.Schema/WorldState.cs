@@ -25,20 +25,20 @@ public sealed record WorldStateSection(
 ) : IStateSection {
     /// <inheritdoc cref="World"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<WorldStateRow>? World { get => field; init => field = Freeze(value); } = Freeze(World);
+    public IReadOnlyList<WorldStateRow>? World { get => field; init => field = Freeze(items: value); } = Freeze(items: World);
     /// <inheritdoc cref="Body"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<ActionStateSlot>? Body { get => field; init => field = Freeze(value); } = Freeze(Body);
+    public IReadOnlyList<ActionStateSlot>? Body { get => field; init => field = Freeze(items: value); } = Freeze(items: Body);
     /// <inheritdoc cref="Identity"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<ActionStateSlot>? Identity { get => field; init => field = Freeze(value); } = Freeze(Identity);
+    public IReadOnlyList<ActionStateSlot>? Identity { get => field; init => field = Freeze(items: value); } = Freeze(items: Identity);
     /// <inheritdoc cref="Lattices"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(value); } = Freeze(Lattices);
+    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(items: value); } = Freeze(items: Lattices);
 
-    IReadOnlyList<StateRow>? IStateSection.Rows => World;
-    IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => Body;
     IReadOnlyList<IStateSlot>? IStateSection.IdentitySlots => Identity;
+    IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => Body;
+    IReadOnlyList<StateRow>? IStateSection.Rows => World;
 
     // The one freeze site every construction and every `with` routes through — a section can never expose a list
     // the caller still holds a live, writable reference to. A list that is already an immutable array is handed
@@ -61,7 +61,7 @@ public sealed record WorldStateSection(
 /// <param name="Min">See <see cref="StateRow.Min"/>.</param>
 /// <param name="Max">See <see cref="StateRow.Max"/>.</param>
 /// <param name="Capacity">See <see cref="StateRow.Capacity"/>.</param>
-/// <param name="NonNegative">See <see cref="StateRow.NonNegative"/>.</param>
+/// <param name="Overflow">See <see cref="StateRow.Overflow"/>.</param>
 /// <param name="GatesDrive">Whether this row is a drive-admission gate. When set, this must be a keyed row
 /// (<see cref="StateRow.IsKeyed"/>) whose per-body cell — keyed by the body's 0-based entity index — is consulted
 /// before admitting a drive or action intent for that body: a nonzero cell refuses the body's intents until the cell
@@ -95,7 +95,7 @@ public sealed record WorldStateRow(
     long? Min = null,
     long? Max = null,
     int? Capacity = null,
-    bool NonNegative = false,
+    StateOverflow Overflow = StateOverflow.Refuse,
     bool GatesDrive = false,
     bool Evicts = false,
     IReadOnlyList<StateCell>? Cells = null,
@@ -111,7 +111,30 @@ public sealed record WorldStateRow(
     StateInverse? Inverse = null,
     StatePhase? Phase = null, StateVisibility? Visibility = null, StateKnowledge? Knowledge = null, string? PhaseOf = null,
     long HistoryCursor = 0
-) : StateRow(Name, Kind, Min, Max, Capacity, NonNegative, Evicts, Cells, Advance, Draw, DrawCursor, DrawnMasks, Dynamics, Cycle, Domain, ValuesFrom, Inverse, Phase, Visibility, Knowledge, PhaseOf, HistoryCursor) {
+) : StateRow(
+    Name,
+    Kind,
+    Min,
+    Max,
+    Capacity,
+    Overflow,
+    Evicts,
+    Cells,
+    Advance,
+    Draw,
+    DrawCursor,
+    DrawnMasks,
+    Dynamics,
+    Cycle,
+    Domain,
+    ValuesFrom,
+    Inverse,
+    Phase,
+    Visibility,
+    Knowledge,
+    PhaseOf,
+    HistoryCursor
+) {
     /// <summary>Initializes a document row over an engine row, adding the two world-only traits.</summary>
     /// <param name="row">The engine row.</param>
     /// <param name="gatesDrive">Whether the row is a drive-admission gate.</param>
@@ -122,7 +145,7 @@ public sealed record WorldStateRow(
         Min: row.Min,
         Max: row.Max,
         Capacity: row.Capacity,
-        NonNegative: row.NonNegative,
+        Overflow: row.Overflow,
         GatesDrive: gatesDrive,
         Evicts: row.Evicts,
         Cells: row.Cells,

@@ -16,34 +16,14 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage<PostContext> {
     private const int RequestedSampleRate = 32_000;
 
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "queued-host-time-travel";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
-
-    /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        var result = QueuedHostContractProbe.VerifyTimeTravel(
-            withContent: () => new MachineHost(
-                model: ConsoleModel.DmgC,
-                cartridgeRom: SyntheticRom.Create()
-            ),
-            withAudio: () => new MachineHost(
-                model: ConsoleModel.DmgC,
-                cartridgeRom: SyntheticRom.Create(),
-                audioSampleRate: RequestedSampleRate
-            ),
-            observe: ObserveState
-        );
-
-        return (result.Passed
-            ? PostStageOutcome.Pass(detail: result.Detail)
-            : PostStageOutcome.Fail(detail: result.Detail));
-    }
 
     // An FNV-1a fold of the whole I/O + high-RAM window (0xFF00-0xFFFF) through the host's side-effect-free debug peek —
     // the joypad register, DIV/TIMA timers, PPU LCDC/STAT/LY, interrupt flags, and HRAM. Every byte is a pure function of
@@ -64,5 +44,28 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage<PostContext> {
         }
 
         return unchecked((long)hash.Value);
+    }
+
+    /// <inheritdoc/>
+    public PostStageOutcome Run(PostContext context) {
+        var result = QueuedHostContractProbe.VerifyTimeTravel(
+            withContent: () => new MachineHost(
+                bootMode: MachineBootMode.Fast,
+                model: ConsoleModel.DmgC,
+                cartridgeRom: SyntheticRom.Create()
+            ),
+            withAudio: () => new MachineHost(
+                bootMode: MachineBootMode.Fast,
+                model: ConsoleModel.DmgC,
+                cartridgeRom: SyntheticRom.Create(),
+                audioSampleRate: RequestedSampleRate
+            ),
+            observe: ObserveState
+        );
+
+        return (result.Passed
+            ? PostStageOutcome.Pass(detail: result.Detail)
+            : PostStageOutcome.Fail(detail: result.Detail)
+        );
     }
 }

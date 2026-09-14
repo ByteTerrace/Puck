@@ -42,7 +42,10 @@ public sealed class ReplayOrderedDomainCaptureLawTests {
 
         transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateRow(
             Principal: WorldPrincipal.Console,
-            Row: new WorldStateRow(Name: CellName.Parse(candidate: "tape-probe"), Kind: CellKind.Int)
+            Row: new WorldStateRow(
+                Name: CellName.Parse(candidate: "tape-probe"),
+                Kind: CellKind.Int
+            )
         ));
         transport.SubmitUndo(
             count: 1,
@@ -72,9 +75,21 @@ public sealed class ReplayOrderedDomainCaptureLawTests {
             .Select(selector: static entry => entry.GetType().Name)
             .ToHashSet(comparer: StringComparer.Ordinal);
 
-        Assert.Contains(collection: kinds, expected: "Mutation");
-        Assert.Contains(collection: kinds, expected: "Undo");
-        Assert.Contains(collection: kinds, expected: "Composition");
-        Assert.Contains(collection: kinds, expected: "Query");
+        Assert.Contains(
+            collection: kinds,
+            expected: "Mutation"
+        );
+        Assert.Contains(
+            collection: kinds,
+            expected: "Undo"
+        );
+        Assert.Contains(
+            collection: kinds,
+            expected: "Composition"
+        );
+        Assert.Contains(
+            collection: kinds,
+            expected: "Query"
+        );
     }
 }

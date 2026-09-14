@@ -69,83 +69,6 @@ public sealed class StorageCompositionLawTests {
     ).Key;
 
     [Fact]
-    public void Push_PublishesTheCounterpartClaim_NamingThisWorldUnderItsOwnerArmNeighbourKey() {
-        using var dir = new TempWorldDirectory();
-        var worlds = new WorldOwnedWorlds(
-            directory: dir.RootPath,
-            machineId: Guid.NewGuid(),
-            template: Fixtures.BuildDocument()
-        );
-        var store = new FakeObjectBlobStore();
-        var publisher = new FakeCounterpartPublisher(accepted: true);
-        var sync = new WorldOwnedWorldSync(
-            containerId: ContainerId,
-            publisher: publisher,
-            stateFilePath: Path.Combine(
-                path1: dir.RootPath,
-                path2: "sync-state.json"
-            ),
-            store: store,
-            target: Target,
-            worlds: worlds
-        );
-
-        var outcomes = sync.Push(id: "amber");
-        var tip = Assert.Single(collection: outcomes, predicate: outcome => (outcome.Id == "amber"));
-
-        Assert.True(condition: tip.Ok, userMessage: tip.Detail);
-        Assert.Contains(expectedSubstring: "counterpart claim posted", actualString: tip.Detail, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "counterpart claim posted", actualString: sync.LastClaimDetail, comparisonType: StringComparison.Ordinal);
-        Assert.Equal(expected: "amber", actual: publisher.LastWorldId);
-        // The exact spelling ValidateAttestedCounterpart requires: a peer's owner-arm WorldReference.NeighbourKey.
-        Assert.Contains(expectedSubstring: $"owner/{ContainerId:D}/amber", actualString: Encoding.UTF8.GetString(bytes: publisher.LastPayload!), comparisonType: StringComparison.Ordinal);
-    }
-    // The document write is the primary effect: a refused claim post is reported, never fatal to a landed push.
-    [Fact]
-    public void Push_StillSucceedsWhenTheCounterpartPublisherRefuses() {
-        using var dir = new TempWorldDirectory();
-        var worlds = new WorldOwnedWorlds(
-            directory: dir.RootPath,
-            machineId: Guid.NewGuid(),
-            template: Fixtures.BuildDocument()
-        );
-        var store = new FakeObjectBlobStore();
-        var publisher = new FakeCounterpartPublisher(accepted: false);
-        var sync = new WorldOwnedWorldSync(
-            containerId: ContainerId,
-            publisher: publisher,
-            stateFilePath: Path.Combine(
-                path1: dir.RootPath,
-                path2: "sync-state.json"
-            ),
-            store: store,
-            target: Target,
-            worlds: worlds
-        );
-
-        var outcomes = sync.Push(id: "amber");
-        var tip = Assert.Single(collection: outcomes, predicate: outcome => (outcome.Id == "amber"));
-
-        Assert.True(condition: tip.Ok, userMessage: tip.Detail);
-        Assert.Contains(expectedSubstring: "counterpart claim post refused — a distinctive fake refusal", actualString: tip.Detail, comparisonType: StringComparison.Ordinal);
-    }
-
-    private sealed class FakeCounterpartPublisher(bool accepted) : ICounterpartPublisher {
-        public byte[]? LastPayload { get; private set; }
-        public string? LastWorldId { get; private set; }
-
-        public bool TryPublish(string worldId, ReadOnlyMemory<byte> payload, out string detail) {
-            LastPayload = payload.ToArray();
-            LastWorldId = worldId;
-            detail = (accepted
-                ? "accepted"
-                : "a distinctive fake refusal");
-
-            return accepted;
-        }
-    }
-
-    [Fact]
     public void BasisBlobAlreadyInCloud_WithDifferentBytes_RefusesByName() {
         using var dir = new TempWorldDirectory();
 
@@ -682,6 +605,98 @@ public sealed class StorageCompositionLawTests {
         ));
     }
     [Fact]
+    public void Push_PublishesTheCounterpartClaim_NamingThisWorldUnderItsOwnerArmNeighbourKey() {
+        using var dir = new TempWorldDirectory();
+        var worlds = new WorldOwnedWorlds(
+            directory: dir.RootPath,
+            machineId: Guid.NewGuid(),
+            template: Fixtures.BuildDocument()
+        );
+        var store = new FakeObjectBlobStore();
+        var publisher = new FakeCounterpartPublisher(accepted: true);
+        var sync = new WorldOwnedWorldSync(
+            containerId: ContainerId,
+            publisher: publisher,
+            stateFilePath: Path.Combine(
+                path1: dir.RootPath,
+                path2: "sync-state.json"
+            ),
+            store: store,
+            target: Target,
+            worlds: worlds
+        );
+
+        var outcomes = sync.Push(id: "amber");
+        var tip = Assert.Single(
+            collection: outcomes,
+            predicate: outcome => (outcome.Id == "amber")
+        );
+
+        Assert.True(
+            condition: tip.Ok,
+            userMessage: tip.Detail
+        );
+        Assert.Contains(
+            expectedSubstring: "counterpart claim posted",
+            actualString: tip.Detail,
+            comparisonType: StringComparison.Ordinal
+        );
+        Assert.Contains(
+            expectedSubstring: "counterpart claim posted",
+            actualString: sync.LastClaimDetail,
+            comparisonType: StringComparison.Ordinal
+        );
+        Assert.Equal(
+            expected: "amber",
+            actual: publisher.LastWorldId
+        );
+        // The exact spelling ValidateAttestedCounterpart requires: a peer's owner-arm WorldReference.NeighbourKey.
+        Assert.Contains(
+            expectedSubstring: $"owner/{ContainerId:D}/amber",
+            actualString: Encoding.UTF8.GetString(bytes: publisher.LastPayload!),
+            comparisonType: StringComparison.Ordinal
+        );
+    }
+    // The document write is the primary effect: a refused claim post is reported, never fatal to a landed push.
+    [Fact]
+    public void Push_StillSucceedsWhenTheCounterpartPublisherRefuses() {
+        using var dir = new TempWorldDirectory();
+        var worlds = new WorldOwnedWorlds(
+            directory: dir.RootPath,
+            machineId: Guid.NewGuid(),
+            template: Fixtures.BuildDocument()
+        );
+        var store = new FakeObjectBlobStore();
+        var publisher = new FakeCounterpartPublisher(accepted: false);
+        var sync = new WorldOwnedWorldSync(
+            containerId: ContainerId,
+            publisher: publisher,
+            stateFilePath: Path.Combine(
+                path1: dir.RootPath,
+                path2: "sync-state.json"
+            ),
+            store: store,
+            target: Target,
+            worlds: worlds
+        );
+
+        var outcomes = sync.Push(id: "amber");
+        var tip = Assert.Single(
+            collection: outcomes,
+            predicate: outcome => (outcome.Id == "amber")
+        );
+
+        Assert.True(
+            condition: tip.Ok,
+            userMessage: tip.Detail
+        );
+        Assert.Contains(
+            expectedSubstring: "counterpart claim post refused — a distinctive fake refusal",
+            actualString: tip.Detail,
+            comparisonType: StringComparison.Ordinal
+        );
+    }
+    [Fact]
     public void PushedBasisBlob_IsNotDiscoveredAsAnOwnedWorld() {
         using var dir = new TempWorldDirectory();
 
@@ -1144,5 +1159,21 @@ public sealed class StorageCompositionLawTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: BasisKey(name: "ghost.world.json")
         );
+    }
+
+    private sealed class FakeCounterpartPublisher(bool accepted) : ICounterpartPublisher {
+        public byte[]? LastPayload { get; private set; }
+        public string? LastWorldId { get; private set; }
+
+        public bool TryPublish(string worldId, ReadOnlyMemory<byte> payload, out string detail) {
+            LastPayload = payload.ToArray();
+            LastWorldId = worldId;
+            detail = (accepted
+                ? "accepted"
+                : "a distinctive fake refusal"
+            );
+
+            return accepted;
+        }
     }
 }

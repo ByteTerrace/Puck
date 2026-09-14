@@ -23,12 +23,11 @@ public abstract record WorldSpeakerSource {
     /// <summary>No signal is bound — honest silence (the emitter holds its place; <c>audio.emitters</c> reads the
     /// state).</summary>
     public sealed record None() : WorldSpeakerSource;
-    /// <summary>A live screen-hosted machine's audio, identified by screen slot — screen index is machine identity
-    /// for screen-hosted machines. The validator checks only that the screen row exists, never that its declared
-    /// source is <c>$type machine</c> (runtime inserts overlay declared sources); no live machine at drain time is
-    /// silence plus a state echo, never a reject.</summary>
-    /// <param name="ScreenIndex">The declared <see cref="WorldScreen.Index"/> whose hosted machine feeds this source.</param>
-    public sealed record Machine(int ScreenIndex) : WorldSpeakerSource;
+    /// <summary>A named machine audio output. The source is a consumer reference only: the named machine host owns
+    /// preparation, advancement, and the single drain shared by every speaker feed that names this output.</summary>
+    /// <param name="Instance">The declared <see cref="WorldMachine.Name"/> instance.</param>
+    /// <param name="Output">The provider audio output name exposed by that instance.</param>
+    public sealed record Machine(string Instance, string Output) : WorldSpeakerSource;
     /// <summary>A tune asset (<see cref="WorldTune"/>) played through a headless machine host — acquired while any
     /// speaker references it, released when orphaned (a runtime derivation, never a data concept).</summary>
     /// <param name="TuneId">The referenced <see cref="WorldTune.Name"/> (must resolve).</param>
@@ -132,7 +131,7 @@ public abstract record WorldSpeaker(
     );
 }
 /// <summary>
-/// One tune asset reference row — a <c>puck.audio.v1</c> document's stable name, its file path (relative to
+/// One tune asset reference row — a <c>puck.tune.v1</c> document's stable name, its file path (relative to
 /// <see cref="AppContext.BaseDirectory"/>, the same convention <see cref="WorldMusicRow"/> uses), and the SHA-256
 /// hex64 pin of the referenced document's own canonical bytes. Never embedded: the document is loaded,
 /// canonicalized, and hash-verified where it is compiled, the same load-then-pin discipline <see cref="WorldMusicRow"/>
@@ -145,7 +144,7 @@ public abstract record WorldSpeaker(
 /// <param name="Hash">The SHA-256 hex64 of the referenced document's canonical bytes.</param>
 public sealed record WorldTune(string Name, string Source, string Hash);
 /// <summary>
-/// One synth-patch asset reference row — the <c>puck.synth.v1</c> twin of <see cref="WorldTune"/>, same
+/// One synth-patch asset reference row — the <c>puck.synthesizer-patch.v1</c> twin of <see cref="WorldTune"/>, same
 /// name/source/hash shape and load-then-pin discipline.
 /// </summary>
 /// <param name="Name">The row's stable name — its mutation address; referenced by
@@ -280,6 +279,21 @@ public sealed record WorldAudioCue(
         VoiceBabble,
     ];
 
+    // Ordinal membership over a published token list, allocation-free — the one scan the three Is*Token doors share.
+    private static bool Contains(IReadOnlyList<string> tokens, string? candidate) {
+        for (var index = 0; (index < tokens.Count); index++) {
+            if (string.Equals(
+                a: tokens[index],
+                b: candidate,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Determines whether <paramref name="token"/> is one of the published <see cref="EventTokens"/>.</summary>
     /// <param name="token">The candidate token.</param>
     public static bool IsEventToken(string? token) => Contains(
@@ -300,20 +314,6 @@ public sealed record WorldAudioCue(
         candidate: token,
         tokens: ProducerBypassedTokens
     );
-    // Ordinal membership over a published token list, allocation-free — the one scan the three Is*Token doors share.
-    private static bool Contains(IReadOnlyList<string> tokens, string? candidate) {
-        for (var index = 0; (index < tokens.Count); index++) {
-            if (string.Equals(
-                a: tokens[index],
-                b: candidate,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }
 /// <summary>
 /// The world's audio host-section defaults — document defaults with the same absence-coalesce convention every
@@ -354,12 +354,6 @@ public sealed record WorldAudioDefaults(
 
     private readonly IReadOnlyList<WorldAudioCue> m_cues = (Cues ?? []);
 
-    /// <summary>Gets the cue table. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
-    public IReadOnlyList<WorldAudioCue> Cues {
-        get => m_cues;
-        init => m_cues = (value ?? []);
-    }
     /// <summary>Gets the inert absence — zero master gain (silent), zero speaker radius, no fade, no cues. The
     /// engine holds no audio posture of its own: the standard values are AUTHORED, in
     /// <c>Assets/worlds/standard.world.json</c>, and a world inherits them by naming that document as its
@@ -372,4 +366,10 @@ public sealed record WorldAudioDefaults(
         Listener: ListenerFocus,
         MasterGain: 0f
     );
+    /// <summary>Gets the cue table. The absence-coalesce lives in the accessor for the same reason
+    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
+    public IReadOnlyList<WorldAudioCue> Cues {
+        get => m_cues;
+        init => m_cues = (value ?? []);
+    }
 }

@@ -8,6 +8,7 @@ using Puck.Overlays;
 using Puck.World.Addons;
 using Puck.World.Client;
 using Puck.World.Protocol;
+using Puck.World.Machines;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -54,6 +55,9 @@ internal static class WorldPostBuildWiring {
     public static bool Install(IServiceProvider services) {
         ArgumentNullException.ThrowIfNull(argument: services);
 
+        var machineCatalog = services.GetRequiredService<WorldMachineCatalog>();
+        var machineCatalogFingerprint = WorldBootComposition.MachineCatalogFingerprint(machineCatalog: machineCatalog);
+
         // The addon runtime resolves lazily as a DI singleton (WorldBootComposition), and WorldAddonCommandModule —
         // one of the modules CommandRegistry aggregates below — takes it as a constructor dependency, so resolving
         // CommandRegistry first would transitively construct it INSIDE that call, with no narrow catch around it.
@@ -69,10 +73,11 @@ internal static class WorldPostBuildWiring {
         }
 
         var consoleRegistry = services.GetRequiredService<CommandRegistry>();
+
         try {
             services.GetRequiredService<WorldServiceExtensions>().Initialize();
-        } catch (Exception exception) when (exception is ArgumentException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException or IOException) {
-            Console.Error.WriteLine($"[world.extensions: configuration refused: {exception.Message}]");
+        } catch (Exception exception) when ((exception is ArgumentException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException or IOException)) {
+            Console.Error.WriteLine(value: $"[world.extensions: configuration refused: {exception.Message}]");
             return false;
         }
 
@@ -113,6 +118,7 @@ internal static class WorldPostBuildWiring {
                 seatBindings.SyncSeat(
                     slot: slot,
                     definition: route.Endpoint.Definition,
+                    engineTick: route.Endpoint.EngineTick,
                     entityIndex: route.EntityIndex,
                     nextInputTick: route.Endpoint.NextInputTick
                 );
@@ -131,10 +137,18 @@ internal static class WorldPostBuildWiring {
         var cameraLink = services.GetRequiredService<IServerLink>();
 
         services.GetRequiredService<WorldReplayTape>().TimelineRestored += () => {
-            for (var slot = 0; slot < WorldSeatBindings.SeatCount; slot++) {
-                if (seatRouter.TryRoute(slot) is { } route && route.Endpoint.ClockOwnedHere &&
-                    route.Endpoint.Identity == WorldInstanceHost.BootInstanceName) {
-                    _ = seatRouter.CompareExchangeEntity(slot, route, route.Entity, out _);
+            for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
+                if (
+                    (seatRouter.TryRoute(slot: slot) is { } route) &&
+                    route.Endpoint.ClockOwnedHere &&
+                    (route.Endpoint.Identity == WorldInstanceHost.BootInstanceName)
+                ) {
+                    _ = seatRouter.CompareExchangeEntity(
+                        slot,
+                        route,
+                        route.Entity,
+                        out _
+                    );
                 }
             }
         };
@@ -160,9 +174,13 @@ internal static class WorldPostBuildWiring {
         // WorldDefinitionSource.SourcePath's own remarks). WorldCompositeNeighbourResolver.Compose returns null only
         // when NEITHER transport is present, in which case an authored adjacency refuses by
         // name rather than passing unproven — unreachable, not this method's own choice.
-        var fileNeighbours = new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: worldSource.SourcePath) is { Length: > 0 } directory)
+        var fileNeighbours = new WorldFileNeighbourResolver(
+            baseDirectory: () => ((Path.GetDirectoryName(path: worldSource.SourcePath) is { Length: > 0 } directory)
             ? directory
-            : AppContext.BaseDirectory));
+            : AppContext.BaseDirectory),
+            catalogFingerprint: machineCatalogFingerprint,
+            catalog: machineCatalog
+        );
         var storageNeighbours = services.GetRequiredService<WorldStorageSyncHandle>().Neighbours;
         var neighbours = WorldCompositeNeighbourResolver.Compose(
             fileNeighbours,
@@ -172,7 +190,8 @@ internal static class WorldPostBuildWiring {
         if (!WorldDefinitionValidator.TryValidate(
             definition: worldSource.Definition,
             reason: out var vocabularyReason,
-            neighbours: neighbours
+            neighbours: neighbours,
+            machines: machineCatalog
         )) {
             Console.Error.WriteLine(value: $"[world] definition refused once its command vocabulary composed: {vocabularyReason}");
 
@@ -185,11 +204,16 @@ internal static class WorldPostBuildWiring {
 
         server.Neighbours = neighbours;
         server.RebuildNeighbours = candidatePath => WorldCompositeNeighbourResolver.Compose(
-            new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: candidatePath) is { Length: > 0 } directory)
+            new WorldFileNeighbourResolver(
+                baseDirectory: () => ((Path.GetDirectoryName(path: candidatePath) is { Length: > 0 } directory)
             ? directory
-            : AppContext.BaseDirectory)),
+            : AppContext.BaseDirectory),
+                catalogFingerprint: machineCatalogFingerprint,
+                catalog: machineCatalog
+            ),
             storageNeighbours
         );
+        server.RebuildDocuments = services.GetRequiredService<IWorldDocumentSource>();
 
         // The boot authority's runtime adjacency source — unlike Neighbours (a load-time proof), this is
         // consulted every tick a body stands inside a derived overlap. Spawned authorities get
@@ -318,7 +342,7 @@ internal static class WorldPostBuildWiring {
         // that token through the same document-authored cue table as built-in events; an optional body association
         // supplies the body's authoritative position at delivery time, otherwise listener placement applies.
         worldServer.GameplayCueTap = cue => {
-            var site = ((cue.Body is { } index) && (worldServer.Body(index: index) is { } body)
+            var site = (((cue.Body is { } index) && (worldServer.Body(index: index) is { } body))
                 ? body.FixedPosition.ToVector3()
                 : (Vector3?)null
             );
@@ -341,10 +365,13 @@ internal static class WorldPostBuildWiring {
                     audio: audioDirector,
                     bindingBar: bindingBarVisibility,
                     pacing: pacing,
-                    tick: tick
+                    tick: tick,
+                    engineTick: worldServer.CompletedEngineTicks
                 );
                 var bytes = WorldDefinitionSerialization.SavePreservingBasis(
                     basisPath: out var basisPath,
+                    catalog: machineCatalog,
+                    catalogFingerprint: machineCatalogFingerprint,
                     definition: snapshot,
                     imports: out var preservedImports,
                     note: out var note,
@@ -354,7 +381,9 @@ internal static class WorldPostBuildWiring {
                 worldServer.Compact();
 
                 var derivation = (((basisPath is { }) || (preservedImports.Count > 0))
-                    ? $", basis: {(basisPath is { } ? basisPath : "none")}, imports: {preservedImports.Count.ToString(provider: CultureInfo.InvariantCulture)}"
+                    ? $", basis: {((basisPath is { })
+                        ? basisPath
+                        : "none")}, imports: {preservedImports.Count.ToString(provider: CultureInfo.InvariantCulture)}"
                     : ((note.Length > 0)
                         ? $", {note}"
                         : ""
@@ -428,10 +457,17 @@ internal static class WorldPostBuildWiring {
         // before that frame writes nothing at all. Left alone, the caller's only evidence is the arming echo, which
         // is indistinguishable from a capture that succeeded — the silent-success shape this repository has already
         // been bitten by. Say it out loud instead, at ApplicationStopped (every hosted service has stopped, so the
-        // render loop is provably finished and an outstanding request provably never will be served). Presentation-
-        // only: a headless boot has no render probe and world.screenshot refuses there anyway.
+        // render loop is provably finished and an outstanding request provably never will be served). The scheduled
+        // `captures` rows drain FIRST, at the same instant: a station whose readback landed on the run's last
+        // composed frame has no later tick-complete hook to manifest it, so WorldCaptureScheduler.Drain finalizes it
+        // here — otherwise the PNG exists, stderr says it was captured, and manifest.json silently lacks the row.
+        // Presentation-only: a headless boot has no render probe and world.screenshot refuses there anyway.
         if (services.GetService<WorldRenderProbe>() is { } renderProbe) {
+            var captureScheduler = services.GetRequiredService<WorldCaptureScheduler>();
+
             services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: () => {
+                captureScheduler.Drain();
+
                 if (renderProbe.Render?.PendingCapturePath is { } pending) {
                     Console.Error.WriteLine(value: $"[world.screenshot] WARNING: a capture of {pending} was still pending when the run ended — no frame composed after it was armed, so NO FILE WAS WRITTEN.");
                 }

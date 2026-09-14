@@ -14,6 +14,95 @@ public unsafe sealed class VulkanNativeVertexBufferApi : IVulkanVertexBufferApi 
     private const uint HostCoherentMemoryPropertyBit = 0x00000004;
     private const uint HostVisibleMemoryPropertyBit = 0x00000002;
 
+    private static unsafe nint CreateBuffer(delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult> createBuffer, nint deviceHandle, ulong size) {
+        return VulkanNativeBufferSupport.CreateBuffer(
+            createBuffer: createBuffer,
+            deviceHandle: deviceHandle,
+            size: size,
+            usage: BufferUsageVertexBufferBit
+        );
+    }
+    private InstancePointers GetInstancePointers(nint instanceHandle) {
+        return m_instancePointers.GetOrAdd(
+            key: instanceHandle,
+            valueFactory: static handle => new InstancePointers {
+                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(
+                functionName: "vkGetPhysicalDeviceMemoryProperties"u8,
+                instanceHandle: handle
+            )),
+            }
+        );
+    }
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkAllocateMemory"u8
+            )),
+                BindBufferMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkBindBufferMemory"u8
+            )),
+                CreateBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateBuffer"u8
+            )),
+                DestroyBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyBuffer"u8
+            )),
+                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkFreeMemory"u8
+            )),
+                GetBufferMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkGetBufferMemoryRequirements"u8
+            )),
+                MapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkMapMemory"u8
+            )),
+                UnmapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkUnmapMemory"u8
+            )),
+            }
+        );
+    }
+    private static unsafe void UploadBufferData(
+        delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult> mapMemory,
+        delegate* unmanaged[Cdecl]<nint, nint, void> unmapMemory,
+        nint deviceHandle,
+        nint memoryHandle,
+        byte[] data
+    ) {
+        VulkanNativeBufferSupport.UploadBufferData(
+            data: data,
+            deviceHandle: deviceHandle,
+            mapMemory: mapMemory,
+            memoryHandle: memoryHandle,
+            unmapMemory: unmapMemory
+        );
+    }
+    private static unsafe void ValidateCreateRequest(VulkanVertexBufferCreateRequest request, byte[] vertexData) {
+        VulkanNativeBufferSupport.ValidateBufferHandles(
+            argumentName: nameof(request),
+            deviceHandle: request.DeviceHandle,
+            instanceHandle: request.InstanceHandle,
+            physicalDeviceHandle: request.PhysicalDeviceHandle
+        );
+        if (0 == vertexData.Length) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: vertexData.Length,
+                message: "Vertex-buffer data must be non-empty.",
+                paramName: nameof(vertexData)
+            );
+        }
+    }
+
     /// <inheritdoc/>
     public VulkanVertexBufferCreateResult CreateVertexBuffer(VulkanVertexBufferCreateRequest request, byte[] vertexData) {
         ValidateCreateRequest(
@@ -137,66 +226,4 @@ public unsafe sealed class VulkanNativeVertexBufferApi : IVulkanVertexBufferApi 
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, InstancePointers> m_instancePointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8)),
-                BindBufferMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindBufferMemory"u8)),
-                CreateBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateBuffer"u8)),
-                DestroyBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyBuffer"u8)),
-                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8)),
-                GetBufferMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetBufferMemoryRequirements"u8)),
-                MapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkMapMemory"u8)),
-                UnmapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUnmapMemory"u8)),
-            }
-        );
-    }
-    private InstancePointers GetInstancePointers(nint instanceHandle) {
-        return m_instancePointers.GetOrAdd(
-            key: instanceHandle,
-            valueFactory: static handle => new InstancePointers {
-                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceMemoryProperties"u8, instanceHandle: handle)),
-            }
-        );
-    }
-    private static unsafe void ValidateCreateRequest(VulkanVertexBufferCreateRequest request, byte[] vertexData) {
-        VulkanNativeBufferSupport.ValidateBufferHandles(
-            argumentName: nameof(request),
-            deviceHandle: request.DeviceHandle,
-            instanceHandle: request.InstanceHandle,
-            physicalDeviceHandle: request.PhysicalDeviceHandle
-        );
-        if (0 == vertexData.Length) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: vertexData.Length,
-                message: "Vertex-buffer data must be non-empty.",
-                paramName: nameof(vertexData)
-            );
-        }
-    }
-    private static unsafe nint CreateBuffer(delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult> createBuffer, nint deviceHandle, ulong size) {
-        return VulkanNativeBufferSupport.CreateBuffer(
-            createBuffer: createBuffer,
-            deviceHandle: deviceHandle,
-            size: size,
-            usage: BufferUsageVertexBufferBit
-        );
-    }
-    private static unsafe void UploadBufferData(
-        delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult> mapMemory,
-        delegate* unmanaged[Cdecl]<nint, nint, void> unmapMemory,
-        nint deviceHandle,
-        nint memoryHandle,
-        byte[] data
-    ) {
-        VulkanNativeBufferSupport.UploadBufferData(
-            data: data,
-            deviceHandle: deviceHandle,
-            mapMemory: mapMemory,
-            memoryHandle: memoryHandle,
-            unmapMemory: unmapMemory
-        );
-    }
 }

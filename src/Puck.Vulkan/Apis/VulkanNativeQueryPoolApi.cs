@@ -14,6 +14,74 @@ public unsafe sealed class VulkanNativeQueryPoolApi : IVulkanQueryPoolApi {
     private const uint QueryTypeTimestamp = 2;
     private const uint StructureTypeQueryPoolCreateInfo = 11;
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
+
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                CreateQueryPool = ((delegate* unmanaged[Cdecl]<nint, in VkQueryPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateQueryPool"u8
+            )),
+                DestroyQueryPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyQueryPool"u8
+            )),
+                CmdResetQueryPool = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdResetQueryPool"u8
+            )),
+                CmdWriteTimestamp = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdWriteTimestamp"u8
+            )),
+                GetQueryPoolResults = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, nuint, nint, ulong, uint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkGetQueryPoolResults"u8
+            )),
+            }
+        );
+    }
+
+    /// <inheritdoc/>
+    public void CmdResetQueryPool(nint deviceHandle, nint commandBufferHandle, nint queryPoolHandle, uint firstQuery, uint queryCount) {
+        if (
+            (0 == deviceHandle) ||
+            (0 == commandBufferHandle) ||
+            (0 == queryPoolHandle)
+        ) {
+            throw new ArgumentException(message: "Vulkan device, command-buffer, and query-pool handles must be non-zero.");
+        }
+
+        var cmdResetQueryPool = GetPointers(deviceHandle: deviceHandle).CmdResetQueryPool;
+
+        cmdResetQueryPool(
+            commandBufferHandle,
+            queryPoolHandle,
+            firstQuery,
+            queryCount
+        );
+    }
+    /// <inheritdoc/>
+    public void CmdWriteTimestamp(nint deviceHandle, nint commandBufferHandle, uint pipelineStage, nint queryPoolHandle, uint query) {
+        if (
+            (0 == deviceHandle) ||
+            (0 == commandBufferHandle) ||
+            (0 == queryPoolHandle)
+        ) {
+            throw new ArgumentException(message: "Vulkan device, command-buffer, and query-pool handles must be non-zero.");
+        }
+
+        var cmdWriteTimestamp = GetPointers(deviceHandle: deviceHandle).CmdWriteTimestamp;
+
+        cmdWriteTimestamp(
+            commandBufferHandle,
+            pipelineStage,
+            queryPoolHandle,
+            query
+        );
+    }
     /// <inheritdoc/>
     public VkResult CreateTimestampPool(nint deviceHandle, uint queryCount, out nint queryPoolHandle) {
         VulkanArgument.RequireHandle(
@@ -61,44 +129,6 @@ public unsafe sealed class VulkanNativeQueryPoolApi : IVulkanQueryPoolApi {
         );
     }
     /// <inheritdoc/>
-    public void CmdResetQueryPool(nint deviceHandle, nint commandBufferHandle, nint queryPoolHandle, uint firstQuery, uint queryCount) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == commandBufferHandle) ||
-            (0 == queryPoolHandle)
-        ) {
-            throw new ArgumentException(message: "Vulkan device, command-buffer, and query-pool handles must be non-zero.");
-        }
-
-        var cmdResetQueryPool = GetPointers(deviceHandle: deviceHandle).CmdResetQueryPool;
-
-        cmdResetQueryPool(
-            commandBufferHandle,
-            queryPoolHandle,
-            firstQuery,
-            queryCount
-        );
-    }
-    /// <inheritdoc/>
-    public void CmdWriteTimestamp(nint deviceHandle, nint commandBufferHandle, uint pipelineStage, nint queryPoolHandle, uint query) {
-        if (
-            (0 == deviceHandle) ||
-            (0 == commandBufferHandle) ||
-            (0 == queryPoolHandle)
-        ) {
-            throw new ArgumentException(message: "Vulkan device, command-buffer, and query-pool handles must be non-zero.");
-        }
-
-        var cmdWriteTimestamp = GetPointers(deviceHandle: deviceHandle).CmdWriteTimestamp;
-
-        cmdWriteTimestamp(
-            commandBufferHandle,
-            pipelineStage,
-            queryPoolHandle,
-            query
-        );
-    }
-    /// <inheritdoc/>
     public VkResult GetTimestampResults(nint deviceHandle, nint queryPoolHandle, uint firstQuery, uint queryCount, Span<ulong> results) {
         if (
             (0 == deviceHandle) ||
@@ -140,20 +170,5 @@ public unsafe sealed class VulkanNativeQueryPoolApi : IVulkanQueryPoolApi {
         public delegate* unmanaged[Cdecl]<nint, nint, uint, uint, void> CmdResetQueryPool;
         public delegate* unmanaged[Cdecl]<nint, uint, nint, uint, void> CmdWriteTimestamp;
         public delegate* unmanaged[Cdecl]<nint, nint, uint, uint, nuint, nint, ulong, uint, VkResult> GetQueryPoolResults;
-    }
-
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateQueryPool = ((delegate* unmanaged[Cdecl]<nint, in VkQueryPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateQueryPool"u8)),
-                DestroyQueryPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyQueryPool"u8)),
-                CmdResetQueryPool = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdResetQueryPool"u8)),
-                CmdWriteTimestamp = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdWriteTimestamp"u8)),
-                GetQueryPoolResults = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, nuint, nint, ulong, uint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetQueryPoolResults"u8)),
-            }
-        );
     }
 }

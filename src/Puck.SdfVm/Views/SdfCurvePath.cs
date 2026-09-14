@@ -24,9 +24,15 @@ namespace Puck.SdfVm.Views;
 public sealed class SdfCurvePath {
     // Every raw a CompiledCurvatureSpline carries is Q(CurvatureSpline.CoefficientFractionBitCount); this converts
     // one to double, once, at construction.
-    private static readonly double RawScale = Math.ScaleB(n: CurvatureSpline.CoefficientFractionBitCount, x: 1.0);
+    private static readonly double RawScale = Math.ScaleB(
+        n: CurvatureSpline.CoefficientFractionBitCount,
+        x: 1.0
+    );
 
     private readonly Segment[] m_segments;
+    // The double-precision total, retained alongside the public float-narrowed TotalLength so Sample's own
+    // wrap/clamp arithmetic never re-narrows through the float seam.
+    private readonly double m_totalLength;
 
     // One compiled segment's raws, converted to double once: the planar Bézier control points, the derivative
     // control points Sample's tangent reads directly (already the 3×/6× de Casteljau-ready form
@@ -89,62 +95,45 @@ public sealed class SdfCurvePath {
         m_segments = segments;
     }
 
-    // The double-precision total, retained alongside the public float-narrowed TotalLength so Sample's own
-    // wrap/clamp arithmetic never re-narrows through the float seam.
-    private readonly double m_totalLength;
-
     /// <summary>Gets a value indicating whether the last knot connects back to the first — <see cref="Sample"/> wraps
     /// modulo <see cref="TotalLength"/> when set, clamps to <c>[0, TotalLength]</c> otherwise.</summary>
     public bool Closed { get; }
     /// <summary>Gets the total arc length of the curve.</summary>
     public float TotalLength { get; }
 
-    /// <summary>Samples the curve at an arc length.</summary>
-    /// <param name="arcLength">The arc length to sample — wrapped (closed) or clamped (open) first; any finite input
-    /// is accepted.</param>
-    /// <returns>The sampled world position, and the tangent direction's yaw under the engine's own facing convention
-    /// (<c>facing(yaw) = (-sin(yaw), -cos(yaw))</c> in world X/Z — the same convention
-    /// <c>Puck.World.Server.WorldBody</c>'s <c>SnapYawToPlanarIntent</c> reads a commanded direction's yaw from):
-    /// <c>yaw = atan2(-tangentX, -tangentZ)</c>, so a subject built from it via
-    /// <c>Quaternion.CreateFromYawPitchRoll(yaw, 0, 0)</c> faces exactly along the sampled tangent.</returns>
-    public (Vector3 Position, float TangentYaw) Sample(float arcLength) {
-        var segments = m_segments;
-        var totalLength = m_totalLength;
-        var local = (Closed
-            ? ((totalLength > 0.0) ? (arcLength - (totalLength * Math.Floor(d: (arcLength / totalLength)))) : 0.0)
-            : arcLength);
-
-        local = Math.Clamp(max: totalLength, min: 0.0, value: local);
-
-        var segmentIndex = 0;
-
-        for (var index = (segments.Length - 1); (index >= 0); --index) {
-            if (local >= segments[index].Station) {
-                segmentIndex = index;
-
-                break;
-            }
-        }
-
-        var segment = segments[segmentIndex];
-        var withinSegment = (local - segment.Station);
-        var t = InvertArcTable(
-            table: segment.ArcTable,
-            withinSegment: withinSegment
+    private static double DeCasteljau(double p0, double p1, double p2, double p3, double t) {
+        var q0 = double.Lerp(
+            amount: t,
+            value1: p0,
+            value2: p1
         );
-        var positionX = DeCasteljau(p0: segment.P0X, p1: segment.P1X, p2: segment.P2X, p3: segment.P3X, t: t);
-        var positionZ = DeCasteljau(p0: segment.P0Z, p1: segment.P1Z, p2: segment.P2Z, p3: segment.P3Z, t: t);
-        var tangentX = QuadraticAt(a0: segment.D0X, a1: segment.D1X, a2: segment.D2X, t: t);
-        var tangentZ = QuadraticAt(a0: segment.D0Z, a1: segment.D1Z, a2: segment.D2Z, t: t);
-        var y = (segment.Y0 + (segment.Grade * withinSegment));
+        var q1 = double.Lerp(
+            amount: t,
+            value1: p1,
+            value2: p2
+        );
+        var q2 = double.Lerp(
+            amount: t,
+            value1: p2,
+            value2: p3
+        );
+        var r0 = double.Lerp(
+            amount: t,
+            value1: q0,
+            value2: q1
+        );
+        var r1 = double.Lerp(
+            amount: t,
+            value1: q1,
+            value2: q2
+        );
 
-        return (
-            Position: new Vector3(x: ((float)positionX), y: ((float)y), z: ((float)positionZ)),
-            TangentYaw: ((float)Math.Atan2(x: -tangentZ, y: -tangentX))
+        return double.Lerp(
+            amount: t,
+            value1: r0,
+            value2: r1
         );
     }
-
-    private static double ToDouble(long raw) => (raw / RawScale);
     // Binary-searches the cumulative table (its own panel count, adaptively derived per segment, not fixed) for the
     // bracket containing withinSegment, then linearly interpolates the fraction within it — the
     // CompiledCurvatureSpline.InvertArcTable precedent, in double.
@@ -165,23 +154,115 @@ public sealed class SdfCurvePath {
         var bracketLo = table[lo];
         var bracketHi = table[(lo + 1)];
         var span = (bracketHi - bracketLo);
-        var fraction = ((span > 0.0) ? Math.Clamp(max: 1.0, min: 0.0, value: ((withinSegment - bracketLo) / span)) : 0.0);
+        var fraction = ((span > 0.0)
+            ? Math.Clamp(
+                max: 1.0,
+                min: 0.0,
+                value: ((withinSegment - bracketLo) / span)
+            )
+            : 0.0
+        );
 
         return ((lo + fraction) / (table.Length - 1));
     }
-    private static double DeCasteljau(double p0, double p1, double p2, double p3, double t) {
-        var q0 = double.Lerp(amount: t, value1: p0, value2: p1);
-        var q1 = double.Lerp(amount: t, value1: p1, value2: p2);
-        var q2 = double.Lerp(amount: t, value1: p2, value2: p3);
-        var r0 = double.Lerp(amount: t, value1: q0, value2: q1);
-        var r1 = double.Lerp(amount: t, value1: q1, value2: q2);
-
-        return double.Lerp(amount: t, value1: r0, value2: r1);
-    }
     private static double QuadraticAt(double a0, double a1, double a2, double t) {
-        var q0 = double.Lerp(amount: t, value1: a0, value2: a1);
-        var q1 = double.Lerp(amount: t, value1: a1, value2: a2);
+        var q0 = double.Lerp(
+            amount: t,
+            value1: a0,
+            value2: a1
+        );
+        var q1 = double.Lerp(
+            amount: t,
+            value1: a1,
+            value2: a2
+        );
 
-        return double.Lerp(amount: t, value1: q0, value2: q1);
+        return double.Lerp(
+            amount: t,
+            value1: q0,
+            value2: q1
+        );
+    }
+    private static double ToDouble(long raw) => (raw / RawScale);
+
+    /// <summary>Samples the curve at an arc length.</summary>
+    /// <param name="arcLength">The arc length to sample — wrapped (closed) or clamped (open) first; any finite input
+    /// is accepted.</param>
+    /// <returns>The sampled world position, and the tangent direction's yaw under the engine's own facing convention
+    /// (<c>facing(yaw) = (-sin(yaw), -cos(yaw))</c> in world X/Z — the same convention
+    /// <c>Puck.World.Server.WorldBody</c>'s <c>SnapYawToPlanarIntent</c> reads a commanded direction's yaw from):
+    /// <c>yaw = atan2(-tangentX, -tangentZ)</c>, so a subject built from it via
+    /// <c>Quaternion.CreateFromYawPitchRoll(yaw, 0, 0)</c> faces exactly along the sampled tangent.</returns>
+    public (Vector3 Position, float TangentYaw) Sample(float arcLength) {
+        var segments = m_segments;
+        var totalLength = m_totalLength;
+        var local = (Closed
+            ? ((totalLength > 0.0)
+                ? (arcLength - (totalLength * Math.Floor(d: (arcLength / totalLength))))
+                : 0.0)
+            : arcLength
+        );
+
+        local = Math.Clamp(
+            max: totalLength,
+            min: 0.0,
+            value: local
+        );
+
+        var segmentIndex = 0;
+
+        for (var index = (segments.Length - 1); (index >= 0); --index) {
+            if (local >= segments[index].Station) {
+                segmentIndex = index;
+
+                break;
+            }
+        }
+
+        var segment = segments[segmentIndex];
+        var withinSegment = (local - segment.Station);
+        var t = InvertArcTable(
+            table: segment.ArcTable,
+            withinSegment: withinSegment
+        );
+        var positionX = DeCasteljau(
+            p0: segment.P0X,
+            p1: segment.P1X,
+            p2: segment.P2X,
+            p3: segment.P3X,
+            t: t
+        );
+        var positionZ = DeCasteljau(
+            p0: segment.P0Z,
+            p1: segment.P1Z,
+            p2: segment.P2Z,
+            p3: segment.P3Z,
+            t: t
+        );
+        var tangentX = QuadraticAt(
+            a0: segment.D0X,
+            a1: segment.D1X,
+            a2: segment.D2X,
+            t: t
+        );
+        var tangentZ = QuadraticAt(
+            a0: segment.D0Z,
+            a1: segment.D1Z,
+            a2: segment.D2Z,
+            t: t
+        );
+        var y = (segment.Y0 + (segment.Grade * withinSegment));
+
+        return (
+            Position: new Vector3(
+            x: ((float)positionX),
+            y: ((float)y),
+            z: ((float)positionZ)
+        ),
+            TangentYaw: ((float)Math.Atan2(
+            x: -tangentZ,
+            y: -tangentX
+        ))
+        );
     }
 }

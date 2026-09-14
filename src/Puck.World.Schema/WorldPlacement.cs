@@ -92,10 +92,18 @@ public sealed record WorldPlacementInhabit(
         if (Count?.Row is not null) {
             var sampleCount = ((Distribution?.Region as WorldDistributionRegion.Disc)?.SampleCount);
 
-            return Math.Clamp(value: (sampleCount ?? peerCapacity), min: 0, max: peerCapacity);
+            return Math.Clamp(
+                max: peerCapacity,
+                min: 0,
+                value: (sampleCount ?? peerCapacity)
+            );
         }
 
-        return Math.Clamp(value: (ResolvedCount.Literal ?? 1), min: 0, max: peerCapacity);
+        return Math.Clamp(
+            value: (ResolvedCount.Literal ?? 1),
+            min: 0,
+            max: peerCapacity
+        );
     }
 }
 /// <summary>An inhabit facet's declared body count: an authored integer literal, or a live cell reference
@@ -118,21 +126,33 @@ public sealed record WorldPlacementInhabitCount(int? Literal = null, string? Row
     /// time; a live document edit that drops the row reads defensively as absent rather than throwing).</summary>
     /// <param name="definition">The document to resolve against.</param>
     /// <param name="tick">The tick this read answers as of.</param>
-    public long? Resolve(WorldDefinition definition, ulong tick = 0UL) {
+    /// <param name="engineTick">The engine tick this read answers as of.</param>
+    public long? Resolve(WorldDefinition definition, ulong tick = 0UL, ulong engineTick = 0UL) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (Row is not { } row) {
             return Literal;
         }
 
-        return (WorldStateReader.TryRead(definition: definition, key: Key, rawValue: out var raw, row: out _, rowName: row, tick: tick, text: out _)
+        return (WorldStateReader.TryRead(
+            definition: definition,
+            key: Key,
+            rawValue: out var raw,
+            row: out _,
+            rowName: row,
+            tick: tick,
+            engineTick: engineTick,
+            text: out _
+        )
             ? raw
             : null
         );
     }
     /// <inheritdoc/>
-    public override string ToString() => (Row is { } row
-        ? ((Key is { } key) ? $"{row}.{key}" : row)
+    public override string ToString() => ((Row is { } row)
+        ? ((Key is { } key)
+            ? $"{row}.{key}"
+            : row)
         : (Literal ?? 1).ToString(provider: CultureInfo.InvariantCulture)
     );
 
@@ -161,7 +181,10 @@ public sealed class WorldPlacementInhabitCountJsonConverter : JsonConverter<Worl
         string? row = null;
         string? key = null;
 
-        while (reader.Read() && (reader.TokenType != JsonTokenType.EndObject)) {
+        while (
+            reader.Read() &&
+            (reader.TokenType != JsonTokenType.EndObject)
+        ) {
             if (reader.TokenType != JsonTokenType.PropertyName) {
                 throw new JsonException(message: $"Unexpected token inside {nameof(WorldPlacementInhabitCount)} ({WorldPlacementInhabitCount.Grammar}).");
             }
@@ -170,9 +193,17 @@ public sealed class WorldPlacementInhabitCountJsonConverter : JsonConverter<Worl
 
             reader.Read();
 
-            if (string.Equals(a: propertyName, b: "row", comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(
+                a: propertyName,
+                b: "row",
+                comparisonType: StringComparison.Ordinal
+            )) {
                 row = reader.GetString();
-            } else if (string.Equals(a: propertyName, b: "key", comparisonType: StringComparison.Ordinal)) {
+            } else if (string.Equals(
+                a: propertyName,
+                b: "key",
+                comparisonType: StringComparison.Ordinal
+            )) {
                 key = reader.GetString();
             } else {
                 throw new JsonException(message: $"{nameof(WorldPlacementInhabitCount)} does not declare a '{propertyName}' member ({WorldPlacementInhabitCount.Grammar}).");
@@ -183,7 +214,10 @@ public sealed class WorldPlacementInhabitCountJsonConverter : JsonConverter<Worl
             throw new JsonException(message: $"{nameof(WorldPlacementInhabitCount)}'s object form must name \"row\" ({WorldPlacementInhabitCount.Grammar}).");
         }
 
-        return new WorldPlacementInhabitCount(Row: row, Key: key);
+        return new WorldPlacementInhabitCount(
+            Row: row,
+            Key: key
+        );
     }
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, WorldPlacementInhabitCount value, JsonSerializerOptions options) {
@@ -191,10 +225,16 @@ public sealed class WorldPlacementInhabitCountJsonConverter : JsonConverter<Worl
 
         if (value.Row is { } row) {
             writer.WriteStartObject();
-            writer.WriteString(propertyName: "row", value: row);
+            writer.WriteString(
+                propertyName: "row",
+                value: row
+            );
 
             if (value.Key is { } key) {
-                writer.WriteString(propertyName: "key", value: key);
+                writer.WriteString(
+                    propertyName: "key",
+                    value: key
+                );
             }
 
             writer.WriteEndObject();
@@ -420,6 +460,58 @@ public sealed record WorldPlacement(
 );
 /// <summary>Adapts placement document facets to the shared creation-stamp vocabulary.</summary>
 public static class WorldPlacementStamp {
+    /// <summary>The worst-case, seed-independent materialized copy count a placement's distribution could ever
+    /// produce — a Lattice's exact CountA x CountB, a Scatter's exact block count, a Noise grid's worst case
+    /// (Width x Depth, since actual admission needs the world seed and is not paid for during validation), or 1 for
+    /// no distribution — mirror-doubled and saturated at <paramref name="ceiling"/>. The seed-independent ceiling
+    /// the document validator bounds an authored grid against; see <see cref="SampledFixedOffsetsFor"/> for the
+    /// actual (seed-resolved) count a booted world materializes.</summary>
+    /// <param name="placement">The placement row.</param>
+    /// <param name="ceiling">The largest returned value.</param>
+    public static long MaterializedCopyCeiling(WorldPlacement placement, long ceiling = long.MaxValue) {
+        var mirror = MirrorFor(placement: placement);
+
+        return placement.Distribution?.Region switch {
+            WorldDistributionRegion.Noise noise => WithMirror(
+            copies: Math.Min(
+                val1: CreationStampSampling.NoiseInstanceCeiling(
+                    width: noise.Width,
+                    depth: noise.Depth
+                ),
+                val2: ceiling
+            ),
+            mirror: mirror,
+            ceiling: ceiling
+        ),
+            WorldDistributionRegion.Scatter scatter => WithMirror(
+            copies: Math.Min(
+                val1: CreationStampSampling.ScatterInstanceCeiling(
+                    width: scatter.Width,
+                    depth: scatter.Depth,
+                    spacing: scatter.Spacing
+                ),
+                val2: ceiling
+            ),
+            mirror: mirror,
+            ceiling: ceiling
+        ),
+            _ => CreationStampLattice.MaterializedCopyCount(
+            pattern: PatternFor(placement: placement),
+            sampledCount: null,
+            mirror: mirror,
+            ceiling: ceiling
+        ),
+        };
+
+        static long WithMirror(long copies, CreationStampPlane? mirror, long ceiling) => ((mirror is null)
+            ? copies
+            : CreationStampLattice.MultiplySaturated(
+                ceiling: ceiling,
+                left: copies,
+                right: 2L
+            )
+        );
+    }
     /// <summary>Returns the placement's shared reflection plane.</summary>
     public static CreationStampPlane? MirrorFor(WorldPlacement placement) => ((placement.Mirror is { } mirror)
         ? new CreationStampPlane(
@@ -445,24 +537,24 @@ public static class WorldPlacementStamp {
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
     public static IReadOnlyList<FixedVector3>? SampledFixedOffsetsFor(WorldPlacement placement, ulong worldSeed) => placement.Distribution?.Region switch {
         WorldDistributionRegion.Noise noise => CreationStampSampling.ResolveNoise(
-            cellSize: FixedQ4816.FromDouble(value: noise.CellSize),
-            width: noise.Width,
-            depth: noise.Depth,
-            frequency: noise.Frequency,
-            threshold: FixedQ4816.FromDouble(value: noise.Threshold),
-            octaves: noise.Octaves,
-            seed: noise.Seed,
-            worldSeed: worldSeed
-        ),
+        cellSize: FixedQ4816.FromDouble(value: noise.CellSize),
+        width: noise.Width,
+        depth: noise.Depth,
+        frequency: noise.Frequency,
+        threshold: FixedQ4816.FromDouble(value: noise.Threshold),
+        octaves: noise.Octaves,
+        seed: noise.Seed,
+        worldSeed: worldSeed
+    ),
         WorldDistributionRegion.Scatter scatter => CreationStampSampling.ResolveScatter(
-            cellSize: FixedQ4816.FromDouble(value: scatter.CellSize),
-            width: scatter.Width,
-            depth: scatter.Depth,
-            spacing: scatter.Spacing,
-            radius: scatter.Radius,
-            seed: scatter.Seed,
-            worldSeed: worldSeed
-        ),
+        cellSize: FixedQ4816.FromDouble(value: scatter.CellSize),
+        width: scatter.Width,
+        depth: scatter.Depth,
+        spacing: scatter.Spacing,
+        radius: scatter.Radius,
+        seed: scatter.Seed,
+        worldSeed: worldSeed
+    ),
         _ => null,
     };
     /// <summary>The presentation-float widening of <see cref="SampledFixedOffsetsFor"/>, for the renderer's stamp
@@ -470,7 +562,10 @@ public static class WorldPlacementStamp {
     /// <param name="placement">The placement row.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
     public static IReadOnlyList<Vector3>? SampledOffsetsFor(WorldPlacement placement, ulong worldSeed) {
-        if (SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed) is not { } fixedOffsets) {
+        if (SampledFixedOffsetsFor(
+            placement: placement,
+            worldSeed: worldSeed
+        ) is not { } fixedOffsets) {
             return null;
         }
 
@@ -481,40 +576,5 @@ public static class WorldPlacementStamp {
         }
 
         return offsets;
-    }
-    /// <summary>The worst-case, seed-independent materialized copy count a placement's distribution could ever
-    /// produce — a Lattice's exact CountA x CountB, a Scatter's exact block count, a Noise grid's worst case
-    /// (Width x Depth, since actual admission needs the world seed and is not paid for during validation), or 1 for
-    /// no distribution — mirror-doubled and saturated at <paramref name="ceiling"/>. The seed-independent ceiling
-    /// the document validator bounds an authored grid against; see <see cref="SampledFixedOffsetsFor"/> for the
-    /// actual (seed-resolved) count a booted world materializes.</summary>
-    /// <param name="placement">The placement row.</param>
-    /// <param name="ceiling">The largest returned value.</param>
-    public static long MaterializedCopyCeiling(WorldPlacement placement, long ceiling = long.MaxValue) {
-        var mirror = MirrorFor(placement: placement);
-
-        return placement.Distribution?.Region switch {
-            WorldDistributionRegion.Noise noise => WithMirror(
-                copies: Math.Min(val1: CreationStampSampling.NoiseInstanceCeiling(width: noise.Width, depth: noise.Depth), val2: ceiling),
-                mirror: mirror,
-                ceiling: ceiling
-            ),
-            WorldDistributionRegion.Scatter scatter => WithMirror(
-                copies: Math.Min(val1: CreationStampSampling.ScatterInstanceCeiling(width: scatter.Width, depth: scatter.Depth, spacing: scatter.Spacing), val2: ceiling),
-                mirror: mirror,
-                ceiling: ceiling
-            ),
-            _ => CreationStampLattice.MaterializedCopyCount(
-                pattern: PatternFor(placement: placement),
-                sampledCount: null,
-                mirror: mirror,
-                ceiling: ceiling
-            ),
-        };
-
-        static long WithMirror(long copies, CreationStampPlane? mirror, long ceiling) => ((mirror is null)
-            ? copies
-            : CreationStampLattice.MultiplySaturated(ceiling: ceiling, left: copies, right: 2L)
-        );
     }
 }

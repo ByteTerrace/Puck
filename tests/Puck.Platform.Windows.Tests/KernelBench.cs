@@ -57,7 +57,10 @@ internal sealed unsafe class KernelBench : IDisposable {
         try {
             D3D_FEATURE_LEVEL granted;
             ReadOnlySpan<D3D_FEATURE_LEVEL> levels = [D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0];
-            using var noSoftwareModule = new SafeFileHandle(ownsHandle: false, preexistingHandle: 0);
+            using var noSoftwareModule = new SafeFileHandle(
+                ownsHandle: false,
+                preexistingHandle: 0
+            );
 
             {
                 var devicePointer = &device;
@@ -66,7 +69,9 @@ internal sealed unsafe class KernelBench : IDisposable {
                 var result = PInvoke.D3D11CreateDevice(
                     DriverType: D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_UNKNOWN,
                     Flags: D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT |
-                        (requireVideoSupport ? D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_VIDEO_SUPPORT : 0),
+                        (requireVideoSupport
+                    ? D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_VIDEO_SUPPORT
+                    : 0),
                     SDKVersion: PInvoke.D3D11_SDK_VERSION,
                     Software: noSoftwareModule,
                     pAdapter: ((IDXGIAdapter*)adapter),
@@ -87,14 +92,28 @@ internal sealed unsafe class KernelBench : IDisposable {
                     return null;
                 }
 
-                ThrowIfFailed(hr: result, operation: "D3D11CreateDevice");
+                ThrowIfFailed(
+                    hr: result,
+                    operation: "D3D11CreateDevice"
+                );
             }
 
             var device1Iid = ID3D11Device1.IID_Guid;
 
-            ThrowIfFailed(hr: ((IUnknown*)device)->QueryInterface(ppvObject: out var device1Pointer, riid: in device1Iid), operation: "QueryInterface(ID3D11Device1)");
+            ThrowIfFailed(
+                hr: ((IUnknown*)device)->QueryInterface(
+                    ppvObject: out var device1Pointer,
+                    riid: in device1Iid
+                ),
+                operation: "QueryInterface(ID3D11Device1)"
+            );
 
-            return new KernelBench(adapter: adapter, context: context, device: device, device1: ((ID3D11Device1*)device1Pointer));
+            return new KernelBench(
+                adapter: adapter,
+                context: context,
+                device: device,
+                device1: ((ID3D11Device1*)device1Pointer)
+            );
         } catch {
             Release(value: context);
             Release(value: device);
@@ -124,12 +143,23 @@ internal sealed unsafe class KernelBench : IDisposable {
                     pSysMem = pixelData,
                 };
 
-                m_device->CreateTexture2D(pDesc: &description, pInitialData: &initialData, ppTexture2D: &texture);
+                m_device->CreateTexture2D(
+                    pDesc: &description,
+                    pInitialData: &initialData,
+                    ppTexture2D: &texture
+                );
             }
 
-            m_device->CreateShaderResourceView(pResource: ((ID3D11Resource*)texture), pDesc: null, ppSRView: &view);
+            m_device->CreateShaderResourceView(
+                pResource: ((ID3D11Resource*)texture),
+                pDesc: null,
+                ppSRView: &view
+            );
 
-            var frame = new Frame(texture: texture, view: view);
+            var frame = new Frame(
+                texture: texture,
+                view: view
+            );
 
             m_frames.Add(item: frame);
 
@@ -167,11 +197,21 @@ internal sealed unsafe class KernelBench : IDisposable {
                 MiscFlags = D3D11_RESOURCE_MISC_FLAG.D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_FLAG.D3D11_RESOURCE_MISC_SHARED_NTHANDLE,
             };
 
-            m_device->CreateTexture2D(pDesc: &description, pInitialData: null, ppTexture2D: &texture);
+            m_device->CreateTexture2D(
+                pDesc: &description,
+                pInitialData: null,
+                ppTexture2D: &texture
+            );
 
             var resourceIid = IDXGIResource1.IID_Guid;
 
-            ThrowIfFailed(hr: ((IUnknown*)texture)->QueryInterface(ppvObject: out var resourcePointer, riid: in resourceIid), operation: "QueryInterface(IDXGIResource1)");
+            ThrowIfFailed(
+                hr: ((IUnknown*)texture)->QueryInterface(
+                    ppvObject: out var resourcePointer,
+                    riid: in resourceIid
+                ),
+                operation: "QueryInterface(IDXGIResource1)"
+            );
 
             var resource = ((IDXGIResource1*)resourcePointer);
             HANDLE handle;
@@ -187,7 +227,13 @@ internal sealed unsafe class KernelBench : IDisposable {
                 _ = ((IUnknown*)resource)->Release();
             }
 
-            var target = new SharedTarget(texture: texture, handle: new SafeFileHandle(ownsHandle: true, preexistingHandle: ((nint)handle.Value)));
+            var target = new SharedTarget(
+                texture: texture,
+                handle: new SafeFileHandle(
+                    ownsHandle: true,
+                    preexistingHandle: ((nint)handle.Value)
+                )
+            );
 
             m_targets.Add(item: target);
 
@@ -213,7 +259,11 @@ internal sealed unsafe class KernelBench : IDisposable {
 
         publication.Configure(targetCount: slots);
 
-        return new SharedRing(handles: handles, slots: publication, targets: targets);
+        return new SharedRing(
+            handles: handles,
+            slots: publication,
+            targets: targets
+        );
     }
     /// <summary>Writes CPU pixel data into an already-created target texture (Default usage accepts
     /// <c>UpdateSubresource</c> without a staging round trip).</summary>
@@ -232,14 +282,25 @@ internal sealed unsafe class KernelBench : IDisposable {
     /// <summary>Opens a shared target back through its NT handle (as a consumer device would) and creates a
     /// shader-resource view over the opened texture; the view lives until this bench disposes.</summary>
     public nint OpenSharedView(nint sharedHandle) {
-        using var handle = new SafeFileHandle(ownsHandle: false, preexistingHandle: sharedHandle);
+        using var handle = new SafeFileHandle(
+            ownsHandle: false,
+            preexistingHandle: sharedHandle
+        );
 
-        m_device1->OpenSharedResource1(hResource: handle, ppResource: out var opened, returnedInterface: ID3D11Texture2D.IID_Guid);
+        m_device1->OpenSharedResource1(
+            hResource: handle,
+            ppResource: out var opened,
+            returnedInterface: ID3D11Texture2D.IID_Guid
+        );
 
         var texture = ((ID3D11Texture2D*)opened);
         ID3D11ShaderResourceView* view = null;
 
-        m_device->CreateShaderResourceView(pResource: ((ID3D11Resource*)texture), pDesc: null, ppSRView: &view);
+        m_device->CreateShaderResourceView(
+            pResource: ((ID3D11Resource*)texture),
+            pDesc: null,
+            ppSRView: &view
+        );
 
         m_openedTextures.Add(item: ((nint)texture));
         m_openedViews.Add(item: ((nint)view));
@@ -259,25 +320,44 @@ internal sealed unsafe class KernelBench : IDisposable {
         };
         ID3D11Texture2D* staging = null;
 
-        m_device->CreateTexture2D(pDesc: &description, pInitialData: null, ppTexture2D: &staging);
+        m_device->CreateTexture2D(
+            pDesc: &description,
+            pInitialData: null,
+            ppTexture2D: &staging
+        );
 
         try {
-            m_context->CopyResource(pDstResource: ((ID3D11Resource*)staging), pSrcResource: ((ID3D11Resource*)target.Texture));
+            m_context->CopyResource(
+                pDstResource: ((ID3D11Resource*)staging),
+                pSrcResource: ((ID3D11Resource*)target.Texture)
+            );
 
             D3D11_MAPPED_SUBRESOURCE mapped;
 
-            m_context->Map(pResource: ((ID3D11Resource*)staging), Subresource: 0, MapType: D3D11_MAP.D3D11_MAP_READ, MapFlags: 0, pMappedResource: &mapped);
+            m_context->Map(
+                pResource: ((ID3D11Resource*)staging),
+                Subresource: 0,
+                MapType: D3D11_MAP.D3D11_MAP_READ,
+                MapFlags: 0,
+                pMappedResource: &mapped
+            );
 
             try {
                 var pixels = new byte[((FrameWidth * FrameHeight) * 4)];
 
                 for (var y = 0; (y < FrameHeight); y++) {
-                    new ReadOnlySpan<byte>((((byte*)mapped.pData) + (y * mapped.RowPitch)), (FrameWidth * 4)).CopyTo(destination: pixels.AsSpan(start: ((y * FrameWidth) * 4)));
+                    new ReadOnlySpan<byte>(
+                        (((byte*)mapped.pData) + (y * mapped.RowPitch)),
+                        (FrameWidth * 4)
+                    ).CopyTo(destination: pixels.AsSpan(start: ((y * FrameWidth) * 4)));
                 }
 
                 return pixels;
             } finally {
-                m_context->Unmap(pResource: ((ID3D11Resource*)staging), Subresource: 0);
+                m_context->Unmap(
+                    pResource: ((ID3D11Resource*)staging),
+                    Subresource: 0
+                );
             }
         } finally {
             Release(value: staging);
@@ -309,20 +389,32 @@ internal sealed unsafe class KernelBench : IDisposable {
     }
 
     private static IDXGIAdapter1* FindHardwareAdapter() {
-        ThrowIfFailed(hr: PInvoke.CreateDXGIFactory1(ppFactory: out var factoryPointer, riid: IDXGIFactory1.IID_Guid), operation: "CreateDXGIFactory1");
+        ThrowIfFailed(
+            hr: PInvoke.CreateDXGIFactory1(
+                ppFactory: out var factoryPointer,
+                riid: IDXGIFactory1.IID_Guid
+            ),
+            operation: "CreateDXGIFactory1"
+        );
 
         var factory = ((IDXGIFactory1*)factoryPointer);
 
         try {
             for (var index = 0u; ; index++) {
                 IDXGIAdapter1* adapter;
-                var hr = factory->EnumAdapters1(Adapter: index, ppAdapter: &adapter);
+                var hr = factory->EnumAdapters1(
+                    Adapter: index,
+                    ppAdapter: &adapter
+                );
 
                 if (HRESULT.DXGI_ERROR_NOT_FOUND == hr) {
                     return null;
                 }
 
-                ThrowIfFailed(hr: hr, operation: "IDXGIFactory1::EnumAdapters1");
+                ThrowIfFailed(
+                    hr: hr,
+                    operation: "IDXGIFactory1::EnumAdapters1"
+                );
 
                 var description = adapter->GetDesc1();
 
@@ -343,23 +435,24 @@ internal sealed unsafe class KernelBench : IDisposable {
     }
     private static void ThrowIfFailed(HRESULT hr, string operation) {
         if (hr.Value < 0) {
-            throw new COMException(errorCode: hr.Value, message: $"{operation} failed");
+            throw new COMException(
+                errorCode: hr.Value,
+                message: $"{operation} failed"
+            );
         }
     }
 
     public sealed class Frame(ID3D11Texture2D* texture, ID3D11ShaderResourceView* view) {
         public ID3D11Texture2D* Texture { get; } = texture;
+        public ID3D11ShaderResourceView* ViewPointer { get; } = view;
 
         public nint View => ((nint)ViewPointer);
-
-        public ID3D11ShaderResourceView* ViewPointer { get; } = view;
     }
     public sealed class SharedTarget(ID3D11Texture2D* texture, SafeFileHandle handle) {
         public SafeFileHandle Handle { get; } = handle;
+        public ID3D11Texture2D* Texture { get; } = texture;
 
         public nint SharedHandle => Handle.DangerousGetHandle();
-
-        public ID3D11Texture2D* Texture { get; } = texture;
     }
     /// <summary>A shared ring created by <see cref="CreateSharedRing"/>: the targets in slot order (for
     /// <see cref="ReadBack"/>), their shared handles in the same order (for a

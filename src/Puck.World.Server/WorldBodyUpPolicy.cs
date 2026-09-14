@@ -10,13 +10,12 @@ internal enum WorldBodyUpPolicy : byte {
     /// grounded up.</summary>
     SurfaceFollowing,
 }
-
 internal static class WorldBodyUpPolicyCompiler {
     /// <summary>Compiles the existing <see cref="WorldContactRequirement.GradientDerivedUp"/> requirement into the
     /// body-frame policy that consumes contact and gravity facts.</summary>
     public static WorldBodyUpPolicy Compile(WorldCollision collision) => (
         collision.Requirements.Contains(value: WorldContactRequirement.GradientDerivedUp)
-            ? WorldBodyUpPolicy.SurfaceFollowing
-            : WorldBodyUpPolicy.Ambient
+        ? WorldBodyUpPolicy.SurfaceFollowing
+        : WorldBodyUpPolicy.Ambient
     );
 }

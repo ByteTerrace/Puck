@@ -13,11 +13,302 @@ namespace Puck.HumbleGamingBrick.Post;
 /// dispatches them so the battery stays the default.
 /// </summary>
 internal static class Diagnostics {
+    /// <summary>The frame budget a snapshot dump runs when <c>--frames</c> is absent.</summary>
+    private const int DefaultDumpSnapshotFrames = 300;
     /// <summary>The frame budget a render runs when none is given — ten seconds of emulated time, enough for a
     /// commercial ROM to clear its logo screens and start drawing.</summary>
     private const int DefaultRenderFrames = 600;
-    /// <summary>The frame budget a snapshot dump runs when <c>--frames</c> is absent.</summary>
-    private const int DefaultDumpSnapshotFrames = 300;
+
+    // Resolves --boot: the literal "puck" selects the forge's authored image for the model, anything else (including
+    // its absence) leaves the machine on the seeded post-boot state.
+    private static byte[]? AuthoredBootRom(string[] args, ConsoleModel model) {
+        var boot = CommandLineArguments.Value(
+            args: args,
+            name: "--boot"
+        );
+
+        return (string.Equals(
+            a: boot,
+            b: "puck",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )
+            ? BootRomBuilder.Build(model: model)
+            : null
+        );
+    }
+    // Parses --dump-snapshot's knobs, boots the machine, runs the requested frames, and writes the snapshot image plus
+    // its section-table sidecar. Returns 2 when --rom names a missing file, otherwise 0.
+    private static int DumpSnapshot(string[] args) =>
+        SnapshotDumpDiagnostic.Run<MachineSnapshot, MachineIdentity, Tick>(
+            args: args,
+            capture: static (rom, isSynthetic, frames) => {
+                var model = (isSynthetic
+                    ? ConsoleModel.DmgC
+                    : ModelFromHeader(rom: rom)
+                );
+
+                using var machine = PostMachine.Build(
+                    model: model,
+                    rom: rom
+                );
+
+                PostMachine.RunFrames(
+                    frames: frames,
+                    instance: machine
+                );
+
+                return (machine.Machine.Snapshot(), $"{model}, {frames} frames");
+            },
+            defaultArtifactsSubpath: "gb-post",
+            defaultFrames: DefaultDumpSnapshotFrames,
+            syntheticRom: static () => SyntheticRom.Create()
+        );
+    // Warm the machine with the fast Run path, then instruction-step under the clock, attributing each instruction's
+    // consumed cycles to halted time when it began halted (a wake instruction lands in the halted bucket — off by one
+    // instruction, immaterial at this scale).
+    private static void HaltShare(string romPath, int warmFrames, int measureFrames, ConsoleModel model) {
+        using var machine = PostMachine.Build(
+            model: model,
+            rom: File.ReadAllBytes(path: romPath)
+        );
+
+        var cpu = machine.GetRequiredService<ICpu>();
+        var clock = machine.GetRequiredService<MasterClock>();
+
+        PostMachine.RunFrames(
+            frames: warmFrames,
+            instance: machine
+        );
+
+        var targetCycles = (((ulong)measureFrames) * ((ulong)PostMachine.TCyclesPerFrame));
+        var startCycles = clock.CycleCount;
+        var haltedCycles = 0UL;
+
+        while ((clock.CycleCount - startCycles) < targetCycles) {
+            var wasHalted = cpu.IsHalted;
+            var before = clock.CycleCount;
+
+            machine.Machine.StepInstruction();
+
+            if (wasHalted) {
+                haltedCycles += (clock.CycleCount - before);
+            }
+        }
+
+        var totalCycles = (clock.CycleCount - startCycles);
+
+        Console.WriteLine(value: $"  halt-share {Path.GetFileName(path: romPath)} ({model}): {haltedCycles:N0} of {totalCycles:N0} cycles halted over {measureFrames} frames (after {warmFrames} warm) = {((100.0 * haltedCycles) / totalCycles):F1}%");
+    }
+    // The family's target revision for whichever hardware the cartridge's color flag asks for.
+    private static ConsoleModel ModelFromHeader(byte[] rom) =>
+        (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80)))
+            ? ConsoleModel.CgbE
+            : ConsoleModel.DmgC
+        );
+    // The positional token `offset` positions after `index`, or null when it is absent or is itself a flag (starts "--").
+    private static string? PositionalAfter(string[] args, int index, int offset) =>
+        ((((index + offset) < args.Length) && !args[(index + offset)].StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "--"
+        ))
+            ? args[(index + offset)]
+            : null
+        );
+    private static void Render(string romPath, string outputPath, int frames, ConsoleModel model, byte[]? bootRom) {
+        using var machine = PostMachine.Build(
+            bootRom: bootRom,
+            model: model,
+            rom: File.ReadAllBytes(path: romPath)
+        );
+
+        // Frame-at-a-time so the KEY1 speed switch is caught at the frame it happens — the observable that separates
+        // "the game runs double-speed on Color hardware" from "the game paces identically on every costume".
+        var key1 = machine.GetRequiredService<IKey1>();
+        var speedSwitchFrame = -1;
+
+        for (var frame = 0; (frame < frames); ++frame) {
+            PostMachine.RunFrames(
+                frames: 1,
+                instance: machine
+            );
+
+            if (
+                (speedSwitchFrame < 0) &&
+                key1.IsDoubleSpeed
+            ) {
+                speedSwitchFrame = frame;
+            }
+        }
+
+        var speedDetail = ((speedSwitchFrame >= 0)
+            ? $"double-speed since frame {speedSwitchFrame}"
+            : "normal speed throughout"
+        );
+        var framebuffer = machine.GetRequiredService<IFramebuffer>();
+        var pixels = framebuffer.Pixels;
+        var rgba = FramebufferRgba.Pack(pixels: pixels);
+
+        PngEncoder.Write(
+            path: outputPath,
+            rgba: rgba,
+            width: framebuffer.Width,
+            height: framebuffer.Height
+        );
+
+        var pixelHash = Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: pixels));
+
+        var bootDetail = ((bootRom is null)
+            ? "seeded handoff"
+            : "authored boot ROM"
+        );
+
+        Console.WriteLine(value: $"  rendered {Path.GetFileName(path: romPath)} ({model}, {bootDetail}, {frames} frames, {speedDetail}) -> {outputPath} [fb-hash 0x{pixelHash:X16}]");
+    }
+    // Step the machine one instruction at a time and log, for every instruction executed while LY sits inside the
+    // window (plus every entry into the interrupt-vector page), the master-clock cycle BEFORE the step, the program
+    // counter, LY, STAT, the raw interrupt-request lines, and A/B — enough to reconstruct exact wake and bus-read
+    // cycles for the acceptance STAT-timing family offline.
+    private static void StatTrace(string romPath, string outputPath, int frames, ConsoleModel model, int lyMin, int lyMax) {
+        using var machine = PostMachine.Build(
+            model: model,
+            rom: File.ReadAllBytes(path: romPath)
+        );
+
+        var clock = machine.GetRequiredService<MasterClock>();
+        var cpu = machine.GetRequiredService<ICpu>();
+        var interrupts = machine.GetRequiredService<IInterruptController>();
+        var ppu = machine.GetRequiredService<IPpu>();
+        var targetCycles = (((ulong)frames) * ((ulong)PostMachine.TCyclesPerFrame));
+
+        using var writer = new StreamWriter(path: outputPath);
+
+        while (clock.CycleCount < targetCycles) {
+            var before = clock.CycleCount;
+            var pc = cpu.ProgramCounter;
+            var ly = ppu.ReadRegister(address: MemoryMap.LcdY);
+            var stat = ppu.ReadRegister(address: MemoryMap.LcdStatus);
+            var requested = ((byte)interrupts.Requested);
+            var halted = cpu.IsHalted;
+
+            machine.Machine.StepInstruction();
+
+            if (
+                ((ly >= lyMin) && (ly <= lyMax)) ||
+                (pc < 0x0100)
+            ) {
+                writer.WriteLine(value: $"{before} pc={pc:X4} ly={ly:X2} stat={stat:X2} if={requested:X2} a={cpu.A:X2} b={cpu.B:X2}{(halted
+                    ? " halt"
+                    : string.Empty)}");
+            }
+        }
+
+        Console.WriteLine(value: $"  stat-trace {Path.GetFileName(path: romPath)} ({model}, {frames} frames, ly {lyMin:X2}-{lyMax:X2}) -> {outputPath}");
+    }
+    // Parses the --hash-divergence flag and its knobs, then runs the localizer. Returns false (leaving the battery to
+    // run) when the flag is absent. The first non-flag token after --hash-divergence is romA (omitted = the synthetic
+    // cartridge), the second is romB; --fine, --frames <n> (default 600), and --perturb-at <f> are order-independent.
+    private static bool TryHashDivergence(string[] args, out int exitCode) {
+        exitCode = 0;
+
+        var hashDivergenceIndex = Array.IndexOf(
+            array: args,
+            value: "--hash-divergence"
+        );
+
+        if (hashDivergenceIndex < 0) {
+            return false;
+        }
+
+        var romAPath = PositionalAfter(
+            args: args,
+            index: hashDivergenceIndex,
+            offset: 1
+        );
+        // romB is the SECOND positional after the flag, so it only exists once romA was given; without romA (the
+        // synthetic-cartridge self-check) a following knob like "--frames 120" must not be mistaken for a ROM path.
+        var romBPath = ((romAPath is not null)
+            ? PositionalAfter(
+                args: args,
+                index: hashDivergenceIndex,
+                offset: 2
+            )
+            : null
+        );
+        var fine = (Array.IndexOf(
+            array: args,
+            value: "--fine"
+        ) >= 0);
+        var framesArg = CommandLineArguments.Value(
+            args: args,
+            name: "--frames"
+        );
+        var frames = (((framesArg is not null) && int.TryParse(
+            result: out var parsedFrames,
+            s: framesArg
+        ))
+            ? parsedFrames
+            : 600
+        );
+        var perturbArg = CommandLineArguments.Value(
+            args: args,
+            name: "--perturb-at"
+        );
+        var perturbAtFrame = (((perturbArg is not null) && int.TryParse(
+            result: out var parsedPerturb,
+            s: perturbArg
+        ))
+            ? parsedPerturb
+            : (int?)null
+        );
+
+        exitCode = HashDivergenceProbe.Run(
+            fine: fine,
+            frames: frames,
+            perturbAtFrame: perturbAtFrame,
+            romAPath: romAPath,
+            romBPath: romBPath
+        );
+
+        return true;
+    }
+    // The value following a named flag (e.g. --frames 300), or null when the flag is absent or has no following token.
+    // A model token is either a family name (which selects that family's target revision) or a revision's own name.
+    private static bool TryParseModel(string value, out ConsoleModel model) {
+        if (string.Equals(
+            a: value,
+            b: "dmg",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
+            model = ConsoleModel.DmgC;
+
+            return true;
+        }
+
+        if (string.Equals(
+            a: value,
+            b: "cgb",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
+            model = ConsoleModel.CgbE;
+
+            return true;
+        }
+
+        if (
+            Enum.TryParse(
+            ignoreCase: true,
+            result: out model,
+            value: value
+        ) &&
+            Enum.IsDefined(value: model)
+        ) {
+            return true;
+        }
+
+        model = ConsoleModel.DmgC;
+
+        return false;
+    }
 
     /// <summary>Dispatches the diagnostic CLI flags — each runs a single investigative mode and returns; when none
     /// matches, the caller proceeds to the POST battery.</summary>
@@ -120,19 +411,22 @@ internal static class Diagnostics {
                     result: out var parsedWarm
                 ))
                     ? parsedWarm
-                    : 300);
+                    : 300
+                );
                 var measureFrames = ((((index + 3) < args.Length) && int.TryParse(
                     s: args[(index + 3)],
                     result: out var parsedMeasure
                 ))
                     ? parsedMeasure
-                    : 300);
+                    : 300
+                );
                 var model = ((((index + 4) < args.Length) && TryParseModel(
                     value: args[(index + 4)],
                     model: out var parsedModel
                 ))
                     ? parsedModel
-                    : ModelFromHeader(rom: File.ReadAllBytes(path: romPath)));
+                    : ModelFromHeader(rom: File.ReadAllBytes(path: romPath))
+                );
 
                 HaltShare(
                     measureFrames: measureFrames,
@@ -160,25 +454,29 @@ internal static class Diagnostics {
                     result: out var parsedFrames
                 ))
                     ? parsedFrames
-                    : 20);
+                    : 20
+                );
                 var model = ((((index + 4) < args.Length) && TryParseModel(
                     value: args[(index + 4)],
                     model: out var parsedModel
                 ))
                     ? parsedModel
-                    : ModelFromHeader(rom: File.ReadAllBytes(path: romPath)));
+                    : ModelFromHeader(rom: File.ReadAllBytes(path: romPath))
+                );
                 var lyMin = ((((index + 5) < args.Length) && int.TryParse(
                     s: args[(index + 5)],
                     result: out var parsedMin
                 ))
                     ? parsedMin
-                    : 0x40);
+                    : 0x40
+                );
                 var lyMax = ((((index + 6) < args.Length) && int.TryParse(
                     s: args[(index + 6)],
                     result: out var parsedMax
                 ))
                     ? parsedMax
-                    : 0x46);
+                    : 0x46
+                );
 
                 StatTrace(
                     romPath: romPath,
@@ -209,13 +507,15 @@ internal static class Diagnostics {
                     result: out var parsedFrames
                 ))
                     ? parsedFrames
-                    : DefaultRenderFrames);
+                    : DefaultRenderFrames
+                );
                 var model = ((((index + 4) < args.Length) && TryParseModel(
                     value: args[(index + 4)],
                     model: out var parsedModel
                 ))
                     ? parsedModel
-                    : ModelFromHeader(rom: File.ReadAllBytes(path: romPath)));
+                    : ModelFromHeader(rom: File.ReadAllBytes(path: romPath))
+                );
 
                 Render(
                     romPath: romPath,
@@ -247,283 +547,4 @@ internal static class Diagnostics {
 
         return false;
     }
-
-    // Parses the --hash-divergence flag and its knobs, then runs the localizer. Returns false (leaving the battery to
-    // run) when the flag is absent. The first non-flag token after --hash-divergence is romA (omitted = the synthetic
-    // cartridge), the second is romB; --fine, --frames <n> (default 600), and --perturb-at <f> are order-independent.
-    private static bool TryHashDivergence(string[] args, out int exitCode) {
-        exitCode = 0;
-
-        var hashDivergenceIndex = Array.IndexOf(
-            array: args,
-            value: "--hash-divergence"
-        );
-
-        if (hashDivergenceIndex < 0) {
-            return false;
-        }
-
-        var romAPath = PositionalAfter(
-            args: args,
-            index: hashDivergenceIndex,
-            offset: 1
-        );
-        // romB is the SECOND positional after the flag, so it only exists once romA was given; without romA (the
-        // synthetic-cartridge self-check) a following knob like "--frames 120" must not be mistaken for a ROM path.
-        var romBPath = ((romAPath is not null)
-            ? PositionalAfter(
-            args: args,
-            index: hashDivergenceIndex,
-            offset: 2
-        )
-            : null);
-        var fine = (Array.IndexOf(
-            array: args,
-            value: "--fine"
-        ) >= 0);
-        var framesArg = CommandLineArguments.Value(
-            args: args,
-            name: "--frames"
-        );
-        var frames = (((framesArg is not null) && int.TryParse(
-            result: out var parsedFrames,
-            s: framesArg
-        ))
-            ? parsedFrames
-            : 600);
-        var perturbArg = CommandLineArguments.Value(
-            args: args,
-            name: "--perturb-at"
-        );
-        var perturbAtFrame = (((perturbArg is not null) && int.TryParse(
-            result: out var parsedPerturb,
-            s: perturbArg
-        ))
-            ? parsedPerturb
-            : (int?)null);
-
-        exitCode = HashDivergenceProbe.Run(
-            fine: fine,
-            frames: frames,
-            perturbAtFrame: perturbAtFrame,
-            romAPath: romAPath,
-            romBPath: romBPath
-        );
-
-        return true;
-    }
-    // The positional token `offset` positions after `index`, or null when it is absent or is itself a flag (starts "--").
-    private static string? PositionalAfter(string[] args, int index, int offset) =>
-        ((((index + offset) < args.Length) && !args[(index + offset)].StartsWith(
-        comparisonType: StringComparison.Ordinal,
-        value: "--"
-    ))
-        ? args[(index + offset)]
-        : null);
-    // The value following a named flag (e.g. --frames 300), or null when the flag is absent or has no following token.
-    // A model token is either a family name (which selects that family's target revision) or a revision's own name.
-    private static bool TryParseModel(string value, out ConsoleModel model) {
-        if (string.Equals(
-            a: value,
-            b: "dmg",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            model = ConsoleModel.DmgC;
-
-            return true;
-        }
-
-        if (string.Equals(
-            a: value,
-            b: "cgb",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            model = ConsoleModel.CgbE;
-
-            return true;
-        }
-
-        if (Enum.TryParse(
-            ignoreCase: true,
-            result: out model,
-            value: value
-        ) && Enum.IsDefined(value: model)) {
-            return true;
-        }
-
-        model = ConsoleModel.DmgC;
-
-        return false;
-    }
-    // The family's target revision for whichever hardware the cartridge's color flag asks for.
-    private static ConsoleModel ModelFromHeader(byte[] rom) =>
-        (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80)))
-        ? ConsoleModel.CgbE
-        : ConsoleModel.DmgC);
-    // Warm the machine with the fast Run path, then instruction-step under the clock, attributing each instruction's
-    // consumed cycles to halted time when it began halted (a wake instruction lands in the halted bucket — off by one
-    // instruction, immaterial at this scale).
-    private static void HaltShare(string romPath, int warmFrames, int measureFrames, ConsoleModel model) {
-        using var machine = PostMachine.Build(
-            model: model,
-            rom: File.ReadAllBytes(path: romPath)
-        );
-
-        var cpu = machine.GetRequiredService<ICpu>();
-        var clock = machine.GetRequiredService<MasterClock>();
-
-        PostMachine.RunFrames(
-            frames: warmFrames,
-            instance: machine
-        );
-
-        var targetCycles = (((ulong)measureFrames) * ((ulong)PostMachine.TCyclesPerFrame));
-        var startCycles = clock.CycleCount;
-        var haltedCycles = 0UL;
-
-        while ((clock.CycleCount - startCycles) < targetCycles) {
-            var wasHalted = cpu.IsHalted;
-            var before = clock.CycleCount;
-
-            machine.Machine.StepInstruction();
-
-            if (wasHalted) {
-                haltedCycles += (clock.CycleCount - before);
-            }
-        }
-
-        var totalCycles = (clock.CycleCount - startCycles);
-
-        Console.WriteLine(value: $"  halt-share {Path.GetFileName(path: romPath)} ({model}): {haltedCycles:N0} of {totalCycles:N0} cycles halted over {measureFrames} frames (after {warmFrames} warm) = {((100.0 * haltedCycles) / totalCycles):F1}%");
-    }
-    // Step the machine one instruction at a time and log, for every instruction executed while LY sits inside the
-    // window (plus every entry into the interrupt-vector page), the master-clock cycle BEFORE the step, the program
-    // counter, LY, STAT, the raw interrupt-request lines, and A/B — enough to reconstruct exact wake and bus-read
-    // cycles for the acceptance STAT-timing family offline.
-    private static void StatTrace(string romPath, string outputPath, int frames, ConsoleModel model, int lyMin, int lyMax) {
-        using var machine = PostMachine.Build(
-            model: model,
-            rom: File.ReadAllBytes(path: romPath)
-        );
-
-        var clock = machine.GetRequiredService<MasterClock>();
-        var cpu = machine.GetRequiredService<ICpu>();
-        var interrupts = machine.GetRequiredService<IInterruptController>();
-        var ppu = machine.GetRequiredService<IPpu>();
-        var targetCycles = (((ulong)frames) * ((ulong)PostMachine.TCyclesPerFrame));
-
-        using var writer = new StreamWriter(path: outputPath);
-
-        while (clock.CycleCount < targetCycles) {
-            var before = clock.CycleCount;
-            var pc = cpu.ProgramCounter;
-            var ly = ppu.ReadRegister(address: MemoryMap.LcdY);
-            var stat = ppu.ReadRegister(address: MemoryMap.LcdStatus);
-            var requested = ((byte)interrupts.Requested);
-            var halted = cpu.IsHalted;
-
-            machine.Machine.StepInstruction();
-
-            if (
-                ((ly >= lyMin) && (ly <= lyMax)) ||
-                (pc < 0x0100)
-            ) {
-                writer.WriteLine(value: $"{before} pc={pc:X4} ly={ly:X2} stat={stat:X2} if={requested:X2} a={cpu.A:X2} b={cpu.B:X2}{(halted
-                    ? " halt"
-                    : string.Empty)}");
-            }
-        }
-
-        Console.WriteLine(value: $"  stat-trace {Path.GetFileName(path: romPath)} ({model}, {frames} frames, ly {lyMin:X2}-{lyMax:X2}) -> {outputPath}");
-    }
-    // Resolves --boot: the literal "puck" selects the forge's authored image for the model, anything else (including
-    // its absence) leaves the machine on the seeded post-boot state.
-    private static byte[]? AuthoredBootRom(string[] args, ConsoleModel model) {
-        var boot = CommandLineArguments.Value(
-            args: args,
-            name: "--boot"
-        );
-
-        return (string.Equals(
-            a: boot,
-            b: "puck",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )
-            ? BootRomBuilder.Build(model: model)
-            : null);
-    }
-    private static void Render(string romPath, string outputPath, int frames, ConsoleModel model, byte[]? bootRom) {
-        using var machine = PostMachine.Build(
-            bootRom: bootRom,
-            model: model,
-            rom: File.ReadAllBytes(path: romPath)
-        );
-
-        // Frame-at-a-time so the KEY1 speed switch is caught at the frame it happens — the observable that separates
-        // "the game runs double-speed on Color hardware" from "the game paces identically on every costume".
-        var key1 = machine.GetRequiredService<IKey1>();
-        var speedSwitchFrame = -1;
-
-        for (var frame = 0; (frame < frames); ++frame) {
-            PostMachine.RunFrames(
-                frames: 1,
-                instance: machine
-            );
-
-            if (
-                (speedSwitchFrame < 0) &&
-                key1.IsDoubleSpeed
-            ) {
-                speedSwitchFrame = frame;
-            }
-        }
-
-        var speedDetail = ((speedSwitchFrame >= 0)
-            ? $"double-speed since frame {speedSwitchFrame}"
-            : "normal speed throughout");
-        var framebuffer = machine.GetRequiredService<IFramebuffer>();
-        var pixels = framebuffer.Pixels;
-        var rgba = FramebufferRgba.Pack(pixels: pixels);
-
-        PngEncoder.Write(
-            path: outputPath,
-            rgba: rgba,
-            width: framebuffer.Width,
-            height: framebuffer.Height
-        );
-
-        var pixelHash = Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: pixels));
-
-        var bootDetail = ((bootRom is null)
-            ? "seeded handoff"
-            : "authored boot ROM");
-
-        Console.WriteLine(value: $"  rendered {Path.GetFileName(path: romPath)} ({model}, {bootDetail}, {frames} frames, {speedDetail}) -> {outputPath} [fb-hash 0x{pixelHash:X16}]");
-    }
-    // Parses --dump-snapshot's knobs, boots the machine, runs the requested frames, and writes the snapshot image plus
-    // its section-table sidecar. Returns 2 when --rom names a missing file, otherwise 0.
-    private static int DumpSnapshot(string[] args) =>
-        SnapshotDumpDiagnostic.Run<MachineSnapshot, MachineIdentity, Tick>(
-            args: args,
-            capture: static (rom, isSynthetic, frames) => {
-                var model = (isSynthetic
-                    ? ConsoleModel.DmgC
-                    : ModelFromHeader(rom: rom));
-
-                using var machine = PostMachine.Build(
-                    model: model,
-                    rom: rom
-                );
-
-                PostMachine.RunFrames(
-                    frames: frames,
-                    instance: machine
-                );
-
-                return (machine.Machine.Snapshot(), $"{model}, {frames} frames");
-            },
-            defaultArtifactsSubpath: "gb-post",
-            defaultFrames: DefaultDumpSnapshotFrames,
-            syntheticRom: static () => SyntheticRom.Create()
-        );
 }

@@ -12,17 +12,6 @@ namespace Puck.Vulkan;
 /// <c>vkCmd*</c> command-recording entry points resolved per device from the Vulkan loader.
 /// </summary>
 public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanCommandBufferRecordingApi {
-    private readonly IAllocator m_allocator;
-
-    /// <summary>Initializes a new instance of the <see cref="VulkanNativeCommandBufferRecordingApi"/> class.</summary>
-    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
-    public VulkanNativeCommandBufferRecordingApi(IAllocator allocator) {
-        ArgumentNullException.ThrowIfNull(argument: allocator);
-
-        m_allocator = allocator;
-    }
-
     private const uint ComputePipelineBindPoint = 1;
     private const uint GraphicsPipelineBindPoint = 0;
     private const uint ImageAspectColorBit = 0x00000001;
@@ -33,6 +22,138 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     private const uint StructureTypeMemoryBarrier = 46;
     private const uint StructureTypeRenderPassBeginInfo = 43;
     private const uint SubpassContentsInline = 0;
+
+    private readonly IAllocator m_allocator;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
+
+    /// <summary>Initializes a new instance of the <see cref="VulkanNativeCommandBufferRecordingApi"/> class.</summary>
+    /// <param name="allocator">The unmanaged allocator used to marshal native Vulkan structures.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is <see langword="null"/>.</exception>
+    public VulkanNativeCommandBufferRecordingApi(IAllocator allocator) {
+        ArgumentNullException.ThrowIfNull(argument: allocator);
+
+        m_allocator = allocator;
+    }
+
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                BeginCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferBeginInfo, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkBeginCommandBuffer"u8
+            )),
+                CmdBindPipeline = ((delegate* unmanaged[Cdecl]<nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdBindPipeline"u8
+            )),
+                CmdBindVertexBuffers = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdBindVertexBuffers"u8
+            )),
+                CmdBindDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdBindDescriptorSets"u8
+            )),
+                CmdBeginRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassBeginInfo, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdBeginRenderPass"u8
+            )),
+                CmdDraw = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdDraw"u8
+            )),
+                CmdDispatch = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdDispatch"u8
+            )),
+                CmdDispatchIndirect = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdDispatchIndirect"u8
+            )),
+                CmdSetScissor = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdSetScissor"u8
+            )),
+                CmdPipelineBarrier = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdPipelineBarrier"u8
+            )),
+                CmdClearColorImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdClearColorImage"u8
+            )),
+                CmdFillBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdFillBuffer"u8
+            )),
+                CmdCopyImageToBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdCopyImageToBuffer"u8
+            )),
+                CmdCopyBufferToImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdCopyBufferToImage"u8
+            )),
+                CmdCopyImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdCopyImage"u8
+            )),
+                CmdBlitImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, uint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdBlitImage"u8
+            )),
+                CmdPushConstants = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdPushConstants"u8
+            )),
+                CmdEndRenderPass = ((delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdEndRenderPass"u8
+            )),
+                EndCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkEndCommandBuffer"u8
+            )),
+                // Optional (VK_EXT_debug_utils): resolves to null when the extension is not enabled, leaving the label
+                // methods as no-ops. The command-buffer label commands are device-child, so vkGetDeviceProcAddr resolves
+                // them once the instance extension is on.
+                CmdBeginDebugUtilsLabel = ((delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsLabelExt, void>)VulkanProcResolver.ResolveOptionalDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdBeginDebugUtilsLabelEXT"u8
+            )),
+                CmdEndDebugUtilsLabel = ((delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCmdEndDebugUtilsLabelEXT"u8
+            )),
+            }
+        );
+    }
+    private static unsafe void ValidateRequest(VulkanCommandBufferRecordRequest request) {
+        VulkanArgument.RequireHandle(
+            handle: request.DeviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(request)
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: request.CommandBufferHandle,
+            handleDescription: "command-buffer",
+            paramName: nameof(request)
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: request.FramebufferHandle,
+            handleDescription: "framebuffer",
+            paramName: nameof(request)
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: request.RenderPassHandle,
+            handleDescription: "render-pass",
+            paramName: nameof(request)
+        );
+    }
 
     /// <inheritdoc/>
     public VkResult BeginCommandBuffer(VulkanCommandBufferRecordRequest request) {
@@ -90,7 +211,10 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         var byteCount = Encoding.UTF8.GetByteCount(s: label);
         Span<byte> nameBytes = stackalloc byte[(byteCount + 1)];
 
-        Encoding.UTF8.GetBytes(bytes: nameBytes, chars: label);
+        Encoding.UTF8.GetBytes(
+            bytes: nameBytes,
+            chars: label
+        );
         nameBytes[byteCount] = 0;
 
         fixed (byte* labelName = nameBytes) {
@@ -99,76 +223,37 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 StructureType = StructureTypeDebugUtilsLabel,
             };
 
-            beginLabel(commandBufferHandle, in info);
+            beginLabel(
+                commandBufferHandle,
+                in info
+            );
         }
     }
     /// <inheritdoc/>
-    public void EndDebugLabel(nint deviceHandle, nint commandBufferHandle) {
-        var endLabel = GetPointers(deviceHandle: deviceHandle).CmdEndDebugUtilsLabel;
+    public void BindComputeDescriptorSets(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, ReadOnlySpan<nint> descriptorSetHandles) {
+        var bindDescriptorSets = GetPointers(deviceHandle: deviceHandle).CmdBindDescriptorSets;
 
-        // VK_EXT_debug_utils absent: no-op (balances a BeginDebugLabel that also no-oped).
-        if (endLabel is not null) {
-            endLabel(commandBufferHandle);
+        fixed (nint* descriptorSetHandlesPointer = descriptorSetHandles) {
+            bindDescriptorSets(
+                commandBufferHandle,
+                ComputePipelineBindPoint,
+                pipelineLayoutHandle,
+                0,
+                ((uint)descriptorSetHandles.Length),
+                ((nint)descriptorSetHandlesPointer),
+                0,
+                0
+            );
         }
     }
     /// <inheritdoc/>
-    public void BindGraphicsPipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: commandBufferHandle,
-            handleDescription: "command-buffer",
-            paramName: nameof(commandBufferHandle)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: pipelineHandle,
-            handleDescription: "graphics-pipeline",
-            paramName: nameof(pipelineHandle)
-        );
-
+    public void BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
         var bindPipeline = GetPointers(deviceHandle: deviceHandle).CmdBindPipeline;
 
         bindPipeline(
             commandBufferHandle,
-            GraphicsPipelineBindPoint,
+            ComputePipelineBindPoint,
             pipelineHandle
-        );
-    }
-    /// <inheritdoc/>
-    public void BindVertexBuffer(nint deviceHandle, nint commandBufferHandle, VulkanVertexBufferBinding vertexBufferBinding) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: commandBufferHandle,
-            handleDescription: "command-buffer",
-            paramName: nameof(commandBufferHandle)
-        );
-
-        // vkCmdBindVertexBuffers copies both arrays during the call, so stack storage
-        // suffices (same pattern as BindDescriptorSet) — this runs per draw per
-        // re-record, where the previous array + pin pair was pure heap churn.
-        var bindVertexBuffers = GetPointers(deviceHandle: deviceHandle).CmdBindVertexBuffers;
-        var bufferHandles = stackalloc nint[1];
-
-        bufferHandles[0] = vertexBufferBinding.BufferHandle;
-        var offsets = stackalloc ulong[1];
-
-        offsets[0] = vertexBufferBinding.Offset;
-        bindVertexBuffers(
-            commandBufferHandle,
-            0,
-            1,
-            ((nint)bufferHandles),
-            ((nint)offsets)
         );
     }
     /// <inheritdoc/>
@@ -263,30 +348,340 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         }
     }
     /// <inheritdoc/>
-    public void BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
+    public void BindGraphicsPipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) {
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: commandBufferHandle,
+            handleDescription: "command-buffer",
+            paramName: nameof(commandBufferHandle)
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: pipelineHandle,
+            handleDescription: "graphics-pipeline",
+            paramName: nameof(pipelineHandle)
+        );
+
         var bindPipeline = GetPointers(deviceHandle: deviceHandle).CmdBindPipeline;
 
         bindPipeline(
             commandBufferHandle,
-            ComputePipelineBindPoint,
+            GraphicsPipelineBindPoint,
             pipelineHandle
         );
     }
     /// <inheritdoc/>
-    public void BindComputeDescriptorSets(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, ReadOnlySpan<nint> descriptorSetHandles) {
-        var bindDescriptorSets = GetPointers(deviceHandle: deviceHandle).CmdBindDescriptorSets;
+    public void BindVertexBuffer(nint deviceHandle, nint commandBufferHandle, VulkanVertexBufferBinding vertexBufferBinding) {
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        fixed (nint* descriptorSetHandlesPointer = descriptorSetHandles) {
-            bindDescriptorSets(
-                commandBufferHandle,
-                ComputePipelineBindPoint,
-                pipelineLayoutHandle,
-                0,
-                ((uint)descriptorSetHandles.Length),
-                ((nint)descriptorSetHandlesPointer),
-                0,
-                0
+        VulkanArgument.RequireHandle(
+            handle: commandBufferHandle,
+            handleDescription: "command-buffer",
+            paramName: nameof(commandBufferHandle)
+        );
+
+        // vkCmdBindVertexBuffers copies both arrays during the call, so stack storage
+        // suffices (same pattern as BindDescriptorSet) — this runs per draw per
+        // re-record, where the previous array + pin pair was pure heap churn.
+        var bindVertexBuffers = GetPointers(deviceHandle: deviceHandle).CmdBindVertexBuffers;
+        var bufferHandles = stackalloc nint[1];
+
+        bufferHandles[0] = vertexBufferBinding.BufferHandle;
+        var offsets = stackalloc ulong[1];
+
+        offsets[0] = vertexBufferBinding.Offset;
+        bindVertexBuffers(
+            commandBufferHandle,
+            0,
+            1,
+            ((nint)bufferHandles),
+            ((nint)offsets)
+        );
+    }
+    /// <inheritdoc/>
+    public void BlitImage(
+        nint deviceHandle,
+        nint commandBufferHandle,
+        nint sourceImageHandle,
+        uint sourceImageLayout,
+        uint sourceMipLevel,
+        uint sourceWidth,
+        uint sourceHeight,
+        nint destinationImageHandle,
+        uint destinationImageLayout,
+        uint destinationMipLevel,
+        uint destinationWidth,
+        uint destinationHeight,
+        uint filter
+    ) {
+        var blitImage = GetPointers(deviceHandle: deviceHandle).CmdBlitImage;
+        var blit = new VkImageBlit {
+            DstOffset0 = new VkOffset3D(
+            x: 0,
+            y: 0,
+            z: 0
+        ),
+            DstOffset1 = new VkOffset3D(
+            x: ((int)destinationWidth),
+            y: ((int)destinationHeight),
+            z: 1
+        ),
+            DstSubresource = new VkImageSubresourceLayers {
+                AspectMask = ImageAspectColorBit,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+                MipLevel = destinationMipLevel,
+            },
+            SrcOffset0 = new VkOffset3D(
+            x: 0,
+            y: 0,
+            z: 0
+        ),
+            SrcOffset1 = new VkOffset3D(
+            x: ((int)sourceWidth),
+            y: ((int)sourceHeight),
+            z: 1
+        ),
+            SrcSubresource = new VkImageSubresourceLayers {
+                AspectMask = ImageAspectColorBit,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+                MipLevel = sourceMipLevel,
+            },
+        };
+        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageBlit>());
+
+        try {
+            Marshal.StructureToPtr(
+                fDeleteOld: false,
+                ptr: pointer,
+                structure: blit
             );
+            blitImage(
+                commandBufferHandle,
+                sourceImageHandle,
+                sourceImageLayout,
+                destinationImageHandle,
+                destinationImageLayout,
+                1,
+                pointer,
+                filter
+            );
+        } finally {
+            m_allocator.Free(ptr: pointer);
+        }
+    }
+    /// <inheritdoc/>
+    public void ClearColorImage(
+        nint deviceHandle,
+        nint commandBufferHandle,
+        nint imageHandle,
+        uint imageLayout,
+        float red,
+        float green,
+        float blue,
+        float alpha
+    ) {
+        var clearColorImage = GetPointers(deviceHandle: deviceHandle).CmdClearColorImage;
+        // vkCmdClearColorImage consumes both host structs synchronously, so they live on the stack.
+        var clearColor = new VkClearColorValue(
+            float32_0: red,
+            float32_1: green,
+            float32_2: blue,
+            float32_3: alpha
+        );
+        var range = new VkImageSubresourceRange {
+            AspectMask = ImageAspectColorBit,
+            BaseArrayLayer = 0,
+            BaseMipLevel = 0,
+            LayerCount = 1,
+            LevelCount = 1,
+        };
+
+        clearColorImage(
+            commandBufferHandle,
+            imageHandle,
+            imageLayout,
+            ((nint)(&clearColor)),
+            1,
+            ((nint)(&range))
+        );
+    }
+    /// <inheritdoc/>
+    public void CopyBufferToImage(
+        nint deviceHandle,
+        nint commandBufferHandle,
+        nint bufferHandle,
+        nint imageHandle,
+        uint imageLayout,
+        int imageOffsetX,
+        int imageOffsetY,
+        uint width,
+        uint height
+    ) {
+        var copyBufferToImage = GetPointers(deviceHandle: deviceHandle).CmdCopyBufferToImage;
+        var bufferImageCopy = new VkBufferImageCopy {
+            BufferImageHeight = 0,
+            BufferOffset = 0,
+            BufferRowLength = 0,
+            ImageExtent = new VkExtent3D(
+            depth: 1,
+            height: height,
+            width: width
+        ),
+            ImageOffset = new VkOffset3D(
+            x: imageOffsetX,
+            y: imageOffsetY,
+            z: 0
+        ),
+            ImageSubresource = new VkImageSubresourceLayers {
+                AspectMask = ImageAspectColorBit,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+                MipLevel = 0,
+            },
+        };
+        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
+
+        try {
+            Marshal.StructureToPtr(
+                fDeleteOld: false,
+                ptr: pointer,
+                structure: bufferImageCopy
+            );
+            copyBufferToImage(
+                commandBufferHandle,
+                bufferHandle,
+                imageHandle,
+                imageLayout,
+                1,
+                pointer
+            );
+        } finally {
+            m_allocator.Free(ptr: pointer);
+        }
+    }
+    /// <inheritdoc/>
+    public void CopyImageToBuffer(
+        nint deviceHandle,
+        nint commandBufferHandle,
+        nint imageHandle,
+        uint imageLayout,
+        nint bufferHandle,
+        uint width,
+        uint height
+    ) {
+        var copyImageToBuffer = GetPointers(deviceHandle: deviceHandle).CmdCopyImageToBuffer;
+        var bufferImageCopy = new VkBufferImageCopy {
+            BufferImageHeight = 0,
+            BufferOffset = 0,
+            BufferRowLength = 0,
+            ImageExtent = new VkExtent3D(
+            depth: 1,
+            height: height,
+            width: width
+        ),
+            ImageOffset = new VkOffset3D(
+            x: 0,
+            y: 0,
+            z: 0
+        ),
+            ImageSubresource = new VkImageSubresourceLayers {
+                AspectMask = ImageAspectColorBit,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+                MipLevel = 0,
+            },
+        };
+        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
+
+        try {
+            Marshal.StructureToPtr(
+                fDeleteOld: false,
+                ptr: pointer,
+                structure: bufferImageCopy
+            );
+            copyImageToBuffer(
+                commandBufferHandle,
+                imageHandle,
+                imageLayout,
+                bufferHandle,
+                1,
+                pointer
+            );
+        } finally {
+            m_allocator.Free(ptr: pointer);
+        }
+    }
+    /// <inheritdoc/>
+    public void CopyImageToImage(
+        nint deviceHandle,
+        nint commandBufferHandle,
+        nint sourceImageHandle,
+        uint sourceImageLayout,
+        nint destinationImageHandle,
+        uint destinationImageLayout,
+        uint width,
+        uint height
+    ) {
+        var copyImage = GetPointers(deviceHandle: deviceHandle).CmdCopyImage;
+        var imageCopy = new VkImageCopy {
+            DstOffset = new VkOffset3D(
+            x: 0,
+            y: 0,
+            z: 0
+        ),
+            DstSubresource = new VkImageSubresourceLayers {
+                AspectMask = ImageAspectColorBit,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+                MipLevel = 0,
+            },
+            Extent = new VkExtent3D(
+            depth: 1,
+            height: height,
+            width: width
+        ),
+            SrcOffset = new VkOffset3D(
+            x: 0,
+            y: 0,
+            z: 0
+        ),
+            SrcSubresource = new VkImageSubresourceLayers {
+                AspectMask = ImageAspectColorBit,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+                MipLevel = 0,
+            },
+        };
+        var copyPointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageCopy>());
+
+        try {
+            Marshal.StructureToPtr(
+                fDeleteOld: false,
+                ptr: copyPointer,
+                structure: imageCopy
+            );
+            copyImage(
+                commandBufferHandle,
+                sourceImageHandle,
+                sourceImageLayout,
+                destinationImageHandle,
+                destinationImageLayout,
+                1,
+                copyPointer
+            );
+        } finally {
+            m_allocator.Free(ptr: copyPointer);
         }
     }
     /// <inheritdoc/>
@@ -335,60 +730,71 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public void TransitionImageLayout(
-        nint deviceHandle,
-        nint commandBufferHandle,
-        nint imageHandle,
-        uint baseMipLevel,
-        uint mipLevelCount,
-        uint oldLayout,
-        uint newLayout,
-        uint sourceAccessMask,
-        uint destinationAccessMask,
-        uint sourceStageMask,
-        uint destinationStageMask
-    ) {
-        var pipelineBarrier = GetPointers(deviceHandle: deviceHandle).CmdPipelineBarrier;
-        var barrier = new VkImageMemoryBarrier {
-            DstAccessMask = destinationAccessMask,
-            DstQueueFamilyIndex = QueueFamilyIgnored,
-            Image = imageHandle,
-            NewLayout = newLayout,
-            OldLayout = oldLayout,
-            SType = StructureTypeImageMemoryBarrier,
-            SrcAccessMask = sourceAccessMask,
-            SrcQueueFamilyIndex = QueueFamilyIgnored,
-            SubresourceRange = new VkImageSubresourceRange {
-                AspectMask = ImageAspectColorBit,
-                BaseArrayLayer = 0,
-                BaseMipLevel = baseMipLevel,
-                LayerCount = 1,
-                LevelCount = mipLevelCount,
-            },
-        };
-        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageMemoryBarrier>());
+    public VkResult EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
 
-        try {
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: pointer,
-                structure: barrier
-            );
-            pipelineBarrier(
-                commandBufferHandle,
-                sourceStageMask,
-                destinationStageMask,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1,
-                pointer
-            );
-        } finally {
-            m_allocator.Free(ptr: pointer);
+        VulkanArgument.RequireHandle(
+            handle: commandBufferHandle,
+            handleDescription: "command-buffer",
+            paramName: nameof(commandBufferHandle)
+        );
+
+        var endCommandBuffer = GetPointers(deviceHandle: deviceHandle).EndCommandBuffer;
+
+        return endCommandBuffer(commandBufferHandle);
+    }
+    /// <inheritdoc/>
+    public void EndDebugLabel(nint deviceHandle, nint commandBufferHandle) {
+        var endLabel = GetPointers(deviceHandle: deviceHandle).CmdEndDebugUtilsLabel;
+
+        // VK_EXT_debug_utils absent: no-op (balances a BeginDebugLabel that also no-oped).
+        if (endLabel is not null) {
+            endLabel(commandBufferHandle);
         }
+    }
+    /// <inheritdoc/>
+    public void EndRenderPass(nint deviceHandle, nint commandBufferHandle) {
+        VulkanArgument.RequireHandle(
+            handle: deviceHandle,
+            handleDescription: "logical-device",
+            paramName: nameof(deviceHandle)
+        );
+
+        VulkanArgument.RequireHandle(
+            handle: commandBufferHandle,
+            handleDescription: "command-buffer",
+            paramName: nameof(commandBufferHandle)
+        );
+
+        var endRenderPass = GetPointers(deviceHandle: deviceHandle).CmdEndRenderPass;
+
+        endRenderPass(commandBufferHandle);
+    }
+    /// <inheritdoc/>
+    public void FillBuffer(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+        if (
+            (sizeBytes == 0) ||
+            ((sizeBytes & 3) != 0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                nameof(sizeBytes),
+                sizeBytes,
+                "Vulkan buffer fills require a positive size divisible by four."
+            );
+        }
+        var fillBuffer = GetPointers(deviceHandle: deviceHandle).CmdFillBuffer;
+
+        fillBuffer(
+            commandBufferHandle,
+            bufferHandle,
+            0,
+            sizeBytes,
+            0
+        );
     }
     /// <inheritdoc/>
     public void PipelineMemoryBarrier(
@@ -419,283 +825,6 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             0,
             0
         );
-    }
-    /// <inheritdoc/>
-    public void ClearColorImage(
-        nint deviceHandle,
-        nint commandBufferHandle,
-        nint imageHandle,
-        uint imageLayout,
-        float red,
-        float green,
-        float blue,
-        float alpha
-    ) {
-        var clearColorImage = GetPointers(deviceHandle: deviceHandle).CmdClearColorImage;
-        // vkCmdClearColorImage consumes both host structs synchronously, so they live on the stack.
-        var clearColor = new VkClearColorValue(
-            float32_0: red,
-            float32_1: green,
-            float32_2: blue,
-            float32_3: alpha
-        );
-        var range = new VkImageSubresourceRange {
-            AspectMask = ImageAspectColorBit,
-            BaseArrayLayer = 0,
-            BaseMipLevel = 0,
-            LayerCount = 1,
-            LevelCount = 1,
-        };
-
-        clearColorImage(
-            commandBufferHandle,
-            imageHandle,
-            imageLayout,
-            ((nint)(&clearColor)),
-            1,
-            ((nint)(&range))
-        );
-    }
-    /// <inheritdoc/>
-    public void CopyImageToImage(
-        nint deviceHandle,
-        nint commandBufferHandle,
-        nint sourceImageHandle,
-        uint sourceImageLayout,
-        nint destinationImageHandle,
-        uint destinationImageLayout,
-        uint width,
-        uint height
-    ) {
-        var copyImage = GetPointers(deviceHandle: deviceHandle).CmdCopyImage;
-        var imageCopy = new VkImageCopy {
-            DstOffset = new VkOffset3D(
-                x: 0,
-                y: 0,
-                z: 0
-            ),
-            DstSubresource = new VkImageSubresourceLayers {
-                AspectMask = ImageAspectColorBit,
-                BaseArrayLayer = 0,
-                LayerCount = 1,
-                MipLevel = 0,
-            },
-            Extent = new VkExtent3D(
-                depth: 1,
-                height: height,
-                width: width
-            ),
-            SrcOffset = new VkOffset3D(
-                x: 0,
-                y: 0,
-                z: 0
-            ),
-            SrcSubresource = new VkImageSubresourceLayers {
-                AspectMask = ImageAspectColorBit,
-                BaseArrayLayer = 0,
-                LayerCount = 1,
-                MipLevel = 0,
-            },
-        };
-        var copyPointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageCopy>());
-
-        try {
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: copyPointer,
-                structure: imageCopy
-            );
-            copyImage(
-                commandBufferHandle,
-                sourceImageHandle,
-                sourceImageLayout,
-                destinationImageHandle,
-                destinationImageLayout,
-                1,
-                copyPointer
-            );
-        } finally {
-            m_allocator.Free(ptr: copyPointer);
-        }
-    }
-    /// <inheritdoc/>
-    public void CopyImageToBuffer(
-        nint deviceHandle,
-        nint commandBufferHandle,
-        nint imageHandle,
-        uint imageLayout,
-        nint bufferHandle,
-        uint width,
-        uint height
-    ) {
-        var copyImageToBuffer = GetPointers(deviceHandle: deviceHandle).CmdCopyImageToBuffer;
-        var bufferImageCopy = new VkBufferImageCopy {
-            BufferImageHeight = 0,
-            BufferOffset = 0,
-            BufferRowLength = 0,
-            ImageExtent = new VkExtent3D(
-                depth: 1,
-                height: height,
-                width: width
-            ),
-            ImageOffset = new VkOffset3D(
-                x: 0,
-                y: 0,
-                z: 0
-            ),
-            ImageSubresource = new VkImageSubresourceLayers {
-                AspectMask = ImageAspectColorBit,
-                BaseArrayLayer = 0,
-                LayerCount = 1,
-                MipLevel = 0,
-            },
-        };
-        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
-
-        try {
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: pointer,
-                structure: bufferImageCopy
-            );
-            copyImageToBuffer(
-                commandBufferHandle,
-                imageHandle,
-                imageLayout,
-                bufferHandle,
-                1,
-                pointer
-            );
-        } finally {
-            m_allocator.Free(ptr: pointer);
-        }
-    }
-    /// <inheritdoc/>
-    public void CopyBufferToImage(
-        nint deviceHandle,
-        nint commandBufferHandle,
-        nint bufferHandle,
-        nint imageHandle,
-        uint imageLayout,
-        int imageOffsetX,
-        int imageOffsetY,
-        uint width,
-        uint height
-    ) {
-        var copyBufferToImage = GetPointers(deviceHandle: deviceHandle).CmdCopyBufferToImage;
-        var bufferImageCopy = new VkBufferImageCopy {
-            BufferImageHeight = 0,
-            BufferOffset = 0,
-            BufferRowLength = 0,
-            ImageExtent = new VkExtent3D(
-                depth: 1,
-                height: height,
-                width: width
-            ),
-            ImageOffset = new VkOffset3D(
-                x: imageOffsetX,
-                y: imageOffsetY,
-                z: 0
-            ),
-            ImageSubresource = new VkImageSubresourceLayers {
-                AspectMask = ImageAspectColorBit,
-                BaseArrayLayer = 0,
-                LayerCount = 1,
-                MipLevel = 0,
-            },
-        };
-        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkBufferImageCopy>());
-
-        try {
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: pointer,
-                structure: bufferImageCopy
-            );
-            copyBufferToImage(
-                commandBufferHandle,
-                bufferHandle,
-                imageHandle,
-                imageLayout,
-                1,
-                pointer
-            );
-        } finally {
-            m_allocator.Free(ptr: pointer);
-        }
-    }
-    /// <inheritdoc/>
-    public void BlitImage(
-        nint deviceHandle,
-        nint commandBufferHandle,
-        nint sourceImageHandle,
-        uint sourceImageLayout,
-        uint sourceMipLevel,
-        uint sourceWidth,
-        uint sourceHeight,
-        nint destinationImageHandle,
-        uint destinationImageLayout,
-        uint destinationMipLevel,
-        uint destinationWidth,
-        uint destinationHeight,
-        uint filter
-    ) {
-        var blitImage = GetPointers(deviceHandle: deviceHandle).CmdBlitImage;
-        var blit = new VkImageBlit {
-            DstOffset0 = new VkOffset3D(
-                x: 0,
-                y: 0,
-                z: 0
-            ),
-            DstOffset1 = new VkOffset3D(
-                x: ((int)destinationWidth),
-                y: ((int)destinationHeight),
-                z: 1
-            ),
-            DstSubresource = new VkImageSubresourceLayers {
-                AspectMask = ImageAspectColorBit,
-                BaseArrayLayer = 0,
-                LayerCount = 1,
-                MipLevel = destinationMipLevel,
-            },
-            SrcOffset0 = new VkOffset3D(
-                x: 0,
-                y: 0,
-                z: 0
-            ),
-            SrcOffset1 = new VkOffset3D(
-                x: ((int)sourceWidth),
-                y: ((int)sourceHeight),
-                z: 1
-            ),
-            SrcSubresource = new VkImageSubresourceLayers {
-                AspectMask = ImageAspectColorBit,
-                BaseArrayLayer = 0,
-                LayerCount = 1,
-                MipLevel = sourceMipLevel,
-            },
-        };
-        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageBlit>());
-
-        try {
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: pointer,
-                structure: blit
-            );
-            blitImage(
-                commandBufferHandle,
-                sourceImageHandle,
-                sourceImageLayout,
-                destinationImageHandle,
-                destinationImageLayout,
-                1,
-                pointer,
-                filter
-            );
-        } finally {
-            m_allocator.Free(ptr: pointer);
-        }
     }
     /// <inheritdoc/>
     public void PushConstants(
@@ -801,53 +930,17 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public void EndRenderPass(nint deviceHandle, nint commandBufferHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: commandBufferHandle,
-            handleDescription: "command-buffer",
-            paramName: nameof(commandBufferHandle)
-        );
-
-        var endRenderPass = GetPointers(deviceHandle: deviceHandle).CmdEndRenderPass;
-
-        endRenderPass(commandBufferHandle);
-    }
-    /// <inheritdoc/>
-    public VkResult EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
-        VulkanArgument.RequireHandle(
-            handle: deviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(deviceHandle)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: commandBufferHandle,
-            handleDescription: "command-buffer",
-            paramName: nameof(commandBufferHandle)
-        );
-
-        var endCommandBuffer = GetPointers(deviceHandle: deviceHandle).EndCommandBuffer;
-
-        return endCommandBuffer(commandBufferHandle);
-    }
-    /// <inheritdoc/>
     public void StartRenderPass(VulkanCommandBufferRecordRequest request) {
         ValidateRequest(request: request);
 
         var startRenderPass = GetPointers(deviceHandle: request.DeviceHandle).CmdBeginRenderPass;
         var clearValue = new VkClearValue {
             Color = new VkClearColorValue(
-                float32_0: 0f,
-                float32_1: 0f,
-                float32_2: 0f,
-                float32_3: 1f
-            ),
+            float32_0: 0f,
+            float32_1: 0f,
+            float32_2: 0f,
+            float32_3: 1f
+        ),
         };
         var clearValuePointer = m_allocator.Alloc(size: Marshal.SizeOf<VkClearValue>());
 
@@ -885,6 +978,62 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             m_allocator.Free(ptr: clearValuePointer);
         }
     }
+    /// <inheritdoc/>
+    public void TransitionImageLayout(
+        nint deviceHandle,
+        nint commandBufferHandle,
+        nint imageHandle,
+        uint baseMipLevel,
+        uint mipLevelCount,
+        uint oldLayout,
+        uint newLayout,
+        uint sourceAccessMask,
+        uint destinationAccessMask,
+        uint sourceStageMask,
+        uint destinationStageMask
+    ) {
+        var pipelineBarrier = GetPointers(deviceHandle: deviceHandle).CmdPipelineBarrier;
+        var barrier = new VkImageMemoryBarrier {
+            DstAccessMask = destinationAccessMask,
+            DstQueueFamilyIndex = QueueFamilyIgnored,
+            Image = imageHandle,
+            NewLayout = newLayout,
+            OldLayout = oldLayout,
+            SType = StructureTypeImageMemoryBarrier,
+            SrcAccessMask = sourceAccessMask,
+            SrcQueueFamilyIndex = QueueFamilyIgnored,
+            SubresourceRange = new VkImageSubresourceRange {
+                AspectMask = ImageAspectColorBit,
+                BaseArrayLayer = 0,
+                BaseMipLevel = baseMipLevel,
+                LayerCount = 1,
+                LevelCount = mipLevelCount,
+            },
+        };
+        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageMemoryBarrier>());
+
+        try {
+            Marshal.StructureToPtr(
+                fDeleteOld: false,
+                ptr: pointer,
+                structure: barrier
+            );
+            pipelineBarrier(
+                commandBufferHandle,
+                sourceStageMask,
+                destinationStageMask,
+                0,
+                0,
+                0,
+                0,
+                0,
+                1,
+                pointer
+            );
+        } finally {
+            m_allocator.Free(ptr: pointer);
+        }
+    }
 
     private unsafe struct DevicePointers {
         public delegate* unmanaged[Cdecl]<nint, in VkCommandBufferBeginInfo, VkResult> BeginCommandBuffer;
@@ -898,6 +1047,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         public delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void> CmdSetScissor;
         public delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void> CmdPipelineBarrier;
         public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void> CmdClearColorImage;
+        public delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, uint, void> CmdFillBuffer;
         public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void> CmdCopyImageToBuffer;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void> CmdCopyBufferToImage;
         public delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, void> CmdCopyImage;
@@ -909,63 +1059,5 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         // EndDebugLabel then no-op).
         public delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsLabelExt, void> CmdBeginDebugUtilsLabel;
         public delegate* unmanaged[Cdecl]<nint, void> CmdEndDebugUtilsLabel;
-    }
-
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<nint, DevicePointers> m_pointers = new();
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                BeginCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferBeginInfo, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBeginCommandBuffer"u8)),
-                CmdBindPipeline = ((delegate* unmanaged[Cdecl]<nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBindPipeline"u8)),
-                CmdBindVertexBuffers = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBindVertexBuffers"u8)),
-                CmdBindDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBindDescriptorSets"u8)),
-                CmdBeginRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassBeginInfo, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBeginRenderPass"u8)),
-                CmdDraw = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdDraw"u8)),
-                CmdDispatch = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdDispatch"u8)),
-                CmdDispatchIndirect = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdDispatchIndirect"u8)),
-                CmdSetScissor = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdSetScissor"u8)),
-                CmdPipelineBarrier = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdPipelineBarrier"u8)),
-                CmdClearColorImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdClearColorImage"u8)),
-                CmdCopyImageToBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyImageToBuffer"u8)),
-                CmdCopyBufferToImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyBufferToImage"u8)),
-                CmdCopyImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyImage"u8)),
-                CmdBlitImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBlitImage"u8)),
-                CmdPushConstants = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdPushConstants"u8)),
-                CmdEndRenderPass = ((delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdEndRenderPass"u8)),
-                EndCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkEndCommandBuffer"u8)),
-                // Optional (VK_EXT_debug_utils): resolves to null when the extension is not enabled, leaving the label
-                // methods as no-ops. The command-buffer label commands are device-child, so vkGetDeviceProcAddr resolves
-                // them once the instance extension is on.
-                CmdBeginDebugUtilsLabel = ((delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsLabelExt, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkCmdBeginDebugUtilsLabelEXT"u8)),
-                CmdEndDebugUtilsLabel = ((delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkCmdEndDebugUtilsLabelEXT"u8)),
-            }
-        );
-    }
-    private static unsafe void ValidateRequest(VulkanCommandBufferRecordRequest request) {
-        VulkanArgument.RequireHandle(
-            handle: request.DeviceHandle,
-            handleDescription: "logical-device",
-            paramName: nameof(request)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: request.CommandBufferHandle,
-            handleDescription: "command-buffer",
-            paramName: nameof(request)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: request.FramebufferHandle,
-            handleDescription: "framebuffer",
-            paramName: nameof(request)
-        );
-
-        VulkanArgument.RequireHandle(
-            handle: request.RenderPassHandle,
-            handleDescription: "render-pass",
-            paramName: nameof(request)
-        );
     }
 }

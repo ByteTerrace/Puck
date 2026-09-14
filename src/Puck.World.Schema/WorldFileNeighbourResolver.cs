@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
 
+using Puck.Abstractions.Machines;
+
 namespace Puck.World;
 
 /// <summary>
@@ -32,15 +34,55 @@ namespace Puck.World;
 /// </remarks>
 public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
     private readonly Func<string> m_baseDirectory;
+    private readonly IMachineValidationCatalog? m_catalog;
+    private readonly string m_catalogFingerprint;
 
     /// <summary>Initializes the resolver.</summary>
     /// <param name="baseDirectory">Resolves the directory a bare <see cref="WorldReference.Document"/> file name is
     /// combined against, evaluated fresh on every <see cref="Resolve"/> call.</param>
     /// <exception cref="ArgumentNullException"><paramref name="baseDirectory"/> is <see langword="null"/>.</exception>
-    public WorldFileNeighbourResolver(Func<string> baseDirectory) {
+    /// <param name="catalogFingerprint">The stable metadata fingerprint partitioning composed neighbour images.</param>
+    /// <param name="catalog">The selected host machine catalog used while composing neighbour documents, or null for structural composition.</param>
+    public WorldFileNeighbourResolver(Func<string> baseDirectory, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: baseDirectory);
 
         m_baseDirectory = baseDirectory;
+        m_catalogFingerprint = catalogFingerprint;
+        m_catalog = catalog;
+    }
+
+    // A references row's locator is relative to the document that authors it, the rule basis and imports follow;
+    // the reader resolves it from its own base directory. A sibling's bare spelling re-expresses to itself. An
+    // owner-form reference carries no locator and is left alone.
+    private static void ReexpressReferences(JsonObject tree, string neighbourDirectory, string baseDirectory) {
+        if (tree["references"] is not JsonArray rows) {
+            return;
+        }
+
+        foreach (var row in rows) {
+            if (
+                (row is not JsonObject reference) ||
+                (reference["document"] is not JsonValue locator) ||
+                !locator.TryGetValue<string>(value: out var document) ||
+                string.IsNullOrWhiteSpace(value: document) ||
+                Path.IsPathRooted(path: document)
+            ) {
+                continue;
+            }
+
+            var absolute = Path.GetFullPath(path: Path.Combine(
+                path1: neighbourDirectory,
+                path2: document
+            ));
+
+            reference["document"] = Path.GetRelativePath(
+                path: absolute,
+                relativeTo: baseDirectory
+            ).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            );
+        }
     }
 
     /// <inheritdoc/>
@@ -68,11 +110,16 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
 
         // Asked before the composition, never after: a held image that still stands for this path is exactly what
         // the composition below is about to answer from, so this reads the outcome rather than a record of one.
-        var shared = WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: path);
+        var shared = WorldDefinitionFileSource.HoldsComposedDocument(
+            catalogFingerprint: m_catalogFingerprint,
+            resolvedPath: path
+        );
 
         // Composes the neighbour's basis chain (a flat file passes through untouched), so a neighbour authored as a
         // delta proves its border with the same composed document it boots as.
         if (!WorldDefinitionFileSource.TryComposeDocumentTree(
+            catalog: m_catalog,
+            catalogFingerprint: m_catalogFingerprint,
             path: path,
             reason: out var composeReason,
             tree: out var tree
@@ -119,38 +166,5 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
             definition: drawn,
             shared: shared
         );
-    }
-    // A references row's locator is relative to the document that authors it, the rule basis and imports follow;
-    // the reader resolves it from its own base directory. A sibling's bare spelling re-expresses to itself. An
-    // owner-form reference carries no locator and is left alone.
-    private static void ReexpressReferences(JsonObject tree, string neighbourDirectory, string baseDirectory) {
-        if (tree["references"] is not JsonArray rows) {
-            return;
-        }
-
-        foreach (var row in rows) {
-            if (
-                (row is not JsonObject reference) ||
-                (reference["document"] is not JsonValue locator) ||
-                !locator.TryGetValue<string>(value: out var document) ||
-                string.IsNullOrWhiteSpace(value: document) ||
-                Path.IsPathRooted(path: document)
-            ) {
-                continue;
-            }
-
-            var absolute = Path.GetFullPath(path: Path.Combine(
-                path1: neighbourDirectory,
-                path2: document
-            ));
-
-            reference["document"] = Path.GetRelativePath(
-                path: absolute,
-                relativeTo: baseDirectory
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
-        }
     }
 }

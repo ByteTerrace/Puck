@@ -15,6 +15,20 @@ namespace Puck.Vulkan;
 public sealed class VulkanFramePresenter : IVulkanFramePresenter {
     private const ulong FrameAcquireTimeoutNanoseconds = 0;
     private const ulong FrameFenceWaitTimeoutNanoseconds = 0;
+    private const ulong PresentWaitTimeoutNanoseconds = 50_000_000UL; // 50 ms bound — a missed present can never hang the pump
+
+    private readonly IVulkanFramePresentationApi m_framePresentationApi;
+    private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
+
+    private long m_lastPresentTimestamp;     // Stopwatch ticks of the last confirmed present; 0 = none
+    private ulong m_nextPresentId = 1UL;     // monotonic per-swapchain; 0 is the "no id" sentinel
+    private uint m_presentCount;             // monotonic confirmed-present count (the pacer's "new present" signal)
+    private nint m_presentWaitResolvedForDevice; // the device handle m_presentWaitSupported was resolved for; 0 = none yet
+    // Closed-loop present timing (VK_KHR_present_wait). All accessed only on the single pump thread that presents.
+    private bool? m_presentWaitSupported;    // resolved per-device (re-resolved when m_presentWaitResolvedForDevice changes); null = not yet probed
+    private ulong m_priorPresentId;          // the id queued last frame; 0 = none yet
+    private ulong m_priorPriorPresentId;     // the id queued TWO frames back, waited on this frame (the frame-ring mirror); 0 = none yet
+    private nint m_priorSwapchainHandle;     // present ids are per-swapchain, so the counter resets when this changes
 
     private static bool IsFrameUnavailable(VkResult result) {
         return (result is VkResult.NotReady
@@ -28,35 +42,52 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         return (result is VkResult.ErrorDeviceLost
             or VkResult.ErrorSurfaceLostKhr);
     }
+    // Waits (bounded) for the present TWO frames back to be displayed and timestamps it, then advances the ids.
+    // Two back — not one — is the presentation frame-ring's mirror: with two presents in flight, the prior present's
+    // display typically lands only after the current frame's GPU work drains, so waiting on it re-serialized the pump
+    // to two vblank periods per loop (the intro probe capped at 60 FPS under a 120 Hz target); the N−2 present has
+    // already displayed by now in the steady state, so this wait returns ~immediately while still confirming real
+    // display cadence for the pacer (one period staler — the pacer's re-anchor guard absorbs that). An unexpected
+    // hard error disables further waits for the session (graceful → open-loop); a timeout/swapchain status code just
+    // skips this one sample.
+    private void RecordPresentTiming(nint deviceHandle, nint swapchainHandle) {
+        if (m_priorPriorPresentId != 0UL) {
+            var waitResult = m_framePresentationApi.WaitForPresent(
+                deviceHandle: deviceHandle,
+                presentId: m_priorPriorPresentId,
+                swapchainHandle: swapchainHandle,
+                timeoutNanoseconds: PresentWaitTimeoutNanoseconds
+            );
 
-    private const ulong PresentWaitTimeoutNanoseconds = 50_000_000UL; // 50 ms bound — a missed present can never hang the pump
+            if (waitResult == VkResult.Success) {
+                m_lastPresentTimestamp = Stopwatch.GetTimestamp();
 
-    private readonly IVulkanFramePresentationApi m_framePresentationApi;
-    private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
+                unchecked {
+                    m_presentCount++;
+                }
+            } else if (
+                !NeedsVulkanReset(result: waitResult) &&
+                !NeedsPresentationResourceRecreate(result: waitResult) &&
+                (waitResult != VkResult.Timeout)
+            ) {
+                // An unexpected hard error (the extension misbehaving, or a wiring bug surfacing on a present_wait-capable
+                // driver): stop using present-wait for the session and surface the code so it can be debugged.
+                m_presentWaitSupported = false;
 
-    // Closed-loop present timing (VK_KHR_present_wait). All accessed only on the single pump thread that presents.
-    private bool? m_presentWaitSupported;    // resolved per-device (re-resolved when m_presentWaitResolvedForDevice changes); null = not yet probed
-    private nint m_presentWaitResolvedForDevice; // the device handle m_presentWaitSupported was resolved for; 0 = none yet
-    private ulong m_nextPresentId = 1UL;     // monotonic per-swapchain; 0 is the "no id" sentinel
-    private ulong m_priorPresentId;          // the id queued last frame; 0 = none yet
-    private ulong m_priorPriorPresentId;     // the id queued TWO frames back, waited on this frame (the frame-ring mirror); 0 = none yet
-    private nint m_priorSwapchainHandle;     // present ids are per-swapchain, so the counter resets when this changes
-    private long m_lastPresentTimestamp;     // Stopwatch ticks of the last confirmed present; 0 = none
-    private uint m_presentCount;             // monotonic confirmed-present count (the pacer's "new present" signal)
+                Console.Error.WriteLine(value: $"[present-timing] vkWaitForPresentKHR returned {waitResult}; disabling closed-loop present timing for this session (open-loop pacing).");
+            }
+        }
 
-    /// <summary>Initializes a new instance of the <see cref="VulkanFramePresenter"/> class.</summary>
-    /// <param name="framePresentationApi">The API used to acquire, submit, and present frames.</param>
-    /// <param name="frameSynchronizationApi">The API used to wait on the in-flight fence.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="framePresentationApi"/> or <paramref name="frameSynchronizationApi"/> is <see langword="null"/>.</exception>
-    public VulkanFramePresenter(
-        IVulkanFramePresentationApi framePresentationApi,
-        IVulkanFrameSynchronizationApi frameSynchronizationApi
-    ) {
-        ArgumentNullException.ThrowIfNull(framePresentationApi);
-        ArgumentNullException.ThrowIfNull(frameSynchronizationApi);
+        m_priorPriorPresentId = m_priorPresentId;
+        m_priorPresentId = m_nextPresentId;
 
-        m_framePresentationApi = framePresentationApi;
-        m_frameSynchronizationApi = frameSynchronizationApi;
+        unchecked {
+            m_nextPresentId++;
+
+            if (m_nextPresentId == 0UL) {
+                m_nextPresentId = 1UL; // never reuse the "no id" sentinel
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -208,7 +239,10 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
             m_nextPresentId = 1UL;
         }
 
-        var presentId = ((m_presentWaitSupported == true) ? m_nextPresentId : 0UL);
+        var presentId = ((m_presentWaitSupported == true)
+            ? m_nextPresentId
+            : 0UL
+        );
         var presentRequest = new VulkanPresentRequest(
             DeviceHandle: deviceHandle,
             ImageIndex: imageIndex,
@@ -230,7 +264,10 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         presentResult.ThrowIfFailed(operation: "vkQueuePresentKHR");
 
         if (presentId != 0UL) {
-            RecordPresentTiming(deviceHandle: deviceHandle, swapchainHandle: swapchain.Handle);
+            RecordPresentTiming(
+                deviceHandle: deviceHandle,
+                swapchainHandle: swapchain.Handle
+            );
         }
 
         return VulkanFramePresentationOutcome.Presented(imageIndex: imageIndex);
@@ -243,51 +280,18 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         return (m_lastPresentTimestamp > 0L);
     }
 
-    // Waits (bounded) for the present TWO frames back to be displayed and timestamps it, then advances the ids.
-    // Two back — not one — is the presentation frame-ring's mirror: with two presents in flight, the prior present's
-    // display typically lands only after the current frame's GPU work drains, so waiting on it re-serialized the pump
-    // to two vblank periods per loop (the intro probe capped at 60 FPS under a 120 Hz target); the N−2 present has
-    // already displayed by now in the steady state, so this wait returns ~immediately while still confirming real
-    // display cadence for the pacer (one period staler — the pacer's re-anchor guard absorbs that). An unexpected
-    // hard error disables further waits for the session (graceful → open-loop); a timeout/swapchain status code just
-    // skips this one sample.
-    private void RecordPresentTiming(nint deviceHandle, nint swapchainHandle) {
-        if (m_priorPriorPresentId != 0UL) {
-            var waitResult = m_framePresentationApi.WaitForPresent(
-                deviceHandle: deviceHandle,
-                presentId: m_priorPriorPresentId,
-                swapchainHandle: swapchainHandle,
-                timeoutNanoseconds: PresentWaitTimeoutNanoseconds
-            );
+    /// <summary>Initializes a new instance of the <see cref="VulkanFramePresenter"/> class.</summary>
+    /// <param name="framePresentationApi">The API used to acquire, submit, and present frames.</param>
+    /// <param name="frameSynchronizationApi">The API used to wait on the in-flight fence.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="framePresentationApi"/> or <paramref name="frameSynchronizationApi"/> is <see langword="null"/>.</exception>
+    public VulkanFramePresenter(
+        IVulkanFramePresentationApi framePresentationApi,
+        IVulkanFrameSynchronizationApi frameSynchronizationApi
+    ) {
+        ArgumentNullException.ThrowIfNull(framePresentationApi);
+        ArgumentNullException.ThrowIfNull(frameSynchronizationApi);
 
-            if (waitResult == VkResult.Success) {
-                m_lastPresentTimestamp = Stopwatch.GetTimestamp();
-
-                unchecked {
-                    m_presentCount++;
-                }
-            } else if (
-                !NeedsVulkanReset(result: waitResult) &&
-                !NeedsPresentationResourceRecreate(result: waitResult) &&
-                (waitResult != VkResult.Timeout)
-            ) {
-                // An unexpected hard error (the extension misbehaving, or a wiring bug surfacing on a present_wait-capable
-                // driver): stop using present-wait for the session and surface the code so it can be debugged.
-                m_presentWaitSupported = false;
-
-                Console.Error.WriteLine(value: $"[present-timing] vkWaitForPresentKHR returned {waitResult}; disabling closed-loop present timing for this session (open-loop pacing).");
-            }
-        }
-
-        m_priorPriorPresentId = m_priorPresentId;
-        m_priorPresentId = m_nextPresentId;
-
-        unchecked {
-            m_nextPresentId++;
-
-            if (m_nextPresentId == 0UL) {
-                m_nextPresentId = 1UL; // never reuse the "no id" sentinel
-            }
-        }
+        m_framePresentationApi = framePresentationApi;
+        m_frameSynchronizationApi = frameSynchronizationApi;
     }
 }

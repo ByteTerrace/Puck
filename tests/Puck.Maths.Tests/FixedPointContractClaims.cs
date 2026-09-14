@@ -10,66 +10,113 @@ namespace Puck.Maths.Tests;
 /// participates in both the ordinary test gate and the mechanically generated public-member coverage ledger.
 /// </summary>
 internal static class FixedPointContractClaims {
-    // ---- LayerSequence: the closed-form inverse vs. an incremental walker, and the bounded-horizon channels ----
+    // ---- FixedTickConversion: the seconds-to-engine-ticks round-up rule vs. exact BigInteger rational arithmetic ----
 
-    /// <summary>A bit-for-bit port of FixedPointStage's layer-sequence regression: <see cref="LayerSequence.LayerOf"/>
-    /// agrees with an O(n) walker that accumulates <see cref="LayerSequence.LayerSize"/> forward from the sequence's
-    /// own <see cref="LayerSequence.Seed"/>, <see cref="LayerSequence.Count"/> lands its boundary exactly at scale,
-    /// <see cref="LayerSequence.Linear"/> indexes flatly and refuses an unrepresentable layer, and a hand-built
-    /// bounded horizon exercises <see cref="LayerSequence.MaxLayer"/>, <see cref="LayerSequence.Capacity"/>,
-    /// <see cref="LayerSequence.Locate"/> and <see cref="LayerSequence.Project"/>'s overflow/depth channels,
-    /// including the refusal past capacity and the saturating overflow on an unbounded sequence.</summary>
+    /// <summary>Checks one raw Q48.16 duration against an INDEPENDENT BigInteger recomputation of the round-up rule —
+    /// exact rational ceiling division, transcribed from the definition (duration * TicksPerSecond / 65536, rounded
+    /// up), never reusing <see cref="BinaryIntegerFunctions.CeilingDivide{T}(T, T)"/> or the subject's own Int128
+    /// arithmetic. Non-positive durations are pinned to zero by the same check.</summary>
+    /// <param name="raw">The raw Q48.16 duration to check.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? LayerSequenceWalkerAndBoundedHorizonSurface() {
-        (string Name, LayerSequence Sequence)[] layerPresets = [
-            ("triangular", LayerSequence.Triangular), ("pronic", LayerSequence.Pronic), ("square", LayerSequence.Square),
-            ("centered-square", LayerSequence.CenteredSquare), ("centered-hexagonal", LayerSequence.CenteredHexagonal),
-        ];
+    private static string? CheckFixedTickConversion(long raw) {
+        var seconds = FixedQ4816.FromRawBits(value: raw);
+        var engine = FixedTickConversion.DurationEngineTicks(seconds: seconds);
+        var general = FixedTickConversion.DurationTicks(
+            ratePerSecond: FixedTickConversion.TicksPerSecond,
+            seconds: seconds
+        );
 
-        foreach (var (name, sequence) in layerPresets) {
-            var layer = 0L;
-            var layerEnd = sequence.Seed;
+        if (engine != general) {
+            return $"FixedTickConversion.DurationEngineTicks(raw={raw}) = {engine} but DurationTicks at TicksPerSecond = {general}";
+        }
 
-            for (var x = 0L; (x < 65_536L); x++) {
-                while (layerEnd <= x) {
-                    layer++;
-                    layerEnd += sequence.LayerSize(layer: layer);
-                }
+        if (CheckFixedTickConversion(
+            actual: engine,
+            ratePerSecond: FixedTickConversion.TicksPerSecond,
+            raw: raw
+        ) is { } detail) {
+            return detail;
+        }
 
-                Assert.True(condition: (sequence.LayerOf(index: x) == layer), userMessage: $"layer-sequence {name}: LayerOf({x}) disagrees with the walker at layer {layer}");
-            }
-
-            for (var n = 1L; (n < 100_000_000L); n <<= 3) {
-                var boundary = sequence.Count(layerCount: n);
-
-                Assert.True(
-                    condition: ((sequence.LayerOf(index: boundary) == (n + 1L)) && (sequence.LayerOf(index: (boundary - 1L)) == n)),
-                    userMessage: $"layer-sequence {name}: boundary of layer {n} is not exact"
-                );
+        foreach (var rate in TickRates) {
+            if (CheckFixedTickConversion(
+                raw: raw,
+                ratePerSecond: rate,
+                actual: FixedTickConversion.DurationTicks(
+                    ratePerSecond: rate,
+                    seconds: seconds
+                )
+            ) is { } rateDetail) {
+                return rateDetail;
             }
         }
 
-        var flat = LayerSequence.Linear(seed: 3L, size: 5L);
+        return null;
+    }
+    private static string? CheckFixedTickConversion(long raw, ulong ratePerSecond, ulong actual) {
+        BigInteger expected;
 
-        Assert.Equal(expected: 0L, actual: flat.LayerOf(index: 2L));
-        Assert.Equal(expected: 1L, actual: flat.LayerOf(index: 3L));
-        Assert.Equal(expected: 2L, actual: flat.LayerOf(index: 12L));
-        Assert.Throws<OverflowException>(testCode: () => LayerSequence.Linear(seed: 0L, size: 1L).LayerOf(index: long.MaxValue));
+        if (raw <= 0L) {
+            expected = BigInteger.Zero;
+        } else {
+            var numerator = (((BigInteger)raw) * ratePerSecond);
+            var denominator = ((BigInteger)65536);
 
-        var horizon = LayerSequence.Create(seed: 1L, start: 6L, step: -2L);
+            expected = ((numerator + (denominator - 1)) / denominator);
+        }
 
-        Assert.Equal(expected: 3L, actual: horizon.MaxLayer);
-        Assert.Equal(expected: 13L, actual: horizon.Capacity);
-        Assert.Equal(expected: 3L, actual: horizon.LayerOf(index: 12L));
-        Assert.Equal(expected: new LayerLocation(Layer: 1L, Offset: 4L), actual: horizon.Locate(index: 5L));
-        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => horizon.LayerOf(index: 13L));
-        Assert.Equal(expected: new LayerProjection(Depth: 2L, Layer: 3L, Overflow: 8L), actual: horizon.Project(index: 20L));
-        Assert.Equal(expected: new LayerProjection(Depth: 0L, Layer: 3L, Overflow: 0L), actual: horizon.Project(index: 12L));
-        Assert.Equal(expected: long.MaxValue, actual: LayerSequence.Linear(seed: 0L, size: 0L).Project(index: long.MaxValue).Overflow);
+        return ((((BigInteger)actual) == expected)
+            ? null
+            : $"FixedTickConversion.DurationTicks(raw={raw}, rate={ratePerSecond}) = {actual}, expected ceil({raw}*{ratePerSecond}/65536) = {expected}"
+        );
+    }
+    // ---- FixedTickConversion.TryDurationEngineTicksExact: the exact-or-refuse rule vs. an independent BigInteger
+    // decomposition of the authored decimal's own bits, with an independent BigInteger carrier ----
+
+    /// <summary>Checks one authored decimal duration against an INDEPENDENT BigInteger recomputation — decomposing
+    /// <paramref name="seconds"/> via <see cref="decimal.GetBits(decimal)"/> into its sign, base-10 scale, and
+    /// unscaled 96-bit integer (lossless), then testing <c>unscaled * TicksPerSecond</c> for exact divisibility by
+    /// <c>10^scale</c> in <see cref="BigInteger"/> rather than the subject's bounded <see cref="UInt128"/> carrier.
+    /// </summary>
+    /// <param name="seconds">The authored duration to check.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    private static string? CheckTryDurationEngineTicksExact(decimal seconds) {
+        var actualExact = FixedTickConversion.TryDurationEngineTicksExact(
+            seconds: seconds,
+            ticks: out var actualTicks
+        );
+        var bits = decimal.GetBits(d: seconds);
+        var negative = ((((uint)bits[3]) & 0x80000000U) != 0U);
+        var scale = (((uint)bits[3]) >> 16) & 0xFFU;
+        var unscaled = (((BigInteger)((uint)bits[2])) << 64) | (((BigInteger)((uint)bits[1])) << 32) | ((BigInteger)((uint)bits[0]));
+
+        if (negative) {
+            return (actualExact
+                ? $"TryDurationEngineTicksExact({seconds}) = true (ticks={actualTicks}), expected false (negative duration)"
+                : null
+            );
+        }
+
+        var scalePower = BigInteger.Pow(
+            exponent: ((int)scale),
+            value: 10
+        );
+        var numerator = (unscaled * FixedTickConversion.TicksPerSecond);
+        var expectedTicks = (numerator / scalePower);
+        var expectedExact = (((numerator % scalePower) == BigInteger.Zero) && (expectedTicks <= ulong.MaxValue));
+
+        if (actualExact != expectedExact) {
+            return $"TryDurationEngineTicksExact({seconds}) returned {actualExact}, expected {expectedExact} (unscaled={unscaled}, scale={scale})";
+        }
+
+        if (expectedExact) {
+            if (((BigInteger)actualTicks) != expectedTicks) {
+                return $"TryDurationEngineTicksExact({seconds}) = {actualTicks} ticks, expected {expectedTicks}";
+            }
+        }
 
         return null;
     }
-
     // ---- BinaryIntegerFunctions: the signed narrow (short -> uint, BMI2) and wide (long -> Int128, SWAR) pairing branches ----
 
     /// <summary>Interleaves the low sixteen bits of <paramref name="value"/> and <paramref name="other"/> one bit at
@@ -101,20 +148,6 @@ internal static class FixedPointContractClaims {
         return unchecked((Int128)paired);
     }
 
-    // Negative, boundary and index-derived short pairs: both MinValue, one MinValue against zero either side, MaxValue
-    // against MinValue, both lanes at -1, and two bit-derived patterns (0xACE5, 0x53A1) that exercise every nibble.
-    private static readonly (short Value, short Other)[] NarrowPairLadder = [
-        (short.MinValue, 0), (0, short.MinValue), (short.MinValue, short.MinValue),
-        (short.MaxValue, short.MinValue), (-1, -1), (-1, 0), (0, -1),
-        (unchecked((short)0xACE5), unchecked((short)0x53A1)),
-    ];
-    // The same shape at the wide (long -> Int128) width.
-    private static readonly (long Value, long Other)[] WidePairLadder = [
-        (long.MinValue, 0L), (0L, long.MinValue), (long.MinValue, long.MinValue),
-        (long.MaxValue, long.MinValue), (-1L, -1L), (-1L, 0L), (0L, -1L),
-        (unchecked((long)0xACE5_1234_5678_9ABCUL), unchecked((long)0x53A1_FEDC_BA98_7654UL)),
-    ];
-
     /// <summary>Proves <see cref="BinaryIntegerFunctions.BitwisePair{TInput,TResult}"/> and
     /// <see cref="BinaryIntegerFunctions.BitwiseUnpair{TInput,TResult}"/> at the two branches no existing law reaches:
     /// the <c>short</c>/<c>ushort</c> <c>Bmi2.ParallelBitDeposit</c> path (distinct from the <c>int</c>/<c>uint</c>
@@ -125,7 +158,10 @@ internal static class FixedPointContractClaims {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? BitwisePairSignedNarrowAndWideCarriersSurface() {
         foreach (var (value, other) in NarrowPairLadder) {
-            var expectedPair = NarrowBitwisePairReference(other: unchecked((ushort)other), value: unchecked((ushort)value));
+            var expectedPair = NarrowBitwisePairReference(
+                other: unchecked((ushort)other),
+                value: unchecked((ushort)value)
+            );
             var actualPair = value.BitwisePair<short, uint>(other: other);
 
             Assert.True(
@@ -135,11 +171,17 @@ internal static class FixedPointContractClaims {
 
             var unpaired = actualPair.BitwiseUnpair<uint, short>();
 
-            Assert.Equal(actual: unpaired, expected: (value, other));
+            Assert.Equal(
+                actual: unpaired,
+                expected: (value, other)
+            );
         }
 
         foreach (var (value, other) in WidePairLadder) {
-            var expectedPair = WideBitwisePairReference(other: unchecked((ulong)other), value: unchecked((ulong)value));
+            var expectedPair = WideBitwisePairReference(
+                other: unchecked((ulong)other),
+                value: unchecked((ulong)value)
+            );
             var actualPair = value.BitwisePair<long, Int128>(other: other);
 
             Assert.True(
@@ -149,7 +191,10 @@ internal static class FixedPointContractClaims {
 
             var unpaired = actualPair.BitwiseUnpair<Int128, long>();
 
-            Assert.Equal(actual: unpaired, expected: (value, other));
+            Assert.Equal(
+                actual: unpaired,
+                expected: (value, other)
+            );
         }
 
         return null;
@@ -176,19 +221,43 @@ internal static class FixedPointContractClaims {
                 Y: FixedQ4816.FromRawBits(value: ((probe * 3571L) + 1234L)),
                 Z: FixedQ4816.FromRawBits(value: ((probe * -421L) + 4321L))
             );
-            var originCellNoise = FieldNoise.Sample(seed: ((ulong)(42 + probe)), position: new FixedPosition(cellX: 0L, cellY: 0L, cellZ: 0L, local: local));
-            var farCellNoise = FieldNoise.Sample(seed: ((ulong)(42 + probe)), position: new FixedPosition(cellX: aliasPeriod, cellY: 0L, cellZ: 0L, local: local));
+            var originCellNoise = FieldNoise.Sample(
+                seed: ((ulong)(42 + probe)),
+                position: new FixedPosition(
+                    cellX: 0L,
+                    cellY: 0L,
+                    cellZ: 0L,
+                    local: local
+                )
+            );
+            var farCellNoise = FieldNoise.Sample(
+                seed: ((ulong)(42 + probe)),
+                position: new FixedPosition(
+                    cellX: aliasPeriod,
+                    cellY: 0L,
+                    cellZ: 0L,
+                    local: local
+                )
+            );
 
             allAliased &= (originCellNoise == farCellNoise);
         }
 
-        Assert.False(condition: allAliased, userMessage: "field noise discards high WorldCoord3 cell bits on the wide path");
+        Assert.False(
+            condition: allAliased,
+            userMessage: "field noise discards high WorldCoord3 cell bits on the wide path"
+        );
 
         // The wide rebase probe: an equivalent wide hierarchical representation across a cell carry must address the
         // same field point. Bumping CellX/CellY/CellZ by one cell while shifting Local by exactly minus/plus one cell
         // width denotes the identical logical position.
         var wideCell = (1L << 50);
-        var wide = new FixedPosition(cellX: wideCell, cellY: -wideCell, cellZ: wideCell, local: FixedVector3.Zero);
+        var wide = new FixedPosition(
+            cellX: wideCell,
+            cellY: -wideCell,
+            cellZ: wideCell,
+            local: FixedVector3.Zero
+        );
         var wideRebased = new FixedPosition(
             cellX: (wideCell + 1L),
             cellY: (-wideCell - 1L),
@@ -201,106 +270,20 @@ internal static class FixedPointContractClaims {
         );
 
         Assert.Equal(
-            expected: FieldNoise.Sample(position: wide, seed: 91UL),
-            actual: FieldNoise.Sample(position: wideRebased, seed: 91UL)
+            expected: FieldNoise.Sample(
+                position: wide,
+                seed: 91UL
+            ),
+            actual: FieldNoise.Sample(
+                position: wideRebased,
+                seed: 91UL
+            )
         );
 
         return null;
     }
-    // ---- UnsignedNumberFunctions.SquareRoot at its T = UInt128 instantiation, near the carrier's own ceiling ----
-
-    /// <summary>Proves <see cref="UnsignedNumberFunctions.SquareRoot{T}(T)"/> at <c>T = UInt128</c>, the instantiation
-    /// <c>core.unsigned-integer-contracts</c> credits by name but never actually reaches — that case's own leg states
-    /// its sweep runs "through 10000" at type <see langword="uint"/>. Boundary rows are checked against hand-derived
-    /// exact literals; interior rows near the carrier's own ceiling are checked against the defining inequality
-    /// <c>root² ≤ value &lt; (root + 1)²</c> formed in <see cref="BigInteger"/>, since <c>(root + 1)²</c> itself
-    /// overflows <see cref="UInt128"/> for several of them and would silently wrap if formed in the carrier under
-    /// test.</summary>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    public static string? UnsignedSquareRootUInt128CarrierBoundarySurface() {
-        (UInt128 Value, UInt128 Expected)[] boundaryLadder = [
-            (UInt128.Zero, UInt128.Zero),
-            ((UInt128.One << 100), (UInt128.One << 50)),
-            (((UInt128.One << 100) - UInt128.One), ((UInt128.One << 50) - UInt128.One)),
-            (((UInt128.One << 100) + UInt128.One), (UInt128.One << 50)),
-            ((((UInt128)ulong.MaxValue) * ulong.MaxValue), ulong.MaxValue),
-            (UInt128.MaxValue, ulong.MaxValue),
-            ((UInt128.MaxValue - UInt128.One), ulong.MaxValue),
-        ];
-
-        foreach (var (value, expected) in boundaryLadder) {
-            Assert.Equal(expected: expected, actual: value.SquareRoot());
-        }
-
-        // Thirty-two index-derived interior operands spanning the widest quarter of the carrier: 2^(127-k) plus a
-        // small index-derived offset, for k from 0 through 31.
-        for (var k = 0; (k < 32); ++k) {
-            var value = ((((UInt128)1) << (127 - k)) + (((UInt128)(k * 104_729)) << (k % 40)));
-            var root = value.SquareRoot();
-            var rootBig = ((BigInteger)root);
-            var valueBig = ((BigInteger)value);
-
-            Assert.True(condition: ((rootBig * rootBig) <= valueBig), userMessage: $"SquareRoot<UInt128>({value}) = {root} overshoots: root^2 exceeds the radicand");
-            Assert.True(condition: (((rootBig + 1) * (rootBig + 1)) > valueBig), userMessage: $"SquareRoot<UInt128>({value}) = {root} undershoots: (root+1)^2 does not exceed the radicand");
-        }
-
-        return null;
-    }
-
-    // ---- FixedTickConversion: the seconds-to-engine-ticks round-up rule vs. exact BigInteger rational arithmetic ----
-
-    /// <summary>Checks one raw Q48.16 duration against an INDEPENDENT BigInteger recomputation of the round-up rule —
-    /// exact rational ceiling division, transcribed from the definition (duration * TicksPerSecond / 65536, rounded
-    /// up), never reusing <see cref="BinaryIntegerFunctions.CeilingDivide{T}(T, T)"/> or the subject's own Int128
-    /// arithmetic. Non-positive durations are pinned to zero by the same check.</summary>
-    /// <param name="raw">The raw Q48.16 duration to check.</param>
-    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    private static string? CheckFixedTickConversion(long raw) {
-        var seconds = FixedQ4816.FromRawBits(value: raw);
-        var engine = FixedTickConversion.DurationEngineTicks(seconds: seconds);
-        var general = FixedTickConversion.DurationTicks(
-            ratePerSecond: FixedTickConversion.TicksPerSecond,
-            seconds: seconds
-        );
-
-        if (engine != general) {
-            return $"FixedTickConversion.DurationEngineTicks(raw={raw}) = {engine} but DurationTicks at TicksPerSecond = {general}";
-        }
-
-        if (CheckFixedTickConversion(raw: raw, ratePerSecond: FixedTickConversion.TicksPerSecond, actual: engine) is { } detail) {
-            return detail;
-        }
-
-        foreach (var rate in s_tickRates) {
-            if (CheckFixedTickConversion(raw: raw, ratePerSecond: rate, actual: FixedTickConversion.DurationTicks(ratePerSecond: rate, seconds: seconds)) is { } rateDetail) {
-                return rateDetail;
-            }
-        }
-
-        return null;
-    }
-    // Every simulation rate a shipped world authors or the validator admits at its edges (a divisor of 50400), the
-    // frame-ish rates, rate 0 (every duration is zero ticks), and 1 (ticks are whole seconds).
-    private static readonly ulong[] s_tickRates = [0UL, 1UL, 7UL, 24UL, 30UL, 60UL, 120UL, 240UL, 1000UL, 50400UL];
-    private static string? CheckFixedTickConversion(long raw, ulong ratePerSecond, ulong actual) {
-        BigInteger expected;
-
-        if (raw <= 0L) {
-            expected = BigInteger.Zero;
-        } else {
-            var numerator = (((BigInteger)raw) * ratePerSecond);
-            var denominator = ((BigInteger)65536);
-
-            expected = ((numerator + (denominator - 1)) / denominator);
-        }
-
-        return ((((BigInteger)actual) == expected)
-            ? null
-            : $"FixedTickConversion.DurationTicks(raw={raw}, rate={ratePerSecond}) = {actual}, expected ceil({raw}*{ratePerSecond}/65536) = {expected}");
-    }
-
     /// <summary>Exact-by-construction: <see cref="FixedTickConversion.DurationTicks"/> at every rate in
-    /// <see cref="s_tickRates"/>, and <see cref="FixedTickConversion.DurationEngineTicks"/> as its
+    /// <see cref="TickRates"/>, and <see cref="FixedTickConversion.DurationEngineTicks"/> as its
     /// <see cref="FixedTickConversion.TicksPerSecond"/> case, match independent BigInteger rational ceiling division
     /// over a curated edge set (zero, the smallest positive raw, one-second and near-one-second boundaries, negative
     /// raws) plus a dense sweep across the first five seconds (positive and negative), so every residue class the
@@ -333,48 +316,146 @@ internal static class FixedPointContractClaims {
 
         return null;
     }
+    // ---- LayerSequence: the closed-form inverse vs. an incremental walker, and the bounded-horizon channels ----
 
-    // ---- FixedTickConversion.TryDurationEngineTicksExact: the exact-or-refuse rule vs. an independent BigInteger
-    // decomposition of the authored decimal's own bits, with an independent BigInteger carrier ----
-
-    /// <summary>Checks one authored decimal duration against an INDEPENDENT BigInteger recomputation — decomposing
-    /// <paramref name="seconds"/> via <see cref="decimal.GetBits(decimal)"/> into its sign, base-10 scale, and
-    /// unscaled 96-bit integer (lossless), then testing <c>unscaled * TicksPerSecond</c> for exact divisibility by
-    /// <c>10^scale</c> in <see cref="BigInteger"/> rather than the subject's bounded <see cref="UInt128"/> carrier.
-    /// </summary>
-    /// <param name="seconds">The authored duration to check.</param>
+    /// <summary>A bit-for-bit port of FixedPointStage's layer-sequence regression: <see cref="LayerSequence.LayerOf"/>
+    /// agrees with an O(n) walker that accumulates <see cref="LayerSequence.LayerSize"/> forward from the sequence's
+    /// own <see cref="LayerSequence.Seed"/>, <see cref="LayerSequence.Count"/> lands its boundary exactly at scale,
+    /// <see cref="LayerSequence.Linear"/> indexes flatly and refuses an unrepresentable layer, and a hand-built
+    /// bounded horizon exercises <see cref="LayerSequence.MaxLayer"/>, <see cref="LayerSequence.Capacity"/>,
+    /// <see cref="LayerSequence.Locate"/> and <see cref="LayerSequence.Project"/>'s overflow/depth channels,
+    /// including the refusal past capacity and the saturating overflow on an unbounded sequence.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
-    private static string? CheckTryDurationEngineTicksExact(decimal seconds) {
-        var actualExact = FixedTickConversion.TryDurationEngineTicksExact(seconds: seconds, ticks: out var actualTicks);
-        var bits = decimal.GetBits(d: seconds);
-        var negative = ((((uint)bits[3]) & 0x80000000U) != 0U);
-        var scale = (((uint)bits[3]) >> 16) & 0xFFU;
-        var unscaled = (((BigInteger)((uint)bits[2])) << 64) | (((BigInteger)((uint)bits[1])) << 32) | ((BigInteger)((uint)bits[0]));
+    public static string? LayerSequenceWalkerAndBoundedHorizonSurface() {
+        (string Name, LayerSequence Sequence)[] layerPresets = [
+            ("triangular", LayerSequence.Triangular), ("pronic", LayerSequence.Pronic), ("square", LayerSequence.Square),
+            ("centered-square", LayerSequence.CenteredSquare), ("centered-hexagonal", LayerSequence.CenteredHexagonal),
+        ];
 
-        if (negative) {
-            return (actualExact
-                ? $"TryDurationEngineTicksExact({seconds}) = true (ticks={actualTicks}), expected false (negative duration)"
-                : null);
+        foreach (var (name, sequence) in layerPresets) {
+            var layer = 0L;
+            var layerEnd = sequence.Seed;
+
+            for (var x = 0L; (x < 65_536L); x++) {
+                while (layerEnd <= x) {
+                    layer++;
+                    layerEnd += sequence.LayerSize(layer: layer);
+                }
+
+                Assert.True(
+                    condition: (sequence.LayerOf(index: x) == layer),
+                    userMessage: $"layer-sequence {name}: LayerOf({x}) disagrees with the walker at layer {layer}"
+                );
+            }
+
+            for (var n = 1L; (n < 100_000_000L); n <<= 3) {
+                var boundary = sequence.Count(layerCount: n);
+
+                Assert.True(
+                    condition: ((sequence.LayerOf(index: boundary) == (n + 1L)) && (sequence.LayerOf(index: (boundary - 1L)) == n)),
+                    userMessage: $"layer-sequence {name}: boundary of layer {n} is not exact"
+                );
+            }
         }
 
-        var scalePower = BigInteger.Pow(exponent: ((int)scale), value: 10);
-        var numerator = (unscaled * FixedTickConversion.TicksPerSecond);
-        var expectedTicks = (numerator / scalePower);
-        var expectedExact = (((numerator % scalePower) == BigInteger.Zero) && (expectedTicks <= ulong.MaxValue));
+        var flat = LayerSequence.Linear(
+            seed: 3L,
+            size: 5L
+        );
 
-        if (actualExact != expectedExact) {
-            return $"TryDurationEngineTicksExact({seconds}) returned {actualExact}, expected {expectedExact} (unscaled={unscaled}, scale={scale})";
+        Assert.Equal(
+            expected: 0L,
+            actual: flat.LayerOf(index: 2L)
+        );
+        Assert.Equal(
+            expected: 1L,
+            actual: flat.LayerOf(index: 3L)
+        );
+        Assert.Equal(
+            expected: 2L,
+            actual: flat.LayerOf(index: 12L)
+        );
+        Assert.Throws<OverflowException>(testCode: () => LayerSequence.Linear(
+            seed: 0L,
+            size: 1L
+        ).LayerOf(index: long.MaxValue));
+
+        var horizon = LayerSequence.Create(
+            seed: 1L,
+            start: 6L,
+            step: -2L
+        );
+
+        Assert.Equal(
+            expected: 3L,
+            actual: horizon.MaxLayer
+        );
+        Assert.Equal(
+            expected: 13L,
+            actual: horizon.Capacity
+        );
+        Assert.Equal(
+            expected: 3L,
+            actual: horizon.LayerOf(index: 12L)
+        );
+        Assert.Equal(
+            expected: new LayerLocation(
+                Layer: 1L,
+                Offset: 4L
+            ),
+            actual: horizon.Locate(index: 5L)
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => horizon.LayerOf(index: 13L));
+        Assert.Equal(
+            expected: new LayerProjection(
+                Depth: 2L,
+                Layer: 3L,
+                Overflow: 8L
+            ),
+            actual: horizon.Project(index: 20L)
+        );
+        Assert.Equal(
+            expected: new LayerProjection(
+                Depth: 0L,
+                Layer: 3L,
+                Overflow: 0L
+            ),
+            actual: horizon.Project(index: 12L)
+        );
+        Assert.Equal(
+            expected: long.MaxValue,
+            actual: LayerSequence.Linear(
+                seed: 0L,
+                size: 0L
+            ).Project(index: long.MaxValue).Overflow
+        );
+
+        return null;
+    }
+    public static string? TryDurationEngineTicksExactAgainstDecimalBits() {
+        decimal[] edges = [
+            0.0m, -0.01m, -1.0m,
+            0.25m, 0.5m, 1.0m, 3.0m,
+            0.00125m, 0.0025m, 0.00375m, 0.005m, 0.00625m, 0.0075m, 0.00875m, 0.01m, 0.01125m, 0.0125m, 0.01375m, 0.015m,
+            0.1m, 0.02m, 0.04m, 0.05m, 0.2m,
+            0.041667m, 0.0417m, 0.04166666667m, 2.91667m,
+            1000000000000000m, decimal.MaxValue,
+        ];
+
+        foreach (var seconds in edges) {
+            if (CheckTryDurationEngineTicksExact(seconds: seconds) is { } detail) {
+                return detail;
+            }
         }
 
-        if (expectedExact) {
-            if (((BigInteger)actualTicks) != expectedTicks) {
-                return $"TryDurationEngineTicksExact({seconds}) = {actualTicks} ticks, expected {expectedTicks}";
+        for (var milli = 0; (milli <= 2000); milli += 37) {
+            if (CheckTryDurationEngineTicksExact(seconds: (milli / 1000.0m)) is { } detail) {
+                return detail;
             }
         }
 
         return null;
     }
-
     /// <summary>Exact-or-refuse: <see cref="FixedTickConversion.TryDurationEngineTicksExact"/> matches an independent
     /// BigInteger decomposition of the authored decimal's own bits over a curated edge set (zero, a negative
     /// duration, every dyadic value already authored in a shipped or scenario document, the finest
@@ -416,10 +497,16 @@ internal static class FixedPointContractClaims {
                         return $"n={numerator} d={denominator} f={shift}: subject ({actualOk}, {actual}) but oracle ({expectedOk}, {expected})";
                     }
 
-                    var scaled = (BigInteger.Abs(value: new BigInteger(value: numerator)) * BigInteger.Pow(exponent: shift, value: 2));
+                    var scaled = (BigInteger.Abs(value: new BigInteger(value: numerator)) * BigInteger.Pow(
+                        exponent: shift,
+                        value: 2
+                    ));
                     var divisor = BigInteger.Abs(value: new BigInteger(value: denominator));
 
-                    if ((((scaled % divisor) * 2) == divisor) && !divisor.IsOne) {
+                    if (
+                        (((scaled % divisor) * 2) == divisor) &&
+                        !divisor.IsOne
+                    ) {
                         ++ties;
                     }
                 }
@@ -432,45 +519,57 @@ internal static class FixedPointContractClaims {
 
         // A zero denominator refuses, at every shift, and clears the result rather than leaving it.
         foreach (var shift in shifts) {
-            if (FixedPointRounding.TryRoundRational(
+            if (
+                FixedPointRounding.TryRoundRational(
                 denominator: BigInteger.Zero,
                 fractionBitCount: shift,
                 numerator: BigInteger.One,
                 result: out var zeroDenominator
-            ) || (zeroDenominator != 0L)) {
+            ) ||
+                (zeroDenominator != 0L)
+            ) {
                 return $"a zero denominator was accepted at f={shift}";
             }
         }
 
         // A negative fraction bit count refuses rather than shifting the other way.
         foreach (var shift in ((int[])[-1, -16, -64, int.MinValue])) {
-            if (FixedPointRounding.TryRoundRational(
+            if (
+                FixedPointRounding.TryRoundRational(
                 denominator: BigInteger.One,
                 fractionBitCount: shift,
                 numerator: BigInteger.One,
                 result: out var negativeShift
-            ) || (negativeShift != 0L)) {
+            ) ||
+                (negativeShift != 0L)
+            ) {
                 return $"a negative fraction bit count was accepted at f={shift}";
             }
         }
 
         // An obviously overflowing scale must be refused without attempting to materialize a 2^int.MaxValue
         // numerator. Zero remains exactly representable at that same scale.
-        if (FixedPointRounding.TryRoundRational(
+        if (
+            FixedPointRounding.TryRoundRational(
             denominator: BigInteger.One,
             fractionBitCount: int.MaxValue,
             numerator: BigInteger.One,
             result: out var enormousShift
-        ) || (enormousShift != 0L)) {
+        ) ||
+            (enormousShift != 0L)
+        ) {
             return "an obviously overflowing enormous fraction bit count was accepted";
         }
 
-        if (!FixedPointRounding.TryRoundRational(
+        if (
+            !FixedPointRounding.TryRoundRational(
             denominator: BigInteger.One,
             fractionBitCount: int.MaxValue,
             numerator: BigInteger.Zero,
             result: out var enormousZero
-        ) || (enormousZero != 0L)) {
+        ) ||
+            (enormousZero != 0L)
+        ) {
             return "zero was refused at an enormous fraction bit count";
         }
 
@@ -510,28 +609,69 @@ internal static class FixedPointContractClaims {
 
         return null;
     }
-    public static string? TryDurationEngineTicksExactAgainstDecimalBits() {
-        decimal[] edges = [
-            0.0m, -0.01m, -1.0m,
-            0.25m, 0.5m, 1.0m, 3.0m,
-            0.00125m, 0.0025m, 0.00375m, 0.005m, 0.00625m, 0.0075m, 0.00875m, 0.01m, 0.01125m, 0.0125m, 0.01375m, 0.015m,
-            0.1m, 0.02m, 0.04m, 0.05m, 0.2m,
-            0.041667m, 0.0417m, 0.04166666667m, 2.91667m,
-            1000000000000000m, decimal.MaxValue,
+    // ---- UnsignedNumberFunctions.SquareRoot at its T = UInt128 instantiation, near the carrier's own ceiling ----
+
+    /// <summary>Proves <see cref="UnsignedNumberFunctions.SquareRoot{T}(T)"/> at <c>T = UInt128</c>, the instantiation
+    /// <c>core.unsigned-integer-contracts</c> credits by name but never actually reaches — that case's own leg states
+    /// its sweep runs "through 10000" at type <see langword="uint"/>. Boundary rows are checked against hand-derived
+    /// exact literals; interior rows near the carrier's own ceiling are checked against the defining inequality
+    /// <c>root² ≤ value &lt; (root + 1)²</c> formed in <see cref="BigInteger"/>, since <c>(root + 1)²</c> itself
+    /// overflows <see cref="UInt128"/> for several of them and would silently wrap if formed in the carrier under
+    /// test.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? UnsignedSquareRootUInt128CarrierBoundarySurface() {
+        (UInt128 Value, UInt128 Expected)[] boundaryLadder = [
+            (UInt128.Zero, UInt128.Zero),
+            ((UInt128.One << 100), (UInt128.One << 50)),
+            (((UInt128.One << 100) - UInt128.One), ((UInt128.One << 50) - UInt128.One)),
+            (((UInt128.One << 100) + UInt128.One), (UInt128.One << 50)),
+            ((((UInt128)ulong.MaxValue) * ulong.MaxValue), ulong.MaxValue),
+            (UInt128.MaxValue, ulong.MaxValue),
+            ((UInt128.MaxValue - UInt128.One), ulong.MaxValue),
         ];
 
-        foreach (var seconds in edges) {
-            if (CheckTryDurationEngineTicksExact(seconds: seconds) is { } detail) {
-                return detail;
-            }
+        foreach (var (value, expected) in boundaryLadder) {
+            Assert.Equal(
+                expected: expected,
+                actual: value.SquareRoot()
+            );
         }
 
-        for (var milli = 0; (milli <= 2000); milli += 37) {
-            if (CheckTryDurationEngineTicksExact(seconds: (milli / 1000.0m)) is { } detail) {
-                return detail;
-            }
+        // Thirty-two index-derived interior operands spanning the widest quarter of the carrier: 2^(127-k) plus a
+        // small index-derived offset, for k from 0 through 31.
+        for (var k = 0; (k < 32); ++k) {
+            var value = ((((UInt128)1) << (127 - k)) + (((UInt128)(k * 104_729)) << (k % 40)));
+            var root = value.SquareRoot();
+            var rootBig = ((BigInteger)root);
+            var valueBig = ((BigInteger)value);
+
+            Assert.True(
+                condition: ((rootBig * rootBig) <= valueBig),
+                userMessage: $"SquareRoot<UInt128>({value}) = {root} overshoots: root^2 exceeds the radicand"
+            );
+            Assert.True(
+                condition: (((rootBig + 1) * (rootBig + 1)) > valueBig),
+                userMessage: $"SquareRoot<UInt128>({value}) = {root} undershoots: (root+1)^2 does not exceed the radicand"
+            );
         }
 
         return null;
     }
+
+    // Negative, boundary and index-derived short pairs: both MinValue, one MinValue against zero either side, MaxValue
+    // against MinValue, both lanes at -1, and two bit-derived patterns (0xACE5, 0x53A1) that exercise every nibble.
+    private static readonly (short Value, short Other)[] NarrowPairLadder = [
+        (short.MinValue, 0), (0, short.MinValue), (short.MinValue, short.MinValue),
+        (short.MaxValue, short.MinValue), (-1, -1), (-1, 0), (0, -1),
+        (unchecked((short)0xACE5), unchecked((short)0x53A1)),
+    ];
+    // The same shape at the wide (long -> Int128) width.
+    private static readonly (long Value, long Other)[] WidePairLadder = [
+        (long.MinValue, 0L), (0L, long.MinValue), (long.MinValue, long.MinValue),
+        (long.MaxValue, long.MinValue), (-1L, -1L), (-1L, 0L), (0L, -1L),
+        (unchecked((long)0xACE5_1234_5678_9ABCUL), unchecked((long)0x53A1_FEDC_BA98_7654UL)),
+    ];
+    // Every simulation rate a shipped world authors or the validator admits at its edges (a divisor of 50400), the
+    // frame-ish rates, rate 0 (every duration is zero ticks), and 1 (ticks are whole seconds).
+    private static readonly ulong[] TickRates = [0UL, 1UL, 7UL, 24UL, 30UL, 60UL, 120UL, 240UL, 1000UL, 50400UL];
 }

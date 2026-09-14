@@ -15,18 +15,6 @@ namespace Puck.SignedDistance.Tests;
 public sealed class SdfFieldEvaluatorCullLawTests {
     private const int UnionInstanceCount = 12;
 
-    private static FixedPosition Position(double x, double y, double z) =>
-        FixedPosition.FromLocal(local: new FixedVector3(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        ));
-    private static FixedVector3 Direction(double x, double y, double z) =>
-        new(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        );
     // Builds the same field twice over the same instruction sequence: `culled` wraps each per-object shape in an
     // Instance bound the evaluator's cull may act on, `unwrapped` emits the identical instructions with no instance
     // metadata, so its evaluator declares no instance and skips nothing. Includes one instance of each blend family
@@ -51,7 +39,11 @@ public sealed class SdfFieldEvaluatorCullLawTests {
         );
 
         for (var index = 0; (index < UnionInstanceCount); index++) {
-            var center = new Vector3((-55f + (index * 10f)), 0f, 0f);
+            var center = new Vector3(
+                x: (-55f + (index * 10f)),
+                y: 0f,
+                z: 0f
+            );
             const float Radius = 0.75f;
 
             void Emit(SdfProgramBuilder builder) {
@@ -72,7 +64,11 @@ public sealed class SdfFieldEvaluatorCullLawTests {
             Emit(builder: unwrappedBuilder);
         }
 
-        var smoothCenter = new Vector3(200f, 0f, 0f);
+        var smoothCenter = new Vector3(
+            x: 200f,
+            y: 0f,
+            z: 0f
+        );
 
         void EmitSmooth(SdfProgramBuilder builder) {
             _ = builder.ResetPoint();
@@ -92,7 +88,11 @@ public sealed class SdfFieldEvaluatorCullLawTests {
         );
         EmitSmooth(builder: unwrappedBuilder);
 
-        var subtractCenter = new Vector3(0f, 0f, 200f);
+        var subtractCenter = new Vector3(
+            x: 0f,
+            y: 0f,
+            z: 200f
+        );
 
         void EmitSubtract(SdfProgramBuilder builder) {
             _ = builder.ResetPoint();
@@ -111,7 +111,11 @@ public sealed class SdfFieldEvaluatorCullLawTests {
         );
         EmitSubtract(builder: unwrappedBuilder);
 
-        var scopedCenter = new Vector3(0f, 200f, 0f);
+        var scopedCenter = new Vector3(
+            x: 0f,
+            y: 200f,
+            z: 0f
+        );
 
         void EmitScoped(SdfProgramBuilder builder) {
             _ = builder.ResetPoint();
@@ -138,214 +142,6 @@ public sealed class SdfFieldEvaluatorCullLawTests {
             new SdfFieldEvaluator(program: unwrappedBuilder.Build())
         );
     }
-
-    [Fact]
-    public void APlaneInsideASmallInstanceBoundIsNeverCulled() {
-        var culledBuilder = new SdfProgramBuilder();
-        var unwrappedBuilder = new SdfProgramBuilder();
-        var material = culledBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = unwrappedBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        // The sphere comes first so a running best exists when the plane's turn comes; the plane's declared bound is
-        // a unit sphere at its origin, while its influence is the whole space.
-        foreach (var builder in (SdfProgramBuilder[])[culledBuilder, unwrappedBuilder,]) {
-            var far = new Vector3(60f, 0f, 0f);
-            var declares = ReferenceEquals(builder, culledBuilder);
-
-            if (declares) {
-                _ = builder.BeginInstance(boundCenter: far, boundRadius: 1f);
-            }
-
-            _ = builder.ResetPoint();
-            _ = builder.Translate(offset: far);
-            _ = builder.Sphere(material: material, radius: 0.75f);
-
-            if (declares) {
-                _ = builder.EndInstance();
-                _ = builder.BeginInstance(boundCenter: new Vector3(0f, 2f, 0f), boundRadius: 1f);
-            }
-
-            _ = builder.ResetPoint();
-            _ = builder.Plane(material: material, normal: Vector3.UnitY, offset: 2f);
-
-            if (declares) {
-                _ = builder.EndInstance();
-            }
-        }
-
-        var culled = new SdfFieldEvaluator(program: culledBuilder.Build(buildInstanceGrid: false));
-        var unwrapped = new SdfFieldEvaluator(program: unwrappedBuilder.Build(buildInstanceGrid: false));
-
-        foreach (var x in (double[])[-80.0, -20.0, 0.0, 20.0, 57.0, 80.0,]) {
-            var position = Position(x: x, y: 0.0, z: 0.0);
-
-            Assert.True(condition: unwrapped.TryDistance(distance: out var expected, material: out var expectedMaterial, position: position));
-            Assert.True(condition: culled.TryDistance(distance: out var actual, material: out var actualMaterial, position: position));
-            Assert.Equal(expected: expected, actual: actual);
-            Assert.Equal(expected: expectedMaterial, actual: actualMaterial);
-        }
-    }
-
-    [Fact]
-    public void CullMatchesTheUncalledReferenceAcrossALatticeOfDistancesGradientsAndCasts() {
-        var (culled, unwrapped) = BuildFixture();
-        var samples = 0;
-
-        for (var xi = -6; (xi <= 6); xi++) {
-            var x = (xi * 10.0);
-
-            foreach (var y in (double[])[-1.0, 0.0, 1.0, 3.0,]) {
-                foreach (var z in (double[])[-3.0, 0.0, 3.0,]) {
-                    samples++;
-
-                    var position = Position(
-                        x: x,
-                        y: y,
-                        z: z
-                    );
-                    var culledFound = culled.TryDistance(
-                        distance: out var culledDistance,
-                        material: out var culledMaterial,
-                        position: position
-                    );
-                    var unwrappedFound = unwrapped.TryDistance(
-                        distance: out var unwrappedDistance,
-                        material: out var unwrappedMaterial,
-                        position: position
-                    );
-
-                    Assert.Equal(
-                        expected: unwrappedFound,
-                        actual: culledFound
-                    );
-                    Assert.Equal(
-                        expected: unwrappedDistance,
-                        actual: culledDistance
-                    );
-                    Assert.Equal(
-                        expected: unwrappedMaterial,
-                        actual: culledMaterial
-                    );
-
-                    var culledGradientFound = culled.TryFieldGradient(
-                        gradient: out var culledGradient,
-                        position: position
-                    );
-                    var unwrappedGradientFound = unwrapped.TryFieldGradient(
-                        gradient: out var unwrappedGradient,
-                        position: position
-                    );
-
-                    Assert.Equal(
-                        expected: unwrappedGradientFound,
-                        actual: culledGradientFound
-                    );
-                    Assert.Equal(
-                        expected: unwrappedGradient,
-                        actual: culledGradient
-                    );
-
-                    foreach (var direction in (double[][])[[1.0, 0.0, 0.0,], [-1.0, 0.0, 0.0,], [0.0, -1.0, 0.0,], [0.3, -0.9, 0.3,],]) {
-                        var dir = Direction(
-                            x: direction[0],
-                            y: direction[1],
-                            z: direction[2]
-                        );
-                        var maxDist = FixedQ4816.FromInteger(value: 400L);
-                        var culledRayFound = culled.Raycast(
-                            dir: dir,
-                            hit: out var culledRayHit,
-                            maxDist: maxDist,
-                            origin: position
-                        );
-                        var unwrappedRayFound = unwrapped.Raycast(
-                            dir: dir,
-                            hit: out var unwrappedRayHit,
-                            maxDist: maxDist,
-                            origin: position
-                        );
-
-                        Assert.Equal(
-                            expected: unwrappedRayFound,
-                            actual: culledRayFound
-                        );
-                        Assert.Equal(
-                            expected: unwrappedRayHit,
-                            actual: culledRayHit
-                        );
-
-                        var radius = FixedQ4816.FromDouble(value: 0.3);
-                        var culledSphereFound = culled.SphereCast(
-                            dir: dir,
-                            hit: out var culledSphereHit,
-                            maxDist: maxDist,
-                            origin: position,
-                            radius: radius
-                        );
-                        var unwrappedSphereFound = unwrapped.SphereCast(
-                            dir: dir,
-                            hit: out var unwrappedSphereHit,
-                            maxDist: maxDist,
-                            origin: position,
-                            radius: radius
-                        );
-
-                        Assert.Equal(
-                            expected: unwrappedSphereFound,
-                            actual: culledSphereFound
-                        );
-                        Assert.Equal(
-                            expected: unwrappedSphereHit,
-                            actual: culledSphereHit
-                        );
-                    }
-                }
-            }
-        }
-
-        Assert.True(condition: (samples > 0));
-    }
-    // Every far instance holds ShapesPerInstance chained union spheres, so evaluating one fully costs far more than
-    // testing its bound once — without the cull, this many far instances is slow enough to discriminate reliably
-    // from a bound-only skip on any machine.
-    private static SdfFieldEvaluator BuildManyFarInstancesEvaluator(int instanceCount, int shapesPerInstance) {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = builder.ResetPoint();
-        _ = builder.Translate(offset: new Vector3(0f, 0f, 3f));
-        _ = builder.Sphere(
-            blend: SdfBlendOp.Union,
-            material: material,
-            radius: 0.5f
-        );
-
-        for (var index = 0; (index < instanceCount); index++) {
-            var center = new Vector3((1000f + (index * 25f)), 0f, 0f);
-
-            void Emit(SdfProgramBuilder b) {
-                for (var shape = 0; (shape < shapesPerInstance); shape++) {
-                    _ = b.ResetPoint();
-                    _ = b.Translate(offset: (center + new Vector3(shape, 0f, 0f)));
-                    _ = b.Sphere(
-                        blend: SdfBlendOp.Union,
-                        material: material,
-                        radius: 0.4f
-                    );
-                }
-            }
-
-            _ = builder.Instance(
-                boundCenter: center,
-                boundRadius: ((shapesPerInstance * 1.0f) + 1.0f),
-                emit: Emit
-            );
-        }
-
-        return new SdfFieldEvaluator(program: builder.Build());
-    }
-
     // Reproduces the case IsPureUnionInstance alone does not exclude: an instance whose body carries no leading
     // ResetPoint (legal — BeginInstance imposes no such requirement), immediately followed by a world-set
     // instruction that also has no leading ResetPoint and so depends on whatever local position/scale the
@@ -363,7 +159,11 @@ public sealed class SdfFieldEvaluatorCullLawTests {
 
         void EmitNear(SdfProgramBuilder builder) {
             _ = builder.ResetPoint();
-            _ = builder.Translate(offset: new Vector3(5f, 0f, 0f));
+            _ = builder.Translate(offset: new Vector3(
+                x: 5f,
+                y: 0f,
+                z: 0f
+            ));
             _ = builder.Sphere(
                 blend: SdfBlendOp.Union,
                 material: material,
@@ -375,7 +175,11 @@ public sealed class SdfFieldEvaluatorCullLawTests {
         EmitNear(builder: unwrappedBuilder);
 
         void EmitFarBodyNoReset(SdfProgramBuilder builder) {
-            _ = builder.Translate(offset: new Vector3(1f, 0f, 0f));
+            _ = builder.Translate(offset: new Vector3(
+                x: 1f,
+                y: 0f,
+                z: 0f
+            ));
             _ = builder.Sphere(
                 blend: SdfBlendOp.Union,
                 material: material,
@@ -384,7 +188,11 @@ public sealed class SdfFieldEvaluatorCullLawTests {
         }
 
         _ = culledBuilder.BeginInstance(
-            boundCenter: new Vector3(100f, 0f, 0f),
+            boundCenter: new Vector3(
+                x: 100f,
+                y: 0f,
+                z: 0f
+            ),
             boundRadius: 1f
         );
         EmitFarBodyNoReset(builder: culledBuilder);
@@ -407,7 +215,278 @@ public sealed class SdfFieldEvaluatorCullLawTests {
             new SdfFieldEvaluator(program: unwrappedBuilder.Build())
         );
     }
+    // Every far instance holds ShapesPerInstance chained union spheres, so evaluating one fully costs far more than
+    // testing its bound once — without the cull, this many far instances is slow enough to discriminate reliably
+    // from a bound-only skip on any machine.
+    private static SdfFieldEvaluator BuildManyFarInstancesEvaluator(int instanceCount, int shapesPerInstance) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
+        _ = builder.ResetPoint();
+        _ = builder.Translate(offset: new Vector3(
+            x: 0f,
+            y: 0f,
+            z: 3f
+        ));
+        _ = builder.Sphere(
+            blend: SdfBlendOp.Union,
+            material: material,
+            radius: 0.5f
+        );
+
+        for (var index = 0; (index < instanceCount); index++) {
+            var center = new Vector3(
+                x: (1000f + (index * 25f)),
+                y: 0f,
+                z: 0f
+            );
+
+            void Emit(SdfProgramBuilder b) {
+                for (var shape = 0; (shape < shapesPerInstance); shape++) {
+                    _ = b.ResetPoint();
+                    _ = b.Translate(offset: (center + new Vector3(
+                        x: shape,
+                        y: 0f,
+                        z: 0f
+                    )));
+                    _ = b.Sphere(
+                        blend: SdfBlendOp.Union,
+                        material: material,
+                        radius: 0.4f
+                    );
+                }
+            }
+
+            _ = builder.Instance(
+                boundCenter: center,
+                boundRadius: ((shapesPerInstance * 1.0f) + 1.0f),
+                emit: Emit
+            );
+        }
+
+        return new SdfFieldEvaluator(program: builder.Build());
+    }
+    private static FixedVector3 Direction(double x, double y, double z) =>
+        new(
+            X: FixedQ4816.FromDouble(value: x),
+            Y: FixedQ4816.FromDouble(value: y),
+            Z: FixedQ4816.FromDouble(value: z)
+        );
+    private static FixedPosition Position(double x, double y, double z) =>
+        FixedPosition.FromLocal(local: new FixedVector3(
+            X: FixedQ4816.FromDouble(value: x),
+            Y: FixedQ4816.FromDouble(value: y),
+            Z: FixedQ4816.FromDouble(value: z)
+        ));
+
+    [Fact]
+    public void APlaneInsideASmallInstanceBoundIsNeverCulled() {
+        var culledBuilder = new SdfProgramBuilder();
+        var unwrappedBuilder = new SdfProgramBuilder();
+        var material = culledBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = unwrappedBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        // The sphere comes first so a running best exists when the plane's turn comes; the plane's declared bound is
+        // a unit sphere at its origin, while its influence is the whole space.
+        foreach (var builder in ((SdfProgramBuilder[])[culledBuilder, unwrappedBuilder,])) {
+            var far = new Vector3(
+                x: 60f,
+                y: 0f,
+                z: 0f
+            );
+            var declares = ReferenceEquals(
+                objA: builder,
+                objB: culledBuilder
+            );
+
+            if (declares) {
+                _ = builder.BeginInstance(
+                    boundCenter: far,
+                    boundRadius: 1f
+                );
+            }
+
+            _ = builder.ResetPoint();
+            _ = builder.Translate(offset: far);
+            _ = builder.Sphere(
+                material: material,
+                radius: 0.75f
+            );
+
+            if (declares) {
+                _ = builder.EndInstance();
+                _ = builder.BeginInstance(
+                    boundCenter: new Vector3(
+                        x: 0f,
+                        y: 2f,
+                        z: 0f
+                    ),
+                    boundRadius: 1f
+                );
+            }
+
+            _ = builder.ResetPoint();
+            _ = builder.Plane(
+                material: material,
+                normal: Vector3.UnitY,
+                offset: 2f
+            );
+
+            if (declares) {
+                _ = builder.EndInstance();
+            }
+        }
+
+        var culled = new SdfFieldEvaluator(program: culledBuilder.Build(buildInstanceGrid: false));
+        var unwrapped = new SdfFieldEvaluator(program: unwrappedBuilder.Build(buildInstanceGrid: false));
+
+        foreach (var x in ((double[])[-80.0, -20.0, 0.0, 20.0, 57.0, 80.0,])) {
+            var position = Position(
+                x: x,
+                y: 0.0,
+                z: 0.0
+            );
+
+            Assert.True(condition: unwrapped.TryDistance(
+                distance: out var expected,
+                material: out var expectedMaterial,
+                position: position
+            ));
+            Assert.True(condition: culled.TryDistance(
+                distance: out var actual,
+                material: out var actualMaterial,
+                position: position
+            ));
+            Assert.Equal(
+                actual: actual,
+                expected: expected
+            );
+            Assert.Equal(
+                actual: actualMaterial,
+                expected: expectedMaterial
+            );
+        }
+    }
+    [Fact]
+    public void CullMatchesTheUncalledReferenceAcrossALatticeOfDistancesGradientsAndCasts() {
+        var (culled, unwrapped) = BuildFixture();
+        var samples = 0;
+
+        for (var xi = -6; (xi <= 6); xi++) {
+            var x = (xi * 10.0);
+
+            foreach (var y in ((double[])[-1.0, 0.0, 1.0, 3.0,])) {
+                foreach (var z in ((double[])[-3.0, 0.0, 3.0,])) {
+                    samples++;
+
+                    var position = Position(
+                        x: x,
+                        y: y,
+                        z: z
+                    );
+                    var culledFound = culled.TryDistance(
+                        distance: out var culledDistance,
+                        material: out var culledMaterial,
+                        position: position
+                    );
+                    var unwrappedFound = unwrapped.TryDistance(
+                        distance: out var unwrappedDistance,
+                        material: out var unwrappedMaterial,
+                        position: position
+                    );
+
+                    Assert.Equal(
+                        actual: culledFound,
+                        expected: unwrappedFound
+                    );
+                    Assert.Equal(
+                        actual: culledDistance,
+                        expected: unwrappedDistance
+                    );
+                    Assert.Equal(
+                        actual: culledMaterial,
+                        expected: unwrappedMaterial
+                    );
+
+                    var culledGradientFound = culled.TryFieldGradient(
+                        gradient: out var culledGradient,
+                        position: position
+                    );
+                    var unwrappedGradientFound = unwrapped.TryFieldGradient(
+                        gradient: out var unwrappedGradient,
+                        position: position
+                    );
+
+                    Assert.Equal(
+                        actual: culledGradientFound,
+                        expected: unwrappedGradientFound
+                    );
+                    Assert.Equal(
+                        actual: culledGradient,
+                        expected: unwrappedGradient
+                    );
+
+                    foreach (var direction in ((double[][])[[1.0, 0.0, 0.0,], [-1.0, 0.0, 0.0,], [0.0, -1.0, 0.0,], [0.3, -0.9, 0.3,],])) {
+                        var dir = Direction(
+                            x: direction[0],
+                            y: direction[1],
+                            z: direction[2]
+                        );
+                        var maxDist = FixedQ4816.FromInteger(value: 400L);
+                        var culledRayFound = culled.Raycast(
+                            dir: dir,
+                            hit: out var culledRayHit,
+                            maxDist: maxDist,
+                            origin: position
+                        );
+                        var unwrappedRayFound = unwrapped.Raycast(
+                            dir: dir,
+                            hit: out var unwrappedRayHit,
+                            maxDist: maxDist,
+                            origin: position
+                        );
+
+                        Assert.Equal(
+                            actual: culledRayFound,
+                            expected: unwrappedRayFound
+                        );
+                        Assert.Equal(
+                            actual: culledRayHit,
+                            expected: unwrappedRayHit
+                        );
+
+                        var radius = FixedQ4816.FromDouble(value: 0.3);
+                        var culledSphereFound = culled.SphereCast(
+                            dir: dir,
+                            hit: out var culledSphereHit,
+                            maxDist: maxDist,
+                            origin: position,
+                            radius: radius
+                        );
+                        var unwrappedSphereFound = unwrapped.SphereCast(
+                            dir: dir,
+                            hit: out var unwrappedSphereHit,
+                            maxDist: maxDist,
+                            origin: position,
+                            radius: radius
+                        );
+
+                        Assert.Equal(
+                            actual: culledSphereFound,
+                            expected: unwrappedSphereFound
+                        );
+                        Assert.Equal(
+                            actual: culledSphereHit,
+                            expected: unwrappedSphereHit
+                        );
+                    }
+                }
+            }
+        }
+
+        Assert.True(condition: (samples > 0));
+    }
     [Fact]
     public void CullNeverFiresWhenTheFollowingInstructionIsNotAResetPoint() {
         var (culled, unwrapped) = BuildLeakyFrameFixture();
@@ -428,19 +507,18 @@ public sealed class SdfFieldEvaluatorCullLawTests {
         );
 
         Assert.Equal(
-            expected: unwrappedFound,
-            actual: culledFound
+            actual: culledFound,
+            expected: unwrappedFound
         );
         Assert.Equal(
-            expected: unwrappedDistance,
-            actual: culledDistance
+            actual: culledDistance,
+            expected: unwrappedDistance
         );
         Assert.Equal(
-            expected: unwrappedMaterial,
-            actual: culledMaterial
+            actual: culledMaterial,
+            expected: unwrappedMaterial
         );
     }
-
     [Fact]
     [Trait("Category", "Performance")]
     public void FarInstanceCullMeetsTheCalibratedTimingBudget() {

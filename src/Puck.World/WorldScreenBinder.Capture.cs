@@ -415,7 +415,10 @@ internal sealed partial class WorldScreenBinder {
     private sealed class PullCadence(uint rateHz) {
         private readonly long m_cadenceTicks = Math.Max(
             val1: 1L,
-            val2: (Stopwatch.Frequency / Math.Max(val1: rateHz, val2: 1u))
+            val2: (Stopwatch.Frequency / Math.Max(
+                val1: rateHz,
+                val2: 1u
+            ))
         );
 
         private long m_lastPullTicks;

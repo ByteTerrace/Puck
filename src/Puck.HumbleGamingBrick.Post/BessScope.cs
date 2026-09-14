@@ -107,15 +107,15 @@ internal static class BessScope {
             ),
             BackgroundPalette: (isColor
             ? ReadColorPalette(
-                bus: bus,
-                registers: BackgroundPaletteRegisters
-            )
+                    bus: bus,
+                    registers: BackgroundPaletteRegisters
+                )
             : []),
             ObjectPalette: (isColor
             ? ReadColorPalette(
-                bus: bus,
-                registers: ObjectPaletteRegisters
-            )
+                    bus: bus,
+                    registers: ObjectPaletteRegisters
+                )
             : [])
         );
     }
@@ -161,17 +161,6 @@ internal static class BessScope {
 
         return Fnv1aHash.Compute(values: writer.ToArray());
     }
-    /// <summary>Reads a run of bytes through the bus (a diagnostic read; not recorded anywhere, no side effects beyond
-    /// whatever a real CPU read on that address would have).</summary>
-    public static byte[] ReadRange(ISystemBus bus, ushort start, int length) {
-        var bytes = new byte[length];
-
-        for (var index = 0; (index < length); ++index) {
-            bytes[index] = bus.ReadByte(address: ((ushort)(start + index)));
-        }
-
-        return bytes;
-    }
     /// <summary>Reads the 64-byte CGB color-palette RAM behind an index/data register pair, without perturbing the
     /// index register's live value: the index is written with auto-increment (bit 7) clear for every entry, and the
     /// original index byte is restored afterward.</summary>
@@ -193,6 +182,17 @@ internal static class BessScope {
         );
 
         return palette;
+    }
+    /// <summary>Reads a run of bytes through the bus (a diagnostic read; not recorded anywhere, no side effects beyond
+    /// whatever a real CPU read on that address would have).</summary>
+    public static byte[] ReadRange(ISystemBus bus, ushort start, int length) {
+        var bytes = new byte[length];
+
+        for (var index = 0; (index < length); ++index) {
+            bytes[index] = bus.ReadByte(address: ((ushort)(start + index)));
+        }
+
+        return bytes;
     }
     /// <summary>Writes the 64-byte CGB color-palette RAM back through the same index/data register pair, finishing with
     /// the index register set to a caller-supplied value (the exported byte, including its auto-increment bit) rather

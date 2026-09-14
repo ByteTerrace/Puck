@@ -22,33 +22,38 @@ public sealed record WorldExtensionConfiguration(string Schema, string World, Gu
     IReadOnlyList<WorldExtensionClientSettings> Clients, IReadOnlyList<WorldExtensionConnection> Connections,
     WorldExtensionHostOptions? Worker = null, int MaximumEntries = 1024, int MaximumBytes = 16777216,
     int ScanEveryTicks = 240, string Recovery = "checkpoint", IReadOnlyList<WorldExtensionObservationSettings>? Observations = null) {
+    private static void CheckDuplicates(JsonElement value) {
+        if (value.ValueKind == JsonValueKind.Object) {
+            var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            foreach (var member in value.EnumerateObject()) {
+                if (!names.Add(item: member.Name)) { throw new JsonException(message: $"Duplicate configuration member '{member.Name}'."); }
+                CheckDuplicates(value: member.Value);
+            }
+        } else if (value.ValueKind == JsonValueKind.Array) {
+            foreach (var item in value.EnumerateArray()) { CheckDuplicates(value: item); }
+        }
+    }
+
     /// <summary>Parses bounded, strict JSON; unknown and duplicate members refuse at every depth.</summary>
     /// <param name="utf8">The host-selected configuration bytes.</param>
     /// <returns>The detached configuration.</returns>
     /// <exception cref="JsonException">The document is malformed, ambiguous, oversized, or unsupported.</exception>
     public static WorldExtensionConfiguration Parse(ReadOnlySpan<byte> utf8) {
-        if (utf8.Length > 1048576) { throw new JsonException("Extension configuration exceeds 1 MiB."); }
+        if (utf8.Length > 1048576) { throw new JsonException(message: "Extension configuration exceeds 1 MiB."); }
         using var document = JsonDocument.Parse(utf8.ToArray());
-        CheckDuplicates(document.RootElement);
-        var value = JsonSerializer.Deserialize(utf8, WorldExtensionConfigurationJson.Default.WorldExtensionConfiguration)
-            ?? throw new JsonException("Extension configuration must be an object.");
-        if (value.Schema != "puck.world.extensions.v1") { throw new JsonException("Unsupported extension configuration schema."); }
+
+        CheckDuplicates(value: document.RootElement);
+        var value = (JsonSerializer.Deserialize(
+            utf8,
+            WorldExtensionConfigurationJson.Default.WorldExtensionConfiguration
+        )
+            ?? throw new JsonException(message: "Extension configuration must be an object."));
+
+        if (value.Schema != "puck.world.extensions.v1") { throw new JsonException(message: "Unsupported extension configuration schema."); }
         return value;
     }
-
-    private static void CheckDuplicates(JsonElement value) {
-        if (value.ValueKind == JsonValueKind.Object) {
-            var names = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var member in value.EnumerateObject()) {
-                if (!names.Add(member.Name)) { throw new JsonException($"Duplicate configuration member '{member.Name}'."); }
-                CheckDuplicates(member.Value);
-            }
-        } else if (value.ValueKind == JsonValueKind.Array) {
-            foreach (var item in value.EnumerateArray()) { CheckDuplicates(item); }
-        }
-    }
 }
-
 /// <summary>One named, explicitly installed provider and its private configuration.</summary>
 /// <param name="Name">Deployment-local provider instance name.</param>
 /// <param name="Type">Installed provider catalog key.</param>
@@ -82,12 +87,10 @@ public sealed record WorldExtensionWorldRequest(string Capability, string Subjec
 /// <param name="Results">Optional observable text table receiving provider result payloads.</param>
 public sealed record WorldExtensionConnection(string Name, string Client, string Operation, string Requests,
     string Status, string? Results = null);
-
 /// <summary>An installed provider type. Configuration selects its key; it never supplies executable paths.</summary>
 /// <param name="Type">The stable catalog key.</param>
 /// <param name="Create">Constructs a trusted provider without making external service calls.</param>
 public sealed record WorldExtensionProviderType(string Type, Func<JsonElement, IWorldConfiguredProvider> Create);
-
 /// <summary>An explicitly installed provider's configurable operation factory. Owns its credentials and adapters.</summary>
 public interface IWorldConfiguredProvider : IDisposable {
     /// <summary>Validates and binds an operation without making external service calls.</summary>
@@ -98,8 +101,8 @@ public interface IWorldConfiguredProvider : IDisposable {
     WorldExtensionOperation Bind(string name, string description, JsonElement settings);
 }
 
+[JsonSerializable(typeof(WorldExtensionConfiguration))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, RespectRequiredConstructorParameters = true,
     RespectNullableAnnotations = true, UseStringEnumConverter = true)]
-[JsonSerializable(typeof(WorldExtensionConfiguration))]
 internal sealed partial class WorldExtensionConfigurationJson : JsonSerializerContext;

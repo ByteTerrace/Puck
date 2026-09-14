@@ -425,9 +425,9 @@ internal static partial class Subjects {
 
                 for (var index = 0; (index < entries.Length); ++index) {
                     entries[index] = (((long)rng.NextUInt32(
-                    maximum: 6U,
-                    minimum: 0U
-                )) - 3L);
+                        maximum: 6U,
+                        minimum: 0U
+                    )) - 3L);
                 }
 
                 digraphs.Add(item: ($"draw({order}.{draw})", order, entries));
@@ -752,9 +752,9 @@ internal static partial class Subjects {
             for (var left = 0; (left < letters); ++left) {
                 for (var right = 0; (right < letters); ++right) {
                     product[((left * letters) + right)] = Math.Max(
-                    val1: left,
-                    val2: right
-                );
+                        val1: left,
+                        val2: right
+                    );
                 }
             }
 
@@ -2214,9 +2214,9 @@ internal static partial class Subjects {
 
             for (var index = 0; (index < coefficients.Length); ++index) {
                 coefficients[index] = m_material.Multiply(
-                left: coefficient,
-                right: value.Coefficients[index]
-            );
+                    left: coefficient,
+                    right: value.Coefficients[index]
+                );
             }
 
             return m_algebra.FromSupport(
@@ -2231,12 +2231,12 @@ internal static partial class Subjects {
 
             foreach (var crossing in word) {
                 element = m_algebra.Multiply(
-                left: element,
-                right: Crossing(
-                    crossing: crossing,
-                    strands: strands
-                )
-            );
+                    left: element,
+                    right: Crossing(
+                        crossing: crossing,
+                        strands: strands
+                    )
+                );
             }
 
             return element;
@@ -2303,9 +2303,9 @@ internal static partial class Subjects {
 
             foreach (var crossing in word) {
                 source = free.Multiply(
-                left: source,
-                right: free.Generator(symbol: Letter(crossing: crossing))
-            );
+                    left: source,
+                    right: free.Generator(symbol: Letter(crossing: crossing))
+                );
             }
 
             return functor.Map(value: source);

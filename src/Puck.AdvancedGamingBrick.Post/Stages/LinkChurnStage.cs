@@ -22,8 +22,8 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </summary>
 internal sealed class LinkChurnStage : IPostStage<PostContext> {
     private const long BudgetStep = 64L;
-    private const uint ExpectedParentControl = 0x6003u; // multiplayer | 115200 bps | IRQ-enable, start clear, id 0
     private const uint ExpectedChildControl = 0x6013u;  // as the parent, with daisy-chain id 1 in bits 4-5
+    private const uint ExpectedParentControl = 0x6003u; // multiplayer | 115200 bps | IRQ-enable, start clear, id 0
     private const uint SioCntAddress = 0x04000128u;
     private const uint SioCntStartMask = 0x0080u;
     private const int StepCount = 700;
@@ -35,84 +35,120 @@ internal sealed class LinkChurnStage : IPostStage<PostContext> {
     public PostTier Tier =>
         PostTier.C;
 
-    /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        ArgumentNullException.ThrowIfNull(argument: context);
+    private static int CountRecordedRounds(AgbMachineInstance console) {
+        var bus = ((AgbBus)console.Machine.Bus);
+        var count = 0;
 
-        // The reference (unchurned) run also probes every budget boundary, so both churn points are chosen
-        // deterministically from its own transfer-idle windows.
-        var reference = RunScenario(
-            bios: context.BiosImage,
-            churnAtSteps: []
-        );
-
-        if (Verify(result: reference) is { } failure) {
-            return PostStageOutcome.Fail(detail: failure);
-        }
-
-        var (firstChurn, secondChurn) = PickChurnSteps(probes: reference.Probes);
-
-        if (
-            (firstChurn < 0) ||
-            (secondChurn < 0)
+        while (
+            (count < MicroRoms.LinkRounds) &&
+            (bus.DebugRead32(address: (MicroRoms.LinkRecordAddress + (((uint)count) * 8u))) != 0u)
         ) {
-            return PostStageOutcome.Fail(detail: "fewer than two transfer-idle budget boundaries appeared mid-exchange; the round schedule is wrong");
+            ++count;
         }
 
-        // (a) Determinism: a second fresh, uninterrupted run reproduces the protocol verdicts and final snapshots.
-        var replay = RunScenario(
-            bios: context.BiosImage,
-            churnAtSteps: []
-        );
-
-        if (Difference(
-            actual: replay,
-            expected: reference,
-            leg: "replay"
-        ) is { } replayFailure) {
-            return PostStageOutcome.Fail(detail: replayFailure);
-        }
-
-        // (b) Churn, twice: suspend/snapshot/restore/reconnect at both idle boundaries, continue, demand the
-        // identical tail.
-        var churned = RunScenario(
-            bios: context.BiosImage,
-            churnAtSteps: [firstChurn, secondChurn]
-        );
-
-        if (Difference(
-            actual: churned,
-            expected: reference,
-            leg: "churn"
-        ) is { } churnFailure) {
-            return PostStageOutcome.Fail(detail: churnFailure);
-        }
-
-        // (c) Reordered/substituted resume: a token bound to (parent, child) applied to (child, parent) must be
-        // rejected and must leave both consoles unlinked (M-03).
-        if (VerifyReorderedResumeRejected(bios: context.BiosImage) is { } reorderFailure) {
-            return PostStageOutcome.Fail(detail: reorderFailure);
-        }
-
-        // (d) Invalid resume tokens — null (the "default"/absent token) and a credit-count mismatch — are rejected
-        // with a clean ArgumentException family, never an NRE, and also leave both consoles unlinked (M-03).
-        if (VerifyInvalidResumeTokenRejected(bios: context.BiosImage) is { } tokenFailure) {
-            return PostStageOutcome.Fail(detail: tokenFailure);
-        }
-
-        // (e) Mid-transfer suspend: Suspend() at a busy (non-transfer-idle) budget boundary is rejected with
-        // InvalidOperationException, and the session is left fully live — continuing it to completion reproduces
-        // the reference exactly (M-04).
-        if (VerifyMidTransferSuspendRejected(
-            bios: context.BiosImage,
-            reference: reference
-        ) is { } suspendFailure) {
-            return PostStageOutcome.Fail(detail: suspendFailure);
-        }
-
-        return PostStageOutcome.Pass(detail: $"{MicroRoms.LinkRounds} multiplayer rounds (parent 0 / child 1), severed transfer-idle at budget steps {firstChurn} and {secondChurn}, replay-identical and churn-identical across both cycles ({reference.ParentState.Size}+{reference.ChildState.Size} state bytes); reordered/substituted resume rejected+unlinked, null/mismatched resume token rejected+unlinked, mid-transfer Suspend rejected with the session left live and driven to an identical completion");
+        return count;
     }
+    private static AgbMachineInstance CreateConsole(ReadOnlyMemory<byte> bios, byte[] rom) {
+        var console = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
+            bios: bios,
+            rom: rom
+        ));
 
+        console.Machine.DirectBoot();
+
+        return console;
+    }
+    private static ushort DebugReadSioCnt(AgbMachineInstance console) =>
+        ((AgbBus)console.Machine.Bus).DebugRead16(address: SioCntAddress);
+    // Compares a later run against the reference: both protocol verdicts and both final snapshots must match.
+    // Snapshot equality also checks Identity (free rigor). Probes are the schedule's own instrument, not compared.
+    private static string? Difference(LinkChurnScenarioResult expected, LinkChurnScenarioResult actual, string leg) {
+        if (!VerdictsEqual(
+            a: expected.ParentVerdict,
+            b: actual.ParentVerdict
+        )) {
+            return $"the {leg} parent protocol verdict diverged from the reference";
+        }
+
+        if (!VerdictsEqual(
+            a: expected.ChildVerdict,
+            b: actual.ChildVerdict
+        )) {
+            return $"the {leg} child protocol verdict diverged from the reference";
+        }
+
+        if (!expected.ParentState.ContentEquals(other: actual.ParentState)) {
+            return $"the {leg} parent final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.ParentState,
+                b: actual.ParentState
+            )}";
+        }
+
+        if (!expected.ChildState.ContentEquals(other: actual.ChildState)) {
+            return $"the {leg} child final state diverged — {HashDivergenceProbe.DescribeDivergence(
+                a: expected.ChildState,
+                b: actual.ChildState
+            )}";
+        }
+
+        return null;
+    }
+    private static bool IsTransferIdle(AgbMachineInstance parent, AgbMachineInstance child) =>
+        (((DebugReadSioCnt(console: parent) & SioCntStartMask) == 0)
+            && ((DebugReadSioCnt(console: child) & SioCntStartMask) == 0));
+    // The first budget boundary that is NOT transfer-idle (SIOCNT's start/busy bit set on the parent, the child, or
+    // both) — the M-04 probe's mid-transfer instant.
+    private static int PickBusyStep(List<BoundaryProbe> probes) {
+        for (var step = 0; (step < probes.Count); ++step) {
+            if (!probes[index: step].Idle) {
+                return step;
+            }
+        }
+
+        return -1;
+    }
+    // The first two budget boundaries that are transfer-idle mid-exchange (at least one round recorded, not all of
+    // them, at a STRICTLY increasing recorded-round count) — two genuine, distinct severable instants.
+    private static (int First, int Second) PickChurnSteps(List<BoundaryProbe> probes) {
+        var first = -1;
+        var firstRecorded = 0;
+
+        for (var step = 0; (step < probes.Count); ++step) {
+            var probe = probes[index: step];
+
+            if (
+                !probe.Idle ||
+                (probe.RecordedRounds < 1) ||
+                (probe.RecordedRounds >= MicroRoms.LinkRounds)
+            ) {
+                continue;
+            }
+
+            if (first < 0) {
+                first = step;
+                firstRecorded = probe.RecordedRounds;
+
+                continue;
+            }
+
+            if (probe.RecordedRounds > firstRecorded) {
+                return (first, step);
+            }
+        }
+
+        return (first, -1);
+    }
+    // A budget-boundary snapshot of the exchange's progress: whether both consoles are transfer-idle right now, and
+    // how many of the parent's round records have landed in IWRAM (a round's low word is never zero once the parent
+    // has written it, so a non-zero slot is proof the round completed — no protocol change needed to observe it).
+    private static BoundaryProbe Probe(AgbMachineInstance parent, AgbMachineInstance child) =>
+        new(
+            Idle: IsTransferIdle(
+                child: child,
+                parent: parent
+            ),
+            RecordedRounds: CountRecordedRounds(console: parent)
+        );
     // One complete scenario on the fixed budget schedule. At each step index in churnAtSteps the live session is
     // suspended (which the reference confirmed transfer-idle), both consoles snapshotted and restored into fresh
     // machines, and the cable reconnected with the resume token before the remaining budgets run.
@@ -196,169 +232,23 @@ internal sealed class LinkChurnStage : IPostStage<PostContext> {
             child.Dispose();
         }
     }
-    private static AgbMachineInstance CreateConsole(ReadOnlyMemory<byte> bios, byte[] rom) {
-        var console = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
-            bios: bios,
-            rom: rom
+    // Value equality for LinkSideVerdict: the record's auto-generated Equals would compare the Rounds array by
+    // reference (each run reads a freshly allocated array), so this compares its elements explicitly.
+    private static bool VerdictsEqual(LinkSideVerdict a, LinkSideVerdict b) =>
+        ((a.IrqCount == b.IrqCount) && (a.Marker == b.Marker) && (a.SerialControl == b.SerialControl) && a.Rounds.AsSpan().SequenceEqual(other: b.Rounds));
+    // Judges the reference run: both sides completed every round with the right IRQ count and daisy-chain id, and
+    // every round's recorded slots prove data actually crossed the cable.
+    private static string? Verify(LinkChurnScenarioResult result) =>
+        (LinkStageProtocol.VerifySide(
+            verdict: result.ParentVerdict,
+            side: "parent",
+            expectedControl: ExpectedParentControl
+        )
+            ?? LinkStageProtocol.VerifySide(
+            verdict: result.ChildVerdict,
+            side: "child",
+            expectedControl: ExpectedChildControl
         ));
-
-        console.Machine.DirectBoot();
-
-        return console;
-    }
-    // A budget-boundary snapshot of the exchange's progress: whether both consoles are transfer-idle right now, and
-    // how many of the parent's round records have landed in IWRAM (a round's low word is never zero once the parent
-    // has written it, so a non-zero slot is proof the round completed — no protocol change needed to observe it).
-    private static BoundaryProbe Probe(AgbMachineInstance parent, AgbMachineInstance child) =>
-        new(
-        Idle: IsTransferIdle(
-            child: child,
-            parent: parent
-        ),
-        RecordedRounds: CountRecordedRounds(console: parent)
-    );
-    private static bool IsTransferIdle(AgbMachineInstance parent, AgbMachineInstance child) =>
-        (((DebugReadSioCnt(console: parent) & SioCntStartMask) == 0)
-            && ((DebugReadSioCnt(console: child) & SioCntStartMask) == 0));
-    private static int CountRecordedRounds(AgbMachineInstance console) {
-        var bus = ((AgbBus)console.Machine.Bus);
-        var count = 0;
-
-        while (
-            (count < MicroRoms.LinkRounds) &&
-            (bus.DebugRead32(address: (MicroRoms.LinkRecordAddress + (((uint)count) * 8u))) != 0u)
-        ) {
-            ++count;
-        }
-
-        return count;
-    }
-    private static ushort DebugReadSioCnt(AgbMachineInstance console) =>
-        ((AgbBus)console.Machine.Bus).DebugRead16(address: SioCntAddress);
-    // The first two budget boundaries that are transfer-idle mid-exchange (at least one round recorded, not all of
-    // them, at a STRICTLY increasing recorded-round count) — two genuine, distinct severable instants.
-    private static (int First, int Second) PickChurnSteps(List<BoundaryProbe> probes) {
-        var first = -1;
-        var firstRecorded = 0;
-
-        for (var step = 0; (step < probes.Count); ++step) {
-            var probe = probes[index: step];
-
-            if (
-                !probe.Idle ||
-                (probe.RecordedRounds < 1) ||
-                (probe.RecordedRounds >= MicroRoms.LinkRounds)
-            ) {
-                continue;
-            }
-
-            if (first < 0) {
-                first = step;
-                firstRecorded = probe.RecordedRounds;
-
-                continue;
-            }
-
-            if (probe.RecordedRounds > firstRecorded) {
-                return (first, step);
-            }
-        }
-
-        return (first, -1);
-    }
-    // The first budget boundary that is NOT transfer-idle (SIOCNT's start/busy bit set on the parent, the child, or
-    // both) — the M-04 probe's mid-transfer instant.
-    private static int PickBusyStep(List<BoundaryProbe> probes) {
-        for (var step = 0; (step < probes.Count); ++step) {
-            if (!probes[index: step].Idle) {
-                return step;
-            }
-        }
-
-        return -1;
-    }
-    // M-03 probe (a): a resume token bound to (parent, child) applied to (child, parent) — a reordering that changes
-    // every slot's expected identity, since the two ROMs differ — must be rejected by AgbMachineIdentity binding, and
-    // rejection must leave both consoles fully unlinked: a fresh, non-resume session over the very same pair (in the
-    // very same rejected order) must still connect cleanly afterward, proof nothing from the aborted attempt leaked.
-    private static string? VerifyReorderedResumeRejected(ReadOnlyMemory<byte> bios) {
-        var parentRom = MicroRoms.GenerateBytes(kind: "link-parent");
-        var childRom = MicroRoms.GenerateBytes(kind: "link-child");
-        var parent = CreateConsole(
-            bios: bios,
-            rom: parentRom
-        );
-        var child = CreateConsole(
-            bios: bios,
-            rom: childRom
-        );
-
-        try {
-            var session = new AgbLinkSession(
-                parent,
-                child
-            );
-
-            session.Run(cycles: BudgetStep);
-
-            if (!IsTransferIdle(
-                child: child,
-                parent: parent
-            )) {
-                return "the reordered-resume probe's suspend point is not transfer-idle; pick a different budget";
-            }
-
-            var token = session.Suspend();
-            var parentState = parent.Machine.Snapshot();
-            var childState = child.Machine.Snapshot();
-            var freshParent = CreateConsole(
-                bios: bios,
-                rom: parentRom
-            );
-            var freshChild = CreateConsole(
-                bios: bios,
-                rom: childRom
-            );
-
-            freshParent.Machine.Restore(snapshot: parentState);
-            freshChild.Machine.Restore(snapshot: childState);
-
-            try {
-                ArgumentException? caught = null;
-
-                try {
-                    using var rejected = new AgbLinkSession(
-                        token,
-                        freshChild,
-                        freshParent
-                    ); // reordered
-                } catch (ArgumentException ex) {
-                    caught = ex;
-                }
-
-                if (caught is null) {
-                    return "a resume with a reordered console pair (child, parent instead of parent, child) did not throw ArgumentException";
-                }
-
-                try {
-                    using var proof = new AgbLinkSession(
-                        freshChild,
-                        freshParent
-                    );
-                } catch (Exception ex) {
-                    return $"a fresh session over the same consoles failed after the rejected reorder ({ex.GetType().Name}: {ex.Message}); the rejected resume must have left a console linked";
-                }
-
-                return null;
-            } finally {
-                freshParent.Dispose();
-                freshChild.Dispose();
-            }
-        } finally {
-            parent.Dispose();
-            child.Dispose();
-        }
-    }
     // M-03 probe (b): a null ("default"/absent) resume token, and a token whose credit count does not match the
     // console count, are both rejected with a clean ArgumentException family (never an NRE), and both leave every
     // console unlinked.
@@ -530,56 +420,166 @@ internal sealed class LinkChurnStage : IPostStage<PostContext> {
             child.Dispose();
         }
     }
-    // Judges the reference run: both sides completed every round with the right IRQ count and daisy-chain id, and
-    // every round's recorded slots prove data actually crossed the cable.
-    private static string? Verify(LinkChurnScenarioResult result) =>
-        (LinkStageProtocol.VerifySide(
-        verdict: result.ParentVerdict,
-        side: "parent",
-        expectedControl: ExpectedParentControl
-    )
-            ?? LinkStageProtocol.VerifySide(
-        verdict: result.ChildVerdict,
-        side: "child",
-        expectedControl: ExpectedChildControl
-    ));
-    // Compares a later run against the reference: both protocol verdicts and both final snapshots must match.
-    // Snapshot equality also checks Identity (free rigor). Probes are the schedule's own instrument, not compared.
-    private static string? Difference(LinkChurnScenarioResult expected, LinkChurnScenarioResult actual, string leg) {
-        if (!VerdictsEqual(
-            a: expected.ParentVerdict,
-            b: actual.ParentVerdict
-        )) {
-            return $"the {leg} parent protocol verdict diverged from the reference";
-        }
+    // M-03 probe (a): a resume token bound to (parent, child) applied to (child, parent) — a reordering that changes
+    // every slot's expected identity, since the two ROMs differ — must be rejected by AgbMachineIdentity binding, and
+    // rejection must leave both consoles fully unlinked: a fresh, non-resume session over the very same pair (in the
+    // very same rejected order) must still connect cleanly afterward, proof nothing from the aborted attempt leaked.
+    private static string? VerifyReorderedResumeRejected(ReadOnlyMemory<byte> bios) {
+        var parentRom = MicroRoms.GenerateBytes(kind: "link-parent");
+        var childRom = MicroRoms.GenerateBytes(kind: "link-child");
+        var parent = CreateConsole(
+            bios: bios,
+            rom: parentRom
+        );
+        var child = CreateConsole(
+            bios: bios,
+            rom: childRom
+        );
 
-        if (!VerdictsEqual(
-            a: expected.ChildVerdict,
-            b: actual.ChildVerdict
-        )) {
-            return $"the {leg} child protocol verdict diverged from the reference";
-        }
+        try {
+            var session = new AgbLinkSession(
+                parent,
+                child
+            );
 
-        if (!expected.ParentState.ContentEquals(other: actual.ParentState)) {
-            return $"the {leg} parent final state diverged — {HashDivergenceProbe.DescribeDivergence(
-                a: expected.ParentState,
-                b: actual.ParentState
-            )}";
-        }
+            session.Run(cycles: BudgetStep);
 
-        if (!expected.ChildState.ContentEquals(other: actual.ChildState)) {
-            return $"the {leg} child final state diverged — {HashDivergenceProbe.DescribeDivergence(
-                a: expected.ChildState,
-                b: actual.ChildState
-            )}";
-        }
+            if (!IsTransferIdle(
+                child: child,
+                parent: parent
+            )) {
+                return "the reordered-resume probe's suspend point is not transfer-idle; pick a different budget";
+            }
 
-        return null;
+            var token = session.Suspend();
+            var parentState = parent.Machine.Snapshot();
+            var childState = child.Machine.Snapshot();
+            var freshParent = CreateConsole(
+                bios: bios,
+                rom: parentRom
+            );
+            var freshChild = CreateConsole(
+                bios: bios,
+                rom: childRom
+            );
+
+            freshParent.Machine.Restore(snapshot: parentState);
+            freshChild.Machine.Restore(snapshot: childState);
+
+            try {
+                ArgumentException? caught = null;
+
+                try {
+                    using var rejected = new AgbLinkSession(
+                        token,
+                        freshChild,
+                        freshParent
+                    ); // reordered
+                } catch (ArgumentException ex) {
+                    caught = ex;
+                }
+
+                if (caught is null) {
+                    return "a resume with a reordered console pair (child, parent instead of parent, child) did not throw ArgumentException";
+                }
+
+                try {
+                    using var proof = new AgbLinkSession(
+                        freshChild,
+                        freshParent
+                    );
+                } catch (Exception ex) {
+                    return $"a fresh session over the same consoles failed after the rejected reorder ({ex.GetType().Name}: {ex.Message}); the rejected resume must have left a console linked";
+                }
+
+                return null;
+            } finally {
+                freshParent.Dispose();
+                freshChild.Dispose();
+            }
+        } finally {
+            parent.Dispose();
+            child.Dispose();
+        }
     }
-    // Value equality for LinkSideVerdict: the record's auto-generated Equals would compare the Rounds array by
-    // reference (each run reads a freshly allocated array), so this compares its elements explicitly.
-    private static bool VerdictsEqual(LinkSideVerdict a, LinkSideVerdict b) =>
-        ((a.IrqCount == b.IrqCount) && (a.Marker == b.Marker) && (a.SerialControl == b.SerialControl) && a.Rounds.AsSpan().SequenceEqual(other: b.Rounds));
+
+    /// <inheritdoc/>
+    public PostStageOutcome Run(PostContext context) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        // The reference (unchurned) run also probes every budget boundary, so both churn points are chosen
+        // deterministically from its own transfer-idle windows.
+        var reference = RunScenario(
+            bios: context.BiosImage,
+            churnAtSteps: []
+        );
+
+        if (Verify(result: reference) is { } failure) {
+            return PostStageOutcome.Fail(detail: failure);
+        }
+
+        var (firstChurn, secondChurn) = PickChurnSteps(probes: reference.Probes);
+
+        if (
+            (firstChurn < 0) ||
+            (secondChurn < 0)
+        ) {
+            return PostStageOutcome.Fail(detail: "fewer than two transfer-idle budget boundaries appeared mid-exchange; the round schedule is wrong");
+        }
+
+        // (a) Determinism: a second fresh, uninterrupted run reproduces the protocol verdicts and final snapshots.
+        var replay = RunScenario(
+            bios: context.BiosImage,
+            churnAtSteps: []
+        );
+
+        if (Difference(
+            actual: replay,
+            expected: reference,
+            leg: "replay"
+        ) is { } replayFailure) {
+            return PostStageOutcome.Fail(detail: replayFailure);
+        }
+
+        // (b) Churn, twice: suspend/snapshot/restore/reconnect at both idle boundaries, continue, demand the
+        // identical tail.
+        var churned = RunScenario(
+            bios: context.BiosImage,
+            churnAtSteps: [firstChurn, secondChurn]
+        );
+
+        if (Difference(
+            actual: churned,
+            expected: reference,
+            leg: "churn"
+        ) is { } churnFailure) {
+            return PostStageOutcome.Fail(detail: churnFailure);
+        }
+
+        // (c) Reordered/substituted resume: a token bound to (parent, child) applied to (child, parent) must be
+        // rejected and must leave both consoles unlinked (M-03).
+        if (VerifyReorderedResumeRejected(bios: context.BiosImage) is { } reorderFailure) {
+            return PostStageOutcome.Fail(detail: reorderFailure);
+        }
+
+        // (d) Invalid resume tokens — null (the "default"/absent token) and a credit-count mismatch — are rejected
+        // with a clean ArgumentException family, never an NRE, and also leave both consoles unlinked (M-03).
+        if (VerifyInvalidResumeTokenRejected(bios: context.BiosImage) is { } tokenFailure) {
+            return PostStageOutcome.Fail(detail: tokenFailure);
+        }
+
+        // (e) Mid-transfer suspend: Suspend() at a busy (non-transfer-idle) budget boundary is rejected with
+        // InvalidOperationException, and the session is left fully live — continuing it to completion reproduces
+        // the reference exactly (M-04).
+        if (VerifyMidTransferSuspendRejected(
+            bios: context.BiosImage,
+            reference: reference
+        ) is { } suspendFailure) {
+            return PostStageOutcome.Fail(detail: suspendFailure);
+        }
+
+        return PostStageOutcome.Pass(detail: $"{MicroRoms.LinkRounds} multiplayer rounds (parent 0 / child 1), severed transfer-idle at budget steps {firstChurn} and {secondChurn}, replay-identical and churn-identical across both cycles ({reference.ParentState.Size}+{reference.ChildState.Size} state bytes); reordered/substituted resume rejected+unlinked, null/mismatched resume token rejected+unlinked, mid-transfer Suspend rejected with the session left live and driven to an identical completion");
+    }
 
     private readonly record struct BoundaryProbe(
         bool Idle,

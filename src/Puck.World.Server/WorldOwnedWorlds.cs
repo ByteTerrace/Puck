@@ -1,3 +1,4 @@
+using Puck.Abstractions.Machines;
 using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
@@ -22,18 +23,20 @@ public sealed class WorldOwnedWorlds {
     /// document is never enumerated again.</summary>
     public const string QuarantineDirectoryName = "unloadable";
 
-    private static readonly CellName MoveSpeedState = CellName.Parse(candidate: "identity-move-speed");
-    private static readonly CellName TurnSpeedState = CellName.Parse(candidate: "identity-turn-speed");
-
+    private readonly string m_catalogFingerprint;
     private readonly string m_directory;
     private readonly List<WorldOwnedWorldDisposal> m_discarded = [];
     private readonly List<WorldIdentity> m_identities;
+    private readonly IMachineValidationCatalog? m_machineCatalog;
+    private readonly WorldOutputHub? m_narrationHub;
     private readonly List<WorldOwnedWorldRefusal> m_refused = [];
     private readonly WorldDefinition m_template;
 
     private WorldDocumentSubmissionReceipt? m_lastReceipt;
     private long m_revision = 1;
-    private readonly WorldOutputHub? m_narrationHub;
+
+    private static readonly CellName MoveSpeedState = CellName.Parse(candidate: "identity-move-speed");
+    private static readonly CellName TurnSpeedState = CellName.Parse(candidate: "identity-turn-speed");
 
     /// <summary>Loads owned worlds from a directory, seeding authored identities when it is empty.</summary>
     /// <param name="template">The document every seeded identity derives from.</param>
@@ -44,10 +47,14 @@ public sealed class WorldOwnedWorlds {
     /// to leave it undelivered — this catalog carries no single owning server of its own.</param>
     /// <exception cref="ArgumentNullException"><paramref name="template"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/> or whitespace.</exception>
-    public WorldOwnedWorlds(WorldDefinition template, string directory, Guid machineId, IWorldNeighbourResolver? neighbours = null, WorldOutputHub? narrationHub = null) {
+    /// <param name="machineCatalog">The host-selected provider metadata for owned-world loads and saves.</param>
+    /// <param name="catalogFingerprint">The selected catalog's composition identity.</param>
+    public WorldOwnedWorlds(WorldDefinition template, string directory, Guid machineId, IWorldNeighbourResolver? neighbours = null, WorldOutputHub? narrationHub = null, IMachineValidationCatalog? machineCatalog = null, string catalogFingerprint = "") {
         ArgumentNullException.ThrowIfNull(argument: template);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         m_narrationHub = narrationHub;
+        m_machineCatalog = machineCatalog;
+        m_catalogFingerprint = catalogFingerprint;
         m_template = IdentityBase(fallback: template);
         m_directory = directory;
         MachineId = machineId;
@@ -76,7 +83,9 @@ public sealed class WorldOwnedWorlds {
                 definition: out var document,
                 neighbours: neighbours,
                 path: path,
-                reason: out var reason
+                reason: out var reason,
+                catalog: m_machineCatalog,
+                catalogFingerprint: m_catalogFingerprint
             ) ||
                 (document?.Identity is null)
             ) {
@@ -104,8 +113,8 @@ public sealed class WorldOwnedWorlds {
                 RefuseInPlace(
                     fileName: fileName,
                     reason: $"declares id '{document.Identity.Id}', which this catalog stores as '{addressed}'{(present.Contains(item: addressed)
-                        ? " — the name another file in this directory carries"
-                        : " — a name no file in this directory carries")}; an owned world's file name is its id, so rename this file to '{addressed}' (or edit its own identity id, which no console verb reaches)"
+                    ? " — the name another file in this directory carries"
+                    : " — a name no file in this directory carries")}; an owned world's file name is its id, so rename this file to '{addressed}' (or edit its own identity id, which no console verb reaches)"
                 );
 
                 continue;
@@ -131,7 +140,10 @@ public sealed class WorldOwnedWorlds {
                     path2: WorldOwnedWorldFileName.For(id: seed.Id)
                 );
 
-                if (File.Exists(path: occupied) || Directory.Exists(path: occupied)) {
+                if (
+                    File.Exists(path: occupied) ||
+                    Directory.Exists(path: occupied)
+                ) {
                     if (m_narrationHub is { HasNarrationSink: true }) {
                         m_narrationHub?.Narrate(
                             channel: "identity",
@@ -173,13 +185,19 @@ public sealed class WorldOwnedWorlds {
     /// <summary>Gets the visited world's player presentation defaults.</summary>
     public WorldPlayerDefaults Defaults { get; }
     /// <summary>Gets the documents this catalog DISPOSED OF at construction, in file-name order — the ones whose
-    /// bytes are not a <c>puck.world.def.v1</c> document at all. Empty on every ordinary boot, and a one-time event
+    /// bytes are not a <c>puck.world.definition.v1</c> document at all. Empty on every ordinary boot, and a one-time event
     /// otherwise, since each entry names a file moved out of the catalog directory. A document refused for a reason
     /// that can answer differently later (an unreadable file, an unresolved basis link, a validation claim resting
     /// on a neighbour) is NOT here: it is named on stderr and left where it is for the next boot.</summary>
     public IReadOnlyList<WorldOwnedWorldDisposal> Discarded => m_discarded;
     /// <summary>Gets the owned-world directory.</summary>
     public string FilePath => m_directory;
+    /// <summary>Gets the latest cross-document durable-state verdict, visible to both authorities.</summary>
+    public WorldDocumentSubmissionReceipt? LastReceipt => m_lastReceipt;
+    /// <summary>Gets the installation id used by controller state slots.</summary>
+    public Guid MachineId { get; }
+    /// <summary>Observes every owner-side cross-document durable-state verdict for a tape.</summary>
+    public Action<WorldDocumentSubmissionReceipt>? ReceiptTap { get; set; }
     /// <summary>Gets the documents this catalog REFUSED IN PLACE at construction, in the order they were refused —
     /// the ones still sitting in the catalog directory with their original bytes, either because the refusal can
     /// answer differently on the next boot (an unreadable file, an unresolved basis link, a validation claim resting
@@ -187,12 +205,6 @@ public sealed class WorldOwnedWorlds {
     /// maps to). The counterpart of <see cref="Discarded"/>:
     /// nothing here was moved, and every entry is refused again on the next construction until it is repaired.</summary>
     public IReadOnlyList<WorldOwnedWorldRefusal> Refused => m_refused;
-    /// <summary>Gets the latest cross-document durable-state verdict, visible to both authorities.</summary>
-    public WorldDocumentSubmissionReceipt? LastReceipt => m_lastReceipt;
-    /// <summary>Gets the installation id used by controller state slots.</summary>
-    public Guid MachineId { get; }
-    /// <summary>Observes every owner-side cross-document durable-state verdict for a tape.</summary>
-    public Action<WorldDocumentSubmissionReceipt>? ReceiptTap { get; set; }
     /// <summary>Gets the local owned-world mutation counter.</summary>
     public long Revision => m_revision;
 
@@ -215,28 +227,6 @@ public sealed class WorldOwnedWorlds {
     /// exclusion class as a body's <c>PressOutcome</c>/<c>StopOutcome</c> — nothing but a read-back verb consults
     /// it, and the next real submission repopulates it).</summary>
     public sealed record WorldOwnedWorldsCheckpoint(IReadOnlyList<byte[]> IdentityDocumentsJson, long Revision);
-
-    /// <summary>Captures every identity's owned document and the mutation counter.</summary>
-    public WorldOwnedWorldsCheckpoint Capture() => new(
-        IdentityDocumentsJson: [.. m_identities.Select(selector: identity => WorldDefinitionSerialization.Serialize(definition: identity.Document!))],
-        Revision: m_revision
-    );
-    /// <summary>Restores every identity from a previously captured checkpoint. The identity list is replaced
-    /// wholesale — this never merges onto whatever the directory load already seeded.</summary>
-    public void Restore(WorldOwnedWorldsCheckpoint checkpoint) {
-        ArgumentNullException.ThrowIfNull(argument: checkpoint);
-
-        m_identities.Clear();
-
-        foreach (var json in checkpoint.IdentityDocumentsJson) {
-            m_identities.Add(item: new WorldIdentity(
-                defaults: Defaults,
-                document: WorldDefinitionSerialization.Deserialize(utf8Json: json)
-            ));
-        }
-
-        m_revision = checkpoint.Revision;
-    }
 
     // THE CONTRACT SPLIT this door's text extension reveals: the DOOR — a grant naming
     // Principal==Document(source) && Capability==Mutate && Subject==State(slot), plus a WriteMask admitting the
@@ -387,16 +377,15 @@ public sealed class WorldOwnedWorlds {
             );
         }
 
-        // THE ROW'S OWN DECLARED ENVELOPE, never this door's guess at one. WorldIdentity.WriteState below swaps the
-        // row in with no revalidation, so whatever this admits is what the persisted document carries — and the
-        // document's own validator (WorldDefinitionValidator's state walk) re-checks Min/Max AND WorldStateRow
-        // .NonNegative at the owned world's next boot. A value this door admits that the validator would refuse is a
-        // document that stops loading, so the two must read the SAME traits off the SAME row: the non-negative floor
-        // is the row's declared NonNegative, on BOTH numeric arms, never an Int-only constant. (An Int + NonNegative
-        // row is what "timer" meant before the kind vocabularies reconciled — see WorldStateRow's own remarks — so
-        // reading the trait is what makes the timer floor a timer floor rather than a coincidence of the arm.)
-        // The two admitted numeric pairings are decided HERE and the envelope is applied ONCE below, so a Fixed
-        // counter and an Int timer cannot grow different floors, envelopes, or overflow behavior by drifting apart.
+        // THE ROW'S OWN DECLARED ENVELOPE, decided through TryAdmitWrite — never this door's guess at one.
+        // WorldIdentity.WriteState below swaps the row in with no revalidation, so whatever this admits is what the
+        // persisted document carries, and the document's own validator (WorldDefinitionValidator's state walk)
+        // re-checks the SAME Min/Max/Overflow at the owned world's next boot. A value this door admits that the
+        // validator would refuse is a document that stops loading, so the two must read the SAME traits off the SAME
+        // row. (An Int row with Min 0 is what "timer" meant before the kind vocabularies reconciled — see
+        // WorldStateRow's own remarks.) The two admitted numeric pairings are decided HERE and the envelope is
+        // applied ONCE below, so a Fixed counter and an Int timer cannot grow different floors, envelopes, or
+        // overflow behavior by drifting apart.
         var storageMatches = (row, submission.StorageKind) switch {
             ( { Kind: CellKind.Fixed, IsSlot: true }, ActionStateKind.Counter) => true,
             ( { Kind: CellKind.Int, IsSlot: true }, ActionStateKind.Timer) => true,
@@ -410,45 +399,43 @@ public sealed class WorldOwnedWorlds {
             );
         }
 
-        try {
-            var current = row.Cells![0].Value;
-            var value = ((submission.Kind == WorldDocumentWriteKind.Add)
-                ? checked((current + submission.Value))
-                : submission.Value
-            );
+        var slotCell = row.Cells![0];
 
-            if (
-                row.NonNegative &&
-                (value < 0)
-            ) {
-                return Refuse(
-                    submission: submission,
-                    reason: $"value {value} is negative — {subject.Describe()}'s floor is non-negative"
-                );
-            }
-
-            if (
-                ((row.Min is { } minimum) && (value < minimum)) ||
-                ((row.Max is { } maximum) && (value > maximum))
-            ) {
-                return Refuse(
-                    submission: submission,
-                    reason: $"value {value} is outside {subject.Describe()}'s authored envelope"
-                );
-            }
-
-            owner.WriteState(row: row with {
-                Cells = [new StateCell(
-                    Key: WorldStateRow.SlotKey,
-                    Value: value
-                )],
-            });
-        } catch (OverflowException) {
+        // This door runs outside the simulation tick, so it has no clock to settle a value-over-time cell against:
+        // storing a fresh cell would silently discard the cell's epoch and accumulate from a stale one.
+        if (!EffectiveBehavior.Resolve(
+            cell: slotCell,
+            row: row
+        ).IsNone) {
             return Refuse(
                 submission: submission,
-                reason: $"{subject.Describe()} overflowed"
+                reason: $"{subject.Describe()} changes over time (advance, dynamics, or cycle), and a cross-document write has no simulation clock to settle it against"
             );
         }
+
+        var current = slotCell.Value;
+
+        if (!row.TryAdmitWrite(
+            current: current,
+            operand: submission.Value,
+            write: ((submission.Kind == WorldDocumentWriteKind.Add)
+            ? StateWriteKind.Add
+            : StateWriteKind.Set),
+            stored: out var value,
+            reason: out var admitReason
+        )) {
+            return Refuse(
+                submission: submission,
+                reason: $"{subject.Describe()} {admitReason}"
+            );
+        }
+
+        owner.WriteState(row: row with {
+            Cells = [new StateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: value
+            )],
+        });
 
         Save(identity: owner);
         return new WorldDocumentSubmissionReceipt(
@@ -526,9 +513,7 @@ public sealed class WorldOwnedWorlds {
             if (m_narrationHub is { HasNarrationSink: true }) {
                 m_narrationHub?.Narrate(
                     channel: "identity",
-                    text: $"[identity] refused {retained.Count} owned world(s) this boot could not read, left where they are for the next one: {Narrate(
-                        entries: retained
-                    )}"
+                    text: $"[identity] refused {retained.Count} owned world(s) this boot could not read, left where they are for the next one: {Narrate(entries: retained)}"
                 );
             }
         }
@@ -536,9 +521,7 @@ public sealed class WorldOwnedWorlds {
             if (m_narrationHub is { HasNarrationSink: true }) {
                 m_narrationHub?.Narrate(
                     channel: "identity",
-                    text: $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{quarantine}' — a document shape this catalog no longer reads is disposed of, never migrated: {Narrate(
-                        entries: [.. m_discarded.Select(selector: entry => (entry.FileName, entry.Reason))]
-                    )}"
+                    text: $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{quarantine}' — a document shape this catalog no longer reads is disposed of, never migrated: {Narrate(entries: [.. m_discarded.Select(selector: entry => (entry.FileName, entry.Reason))])}"
                 );
             }
         }
@@ -550,7 +533,7 @@ public sealed class WorldOwnedWorlds {
     // The one predicate that decides whether a refusal is a verdict on the file's BYTES or on the moment it was read
     // in — the loader's own reason classes, matched on the wording WorldDefinitionFileSource.TryLoad documents.
     // Quarantine is irreversible from the catalog's side (the name it frees is re-seeded), so only the byte verdict
-    // earns it: a document that does not parse as puck.world.def.v1 parses no better on the next boot.
+    // earns it: a document that does not parse as puck.world.definition.v1 parses no better on the next boot.
     //
     // The rest each answer differently on a later call and would CASCADE if quarantined. "cannot read" is a lock or
     // a half-written file; "no file at" is a file that vanished between the enumeration and the load; "basis
@@ -559,25 +542,25 @@ public sealed class WorldOwnedWorlds {
     // neighbours down with it on the following boot, and the seeding pass would write defaults over every freed name.
     private static bool IsTerminalDocumentShape(string path, string reason) => (
         reason.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: $"{path} is not a valid {WorldDefinition.SchemaVersion} document:"
-        ) ||
+        comparisonType: StringComparison.Ordinal,
+        value: $"{path} is not a valid {WorldDefinition.SchemaVersion} document:"
+    ) ||
         reason.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: $"cannot decode {path}:"
-        )
+        comparisonType: StringComparison.Ordinal,
+        value: $"cannot decode {path}:"
+    )
     );
     private static string Narrate(IReadOnlyList<(string FileName, string Reason)> entries) => string.Join(
         separator: "; ",
         values: entries
             .GroupBy(
-                comparer: StringComparer.Ordinal,
-                keySelector: entry => entry.Reason
-            )
+            comparer: StringComparer.Ordinal,
+            keySelector: entry => entry.Reason
+        )
             .Select(selector: group => $"{string.Join(
-                separator: ", ",
-                values: group.Select(selector: entry => entry.FileName)
-            )} — {group.Key}")
+            separator: ", ",
+            values: group.Select(selector: entry => entry.FileName)
+        )} — {group.Key}")
     );
     // A quarantine name is DERIVED from the catalog name, and the catalog re-seeds the name a disposal frees, so the
     // same name reaches this directory again carrying different bytes. Quarantine exists to keep those bytes
@@ -639,9 +622,9 @@ public sealed class WorldOwnedWorlds {
         // The template's own hud policy (enabled/cursor) survives; only its authored panels are stripped — an owned
         // world starts panel-clean but keeps the document-authored cursor, never an engine value.
         HudRaw = new WorldHudSection(
-            Defaults: template.Hud.Defaults,
-            Panels: []
-        ),
+        Defaults: template.Hud.Defaults,
+        Panels: []
+    ),
         Adjacencies = null,
     };
     // The seeded world-state rows: the template's authored rows MINUS any same-named rate rows, so a template can
@@ -651,7 +634,10 @@ public sealed class WorldOwnedWorlds {
 
         if (templateRows is not null) {
             foreach (var row in templateRows) {
-                if ((row.Name != MoveSpeedState) && (row.Name != TurnSpeedState)) {
+                if (
+                    (row.Name != MoveSpeedState) &&
+                    (row.Name != TurnSpeedState)
+                ) {
                     rows.Add(item: row);
                 }
             }
@@ -683,6 +669,11 @@ public sealed class WorldOwnedWorlds {
         );
     }
 
+    /// <summary>Captures every identity's owned document and the mutation counter.</summary>
+    public WorldOwnedWorldsCheckpoint Capture() => new(
+        IdentityDocumentsJson: [.. m_identities.Select(selector: identity => WorldDefinitionSerialization.Serialize(definition: identity.Document!))],
+        Revision: m_revision
+    );
     /// <summary>Creates and persists one owned world. <paramref name="name"/> is a <see cref="SafeName"/>, so
     /// what is left to refuse here is a collision, in either of the two places one can live: an id or display name
     /// this catalog already holds (<c>FindById</c>/<c>Find</c>, both ignoring case), or an entry occupying the id's
@@ -708,7 +699,10 @@ public sealed class WorldOwnedWorlds {
             path2: WorldOwnedWorldFileName.For(id: name)
         );
 
-        if (File.Exists(path: occupied) || Directory.Exists(path: occupied)) {
+        if (
+            File.Exists(path: occupied) ||
+            Directory.Exists(path: occupied)
+        ) {
             reason = $"the catalog path '{Path.GetFileName(path: occupied)}' is already occupied by an entry this boot did not admit — saving there would write over it; repair or remove it (identity.list's refused=/discarded= columns and the boot's stderr lines name it)";
             return null;
         }
@@ -863,6 +857,22 @@ public sealed class WorldOwnedWorlds {
         Save(identity: incoming);
         return true;
     }
+    /// <summary>Restores every identity from a previously captured checkpoint. The identity list is replaced
+    /// wholesale — this never merges onto whatever the directory load already seeded.</summary>
+    public void Restore(WorldOwnedWorldsCheckpoint checkpoint) {
+        ArgumentNullException.ThrowIfNull(argument: checkpoint);
+
+        m_identities.Clear();
+
+        foreach (var json in checkpoint.IdentityDocumentsJson) {
+            m_identities.Add(item: new WorldIdentity(
+                defaults: Defaults,
+                document: WorldDefinitionSerialization.Deserialize(utf8Json: json)
+            ));
+        }
+
+        m_revision = checkpoint.Revision;
+    }
     /// <summary>Persists one identity, preserving the derivation of the file it overwrites — the same
     /// <see cref="WorldDefinitionSerialization.SavePreservingBasis"/> contract <c>world.save</c> runs for the live
     /// world's own document, applied to an owned world's own catalog file. An identity whose file authors a
@@ -900,6 +910,8 @@ public sealed class WorldOwnedWorlds {
 
         _ = WorldDefinitionSerialization.SavePreservingBasis(
             basisPath: out _,
+            catalog: m_machineCatalog,
+            catalogFingerprint: m_catalogFingerprint,
             definition: document,
             imports: out _,
             note: out var note,
@@ -920,27 +932,6 @@ public sealed class WorldOwnedWorlds {
         ) {
             m_revision++;
         }
-    }
-    /// <summary>Writes one fact on an identity's own row and persists the identity when the row changed — the one
-    /// door a rule effect and the console share, so a fact reaches disk through the same save every other identity
-    /// edit takes.</summary>
-    /// <param name="identity">The identity to write.</param>
-    /// <param name="key">The fact key.</param>
-    /// <param name="value">The fact's integer value.</param>
-    /// <param name="changed">Whether the identity's row changed.</param>
-    /// <param name="reason">Why the write was refused, or empty on success.</param>
-    /// <returns><see langword="true"/> when the fact is in place.</returns>
-    public bool TrySetFact(WorldIdentity identity, CellName key, long value, out bool changed, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: identity);
-
-        if (!identity.TrySetFact(key: key, value: value, changed: out changed, reason: out reason)) {
-            return false;
-        }
-        if (changed) {
-            Save(identity: identity);
-        }
-
-        return true;
     }
     /// <summary>Persists every owned world.</summary>
     public void Save() {
@@ -991,12 +982,11 @@ public sealed class WorldOwnedWorlds {
                 return true;
             // A tick count crosses as an unsigned quantity, so a negative cell cannot be read as one. That is a
             // DIFFERENT refusal from a kind mismatch and says so: the row a caller named is the right kind and holds a
-            // value this lane cannot represent. It is reachable only on a row that does NOT declare
-            // WorldStateRow.NonNegative — declaring it is what makes an Int row a timer, and the write door and the
-            // document validator both hold that floor.
+            // value this lane cannot represent. It is reachable only on a row that does NOT declare Min 0 — declaring
+            // it is what makes an Int row a timer, and the write door and the document validator both hold that floor.
             case ( { Kind: CellKind.Int, IsSlot: true } intRow, ActionStateKind.Timer):
                 if (intRow.Cells![0].Value < 0) {
-                    reason = $"{subject.Describe()} holds {intRow.Cells![0].Value}, which no tick count can carry — an int row read as a timer must declare a non-negative floor";
+                    reason = $"{subject.Describe()} holds {intRow.Cells![0].Value}, which no tick count can carry — an int row read as a timer must declare a minimum of 0";
                     return false;
                 }
                 value = new DurableStateValue(
@@ -1010,5 +1000,31 @@ public sealed class WorldOwnedWorlds {
                 reason = $"{subject.Describe()} has the wrong storage kind";
                 return false;
         }
+    }
+    /// <summary>Writes one fact on an identity's own row and persists the identity when the row changed — the one
+    /// door a rule effect and the console share, so a fact reaches disk through the same save every other identity
+    /// edit takes.</summary>
+    /// <param name="identity">The identity to write.</param>
+    /// <param name="key">The fact key.</param>
+    /// <param name="value">The fact's integer value.</param>
+    /// <param name="changed">Whether the identity's row changed.</param>
+    /// <param name="reason">Why the write was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the fact is in place.</returns>
+    public bool TrySetFact(WorldIdentity identity, CellName key, long value, out bool changed, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: identity);
+
+        if (!identity.TrySetFact(
+            changed: out changed,
+            key: key,
+            reason: out reason,
+            value: value
+        )) {
+            return false;
+        }
+        if (changed) {
+            Save(identity: identity);
+        }
+
+        return true;
     }
 }

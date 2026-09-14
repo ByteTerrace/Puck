@@ -60,8 +60,9 @@ public static class OverlayStateComparison {
     /// undeclared row, or an absent cell reads false.</summary>
     /// <param name="definition">The live definition.</param>
     /// <param name="state">The predicate.</param>
-    /// <param name="tick">The tick an advancing row's value is computed at.</param>
-    public static bool Holds(WorldDefinition definition, OverlayPredicate.State state, ulong tick) {
+    /// <param name="tick">The tick a Cycle row's value is computed at.</param>
+    /// <param name="engineTick">The engine tick a StateAdvance row's value is computed at.</param>
+    public static bool Holds(WorldDefinition definition, OverlayPredicate.State state, ulong tick, ulong engineTick) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: state);
 
@@ -78,7 +79,8 @@ public static class OverlayStateComparison {
             row: out var row,
             rowName: rowName,
             text: out var text,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         )
         ) {
             return false;
@@ -95,10 +97,16 @@ public static class OverlayStateComparison {
                 comparisonType: StringComparison.Ordinal
             );
 
-            return ((state.Comparison == ActionStateComparison.NotEqual) ? !equal : equal);
+            return ((state.Comparison == ActionStateComparison.NotEqual)
+                ? !equal
+                : equal
+            );
         }
 
-        if ((rawValue is not { } raw) || (state.Value is not { } expected)) {
+        if (
+            (rawValue is not { } raw) ||
+            (state.Value is not { } expected)
+        ) {
             return false;
         }
 
@@ -134,11 +142,11 @@ public static class OverlayRanking {
                 (predicate is null) ||
                 (evaluator is null) ||
                 ((slot < 0)
-                    ? evaluator.EvaluateAnySeat(predicate: predicate)
-                    : evaluator.Evaluate(
-                        predicate: predicate,
-                        slot: slot
-                    ))
+                ? evaluator.EvaluateAnySeat(predicate: predicate)
+                : evaluator.Evaluate(
+                    predicate: predicate,
+                    slot: slot
+                ))
             ) {
                 return index;
             }
@@ -156,10 +164,10 @@ public struct OverlayFrameCrossfade {
 
     /// <summary>Gets the winning (incoming) key, or -1.</summary>
     public int Current { get; private set; }
-    /// <summary>Gets the outgoing key while a fade runs, or -1.</summary>
-    public int Outgoing { get; private set; }
     /// <summary>Gets the weight of <see cref="Current"/>, 0 to 1; 1 when no fade runs.</summary>
     public float Mix { get; private set; }
+    /// <summary>Gets the outgoing key while a fade runs, or -1.</summary>
+    public int Outgoing { get; private set; }
 
     /// <summary>Advances the fade to <paramref name="nowSeconds"/> with <paramref name="winner"/> as this frame's
     /// winning key. A change of winner starts a fade from the previous winner when <paramref name="fadeSeconds"/>
@@ -179,7 +187,10 @@ public struct OverlayFrameCrossfade {
         }
 
         if (winner != Current) {
-            if ((fadeSeconds > 0f) && (Current >= 0)) {
+            if (
+                (fadeSeconds > 0f) &&
+                (Current >= 0)
+            ) {
                 Outgoing = Current;
                 m_startSeconds = nowSeconds;
             } else {
@@ -201,7 +212,10 @@ public struct OverlayFrameCrossfade {
             Outgoing = -1;
             Mix = 1f;
         } else {
-            Mix = ((float)Math.Max(val1: 0.0, val2: progress));
+            Mix = ((float)Math.Max(
+                val1: 0.0,
+                val2: progress
+            ));
         }
     }
 }

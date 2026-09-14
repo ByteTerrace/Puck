@@ -11,10 +11,19 @@ public static class WorldTables {
         ArgumentNullException.ThrowIfNull(argument: row);
 
         table = null;
-        if (!WorldAssetRowLoader.TryLoadTable(row: row, document: out var document, error: out error)) {
+        if (!WorldAssetRowLoader.TryLoadTable(
+            document: out var document,
+            error: out error,
+            row: row
+        )) {
             return false;
         }
 
-        return CompiledTable.TryCompile(name: row.Name, document: document!, table: out table, error: out error);
+        return CompiledTable.TryCompile(
+            name: row.Name,
+            document: document!,
+            table: out table,
+            error: out error
+        );
     }
 }

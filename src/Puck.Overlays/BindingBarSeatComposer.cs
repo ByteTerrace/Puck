@@ -29,59 +29,6 @@ public static class BindingBarSeatComposer {
             : OverlayResolvedGlyph.None
         );
 
-    /// <summary>Answers whether a physical control is currently held, from the seat's ACTIVE page view — only the
-    /// active page's routed command carries a live held sample, and only the active bank draws it (a stacked wing
-    /// renders a page that is not live, so it shows no press).</summary>
-    /// <param name="activeView">The seat's currently active page view.</param>
-    /// <param name="source">The physical control's input source id.</param>
-    /// <param name="isCommandHeld">Answers whether a named command is currently carried held for this seat.</param>
-    /// <returns><see langword="true"/> when the control is bound on the active page AND that binding's command is
-    /// held.</returns>
-    public static bool IsPhysicallyPressed(BindingPageView activeView, string source, Func<string, bool> isCommandHeld) {
-        ArgumentNullException.ThrowIfNull(argument: activeView);
-        ArgumentNullException.ThrowIfNull(argument: isCommandHeld);
-
-        return (activeView.ButtonsBySource.TryGetValue(
-            key: source,
-            value: out var binding
-        ) && isCommandHeld(binding.Command));
-    }
-    /// <summary>Composes the bar's modifier indicators from a page view: a modifier's pip lights when the page's own
-    /// row requires it (see <see cref="BindingModifierView.Required"/>) — that is, when the modifier is one of the
-    /// row's unordered <c>held</c> members or one of its ordered <c>chord</c> members, both of which must be down for
-    /// this page to be the selected one.</summary>
-    /// <param name="view">The seat's active page view.</param>
-    /// <param name="text">Whether the bar draws its atlas text; <see langword="false"/> leaves each modifier a bare
-    /// plate (every modifier badge resolves from a text LABEL).</param>
-    /// <param name="resolveBadge">Resolves a modifier's input source id to its badge content — the caller's own icon
-    /// table, the SAME door a slot's badge resolves through.</param>
-    /// <param name="destination">The destination modifiers; at least <c>view.Modifiers.Count</c> entries.</param>
-    /// <returns>The number of modifiers written.</returns>
-    public static int ComposeModifiers(BindingPageView view, bool text, Func<string, OverlayResolvedGlyph> resolveBadge, Span<OverlayBindingModifier> destination) {
-        ArgumentNullException.ThrowIfNull(argument: view);
-        ArgumentNullException.ThrowIfNull(argument: resolveBadge);
-
-        var count = Math.Min(
-            val1: view.Modifiers.Count,
-            val2: destination.Length
-        );
-
-        for (var index = 0; (index < count); index++) {
-            var modifier = view.Modifiers[index];
-            var badge = Badge(
-                glyph: resolveBadge(modifier.Sources[0]),
-                text: text
-            );
-
-            destination[index] = new OverlayBindingModifier(
-                BadgeGlyph0: badge.Glyph0,
-                BadgeGlyph1: badge.Glyph1,
-                Held: modifier.Required
-            );
-        }
-
-        return count;
-    }
     /// <summary>Composes one bank's slots: each <paramref name="slotSet"/> control the bank places gets its badge,
     /// its bound action's icon and state from <paramref name="view"/>, and its plate from <paramref name="plates"/>;
     /// a control the bank does not place is written hidden.</summary>
@@ -173,5 +120,61 @@ public static class BindingBarSeatComposer {
                 BadgeY: plate.Badge.Y
             );
         }
+    }
+    /// <summary>Composes the bar's modifier indicators from a page view: a modifier's pip lights when the page's own
+    /// row requires it (see <see cref="BindingModifierView.Required"/>) — that is, when the modifier is one of the
+    /// row's unordered <c>held</c> members or one of its ordered <c>chord</c> members, both of which must be down for
+    /// this page to be the selected one.</summary>
+    /// <param name="view">The seat's active page view.</param>
+    /// <param name="text">Whether the bar draws its atlas text; <see langword="false"/> leaves each modifier a bare
+    /// plate (every modifier badge resolves from a text LABEL).</param>
+    /// <param name="resolveBadge">Resolves a modifier's input source id to its badge content — the caller's own icon
+    /// table, the SAME door a slot's badge resolves through.</param>
+    /// <param name="destination">The destination modifiers; at least <c>view.Modifiers.Count</c> entries.</param>
+    /// <returns>The number of modifiers written.</returns>
+    public static int ComposeModifiers(BindingPageView view, bool text, Func<string, OverlayResolvedGlyph> resolveBadge, Span<OverlayBindingModifier> destination) {
+        ArgumentNullException.ThrowIfNull(argument: view);
+        ArgumentNullException.ThrowIfNull(argument: resolveBadge);
+
+        var count = Math.Min(
+            val1: view.Modifiers.Count,
+            val2: destination.Length
+        );
+
+        for (var index = 0; (index < count); index++) {
+            var modifier = view.Modifiers[index];
+            var badge = Badge(
+                glyph: resolveBadge(modifier.Sources[0]),
+                text: text
+            );
+
+            destination[index] = new OverlayBindingModifier(
+                BadgeGlyph0: badge.Glyph0,
+                BadgeGlyph1: badge.Glyph1,
+                Held: modifier.Required
+            );
+        }
+
+        return count;
+    }
+    /// <summary>Answers whether a physical control is currently held, from the seat's ACTIVE page view — only the
+    /// active page's routed command carries a live held sample, and only the active bank draws it (a stacked wing
+    /// renders a page that is not live, so it shows no press).</summary>
+    /// <param name="activeView">The seat's currently active page view.</param>
+    /// <param name="source">The physical control's input source id.</param>
+    /// <param name="isCommandHeld">Answers whether a named command is currently carried held for this seat.</param>
+    /// <returns><see langword="true"/> when the control is bound on the active page AND that binding's command is
+    /// held.</returns>
+    public static bool IsPhysicallyPressed(BindingPageView activeView, string source, Func<string, bool> isCommandHeld) {
+        ArgumentNullException.ThrowIfNull(argument: activeView);
+        ArgumentNullException.ThrowIfNull(argument: isCommandHeld);
+
+        return (
+            activeView.ButtonsBySource.TryGetValue(
+            key: source,
+            value: out var binding
+        ) &&
+            isCommandHeld(binding.Command)
+        );
     }
 }

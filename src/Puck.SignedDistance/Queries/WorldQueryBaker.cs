@@ -20,220 +20,6 @@ public static class WorldQueryBaker {
     /// blocked layers. Call the overload taking <c>maxCellCount</c> to choose a different explicit budget.</summary>
     public const int DefaultMaxCellCount = 4_194_304;
 
-    // A rectangle edge that is not finite has no cell span: NaN compares false against every bound and quantizes to
-    // 0, and an infinity quantizes to the Q48.16 carrier's extreme. Either one bakes as authored geometry
-    // indistinguishable from a real edge, so both are refused here rather than at the cell loop.
-    private static void CheckRectangle(string kind, int index, float minX, float minZ, float maxX, float maxZ) {
-        CheckFinite(
-            index: index,
-            kind: kind,
-            name: "MinX",
-            value: minX
-        );
-        CheckFinite(
-            index: index,
-            kind: kind,
-            name: "MinZ",
-            value: minZ
-        );
-        CheckFinite(
-            index: index,
-            kind: kind,
-            name: "MaxX",
-            value: maxX
-        );
-        CheckFinite(
-            index: index,
-            kind: kind,
-            name: "MaxZ",
-            value: maxZ
-        );
-
-        if (maxX < minX) {
-            throw new ArgumentException(message: $"{kind} rectangle {index} has MaxX {maxX} below MinX {minX}.");
-        }
-
-        if (maxZ < minZ) {
-            throw new ArgumentException(message: $"{kind} rectangle {index} has MaxZ {maxZ} below MinZ {minZ}.");
-        }
-    }
-    private static void CheckFinite(string kind, int index, string name, float value) {
-        if (!float.IsFinite(f: value)) {
-            throw new ArgumentException(message: $"{kind} rectangle {index} has a non-finite {name} ({value}).");
-        }
-    }
-    // The grid's own corner and far edge are the only quantized coordinates the artifact stores verbatim, so a value
-    // the Q48.16 carrier can only saturate to would place the grid somewhere the caller never authored.
-    private static long QuantizeBound(string paramName, float value) {
-        if (!float.IsFinite(f: value)) {
-            throw new ArgumentException(
-                message: $"The grid bound is not finite ({value}).",
-                paramName: paramName
-            );
-        }
-
-        var raw = FixedQ4816.FromDouble(value: value).Value;
-
-        if (
-            (raw == long.MinValue) ||
-            (raw == long.MaxValue)
-        ) {
-            throw new ArgumentException(
-                message: $"The grid bound ({value}) is outside the Q48.16 coordinate range and would saturate to {raw}.",
-                paramName: paramName
-            );
-        }
-
-        return raw;
-    }
-    // A terrain height quantizing to NoHeightSentinel would erase the very cells the caller authored, and one
-    // quantizing to the opposite extreme would store a height nowhere near the authored one.
-    private static long QuantizeTopY(int index, float value) {
-        CheckFinite(
-            index: index,
-            kind: "Terrain",
-            name: "TopY",
-            value: value
-        );
-
-        var raw = FixedQ4816.FromDouble(value: value).Value;
-
-        if (
-            (raw == WorldQueryArtifact.NoHeightSentinel) ||
-            (raw == long.MaxValue)
-        ) {
-            throw new ArgumentException(message: $"Terrain rectangle {index} has a TopY ({value}) outside the Q48.16 height range, which would saturate to {raw}.");
-        }
-
-        return raw;
-    }
-    // The number of cells covering [originRaw, maxRaw], refusing a span no 32-bit cell index can address rather than
-    // narrowing it: the unchecked narrowing turns a grid wider than 2^31 cells into a silently empty artifact.
-    private static int AxisCells(string paramName, long originRaw, long maxRaw) {
-        var cells = CeilDiv(
-            dividend: ((((Int128)maxRaw)) - originRaw),
-            divisor: CellSizeRaw
-        );
-
-        if (cells > int.MaxValue) {
-            throw new ArgumentException(
-                message: $"The grid spans {cells} cells of {CellSize} along one axis, which overflows a 32-bit cell index.",
-                paramName: paramName
-            );
-        }
-
-        return ((cells < Int128.Zero)
-            ? 0
-            : ((int)cells)
-        );
-    }
-    private static Int128 CeilDiv(Int128 dividend, Int128 divisor) {
-        var quotient = (dividend / divisor);
-        var remainder = (dividend % divisor);
-
-        return (((remainder != Int128.Zero) && ((remainder < Int128.Zero) == (divisor < Int128.Zero)))
-            ? (quotient + Int128.One)
-            : quotient
-        );
-    }
-    private static void MarkBlocked(ulong[] blocked, int width, int height, long originXRaw, long originZRaw, WorldQueryBlockerInput blocker) {
-        if (!TryCellSpan(
-            originRaw: originXRaw,
-            minValue: blocker.MinX,
-            maxValue: blocker.MaxX,
-            axisCells: width,
-            minCell: out var minColumn,
-            maxCellExclusive: out var maxColumn
-        )) {
-            return;
-        }
-
-        if (!TryCellSpan(
-            originRaw: originZRaw,
-            minValue: blocker.MinZ,
-            maxValue: blocker.MaxZ,
-            axisCells: height,
-            minCell: out var minRow,
-            maxCellExclusive: out var maxRow
-        )) {
-            return;
-        }
-
-        for (var row = minRow; (row < maxRow); row++) {
-            var rowBase = (row * width);
-
-            for (var column = minColumn; (column < maxColumn); column++) {
-                var cellIndex = (rowBase + column);
-
-                blocked[(cellIndex >> 6)] |= (1UL << (cellIndex & 63));
-            }
-        }
-    }
-    private static void MarkTerrain(long[] heightRaw, int width, int height, long originXRaw, long originZRaw, WorldQueryTerrainInput patch, long topYRaw) {
-        if (!TryCellSpan(
-            originRaw: originXRaw,
-            minValue: patch.MinX,
-            maxValue: patch.MaxX,
-            axisCells: width,
-            minCell: out var minColumn,
-            maxCellExclusive: out var maxColumn
-        )) {
-            return;
-        }
-
-        if (!TryCellSpan(
-            originRaw: originZRaw,
-            minValue: patch.MinZ,
-            maxValue: patch.MaxZ,
-            axisCells: height,
-            minCell: out var minRow,
-            maxCellExclusive: out var maxRow
-        )) {
-            return;
-        }
-
-        for (var row = minRow; (row < maxRow); row++) {
-            var rowBase = (row * width);
-
-            for (var column = minColumn; (column < maxColumn); column++) {
-                heightRaw[(rowBase + column)] = topYRaw;
-            }
-        }
-    }
-    // Quantizes a rectangle's [min,max] edge on one axis to a clamped [minCell, maxCellExclusive) cell span. Each
-    // edge is snapped to raw Q48.16 exactly once (the quantize-once-per-edge discipline); the loop the caller then
-    // runs is pure integer arithmetic. Returns false when the span is empty or entirely out of grid bounds.
-    private static bool TryCellSpan(long originRaw, float minValue, float maxValue, int axisCells, out int minCell, out int maxCellExclusive) {
-        var minRaw = FixedQ4816.FromDouble(value: minValue).Value;
-        var maxRaw = FixedQ4816.FromDouble(value: maxValue).Value;
-        // Widened before the subtraction: an edge saturated at the carrier and an origin of the opposite sign differ
-        // by more than a long holds, and the clamp that follows only makes sense on the true difference.
-        var minIndex = ClampIndex(
-            axisCells: axisCells,
-            value: ((((Int128)minRaw)) - originRaw).FloorDivide(divisor: ((Int128)CellSizeRaw))
-        );
-        var maxIndex = ClampIndex(
-            axisCells: axisCells,
-            value: CeilDiv(
-                dividend: ((((Int128)maxRaw)) - originRaw),
-                divisor: CellSizeRaw
-            )
-        );
-
-        minCell = minIndex;
-        maxCellExclusive = maxIndex;
-
-        return (maxIndex > minIndex);
-    }
-    private static int ClampIndex(Int128 value, int axisCells) =>
-        ((value < Int128.Zero)
-            ? 0
-            : ((value > axisCells)
-                ? axisCells
-                : ((int)value)
-            )
-        );
-
     // The whole grid derivation one bake performs before it allocates anything: quantize the four bounds, refuse an
     // inverted or uncarryable one, count the cells, and refuse a count above the caller's budget. Split out so a
     // caller that builds a per-cell working set BEFORE calling Bake can run the same refusal first, against the same
@@ -307,6 +93,204 @@ public static class WorldQueryBaker {
         // saturating bound, the largest non-saturating float leaves 2^39 raw ticks of headroom, and rounding the far
         // edge outward adds at most CellSizeRaw - 1.
         return (originXRaw, originZRaw, CellSizeRaw, width, height, ((int)cellCountLong));
+    }
+
+    // The number of cells covering [originRaw, maxRaw], refusing a span no 32-bit cell index can address rather than
+    // narrowing it: the unchecked narrowing turns a grid wider than 2^31 cells into a silently empty artifact.
+    private static int AxisCells(string paramName, long originRaw, long maxRaw) {
+        var cells = ((((Int128)maxRaw)) - originRaw).CeilingDivide(divisor: ((Int128)CellSizeRaw));
+
+        if (cells > int.MaxValue) {
+            throw new ArgumentException(
+                message: $"The grid spans {cells} cells of {CellSize} along one axis, which overflows a 32-bit cell index.",
+                paramName: paramName
+            );
+        }
+
+        return ((cells < Int128.Zero)
+            ? 0
+            : ((int)cells)
+        );
+    }
+    private static void CheckFinite(string kind, int index, string name, float value) {
+        if (!float.IsFinite(f: value)) {
+            throw new ArgumentException(message: $"{kind} rectangle {index} has a non-finite {name} ({value}).");
+        }
+    }
+    // A rectangle edge that is not finite has no cell span: NaN compares false against every bound and quantizes to
+    // 0, and an infinity quantizes to the Q48.16 carrier's extreme. Either one bakes as authored geometry
+    // indistinguishable from a real edge, so both are refused here rather than at the cell loop.
+    private static void CheckRectangle(string kind, int index, float minX, float minZ, float maxX, float maxZ) {
+        CheckFinite(
+            index: index,
+            kind: kind,
+            name: "MinX",
+            value: minX
+        );
+        CheckFinite(
+            index: index,
+            kind: kind,
+            name: "MinZ",
+            value: minZ
+        );
+        CheckFinite(
+            index: index,
+            kind: kind,
+            name: "MaxX",
+            value: maxX
+        );
+        CheckFinite(
+            index: index,
+            kind: kind,
+            name: "MaxZ",
+            value: maxZ
+        );
+
+        if (maxX < minX) {
+            throw new ArgumentException(message: $"{kind} rectangle {index} has MaxX {maxX} below MinX {minX}.");
+        }
+
+        if (maxZ < minZ) {
+            throw new ArgumentException(message: $"{kind} rectangle {index} has MaxZ {maxZ} below MinZ {minZ}.");
+        }
+    }
+    private static int ClampIndex(Int128 value, int axisCells) =>
+        ((value < Int128.Zero)
+            ? 0
+            : ((value > axisCells)
+                ? axisCells
+                : ((int)value)
+        ));
+    private static void MarkBlocked(ulong[] blocked, int width, int height, long originXRaw, long originZRaw, WorldQueryBlockerInput blocker) {
+        if (!TryCellSpan(
+            originRaw: originXRaw,
+            minValue: blocker.MinX,
+            maxValue: blocker.MaxX,
+            axisCells: width,
+            minCell: out var minColumn,
+            maxCellExclusive: out var maxColumn
+        )) {
+            return;
+        }
+
+        if (!TryCellSpan(
+            originRaw: originZRaw,
+            minValue: blocker.MinZ,
+            maxValue: blocker.MaxZ,
+            axisCells: height,
+            minCell: out var minRow,
+            maxCellExclusive: out var maxRow
+        )) {
+            return;
+        }
+
+        for (var row = minRow; (row < maxRow); row++) {
+            var rowBase = (row * width);
+
+            for (var column = minColumn; (column < maxColumn); column++) {
+                var cellIndex = (rowBase + column);
+
+                blocked[(cellIndex >> 6)] |= (1UL << (cellIndex & 63));
+            }
+        }
+    }
+    private static void MarkTerrain(long[] heightRaw, int width, int height, long originXRaw, long originZRaw, WorldQueryTerrainInput patch, long topYRaw) {
+        if (!TryCellSpan(
+            originRaw: originXRaw,
+            minValue: patch.MinX,
+            maxValue: patch.MaxX,
+            axisCells: width,
+            minCell: out var minColumn,
+            maxCellExclusive: out var maxColumn
+        )) {
+            return;
+        }
+
+        if (!TryCellSpan(
+            originRaw: originZRaw,
+            minValue: patch.MinZ,
+            maxValue: patch.MaxZ,
+            axisCells: height,
+            minCell: out var minRow,
+            maxCellExclusive: out var maxRow
+        )) {
+            return;
+        }
+
+        for (var row = minRow; (row < maxRow); row++) {
+            var rowBase = (row * width);
+
+            for (var column = minColumn; (column < maxColumn); column++) {
+                heightRaw[(rowBase + column)] = topYRaw;
+            }
+        }
+    }
+    // The grid's own corner and far edge are the only quantized coordinates the artifact stores verbatim, so a value
+    // the Q48.16 carrier can only saturate to would place the grid somewhere the caller never authored.
+    private static long QuantizeBound(string paramName, float value) {
+        if (!float.IsFinite(f: value)) {
+            throw new ArgumentException(
+                message: $"The grid bound is not finite ({value}).",
+                paramName: paramName
+            );
+        }
+
+        var raw = FixedQ4816.FromDouble(value: value).Value;
+
+        if (
+            (raw == long.MinValue) ||
+            (raw == long.MaxValue)
+        ) {
+            throw new ArgumentException(
+                message: $"The grid bound ({value}) is outside the Q48.16 coordinate range and would saturate to {raw}.",
+                paramName: paramName
+            );
+        }
+
+        return raw;
+    }
+    // A terrain height quantizing to NoHeightSentinel would erase the very cells the caller authored, and one
+    // quantizing to the opposite extreme would store a height nowhere near the authored one.
+    private static long QuantizeTopY(int index, float value) {
+        CheckFinite(
+            index: index,
+            kind: "Terrain",
+            name: "TopY",
+            value: value
+        );
+
+        var raw = FixedQ4816.FromDouble(value: value).Value;
+
+        if (
+            (raw == WorldQueryArtifact.NoHeightSentinel) ||
+            (raw == long.MaxValue)
+        ) {
+            throw new ArgumentException(message: $"Terrain rectangle {index} has a TopY ({value}) outside the Q48.16 height range, which would saturate to {raw}.");
+        }
+
+        return raw;
+    }
+    // Quantizes a rectangle's [min,max] edge on one axis to a clamped [minCell, maxCellExclusive) cell span. Each
+    // edge is snapped to raw Q48.16 exactly once (the quantize-once-per-edge discipline); the loop the caller then
+    // runs is pure integer arithmetic. Returns false when the span is empty or entirely out of grid bounds.
+    private static bool TryCellSpan(long originRaw, float minValue, float maxValue, int axisCells, out int minCell, out int maxCellExclusive) {
+        var minRaw = FixedQ4816.FromDouble(value: minValue).Value;
+        var maxRaw = FixedQ4816.FromDouble(value: maxValue).Value;
+        // Widened before the subtraction: an edge saturated at the carrier and an origin of the opposite sign differ
+        // by more than a long holds, and the clamp that follows only makes sense on the true difference.
+        var minIndex = ClampIndex(
+            axisCells: axisCells,
+            value: ((((Int128)minRaw)) - originRaw).FloorDivide(divisor: ((Int128)CellSizeRaw))
+        );
+        var maxIndex = ClampIndex(
+            axisCells: axisCells,
+            value: ((((Int128)maxRaw)) - originRaw).CeilingDivide(divisor: ((Int128)CellSizeRaw))
+        );
+
+        minCell = minIndex;
+        maxCellExclusive = maxIndex;
+
+        return (maxIndex > minIndex);
     }
 
     /// <summary>Bakes an artifact covering <c>[minX,maxX] x [minZ,maxZ]</c>. A maximum edge that is not aligned to

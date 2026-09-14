@@ -41,9 +41,18 @@ public sealed class VulkanGpuComputePipeline : IGpuComputePipeline {
         }
 
         m_disposed = true;
-        m_api.DestroyPipeline(deviceHandle: m_deviceHandle, pipelineHandle: m_pipeline);
-        m_api.DestroyPipelineLayout(deviceHandle: m_deviceHandle, pipelineLayoutHandle: LayoutHandle);
-        m_api.DestroyDescriptorSetLayout(deviceHandle: m_deviceHandle, descriptorSetLayoutHandle: DescriptorSetLayoutHandle);
+        m_api.DestroyPipeline(
+            deviceHandle: m_deviceHandle,
+            pipelineHandle: m_pipeline
+        );
+        m_api.DestroyPipelineLayout(
+            deviceHandle: m_deviceHandle,
+            pipelineLayoutHandle: LayoutHandle
+        );
+        m_api.DestroyDescriptorSetLayout(
+            deviceHandle: m_deviceHandle,
+            descriptorSetLayoutHandle: DescriptorSetLayoutHandle
+        );
         m_pipeline = 0;
     }
 }

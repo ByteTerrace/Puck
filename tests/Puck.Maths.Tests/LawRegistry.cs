@@ -768,6 +768,7 @@ internal static partial class LawRegistry {
     [
         .. SmokeCases(),
         .. RootCoreCases(),
+        .. CostModelCases(),
         .. FixedQ4816Cases(),
         .. FixedQ1648Cases(),
         .. FixedQ3232Cases(),
@@ -824,7 +825,13 @@ internal static partial class LawRegistry {
         .. HexagonalIndexCases(),
         .. SquareGridCases(),
         .. CombinatoricsCases(),
-        Case(id: "integer.layer-sequence-full-range", run: () => Laws.Claim(lawId: "integer.layer-sequence-full-range", claim: Subjects.LayerSequenceFullRange)),
+        Case(
+            id: "integer.layer-sequence-full-range",
+            run: () => Laws.Claim(
+                claim: Subjects.LayerSequenceFullRange,
+                lawId: "integer.layer-sequence-full-range"
+            )
+        ),
         .. ScalarSpecificationCases(),
         .. BinaryFieldCrcCases(),
         .. MetallicQuasicrystalAccessCases(),

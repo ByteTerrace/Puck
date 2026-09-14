@@ -127,7 +127,7 @@ public static class WorldPrototypeFacets {
                                 FocusDistance: (eye.Focus ?? 1f),
                                 Subject: null
                             ),
-                            new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: ((eye.Fov ?? 60f) * (MathF.PI / 180f)))),
+                            new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: ((eye.Fov ?? 60f) * (MathF.PI / 180f)))),
                         ]
                     ),
                     RenderWidth: FaceRenderWidth,

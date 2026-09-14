@@ -14,37 +14,6 @@
         "description": "The camera\u0027s stable name \u2014 the handle a View screen / layout slot samples by.",
         "type": "string"
       },
-      "anchor": {
-        "description": "What the camera rides, or null for the world reference frame (or for Anchors to decide).",
-        "type": [
-          "object",
-          "null"
-        ],
-        "required": [
-          "$type"
-        ],
-        "anyOf": [
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorEntity"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorEntityPart"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorPlacement"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorGroup"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorSeat"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorRecentSpeaker"
-          }
-        ],
-        "title": "WorldAnchor"
-      },
       "rig": {
         "$ref": "./common.schema.json#/$defs/WorldCameraProgram",
         "description": "The independent local motion, aim, and lens axes."
@@ -56,6 +25,11 @@
       "renderHeight": {
         "description": "The offscreen render height in pixels.",
         "type": "integer"
+      },
+      "anchor": {
+        "$ref": "./common.schema.json#/$defs/WorldAnchor",
+        "description": "What the camera rides, or null for the world reference frame (or for Anchors to decide).",
+        "default": null
       },
       "anchors": {
         "description": "Ranked anchor candidates, first holding wins each frame \u2014 a portrait camera that rides the speaking character while they speak and the seat\u0027s own avatar otherwise. Refused beside Anchor; a single unconditional anchor is Anchor.",
@@ -71,7 +45,7 @@
           ],
           "properties": {
             "anchor": {
-              "$ref": "./common.schema.json#/$defs/WorldAnchor",
+              "$ref": "./common.schema.json#/$defs/WorldAnchorNonNullable",
               "description": "What the camera rides while this candidate wins."
             },
             "when": {
@@ -91,7 +65,6 @@
     },
     "required": [
       "name",
-      "anchor",
       "rig",
       "renderWidth",
       "renderHeight"

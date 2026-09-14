@@ -1,0 +1,570 @@
+// shader-compare — generic side-by-side pipeline shader vs SDF shader comparison tool.
+//
+// Like hgb-compare for Game Boy cartridges, shader-compare provides a side-by-side
+// comparison tool for shader authoring and verification. The left viewport slot
+// renders the procedural GLSL pipeline shader, while the right viewport slot renders
+// the native Puck SDF model/scene.
+//
+// Paired cameras keep angles, framing and field of view aligned across both views.
+// Moth is the initial comparison, but this tool is generic: the pipeline shader
+// can be live-reloaded or pointed to any shader source, and the basis or
+// prototypes can point to any SDF model.
+//
+// In-game controls:
+//   1 - Three-quarter comparison
+//   2 - Front comparison
+//   3 - Rear comparison
+//   4 - Wide flight-stage comparison
+//   5 - Face close-up comparison
+//
+// Interactive console commands:
+//   pipeline.watch compare-pipeline on    - Watch and recompile shader edits automatically
+//   pipeline.reload compare-pipeline      - Recompile the pipeline on demand
+//   pipeline.load compare-pipeline <src>  - Dynamically load another pipeline shader
+
+schema: "puck.world.definition.v1"
+basis: "../avatars/moth.world.json"
+documentId: "puck-shader-compare-v1"
+
+let pipelineSource = "../../pipelines/moth.glsl"
+let pipelineName = "compare-pipeline"
+
+cameras [
+  {
+    name: "pack-rear"
+    renderHeight: 900
+    renderWidth: 1280
+    rig {
+      name: "pack-rear"
+      operations [
+        anchor(subject: worldPoint(point: [0, 1.38, 2.70]))
+        lookAt(subject: worldPoint(point: [0, 1.30, 0.10]))
+        fieldOfView(fieldOfViewRadians: 0.54)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pack-side"
+    renderHeight: 900
+    renderWidth: 1280
+    rig {
+      name: "pack-side"
+      operations [
+        anchor(subject: worldPoint(point: [-2.70, 1.38, 0.20]))
+        lookAt(subject: worldPoint(point: [0, 1.30, 0.20]))
+        fieldOfView(fieldOfViewRadians: 0.54)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    name: "pack-three-quarter"
+    renderHeight: 900
+    renderWidth: 1280
+    rig {
+      name: "pack-three-quarter"
+      operations [
+        anchor(subject: worldPoint(point: [-1.90, 1.38, 1.90]))
+        lookAt(subject: worldPoint(point: [0, 1.30, 0.15]))
+        fieldOfView(fieldOfViewRadians: 0.52)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+views {
+  layouts [
+    {
+      $replace: true
+    }
+    {
+      name: "compare"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: pipelineName
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "three-quarter"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "compare-front"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-front"
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "front"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "compare-rear"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-rear"
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "rear"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "compare-flight"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-flight"
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "flight-stage"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "compare-face"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-face"
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "face"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-rear"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-rear"
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-front"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-front"
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-face"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-face"
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-three-quarter"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: pipelineName
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-sdf-rear"
+      seatCount: 0
+      slots [
+        {
+          camera: "rear"
+          height: 1
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-flight"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-flight"
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-sdf-front"
+      seatCount: 0
+      slots [
+        {
+          camera: "front"
+          height: 1
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "compare-pack-rear"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-pack-rear"
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "pack-rear"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "compare-pack-side"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-pack-side"
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "pack-side"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-pack-rear"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-pack-rear"
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-pack-side"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-pack-side"
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-sdf-pack-rear"
+      seatCount: 0
+      slots [
+        {
+          camera: "pack-rear"
+          height: 1
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-sdf-pack-side"
+      seatCount: 0
+      slots [
+        {
+          camera: "pack-side"
+          height: 1
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "compare-pack-three-quarter"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-pack-three-quarter"
+          width: 0.5
+          x: 0
+          y: 0
+        }
+        {
+          camera: "pack-three-quarter"
+          height: 1
+          width: 0.5
+          x: 0.5
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-pack-three-quarter"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: "compare-pipeline-pack-three-quarter"
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "focus-sdf-pack-three-quarter"
+      seatCount: 0
+      slots [
+        {
+          camera: "pack-three-quarter"
+          height: 1
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "pipeline-only"
+      seatCount: 0
+      slots [
+        {
+          height: 1
+          pipeline: pipelineName
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+    {
+      name: "sdf-only"
+      seatCount: 0
+      slots [
+        {
+          camera: "three-quarter"
+          height: 1
+          width: 1
+          x: 0
+          y: 0
+        }
+      ]
+      transitionRenderScale: 1
+      transitionSeconds: 0
+    }
+  ]
+
+  pipeline "compare-pipeline" {
+    camera: "three-quarter"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "moth-pipeline" {
+    camera: "three-quarter"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "compare-pipeline-front" {
+    camera: "front"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "compare-pipeline-rear" {
+    camera: "rear"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "compare-pipeline-flight" {
+    camera: "flight-stage"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "compare-pipeline-face" {
+    camera: "face"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "compare-pipeline-pack-rear" {
+    camera: "pack-rear"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "compare-pipeline-pack-side" {
+    camera: "pack-side"
+    source: pipelineSource
+    timeScale: 1
+  }
+
+  pipeline "compare-pipeline-pack-three-quarter" {
+    camera: "pack-three-quarter"
+    source: pipelineSource
+    timeScale: 1
+  }
+}
+
+bindingOverlays [
+  {
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            entries [
+              { command: "view.override", id: "view-1", sources ["keyboard.1"], value { kind: "Axis1D", raw [1, 0, 0, 0] } }
+              { command: "view.override", id: "view-2", sources ["keyboard.2"], value { kind: "Axis1D", raw [2, 0, 0, 0] } }
+              { command: "view.override", id: "view-3", sources ["keyboard.3"], value { kind: "Axis1D", raw [3, 0, 0, 0] } }
+              { command: "view.override", id: "view-4", sources ["keyboard.4"], value { kind: "Axis1D", raw [4, 0, 0, 0] } }
+              { command: "view.override", id: "view-5", sources ["keyboard.5"], value { kind: "Axis1D", raw [5, 0, 0, 0] } }
+              { command: "view.override", id: "view-6", sources ["keyboard.6"], value { kind: "Axis1D", raw [6, 0, 0, 0] } }
+              { command: "view.override", id: "view-7", sources ["keyboard.7"], value { kind: "Axis1D", raw [7, 0, 0, 0] } }
+              { command: "view.override", id: "view-8", sources ["keyboard.8"], value { kind: "Axis1D", raw [8, 0, 0, 0] } }
+              { command: "view.override", id: "view-9", sources ["keyboard.9"], value { kind: "Axis1D", raw [9, 0, 0, 0] } }
+              { command: "view.override", id: "view-0", sources ["keyboard.0"], value { kind: "Axis1D", raw [10, 0, 0, 0] } }
+            ]
+            id: "views"
+          }
+        }
+      ]
+    }
+    id: "shader-compare-bindings"
+  }
+]
+

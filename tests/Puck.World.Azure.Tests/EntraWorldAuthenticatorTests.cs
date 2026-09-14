@@ -21,9 +21,52 @@ public sealed class EntraWorldAuthenticatorTests {
         audience = Audience,
         groupId = Group,
         scope = Scope,
-        remoteKeyHash = new string(c: 'a', count: 64),
+        remoteKeyHash = new string(
+        c: 'a',
+        count: 64
+    ),
     });
 
+    private static string UnvalidatedIdentity(string user) => new JsonWebTokenHandler().CreateToken(tokenDescriptor: new SecurityTokenDescriptor {
+        Claims = new Dictionary<string, object> { ["oid"] = user },
+    });
+
+    [Fact]
+    public void HostFingerprintIsExactAndAmbientUserCannotChangeMidSession() {
+        var credential = new FixedCredential(token: UnvalidatedIdentity(user: User));
+        var client = new EntraWorldAuthenticator(
+            Settings,
+            true,
+            credential: credential
+        );
+
+        Assert.True(condition: client.AcceptsRemoteIdentity(keyHash: new string(
+            c: 'a',
+            count: 64
+        )));
+        Assert.False(condition: client.AcceptsRemoteIdentity(keyHash: new string(
+            c: 'b',
+            count: 64
+        )));
+        Assert.StartsWith(
+            (User + "/"),
+            client.UserIdentity()
+        );
+        Assert.Equal(
+            client.UserIdentity(),
+            client.UserIdentity()
+        );
+        Assert.NotEqual(
+            client.UserIdentity(),
+            new EntraWorldAuthenticator(
+                Settings,
+                true,
+                credential: credential
+            ).UserIdentity()
+        );
+        credential.Token = UnvalidatedIdentity(user: Group);
+        Assert.Throws<InvalidOperationException>(testCode: () => client.Prove(challenge: new byte[32]));
+    }
     [InlineData("valid", true)]
     [InlineData("group", false)]
     [InlineData("audience", false)]
@@ -43,59 +86,87 @@ public sealed class EntraWorldAuthenticatorTests {
         var metadata = new OpenIdConnectConfiguration();
 
         metadata.SigningKeys.Add(item: key);
-        var server = new EntraWorldAuthenticator(Settings, false,
-            configuration: new StaticConfigurationManager<OpenIdConnectConfiguration>(configuration: metadata));
+        var server = new EntraWorldAuthenticator(
+            Settings,
+            false,
+            configuration: new StaticConfigurationManager<OpenIdConnectConfiguration>(configuration: metadata)
+        );
         var claims = new Dictionary<string, object> {
-            ["tid"] = ((fault == "tenant") ? Group : Tenant),
+            ["tid"] = ((fault == "tenant")
+            ? Group
+            : Tenant),
             ["oid"] = User,
-            ["groups"] = new[] { ((fault == "group") ? User : Group) },
-            ["scp"] = ((fault == "scope") ? "another_scope" : Scope),
+            ["groups"] = new[] { ((fault == "group")
+            ? User
+            : Group) },
+            ["scp"] = ((fault == "scope")
+            ? "another_scope"
+            : Scope),
         };
 
         if (fault == "app-only") { claims.Remove(key: "scp"); claims["roles"] = new[] { Scope }; }
         if (fault == "overage") { claims.Remove(key: "groups"); claims["hasgroups"] = true; }
         var token = new JsonWebTokenHandler().CreateToken(tokenDescriptor: new SecurityTokenDescriptor {
-            Issuer = $"https://login.microsoftonline.com/{((fault == "issuer") ? Group : Tenant)}/v2.0",
-            Audience = ((fault == "audience") ? Group : Audience),
+            Issuer = $"https://login.microsoftonline.com/{((fault == "issuer")
+            ? Group
+            : Tenant)}/v2.0",
+            Audience = ((fault == "audience")
+            ? Group
+            : Audience),
             Claims = claims,
             IssuedAt = DateTime.UtcNow.AddMinutes(value: -10),
             NotBefore = DateTime.UtcNow.AddMinutes(value: -10),
-            Expires = DateTime.UtcNow.AddMinutes(value: ((fault == "expired") ? -1 : 5)),
-            SigningCredentials = new SigningCredentials(((fault == "signature") ? new RsaSecurityKey(rsa: untrusted) { KeyId = "known" } : key), SecurityAlgorithms.RsaSha256),
+            Expires = DateTime.UtcNow.AddMinutes(value: ((fault == "expired")
+            ? -1
+            : 5)),
+            SigningCredentials = new SigningCredentials(
+            ((fault == "signature")
+            ? new RsaSecurityKey(rsa: untrusted) { KeyId = "known" }
+            : key),
+            SecurityAlgorithms.RsaSha256
+        ),
         });
-        var client = new EntraWorldAuthenticator(Settings, true, credential: new FixedCredential(token: token));
+        var client = new EntraWorldAuthenticator(
+            Settings,
+            true,
+            credential: new FixedCredential(token: token)
+        );
         var challenge = server.NewChallenge();
-        var proof = client.Prove(challenge);
+        var proof = client.Prove(challenge: challenge);
 
         if (fault == "nonce") { challenge = server.NewChallenge(); }
-        Assert.Equal(accepted, server.TryVerify(challenge, proof, out var subject));
-        Assert.Equal((accepted ? client.UserIdentity() : null), subject);
+        Assert.Equal(
+            accepted,
+            server.TryVerify(
+                challenge: challenge,
+                proof: proof,
+                sourceAuthority: out var subject
+            )
+        );
+        Assert.Equal(
+            (accepted
+            ? client.UserIdentity()
+            : null),
+            subject
+        );
     }
-    [Fact]
-    public void HostFingerprintIsExactAndAmbientUserCannotChangeMidSession() {
-        var credential = new FixedCredential(token: UnvalidatedIdentity(user: User));
-        var client = new EntraWorldAuthenticator(Settings, true, credential: credential);
-
-        Assert.True(client.AcceptsRemoteIdentity(new string(c: 'a', count: 64)));
-        Assert.False(client.AcceptsRemoteIdentity(new string(c: 'b', count: 64)));
-        Assert.StartsWith((User + "/"), client.UserIdentity());
-        Assert.Equal(client.UserIdentity(), client.UserIdentity());
-        Assert.NotEqual(client.UserIdentity(), new EntraWorldAuthenticator(Settings, true, credential: credential).UserIdentity());
-        credential.Token = UnvalidatedIdentity(user: Group);
-        Assert.Throws<InvalidOperationException>(testCode: () => client.Prove(new byte[32]));
-    }
-
-    private static string UnvalidatedIdentity(string user) => new JsonWebTokenHandler().CreateToken(tokenDescriptor: new SecurityTokenDescriptor {
-        Claims = new Dictionary<string, object> { ["oid"] = user },
-    });
 
     private sealed class FixedCredential(string token) : TokenCredential {
         public string Token { get; set; } = token;
 
         public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken) {
-            Assert.Equal($"api://{Audience}/.default", Assert.Single(collection: requestContext.Scopes));
-            return new(accessToken: Token, expiresOn: DateTimeOffset.UtcNow.AddMinutes(minutes: 1));
+            Assert.Equal(
+                $"api://{Audience}/.default",
+                Assert.Single(collection: requestContext.Scopes)
+            );
+            return new(
+                accessToken: Token,
+                expiresOn: DateTimeOffset.UtcNow.AddMinutes(minutes: 1)
+            );
         }
-        public override ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken) => ValueTask.FromResult(result: GetToken(cancellationToken: cancellationToken, requestContext: requestContext));
+        public override ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken) => ValueTask.FromResult(result: GetToken(
+            cancellationToken: cancellationToken,
+            requestContext: requestContext
+        ));
     }
 }

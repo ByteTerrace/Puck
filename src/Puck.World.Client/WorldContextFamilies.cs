@@ -11,13 +11,6 @@ namespace Puck.World;
 /// Context rows carry no expressions; they only compare one published value with one authored state token.
 /// </summary>
 public static class WorldContextFamilies {
-    /// <summary>The layout family: the window composer's active layout selection — an authored
-    /// <c>views.layouts</c> row's name, or <see cref="LayoutBuiltin"/> for the built-in seat ladder. Its states are
-    /// OPEN (authored layout names), so <see cref="StatesOf"/> answers <see langword="null"/> and admission rides
-    /// <see cref="IsOpenStates"/>; a context row naming a layout the world never authors simply never matches.</summary>
-    public const string Layout = "layout";
-    /// <summary>The layout state while the built-in seat ladder composes the window.</summary>
-    public const string LayoutBuiltin = "builtin";
     /// <summary>The engagement family: whether the seat's acting principal has composed any control application
     /// beyond its own body.</summary>
     public const string Engagement = "engagement";
@@ -26,6 +19,13 @@ public static class WorldContextFamilies {
     public const string EngagementEngaged = "engaged";
     /// <summary>The engagement state while the seat's principal holds only its own-body application.</summary>
     public const string EngagementNone = "none";
+    /// <summary>The layout family: the window composer's active layout selection — an authored
+    /// <c>views.layouts</c> row's name, or <see cref="LayoutBuiltin"/> for the built-in seat ladder. Its states are
+    /// OPEN (authored layout names), so <see cref="StatesOf"/> answers <see langword="null"/> and admission rides
+    /// <see cref="IsOpenStates"/>; a context row naming a layout the world never authors simply never matches.</summary>
+    public const string Layout = "layout";
+    /// <summary>The layout state while the built-in seat ladder composes the window.</summary>
+    public const string LayoutBuiltin = "builtin";
     /// <summary>The roster family: a seat's participant-lifecycle state.</summary>
     public const string Roster = "roster";
     /// <summary>The roster state of a joined, confirmed participant. Deliberately ships with no default context row:

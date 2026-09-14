@@ -1,5 +1,5 @@
 {
-  "schema": "puck.audio.v1",
+  "schema": "puck.tune.v1",
   "name": "nexus-alert-bed",
   "tempo": 8,
   "patterns": [

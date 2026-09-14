@@ -46,10 +46,10 @@ public sealed record WorldCapturesSection(string Directory, IReadOnlyList<WorldC
 /// <summary>The <c>captures</c> section's capacity ceilings — small and fixed, since a capture schedule is authored
 /// topology for a short deterministic proving run, never a live-growing table.</summary>
 public static class WorldCapturesCapacity {
+    /// <summary>The largest admitted palette-entry count per station.</summary>
+    public const int MaxPaletteEntriesPerRow = 16;
     /// <summary>The largest admitted station-row count.</summary>
     public const int MaxRows = 32;
     /// <summary>The largest admitted tick count per station.</summary>
     public const int MaxTicksPerRow = 16;
-    /// <summary>The largest admitted palette-entry count per station.</summary>
-    public const int MaxPaletteEntriesPerRow = 16;
 }

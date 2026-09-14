@@ -1,0 +1,561 @@
+using Puck.GamingBricks.Forge;
+using Puck.HumbleGamingBrick;
+using Puck.HumbleGamingBrick.Forge;
+using Puck.HumbleGamingBrick.Forge.Framework;
+
+
+namespace Puck.AdvancedGamingBrick.Forge.Tests;
+
+/// <summary>Covers nested branches, counted loops and loop exits, and pins the per-frame reservation against real hardware.</summary>
+public sealed class CartridgeControlFlowTests {
+    private static CartridgeDocument Blank(string target, string title) => CartridgeDocuments.Create(
+        target: target,
+        title: title
+    );
+    private static int LargestSweepInsideTheReservation(string target) {
+        var low = 1;
+        var high = CartridgeLimits.RepeatCount;
+
+        while (low < high) {
+            var probe = (((low + high) + 1) / 2);
+
+            var (frame, reservation) = CartridgeDocuments.Estimate(document: Sweep(
+                count: probe,
+                target: target
+            ));
+            if (
+                frame.IsKnown &&
+                (frame.Cycles <= reservation)
+            ) { low = probe; } else { high = (probe - 1); }
+        }
+
+        return low;
+    }
+    // Guards the body behind a "done" latch so the measured state is the first frame's result, not a per-frame rerun.
+    private static CartridgeRule Once(string name, CartridgeStatement[] body) => new(
+        Name: name,
+        When: CartridgeExpressions.Gate(
+            left: CartridgeExpressions.Of(state: "done"),
+            comparison: ActionStateComparison.Equal,
+            right: CartridgeExpressions.Of(constant: 0)
+        ),
+        Body: [.. body, Set(
+                target: "done",
+                operation: null,
+                value: CartridgeExpressions.Of(constant: 1)
+            )]
+    );
+    private static void Refuses(CartridgeDocument document, string fragment) {
+        var errors = CartridgeDocuments.Validate(document: document);
+
+        Assert.Contains(
+            collection: errors,
+            filter: error => error.Message.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: fragment
+            )
+        );
+    }
+    private static CartridgeStatement Repeat(int count, string index, CartridgeStatement[] body) =>
+        new(
+            Kind: "repeat",
+            Count: count,
+            Index: index,
+            Body: body
+        );
+    private static CartridgeRule Rule(CartridgeStatement[] body) => new(
+        Name: "rule",
+        Body: body
+    );
+    private static MachineProbe Run(CartridgeDocument document, int frames, out CartridgeCompilation result) {
+        ICartridgeCompiler compiler = ((document.Target == "agb")
+            ? new AgbCartridgeCompiler()
+            : new HgbCartridgeCompiler()
+        );
+
+        result = compiler.Compile(document: document);
+        var machine = new MachineProbe(result: result);
+
+        machine.Run(frames: frames);
+        return machine;
+    }
+    private static CartridgeStatement Set(string target, ExpressionOp? operation, ValueExpression value) =>
+        new(
+            Kind: "set",
+            Target: new CartridgeTarget(State: target),
+            Operation: operation,
+            Value: value
+        );
+    private static CartridgeDocument Sweep(string target, int count) => Blank(
+        target: target,
+        title: "SWEEP"
+    ) with {
+        Variables = [new CartridgeVariable(
+            Name: "slot",
+            Initial: 0
+        ), new CartridgeVariable(
+            Name: "band",
+            Initial: 0
+        ), new CartridgeVariable(
+            Name: "sink",
+            Initial: 0
+        )],
+        Arrays = [new CartridgeArray(
+            Initial: new int[180],
+            Name: "cells"
+        )],
+        Rules = [new CartridgeRule(
+            Name: "work",
+            Body: [
+            Repeat(
+                    count: count,
+                    index: "band",
+                    body: [
+                Repeat(
+                            count: SweepInner,
+                            index: "slot",
+                            body: [
+                    Set(
+                                    target: "sink",
+                                    operation: ExpressionOp.Add,
+                                    value: CartridgeExpressions.Of(
+                                        state: "cells",
+                                        key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "slot"))
+                                    )
+                                ),
+                ]
+                        ),
+            ]
+                ),
+        ]
+        )],
+    };
+
+    /// <summary>
+    /// Calibrates <see cref="CartridgeCostProfile.FrameUnits"/> against hardware: a document the estimate puts at the
+    /// reservation must still complete one rule pass per hardware frame, or the advice is wrong in the direction that
+    /// matters. The estimate gates nothing, so this is what keeps it honest.
+    /// </summary>
+    [Theory]
+    [InlineData("cgb")]
+    [InlineData("agb")]
+    public void ADocumentAtTheBudgetKeepsUpWithTheFrameRate(string target) {
+        const int Frames = 40;
+        var accepted = LargestSweepInsideTheReservation(target: target);
+
+        // The bisection must have stopped on the reservation, not on the schema's own cap for one count.
+        Assert.NotEqual(
+            actual: accepted,
+            expected: CartridgeLimits.RepeatCount
+        );
+
+        var document = Blank(
+            target: target,
+            title: "BUDGET"
+        ) with {
+            Variables = [
+                new CartridgeVariable(
+                Name: "slot",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "band",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "ticks",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "sink",
+                Initial: 0
+            ),
+            ],
+            Arrays = [new CartridgeArray(
+                Initial: new int[180],
+                Name: "cells"
+            )],
+            Rules = [new CartridgeRule(
+                Name: "work",
+                Body: [
+                Repeat(
+                        count: accepted,
+                        index: "band",
+                        body: [
+                    Repeat(
+                                count: SweepInner,
+                                index: "slot",
+                                body: [
+                        Set(
+                                        target: "sink",
+                                        operation: ExpressionOp.Add,
+                                        value: CartridgeExpressions.Of(
+                                            state: "cells",
+                                            key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "slot"))
+                                        )
+                                    ),
+                    ]
+                            ),
+                ]
+                    ),
+                Set(
+                        target: "ticks",
+                        operation: ExpressionOp.Add,
+                        value: CartridgeExpressions.Of(constant: 1)
+                    ),
+            ]
+            )],
+        };
+        using var machine = Run(
+            document: document,
+            frames: Frames,
+            out var result
+        );
+        var ticks = machine.Read(address: result.Variables["ticks"]);
+
+        Assert.InRange(
+            actual: ticks,
+            high: Frames,
+            low: (Frames - 4)
+        );
+    }
+    [InlineData("cgb")]
+    [InlineData("agb")]
+    [Theory]
+    public void BreakLeavesTheIndexAtTheIterationThatBroke(string target) {
+        var document = Blank(
+            target: target,
+            title: "BREAK"
+        ) with {
+            Variables = [
+                new CartridgeVariable(
+                Name: "slot",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "seen",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "done",
+                Initial: 0
+            ),
+            ],
+            Arrays = [new CartridgeArray(
+                Initial: [4, 4, 0, 4, 4],
+                Name: "cells"
+            )],
+            Rules = [Once(
+                name: "scan",
+                body: [
+                Repeat(
+                        count: 5,
+                        index: "slot",
+                        body: [
+                    new CartridgeStatement(
+                                Kind: "if",
+                                When: CartridgeExpressions.Gate(
+                                    left: CartridgeExpressions.Of(
+                                        state: "cells",
+                                        key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "slot"))
+                                    ),
+                                    comparison: ActionStateComparison.Equal,
+                                    right: CartridgeExpressions.Of(constant: 0)
+                                ),
+                                Then: [new CartridgeStatement(Kind: "break")]
+                            ),
+                    Set(
+                                target: "seen",
+                                operation: ExpressionOp.Add,
+                                value: CartridgeExpressions.Of(constant: 1)
+                            ),
+                ]
+                    ),
+            ]
+            )],
+        };
+        using var machine = Run(
+            document: document,
+            frames: 12,
+            out var result
+        );
+
+        Assert.Equal(
+            expected: 2,
+            actual: machine.Read(address: result.Variables["slot"])
+        );
+        Assert.Equal(
+            expected: 2,
+            actual: machine.Read(address: result.Variables["seen"])
+        );
+    }
+    [InlineData("cgb")]
+    [InlineData("agb")]
+    [Theory]
+    public void NestedLoopsAndElseArmsAgree(string target) {
+        var document = Blank(
+            target: target,
+            title: "NESTED"
+        ) with {
+            Variables = [
+                new CartridgeVariable(
+                Name: "outer",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "inner",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "cursor",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "evens",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "odds",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "done",
+                Initial: 0
+            ),
+            ],
+            Arrays = [new CartridgeArray(
+                Initial: new int[12],
+                Name: "grid"
+            )],
+            Rules = [Once(
+                name: "fill",
+                body: [
+                // grid[cursor] = outer * 4 + inner, walked by a running cursor rather than a per-cell multiply.
+                Repeat(
+                        count: 3,
+                        index: "outer",
+                        body: [
+                    Repeat(
+                                count: 4,
+                                index: "inner",
+                                body: [
+                        new CartridgeStatement(
+                                        Kind: "set",
+                                        Target: new CartridgeTarget(
+                                            State: "grid",
+                                            Key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "cursor"))
+                                        ),
+                                        Operation: null,
+                                        Value: CartridgeExpressions.Of(state: "cursor")
+                                    ),
+                        new CartridgeStatement(
+                                        Kind: "if",
+                                        When: CartridgeExpressions.Gate(
+                                            left: CartridgeExpressions.Of(state: "inner"),
+                                            comparison: ActionStateComparison.Less,
+                                            right: CartridgeExpressions.Of(constant: 2)
+                                        ),
+                                        Then: [Set(
+                                                target: "evens",
+                                                operation: ExpressionOp.Add,
+                                                value: CartridgeExpressions.Of(constant: 1)
+                                            )],
+                                        Else: [Set(
+                                                target: "odds",
+                                                operation: ExpressionOp.Add,
+                                                value: CartridgeExpressions.Of(constant: 1)
+                                            )]
+                                    ),
+                        Set(
+                                        target: "cursor",
+                                        operation: ExpressionOp.Add,
+                                        value: CartridgeExpressions.Of(constant: 1)
+                                    ),
+                    ]
+                            ),
+                ]
+                    ),
+            ]
+            )],
+        };
+        using var machine = Run(
+            document: document,
+            frames: 12,
+            out var result
+        );
+
+        Assert.Equal(
+            expected: 12,
+            actual: machine.Read(address: result.Variables["cursor"])
+        );
+        Assert.Equal(
+            expected: 6,
+            actual: machine.Read(address: result.Variables["evens"])
+        );
+        Assert.Equal(
+            expected: 6,
+            actual: machine.Read(address: result.Variables["odds"])
+        );
+        for (var cell = 0; (cell < 12); ++cell) {
+            Assert.Equal(
+                expected: cell,
+                actual: machine.Read(address: (result.Arrays["grid"] + ((uint)cell)))
+            );
+        }
+    }
+    [InlineData("cgb")]
+    [InlineData("agb")]
+    [Theory]
+    public void RepeatWalksItsIndexAndSumsAnArray(string target) {
+        var document = Blank(
+            target: target,
+            title: "LOOP"
+        ) with {
+            Variables = [
+                new CartridgeVariable(
+                Name: "row",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "total",
+                Initial: 0
+            ),
+                new CartridgeVariable(
+                Name: "done",
+                Initial: 0
+            ),
+            ],
+            Arrays = [new CartridgeArray(
+                Initial: [1, 2, 3, 4, 5, 6],
+                Name: "values"
+            )],
+            Rules = [Once(
+                name: "sum",
+                body: [
+                Repeat(
+                        count: 6,
+                        index: "row",
+                        body: [
+                    Set(
+                                target: "total",
+                                operation: ExpressionOp.Add,
+                                value: CartridgeExpressions.Of(
+                                    state: "values",
+                                    key: CartridgeExpressions.Key(index: CartridgeExpressions.Of(state: "row"))
+                                )
+                            ),
+                ]
+                    ),
+            ]
+            )],
+        };
+        using var machine = Run(
+            document: document,
+            frames: 12,
+            out var result
+        );
+
+        Assert.Equal(
+            expected: 21,
+            actual: machine.Read(address: result.Variables["total"])
+        );
+        Assert.Equal(
+            expected: 6,
+            actual: machine.Read(address: result.Variables["row"])
+        );
+    }
+    [Fact]
+    public void ValidationRefusesUnboundedAndMalformedControlFlow() {
+        var document = Blank(
+            target: "cgb",
+            title: "REFUSE"
+        ) with {
+            Variables = [new CartridgeVariable(
+                Name: "i",
+                Initial: 0
+            ), new CartridgeVariable(
+                Name: "x",
+                Initial: 0
+            )],
+        };
+
+        Refuses(
+            document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "break")])] },
+            fragment: "inside a repeat"
+        );
+        Refuses(
+            document: document with { Rules = [Rule(body: [Repeat(
+                        count: 0,
+                        index: "i",
+                        body: [Set(
+                                target: "x",
+                                operation: ExpressionOp.Add,
+                                value: CartridgeExpressions.Of(constant: 1)
+                            )]
+                    )])] },
+            fragment: "iteration count"
+        );
+        Refuses(
+            document: document with { Rules = [Rule(body: [new CartridgeStatement(
+                        Kind: "repeat",
+                        Count: 4,
+                        Index: "missing",
+                        Body: [Set(
+                                target: "x",
+                                operation: ExpressionOp.Add,
+                                value: CartridgeExpressions.Of(constant: 1)
+                            )]
+                    )])] },
+            fragment: "Unknown state variable"
+        );
+        Refuses(
+            document: document with { Rules = [Rule(body: [new CartridgeStatement(
+                        Kind: "set",
+                        Target: new CartridgeTarget(State: "x"),
+                        Operation: null,
+                        Value: CartridgeExpressions.Of(constant: 1),
+                        Count: 3
+                    )])] },
+            fragment: "cannot carry 'count'"
+        );
+        Refuses(
+            document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "loop")])] },
+            fragment: "Expected set, if, repeat, break, map, blit, plot, save, load, play, stop, clock, fade or blend"
+        );
+    }
+
+    // The widest sweep the estimate still puts inside the reservation, found by bisection rather than a pinned number that would drift
+    // the moment a cost constant moves. The sweep nests: one count is bounded at 255 by the schema, which is well
+    // inside either reservation, so a single loop would measure that bound instead of the reservation.
+    // Inner iterations per band. Small enough that the outer count lands well inside the schema's cap on either
+    // machine, so the bisection is bounded by the reservation.
+    private const int SweepInner = 20;
+
+    private sealed class MachineProbe : IDisposable {
+        private readonly AgbVerifyMachineDriver? m_agb;
+        private readonly VerifyMachineDriver? m_hgb;
+
+        public MachineProbe(CartridgeCompilation result) {
+            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
+                rom: result.Rom,
+                label: "control"
+            ); } else { m_hgb = new VerifyMachineDriver(
+                rom: result.Rom,
+                label: "control"
+            ); }
+        }
+
+        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
+        public byte Read(uint address) => (m_agb?.ReadByte(address: address) ?? m_hgb!.Read(address: ((ushort)address)));
+        public void Run(int frames) {
+            m_agb?.RunFrames(
+                frames: frames,
+                keys: AgbKeys.None
+            );
+            m_hgb?.RunFrames(
+                buttons: JoypadButtons.None,
+                frames: frames
+            );
+        }
+    }
+}

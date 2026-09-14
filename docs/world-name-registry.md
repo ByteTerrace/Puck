@@ -14,28 +14,35 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 
 | Path | Kind | Role | Facet | Member |
 |---|---|---|---|---|
-| `render.lighting.sun.color` | State | Binding | Binding | `WorldRenderSun.Color` |
-| `render.lighting.ambient.color` | State | Binding | Binding | `WorldRenderAmbient.Color` |
-| `render.sky.zenith` | State | Binding | Binding | `WorldRenderSky.Zenith` |
-| `render.sky.horizon` | State | Binding | Binding | `WorldRenderSky.Horizon` |
-| `render.sky.ground` | State | Binding | Binding | `WorldRenderSky.Ground` |
-| `render.sky.clouds.color` | State | Binding | Binding | `WorldRenderSkyClouds.Color` |
+| `render.lighting.lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
+| `render.lighting.lights[][hemisphere].color` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Color` |
+| `render.lighting.lights[][rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
+| `render.lighting.lights[][point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
+| `render.lighting.curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
+| `render.sky.layers[][gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
+| `render.sky.layers[][clouds].color` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Color` |
 | `render.cycle.state` | State | Names | Read | `WorldRenderCycle.State` |
-| `render.cycle.keys[].lighting.sun.color` | State | Binding | Binding | `WorldRenderSun.Color` |
-| `render.cycle.keys[].lighting.ambient.color` | State | Binding | Binding | `WorldRenderAmbient.Color` |
-| `render.cycle.keys[].sky.zenith` | State | Binding | Binding | `WorldRenderSky.Zenith` |
-| `render.cycle.keys[].sky.horizon` | State | Binding | Binding | `WorldRenderSky.Horizon` |
-| `render.cycle.keys[].sky.ground` | State | Binding | Binding | `WorldRenderSky.Ground` |
-| `render.cycle.keys[].sky.clouds.color` | State | Binding | Binding | `WorldRenderSkyClouds.Color` |
+| `render.cycle.keys[].lighting.lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
+| `render.cycle.keys[].lighting.lights[][hemisphere].color` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Color` |
+| `render.cycle.keys[].lighting.lights[][rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
+| `render.cycle.keys[].lighting.lights[][point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
+| `render.cycle.keys[].lighting.curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
+| `render.cycle.keys[].sky.layers[][gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
+| `render.cycle.keys[].sky.layers[][clouds].color` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Color` |
+| `render.environment.softboxes[].color` | State | Binding | Binding | `WorldRenderSoftbox.Color` |
+| `render.environment.horizon.low` | State | Binding | Binding | `WorldRenderHorizon.Low` |
+| `render.environment.horizon.high` | State | Binding | Binding | `WorldRenderHorizon.High` |
+| `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].memory[].row` | State | Names | Read | `WorldScreenMemory.Row` |
 | `screens[].memory[].key` | State | Key | Read | `WorldScreenMemory.Key` |
 | `cameras[].rig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `cameras[].rig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
 | `cameras[].rig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
 | `cameras[].rig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
-| `cameras[].rig.operations[][fov].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.Fov.FieldOfViewRadians` |
+| `cameras[].rig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `cameras[].rig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
-| `cameras[].rig.operations[][select].key` | State | Binding | Binding | `WorldCameraProgramOp.Select.Key` |
+| `cameras[].rig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
 | `cameras[].anchors[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `cameras[].anchors[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `cameras[].anchors[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
@@ -138,6 +145,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onPress.effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onPress.effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onPress.effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onPress.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -160,6 +188,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -265,6 +294,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onRelease.effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onRelease.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -287,6 +337,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -392,6 +443,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onFact[].effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `kits.rows[].actions{*}.onFact[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -414,6 +486,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -467,6 +540,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bindingOverlays[].when.key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
 | `bindingOverlays[].when.comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
 | `bindingOverlays[].when.comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
+| `placements.rows[].faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `placements.rows[].respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `placements.rows[].respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `placements.rows[].respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -482,21 +556,31 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
 | `placements.rows[].deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `placements.rows[].deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `speakers[].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][fixed].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][anchored].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][bed].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
 | `host.backendRow` | State | Names | Read | `WorldHostDefaults.BackendRow` |
 | `views.seatRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.seatRig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
 | `views.seatRig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
 | `views.seatRig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
-| `views.seatRig.operations[][fov].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.Fov.FieldOfViewRadians` |
+| `views.seatRig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `views.seatRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
-| `views.seatRig.operations[][select].key` | State | Binding | Binding | `WorldCameraProgramOp.Select.Key` |
+| `views.seatRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
 | `views.cameraRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.cameraRig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
 | `views.cameraRig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
 | `views.cameraRig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
-| `views.cameraRig.operations[][fov].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.Fov.FieldOfViewRadians` |
+| `views.cameraRig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `views.cameraRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
-| `views.cameraRig.operations[][select].key` | State | Binding | Binding | `WorldCameraProgramOp.Select.Key` |
+| `views.cameraRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `looks.rows[].motion.lanes` | State | Expression | Read | `WorldLookMotion.Lanes` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
 | `dynamics[].name` | Dynamics | Declares |  | `DynamicsRow.Name` |
 | `hud.defaults.cursor.visible[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `hud.defaults.cursor.visible[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -684,6 +768,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `rules[].effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `rules[].effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `rules[].effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `rules[].effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `rules[].effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `rules[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -706,6 +811,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `rules[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -818,6 +924,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `rules[].decision.options[].effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].decision.options[].effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.options[].effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `rules[].decision.options[].effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `rules[].decision.options[].effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `rules[].decision.options[].effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.options[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.options[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.options[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.options[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].decision.options[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.options[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].decision.options[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -840,6 +967,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -964,6 +1092,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `rules[].decision.onNoChoice[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].decision.onNoChoice[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.onNoChoice[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `rules[].decision.onNoChoice[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `rules[].decision.onNoChoice[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `rules[].decision.onNoChoice[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.onNoChoice[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.onNoChoice[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `rules[].decision.onNoChoice[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `rules[].decision.onNoChoice[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `rules[].decision.onNoChoice[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.onNoChoice[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].decision.onNoChoice[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -986,6 +1135,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -1081,6 +1231,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][scheduleState].key` | State | Key | Read | `ActionEffect.ScheduleState.Key` |
 | `interactions.interactions[].effects[][transaction].effects…` | | | | re-enters `IReadOnlyList`1` |
 | `interactions.interactions[].effects[][transaction].onFailure…` | | | | re-enters `IReadOnlyList`1` |
+| `interactions.interactions[].effects[][if].condition[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `interactions.interactions[].effects[][if].condition[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `interactions.interactions[].effects[][if].condition[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `interactions.interactions[].effects[][if].condition[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `interactions.interactions[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `interactions.interactions[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `interactions.interactions[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `interactions.interactions[].effects[][if].then…` | | | | re-enters `IReadOnlyList`1` |
+| `interactions.interactions[].effects[][if].else…` | | | | re-enters `IReadOnlyList`1` |
 | `interactions.interactions[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `interactions.interactions[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `interactions.interactions[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
@@ -1103,6 +1274,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -1159,6 +1331,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `search.jobs[].best` | State | Names | Action | `WorldSearchRow.Best` |
 | `search.jobs[].chance.row` | State | Names | Read | `WorldSearchChance.Row` |
 | `search.jobs[].scores` | State | Names | Read | `WorldSearchRow.Scores` |
+| `machines[].name` | Machine | Declares |  | `WorldMachine.Name` |
+| `machines[].memory[].name` | MachineBinding | Declares |  | `WorldMachineMemory.Name` |
+| `machines[].memory[].row` | State | Names | Read | `WorldMachineMemory.Row` |
+| `machines[].memory[].key` | State | Key | Read | `WorldMachineMemory.Key` |
 | `exports.reads` | Any | Names | Read | `WorldExports.Reads` |
 | `exports.actions` | Any | Names | Action | `WorldExports.Actions` |
 | `exports.bindings` | Any | Names | Binding | `WorldExports.Bindings` |
@@ -1169,17 +1345,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 |---|---|---|
 | `spawnPoints[].id` | `WorldSpawnPoint.Id` | a spawn point id |
 | `render.extensions[].id` | `WorldRenderExtensionEntry.Id` | a post-render extension id |
-| `screens[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `screens[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
-| `screens[].magazine.entries[][machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `screens[].magazine.entries[][probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `cameras[].name` | `WorldCamera.Name` | a camera name |
 | `cameras[].rig.name` | `WorldCameraProgram.Name` | a camera program name |
 | `cameras[].rig.operations[][path].curve` | `WorldCameraProgramOp.Path.Curve` | a curve name |
 | `cameras[].rig.operations[][blend].a` | `WorldCameraProgramOp.Blend.A` | a camera program name |
 | `cameras[].rig.operations[][blend].b` | `WorldCameraProgramOp.Blend.B` | a camera program name |
-| `cameras[].rig.operations[][select].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
-| `cameras[].rig.operations[][select].default` | `WorldCameraProgramOp.Select.Default` | a camera program name |
+| `cameras[].rig.operations[][selectProgram].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
+| `cameras[].rig.operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
 | `bodies.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `bodies.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `bodies.peerVariation.phase.name` | `WorldSequence.Name` | a sequence name |
@@ -1201,6 +1375,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].motion.shaping[].when[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].motion.holds[].name` | `WorldHold.Name` | a hold name, local to its kit |
 | `kits.rows[].motion.holds[].spend.state` | `WorldHoldSpend.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onPress.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onPress.effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1214,7 +1389,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1222,6 +1396,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onPress.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onRelease.effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1235,7 +1410,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1243,6 +1417,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onRelease.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onFact[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1256,7 +1431,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1284,7 +1458,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `placements.rows[].inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `placements.rows[].inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `placements.rows[].faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `placements.rows[].faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `placements.rows[].deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `placements.rows[].spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1301,15 +1474,17 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.seatRig.operations[][path].curve` | `WorldCameraProgramOp.Path.Curve` | a curve name |
 | `views.seatRig.operations[][blend].a` | `WorldCameraProgramOp.Blend.A` | a camera program name |
 | `views.seatRig.operations[][blend].b` | `WorldCameraProgramOp.Blend.B` | a camera program name |
-| `views.seatRig.operations[][select].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
-| `views.seatRig.operations[][select].default` | `WorldCameraProgramOp.Select.Default` | a camera program name |
+| `views.seatRig.operations[][selectProgram].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
+| `views.seatRig.operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
 | `views.cameraRig.name` | `WorldCameraProgram.Name` | a camera program name |
 | `views.cameraRig.operations[][path].curve` | `WorldCameraProgramOp.Path.Curve` | a curve name |
 | `views.cameraRig.operations[][blend].a` | `WorldCameraProgramOp.Blend.A` | a camera program name |
 | `views.cameraRig.operations[][blend].b` | `WorldCameraProgramOp.Blend.B` | a camera program name |
-| `views.cameraRig.operations[][select].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
-| `views.cameraRig.operations[][select].default` | `WorldCameraProgramOp.Select.Default` | a camera program name |
+| `views.cameraRig.operations[][selectProgram].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
+| `views.cameraRig.operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
+| `views.pipelines[].name` | `WorldViewPipeline.Name` | a view pipeline name |
+| `views.pipelines[].source` | `WorldViewPipeline.Source` | a view pipeline's source is a document path |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `hud.panels[].id` | `WorldHudPanel.Id` | a HUD panel id |
 | `hud.panels[].elements[].id` | `WorldHudElement.Id` | a HUD element id |
@@ -1347,6 +1522,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.lattices[][graph].edges[].to` | `GraphEdge.To` | a graph cell id is local to its topology |
 | `state.lattices[][field].reactions[][emit].tag` | `WorldReaction.Emit.Tag` | an emission tag |
 | `markers[].id` | `WorldMarkerRow.Id` | a marker id |
+| `rules[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1360,7 +1536,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `rules[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1369,6 +1544,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.options[].name` | `WorldDecisionOption.Name` | an option name is local to its decision |
+| `rules[].decision.options[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.options[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].decision.options[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.options[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1382,7 +1558,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1391,6 +1566,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].decision.options[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.interrupt[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `rules[].decision.onNoChoice[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.onNoChoice[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].decision.onNoChoice[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.onNoChoice[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1404,7 +1580,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1420,10 +1595,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `identity.facts.state` | `WorldIdentityFacts.State` | an identity-lane row name |
 | `groups.kinds[].name` | `WorldGroupKind.Name` | a group kind name |
 | `groups.kinds[].roles[].name` | `WorldGroupRole.Name` | a group role name |
-| `groups.kinds[].sharedStateScope` | `WorldGroupKind.SharedStateScope` | a group scope token |
 | `groups.ownership[].subject.id` | `OwnershipSubject.Id` | an ownership subject id |
 | `properties.names` | `WorldPropertyRegistrySection.Names` | property names are the properties section's own namespace |
 | `interactions.interactions[].name` | `WorldInteraction.Name` | an interaction name is the interactions section's own namespace |
+| `interactions.interactions[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `interactions.interactions[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `interactions.interactions[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `interactions.interactions[].effects[][designateBody].register` | `WorldEffect.DesignateBody.Register` | a target register name |
@@ -1437,7 +1612,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
-| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
@@ -1474,3 +1648,4 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `search.jobs[].name` | `WorldSearchRow.Name` | a search job name is the search section's own namespace |
 | `search.jobs[].shapes[][jump].over` | `WorldSearchShape.Jump.Over` | direction names are local to the board's topology |
 | `search.jobs[].shapes[][pair].with` | `WorldSearchShape.Paired.With` | a cell key of the job's token row |
+| `machines[].cable.name` | `WorldMachineCable.Name` | a link-cable name |

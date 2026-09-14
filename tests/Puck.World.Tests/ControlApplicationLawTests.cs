@@ -33,20 +33,45 @@ public sealed class ControlApplicationLawTests {
     }
 
     [Fact]
-    public void UncomposedParticipantHoldsOnlyItsOwnBodyApplication() {
+    public void DissolveRestoresTheDefaultSetAndReleasesTheLatch() {
         using var fixture = Fixtures.FreshServer();
 
         var seat = Join(
             fixture: fixture,
             slot: 0
         );
-        var applications = fixture.Server.Grants.Applications(principal: seat);
+        var target = GrantSubject.Screen(index: Fixtures.TestPatternScreenIndex);
 
+        Assert.True(condition: fixture.Server.Engagement.Compose(
+            entityIndex: seat.Index,
+            target: target,
+            exclusive: true,
+            actingPrincipal: seat,
+            targetPrincipal: seat
+        ));
+        Assert.Equal(
+            expected: ControlOutcome.Dissolved,
+            actual: fixture.Server.Engagement.Dissolve(
+                entityIndex: seat.Index,
+                actingPrincipal: seat,
+                targetPrincipal: seat
+            )
+        );
         Assert.Equal(
             expected: ControlApplication.OwnBody(bodyIndex: seat.Index),
-            actual: Assert.Single(collection: applications)
+            actual: Assert.Single(collection: fixture.Server.Grants.Applications(principal: seat))
         );
         Assert.False(condition: fixture.Server.Body(index: seat.Index)!.Engaged);
+
+        // A set already at its default is a friendly no-op, never a denial and never a repair.
+        Assert.Equal(
+            expected: ControlOutcome.NotApplied,
+            actual: fixture.Server.Engagement.Dissolve(
+                entityIndex: seat.Index,
+                actingPrincipal: seat,
+                targetPrincipal: seat
+            )
+        );
     }
     [Fact]
     public void ExclusiveCompositionDropsTheOwnBodyMember_MirroredCompositionRetainsIt() {
@@ -100,47 +125,6 @@ public sealed class ControlApplicationLawTests {
             filter: application => (application.Target == target)
         );
         Assert.False(condition: fixture.Server.Body(index: seat.Index)!.Engaged);
-    }
-    [Fact]
-    public void DissolveRestoresTheDefaultSetAndReleasesTheLatch() {
-        using var fixture = Fixtures.FreshServer();
-
-        var seat = Join(
-            fixture: fixture,
-            slot: 0
-        );
-        var target = GrantSubject.Screen(index: Fixtures.TestPatternScreenIndex);
-
-        Assert.True(condition: fixture.Server.Engagement.Compose(
-            entityIndex: seat.Index,
-            target: target,
-            exclusive: true,
-            actingPrincipal: seat,
-            targetPrincipal: seat
-        ));
-        Assert.Equal(
-            expected: ControlOutcome.Dissolved,
-            actual: fixture.Server.Engagement.Dissolve(
-                entityIndex: seat.Index,
-                actingPrincipal: seat,
-                targetPrincipal: seat
-            )
-        );
-        Assert.Equal(
-            expected: ControlApplication.OwnBody(bodyIndex: seat.Index),
-            actual: Assert.Single(collection: fixture.Server.Grants.Applications(principal: seat))
-        );
-        Assert.False(condition: fixture.Server.Body(index: seat.Index)!.Engaged);
-
-        // A set already at its default is a friendly no-op, never a denial and never a repair.
-        Assert.Equal(
-            expected: ControlOutcome.NotApplied,
-            actual: fixture.Server.Engagement.Dissolve(
-                entityIndex: seat.Index,
-                actingPrincipal: seat,
-                targetPrincipal: seat
-            )
-        );
     }
     [Fact]
     public void RevokingControlOverAnAppliedTargetDissolvesThatMember() {
@@ -225,5 +209,21 @@ public sealed class ControlApplicationLawTests {
             collection: occupants,
             action: static occupant => Assert.True(condition: occupant.Capture)
         );
+    }
+    [Fact]
+    public void UncomposedParticipantHoldsOnlyItsOwnBodyApplication() {
+        using var fixture = Fixtures.FreshServer();
+
+        var seat = Join(
+            fixture: fixture,
+            slot: 0
+        );
+        var applications = fixture.Server.Grants.Applications(principal: seat);
+
+        Assert.Equal(
+            expected: ControlApplication.OwnBody(bodyIndex: seat.Index),
+            actual: Assert.Single(collection: applications)
+        );
+        Assert.False(condition: fixture.Server.Body(index: seat.Index)!.Engaged);
     }
 }

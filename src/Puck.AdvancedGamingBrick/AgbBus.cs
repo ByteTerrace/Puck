@@ -27,9 +27,11 @@ public sealed partial class AgbBus : IAgbBus {
     private static readonly int[] SramWait = { 4, 3, 2, 8 };
 
     private readonly byte[] m_bios;
+
     private readonly byte[] m_ewram = new byte[0x40000];
     private readonly byte[] m_iwram = new byte[0x8000];
     private readonly byte[] m_io = new byte[0x400];
+
     private readonly AgbScheduler m_scheduler;
     private readonly AgbCartridge m_cartridge;
     private readonly IAgbInterruptController m_interrupts;
@@ -40,7 +42,9 @@ public sealed partial class AgbBus : IAgbBus {
     private readonly IAgbApu m_apu;
     private readonly AgbDmaController? m_dmaCore;
     private readonly AgbApu? m_apuCore;
+
     private readonly AgbClockState m_clockState = new();
+
     private readonly Action<string>? m_busTrace;
 
     private uint m_openBus;
@@ -78,7 +82,9 @@ public sealed partial class AgbBus : IAgbBus {
     private uint m_prefetchAddr;
     private uint m_prefetchLoad;
     private int m_prefetchWait;
+
     private bool m_prefetchStopped = true;
+
     private bool m_prefetchAhead;
 
     /// <summary>Creates the bus over a BIOS image, a cartridge, and the I/O peripherals it routes to.</summary>
@@ -105,7 +111,7 @@ public sealed partial class AgbBus : IAgbBus {
         ArgumentNullException.ThrowIfNull(apu);
 
         m_scheduler = scheduler;
-        PrefetchDisabled = options?.DisablePrefetch ?? false;
+        PrefetchDisabled = (options?.DisablePrefetch ?? false);
         m_busTrace = options?.BusTrace;
         m_bios = bios.Image.ToArray();
         m_cartridge = cartridge;
@@ -115,13 +121,15 @@ public sealed partial class AgbBus : IAgbBus {
         m_serial = serial;
         m_ppu = ppu;
         m_apu = apu;
-        m_dmaCore = dma as AgbDmaController;
-        m_apuCore = apu as AgbApu;
+        m_dmaCore = (dma as AgbDmaController);
+        m_apuCore = (apu as AgbApu);
 
         // Only built-in controllers publish every readiness transition. Decorators retain the interface path.
         // An observer already owned by another bus must not be replaced.
-        if ((timers is AgbTimerController { ClockState: null } timerCore)
-            && (interrupts is AgbInterruptController { ClockState: null } interruptCore)) {
+        if (
+            (timers is AgbTimerController { ClockState: null } timerCore) &&
+            (interrupts is AgbInterruptController { ClockState: null } interruptCore)
+        ) {
             timerCore.ObserveClockState(state: m_clockState);
             interruptCore.ObserveClockState(state: m_clockState);
         }
@@ -223,7 +231,11 @@ public sealed partial class AgbBus : IAgbBus {
     private void StepClocks(int n) {
         // Readiness is withdrawn by register writes, latch/IRQ transitions and restore. Equality belongs to
         // the slow path: an event at the charge's final cycle must fire before the access returns.
-        if ((n > 0) && m_clockState.CanAdvance && (n < (m_scheduler.NextWhen - m_scheduler.Now))) {
+        if (
+            (n > 0) &&
+            m_clockState.CanAdvance &&
+            (n < (m_scheduler.NextWhen - m_scheduler.Now))
+        ) {
             m_scheduler.Now += n;
             return;
         }
@@ -259,7 +271,8 @@ public sealed partial class AgbBus : IAgbBus {
             // Never step past the next event: clamp the span so the event fires on its exact cycle.
             var chunk = ((untilEvent < remaining)
                 ? (int)untilEvent
-                : remaining);
+                : remaining
+            );
 
             if (fast) {
                 m_scheduler.Now += chunk;
@@ -321,8 +334,12 @@ public sealed partial class AgbBus : IAgbBus {
 
         // Built-in peripherals expose their request flags without consuming them. Decorators and substitute
         // implementations retain the full interface path, including their access-time callbacks.
-        if ((m_dmaCore is not null) && (m_apuCore is not null)
-            && !m_dmaCore.HasPendingTransfer && !m_apuCore.HasPendingFifoRefill) {
+        if (
+            (m_dmaCore is not null) &&
+            (m_apuCore is not null) &&
+            !m_dmaCore.HasPendingTransfer &&
+            !m_apuCore.HasPendingFifoRefill
+        ) {
             return;
         }
 
@@ -747,7 +764,9 @@ public sealed partial class AgbBus : IAgbBus {
 
     /// <inheritdoc/>
     public void StepHalted() {
-        if (!(m_stopped ? StopWakeRequested() : m_interrupts.HasPendingInterrupt)) {
+        if (!(m_stopped
+            ? StopWakeRequested()
+            : m_interrupts.HasPendingInterrupt)) {
             // A sleeping CPU still yields to its caller. In particular, keypad input must be deliverable on the
             // next queued host segment, and a link peer must get its turn to produce a serial wake interrupt.
             StepClocks(n: 1);
@@ -920,7 +939,8 @@ public sealed partial class AgbBus : IAgbBus {
 
         return ((width == 4)
             ? DebugReadIo(offset: offset) | (((uint)DebugReadIo(offset: (offset + 2u))) << 16)
-            : DebugReadIo(offset: offset));
+            : DebugReadIo(offset: offset)
+        );
     }
     // Reads the cartridge ROM directly (the pure byte accessor), deliberately bypassing the game-pak burst-page
     // counter that ReadRom's DMA branch mutates — a CPU/debug read never drives that counter on hardware either.
@@ -932,7 +952,8 @@ public sealed partial class AgbBus : IAgbBus {
             : (uint)(m_cartridge.ReadRom(offset: offset)
                 | (m_cartridge.ReadRom(offset: (offset + 1u)) << 8)
                 | (m_cartridge.ReadRom(offset: (offset + 2u)) << 16)
-                | (m_cartridge.ReadRom(offset: (offset + 3u)) << 24)));
+                | (m_cartridge.ReadRom(offset: (offset + 3u)) << 24))
+        );
     }
     private void WriteRegion(uint address, int width, uint value) {
         // Aligned address for the wide-bus regions (the CPU forces 16/32-bit accesses to their natural alignment);
@@ -1060,15 +1081,16 @@ public sealed partial class AgbBus : IAgbBus {
 
         return (m_executingInBios
             ? AgbArrayAccess.Read(
-            array: m_bios,
-            index: address & 0x3FFFu,
-            width: width
-        )
+                array: m_bios,
+                index: address & 0x3FFFu,
+                width: width
+            )
             : SelectLane(
-            address: address,
-            value: m_lastBiosOpcode,
-            width: width
-        ));
+                address: address,
+                value: m_lastBiosOpcode,
+                width: width
+            )
+        );
     }
     // Selects the byte/halfword lane the accessed address sees within a 32-bit bus value — the hardware
     // memory-data-register shift by 8*(addr&3) applied to narrow reads of an undriven or latch-backed word.
@@ -1083,7 +1105,8 @@ public sealed partial class AgbBus : IAgbBus {
     // so the burst's consuming instruction and the one after it read the DMA value (the "DMA-lingering" open bus).
     private uint OpenBusWord() => ((m_dmaOpenBusWindow > 0)
         ? m_dmaOpenBus
-        : m_openBus);
+        : m_openBus
+    );
     // An undriven read, lane-selected to the accessed address.
     private uint OpenBusValue(uint address, int width) => SelectLane(
         value: OpenBusWord(),
@@ -1169,7 +1192,8 @@ public sealed partial class AgbBus : IAgbBus {
 
                         return (((offset & 1u) == 0u)
                             ? (uint)(half & 0xFFu)
-                            : (uint)(half >> 8));
+                            : (uint)(half >> 8)
+                        );
                     }
                 case 2:
                     return m_cartridge.ReadRomBurst(
@@ -1268,7 +1292,8 @@ public sealed partial class AgbBus : IAgbBus {
         ) {
             var fifo = ((offset < 0xA4u)
                 ? 0
-                : 1);
+                : 1
+            );
 
             for (var i = 0; (i < width); ++i) {
                 m_apu.WriteFifoByte(
@@ -1287,7 +1312,8 @@ public sealed partial class AgbBus : IAgbBus {
 
                     half = (((offset & 1u) == 0u)
                         ? (ushort)((half & 0xFF00u) | (value & 0xFFu))
-                        : (ushort)((half & 0x00FFu) | ((value & 0xFFu) << 8)));
+                        : (ushort)((half & 0x00FFu) | ((value & 0xFFu) << 8))
+                    );
 
                     WriteIoHalf(
                         offset: aligned,
@@ -1335,7 +1361,8 @@ public sealed partial class AgbBus : IAgbBus {
 
             return (readable
                 ? m_ppu.ReadRegister(offset: offset)
-                : OpenBusHalf(offset: offset));
+                : OpenBusHalf(offset: offset)
+            );
         }
 
         if (
@@ -1370,7 +1397,8 @@ public sealed partial class AgbBus : IAgbBus {
             // returns zero for the write-only count and the bit-masked control value.
             return ((((offset - 0xB0u) % 12u) >= 8u)
                 ? m_dma.ReadRegister(offset: offset)
-                : OpenBusHalf(offset: offset));
+                : OpenBusHalf(offset: offset)
+            );
         }
 
         if (
@@ -1575,7 +1603,6 @@ public sealed partial class AgbBus : IAgbBus {
         }
         StepClocks(n: cost);
     }
-
     // Per-access bus trace, mirroring the reference oracle's bus-trace format, so the two access streams diff
     // directly to localise cycle divergences. Logs the running clock (committed + uncommitted) BEFORE the access.
 
@@ -1643,7 +1670,8 @@ public sealed partial class AgbBus : IAgbBus {
 
         var size = ((width == 4)
             ? 4u
-            : 2u);
+            : 2u
+        );
 
         m_prefetchStopped = false;
         m_prefetchAhead = false;
@@ -1697,12 +1725,14 @@ public sealed partial class AgbBus : IAgbBus {
                 // On-board WRAM sits behind a 16-bit bus with two default wait-states.
                 return ((width == 4)
                     ? 6
-                    : 3);
+                    : 3
+                );
             case RegionPalette:
             case RegionVram:
                 return ((width == 4)
                     ? 2
-                    : 1);
+                    : 1
+                );
             case 0x8:
             case 0x9:
                 return RomCycles(
@@ -1750,7 +1780,8 @@ public sealed partial class AgbBus : IAgbBus {
     private static BusAccessType RomBurstAccess(uint address, BusAccessType access) {
         return (((access == BusAccessType.Sequential) && ((address & 0x1FFFEu) == 0u))
             ? BusAccessType.NonSequential
-            : access);
+            : access
+        );
     }
     private static int RomCycles(int nonSeq, int seq, int width, BusAccessType access) {
         // On the 16-bit game-pak bus a 32-bit access is two halfword transfers plus a one-cycle merge penalty,
@@ -1760,11 +1791,13 @@ public sealed partial class AgbBus : IAgbBus {
         if (width == 4) {
             return ((access == BusAccessType.Sequential)
                 ? ((seq + seq) + 2)
-                : ((nonSeq + seq) + 2));
+                : ((nonSeq + seq) + 2)
+            );
         }
 
         return ((access == BusAccessType.Sequential)
             ? (seq + 1)
-            : (nonSeq + 1));
+            : (nonSeq + 1)
+        );
     }
 }

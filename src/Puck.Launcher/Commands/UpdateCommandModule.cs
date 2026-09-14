@@ -48,7 +48,10 @@ internal sealed class UpdateCommandModule(UpdateService service) : ICommandModul
                     return CommandResult.Error(output: $"[update.check: unrecognized '{args[0]}' — expected no arguments]");
                 }
 
-                var result = m_service.CheckAsync(now: DateTimeOffset.UtcNow, cancellationToken: CancellationToken.None).GetAwaiter().GetResult();
+                var result = m_service.CheckAsync(
+                    now: DateTimeOffset.UtcNow,
+                    cancellationToken: CancellationToken.None
+                ).GetAwaiter().GetResult();
                 var line = $"[update.check: {Word(outcome: result.Outcome)} — {result.Detail}]";
 
                 return (result.Outcome switch {
@@ -66,10 +69,18 @@ internal sealed class UpdateCommandModule(UpdateService service) : ICommandModul
                     return CommandResult.Error(output: $"[update.apply: unrecognized '{args[0]}' — expected no arguments]");
                 }
 
-                var result = m_service.ApplyAsync(now: DateTimeOffset.UtcNow, cancellationToken: CancellationToken.None).GetAwaiter().GetResult();
-                var line = $"[update.apply: {(result.Applied ? "applied" : "refused")} — {result.Detail}]";
+                var result = m_service.ApplyAsync(
+                    now: DateTimeOffset.UtcNow,
+                    cancellationToken: CancellationToken.None
+                ).GetAwaiter().GetResult();
+                var line = $"[update.apply: {(result.Applied
+                    ? "applied"
+                    : "refused")} — {result.Detail}]";
 
-                return (result.Applied ? new CommandResult(Output: line) : CommandResult.Error(output: line));
+                return (result.Applied
+                    ? new CommandResult(Output: line)
+                    : CommandResult.Error(output: line)
+                );
             }
         );
     }

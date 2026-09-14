@@ -10,9 +10,6 @@ namespace Puck.SdfVm;
 /// <see cref="SdfWorldEngine.UploadProgram"/> — the new program must fit the constructed buffer.</param>
 /// <param name="ViewportCapacity">The number of viewport slots to provision (source textures + packed viewport rows).
 /// Frames may carry fewer views than the capacity, never more; the kernels' source array caps it at 5.</param>
-/// <param name="ChildMask">Bit <c>v</c> set means viewport <c>v</c> is backed by a hosted child surface, not an SDF
-/// camera: no source texture is allocated for it (the host binds the child's storage image each frame via
-/// <see cref="SdfWorldEngine.SetChildSource"/>), and the beam prepass + Stage 1 skip the slot.</param>
 /// <param name="DynamicTransformCapacity">The number of dynamic entity-transform slots to allocate (at least one slot
 /// is always bound so the binding stays valid for a static scene). The engine automatically raises this floor to the
 /// program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/>. A plain per-engine choice with no fixed ceiling —
@@ -52,7 +49,6 @@ namespace Puck.SdfVm;
 public sealed record SdfWorldEngineOptions(
     SdfProgram Program,
     uint ViewportCapacity = SdfWorldEngine.MaxViewports,
-    uint ChildMask = 0,
     int DynamicTransformCapacity = 1,
     Func<IGpuDeviceContext, IGpuStorageImage>? CreateOutputImage = null,
     IGpuTimingPoolFactory? TimingFactory = null,

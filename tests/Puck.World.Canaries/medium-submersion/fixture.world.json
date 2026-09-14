@@ -1,5 +1,5 @@
 {
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "documentId": "medium-submersion-canary",
   "bodies": {
     "localSeats": 1
@@ -90,7 +90,7 @@
     },
     "seatRig": {
       "name": "seatChase",
-      "version": "puck.camera.v1",
+      "version": "puck.camera.program.v1",
       "operations": [
         {
           "$type": "orbit",
@@ -116,7 +116,7 @@
           "worldAxes": false
         },
         {
-          "$type": "fov",
+          "$type": "fieldOfView",
           "fieldOfViewRadians": 0.9599311
         }
       ]
@@ -125,7 +125,7 @@
   "bodyMotionPrograms": [
     {
       "name": "medium",
-      "version": "puck.body-motion.v1",
+      "version": "puck.body.program.v1",
       "kind": "Motion",
       "operations": [
         "ResolveYawAttitudeAndPlanarFrame",

@@ -54,7 +54,7 @@ public sealed class SearchLawTests {
 
         var status = fixture.Server.SearchStatus()[0];
 
-        for (var tick = 0; (tick < 6000) && !status.Done; tick++) {
+        for (var tick = 0; (tick < 750) && !status.Done; tick++) {
             fixture.Step();
             status = fixture.Server.SearchStatus()[0];
         }

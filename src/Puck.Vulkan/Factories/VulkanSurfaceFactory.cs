@@ -141,21 +141,21 @@ public sealed class VulkanSurfaceFactory : IVulkanSurfaceFactory {
 
         return binding.DisplayKind switch {
             NativeDisplayKind.Vi => CreateViSurface(
-                binding: binding,
-                instanceHandle: instanceHandle
-            ),
+            binding: binding,
+            instanceHandle: instanceHandle
+        ),
             NativeDisplayKind.Wayland => CreateWaylandSurface(
-                binding: binding,
-                instanceHandle: instanceHandle
-            ),
+            binding: binding,
+            instanceHandle: instanceHandle
+        ),
             NativeDisplayKind.Win32 => CreateWin32Surface(
-                binding: binding,
-                instanceHandle: instanceHandle
-            ),
+            binding: binding,
+            instanceHandle: instanceHandle
+        ),
             NativeDisplayKind.Xcb => CreateXcbSurface(
-                binding: binding,
-                instanceHandle: instanceHandle
-            ),
+            binding: binding,
+            instanceHandle: instanceHandle
+        ),
             _ => throw new PlatformNotSupportedException(message: $"Vulkan surface creation is not implemented for display kind '{binding.DisplayKind}'.")
         };
     }

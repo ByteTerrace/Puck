@@ -2,7 +2,7 @@ namespace Puck.World.Protocol;
 
 /// <summary>
 /// The closed payload union a <see cref="SubmissionEnvelope"/> carries — every non-intent submission kind
-/// (command/grant/revoke/session/rebuild/mutation/undo/composition/lever/query/screen-op/designation), one case
+/// (command/grant/revoke/session/rebuild/mutation/undo/composition/lever/query/screen-op/operation/designation), one case
 /// per kind, so the server's ONE ordered domain never has to split by message kind to know what it is holding. Per-tick
 /// <see cref="IntentSubmission"/> is NOT a case here — intents keep their own separate buffer (arrival order is
 /// fold-independent), never this envelope.
@@ -46,6 +46,9 @@ public abstract record WorldSubmissionPayload {
     /// <c>.options</c>/<c>.link</c>/<c>.unlink</c>) — see <see cref="Protocol.WorldScreenOp"/>.</summary>
     /// <param name="Value">The screen op.</param>
     public sealed record ScreenOp(WorldScreenOp Value) : WorldSubmissionPayload;
+    /// <summary>A generic ordered operation on one named machine instance.</summary>
+    /// <param name="Value">The named-machine operation.</param>
+    public sealed record Operation(WorldMachineOperation Value) : WorldSubmissionPayload;
     /// <summary>A subject-bearing target-register write.</summary>
     /// <param name="Value">The proposed designation.</param>
     public sealed record Designation(WorldDesignation Value) : WorldSubmissionPayload;

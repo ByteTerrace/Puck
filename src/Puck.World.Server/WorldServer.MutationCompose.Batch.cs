@@ -23,7 +23,7 @@ public sealed partial class WorldServer {
     // rehydration a hit triggers does. A member that can add or drop a reference — a whole-row write, or an edit to
     // any other section — drops the set, so the next state member collects it again from the document that member
     // produced.
-    private static bool TryComposeBatch(WorldDefinition current, WorldMutation.Batch batch, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns) {
+    private static bool TryComposeBatch(WorldDefinition current, WorldMutation.Batch batch, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns) {
         var working = current;
         List<WorldStateRow>? workspace = null;
         var workspaceDirty = false;
@@ -32,123 +32,200 @@ public sealed partial class WorldServer {
 
         reason = string.Empty;
         evictedKey = null;
-        if (batch.ExpectedDefinition is { } expected && expected != WorldDefinitionFingerprint.Compute(current, batch.ExpectedStateRows)) {
+        if (
+            (batch.ExpectedDefinition is { } expected) &&
+            (expected != WorldDefinitionFingerprint.Compute(
+            definition: current,
+            stateRows: batch.ExpectedStateRows
+        ))
+        ) {
             candidate = current;
             reason = "the proposal is stale: its base definition changed; preview again";
             return false;
         }
-        if (batch.ExpectedInputs is { } inputs && inputs.Fingerprint != WorldDefinitionFingerprint.ComputeInputs(current, inputs.PlacementIds, inputs.StateRows)) {
+        if (
+            (batch.ExpectedInputs is { } inputs) &&
+            (inputs.Fingerprint != WorldDefinitionFingerprint.ComputeInputs(
+            definition: current,
+            placementIds: inputs.PlacementIds,
+            stateRows: inputs.StateRows
+        ))
+        ) {
             candidate = current;
             reason = "the proposal is stale: its named inputs changed; preview again";
             return false;
         }
-        foreach (var spatial in batch.ExpectedSpatialReads ?? []) {
+        foreach (var spatial in (batch.ExpectedSpatialReads ?? [])) {
             var region = spatial.Region;
-            if (spatial.Fingerprint != WorldDefinitionFingerprint.ComputeSpatial(current, region)) {
+
+            if (spatial.Fingerprint != WorldDefinitionFingerprint.ComputeSpatial(
+                definition: current,
+                region: region
+            )) {
                 candidate = current;
                 reason = "the proposal is stale: its spatial read changed; preview again";
                 return false;
             }
         }
-        foreach (var cell in batch.ExpectedCells ?? []) {
-            if (!WorldStateReader.TryRead(current, cell.Row, cell.Key, tick, out var row, out var raw, out _) || raw is not { } value ||
-                (cell.Kind is { } kind && row.Kind != kind) || !cell.Comparison.Holds(FixedQ4816.FromRawBits(value), FixedQ4816.FromRawBits(cell.Value))) {
+        foreach (var cell in (batch.ExpectedCells ?? [])) {
+            if (
+                !WorldStateReader.TryRead(
+                current,
+                cell.Row,
+                cell.Key,
+                tick,
+                engineTick,
+                out var row,
+                out var raw,
+                out _
+            ) ||
+                (raw is not { } value) ||
+                ((cell.Kind is { } kind) && (row.Kind != kind)) ||
+                !cell.Comparison.Holds(
+                FixedQ4816.FromRawBits(value: value),
+                FixedQ4816.FromRawBits(value: cell.Value)
+            )
+            ) {
                 candidate = current;
                 reason = $"the proposal is stale: state '{cell.Row}' changed; preview again";
                 return false;
             }
         }
 
-        for (var index = 0; index < batch.Mutations.Count; index++) {
+        for (var index = 0; (index < batch.Mutations.Count); index++) {
             var member = batch.Mutations[index];
             string? writtenRow = null;
 
             switch (member) {
                 case WorldMutation.UpsertStateCell upsert: {
-                    workspace ??= OpenWorkspace(working: working, derivesBoards: out workspaceDerivesBoards);
+                        workspace ??= OpenWorkspace(
+                            derivesBoards: out workspaceDerivesBoards,
+                            working: working
+                        );
 
-                    if (!TryComposeCellUpsert(
-                        composed: out var composed,
-                        rows: workspace,
-                        evictedKey: out evictedKey,
-                        mutation: upsert,
-                        reason: out reason,
-                        tick: tick
-                    )) {
-                        candidate = current;
-
-                        return false;
-                    }
-
-                    PlaceRow(working: working, workspace: workspace, row: composed, rebaseCellKey: upsert.Key, tick: tick, derivesBoards: workspaceDerivesBoards);
-                    workspaceDirty = true;
-                    writtenRow = upsert.Row;
-
-                    break;
-                }
-                case WorldMutation.RemoveStateCell remove: {
-                    workspace ??= OpenWorkspace(working: working, derivesBoards: out workspaceDerivesBoards);
-
-                    if (!TryComposeCellRemove(
-                        composed: out var composed,
-                        rows: workspace,
-                        mutation: remove,
-                        reason: out reason
-                    )) {
-                        candidate = current;
-
-                        return false;
-                    }
-
-                    PlaceRow(working: working, workspace: workspace, row: composed, rebaseCellKey: null, tick: tick, derivesBoards: workspaceDerivesBoards);
-                    workspaceDirty = true;
-                    writtenRow = remove.Row;
-
-                    break;
-                }
-                default: {
-                    SyncWorkspace(working: ref working, workspace: workspace, workspaceDirty: ref workspaceDirty);
-                    workspace = null;
-
-                    var previous = working;
-
-                    if (!TryComposeCore(
-                        candidate: out var next,
-                        current: working,
-                        evictedKey: out evictedKey,
-                        instanceIdentity: instanceIdentity,
-                        mutation: member,
-                        reason: out reason,
-                        tick: tick,
-                        patterns: patterns
-                    )) {
-                        candidate = current;
-
-                        return false;
-                    }
-
-                    if (!PreservesReferencedRows(mutation: member)) {
-                        referencedRows = null;
-                    }
-
-                    working = next;
-                    writtenRow = StateRowOf(mutation: member);
-
-                    if (writtenRow is not null) {
-                        if (!TryRefreshReferenced(working: ref working, referencedRows: ref referencedRows, rowName: writtenRow, workspace: null, workspaceDirty: ref workspaceDirty, reason: out reason)) {
+                        if (!TryComposeCellUpsert(
+                            composed: out var composed,
+                            evictedKey: out evictedKey,
+                            mutation: upsert,
+                            reason: out reason,
+                            rows: workspace,
+                            tick: tick,
+                            engineTick: engineTick
+                        )) {
                             candidate = current;
 
                             return false;
                         }
 
-                        writtenRow = null;
+                        PlaceRow(
+                            working: working,
+                            workspace: workspace,
+                            row: composed,
+                            rebaseCellKey: upsert.Key,
+                            tick: tick,
+                            engineTick: engineTick,
+                            derivesBoards: workspaceDerivesBoards
+                        );
+                        workspaceDirty = true;
+                        writtenRow = upsert.Row;
+
+                        break;
                     }
+                case WorldMutation.RemoveStateCell remove: {
+                        workspace ??= OpenWorkspace(
+                            derivesBoards: out workspaceDerivesBoards,
+                            working: working
+                        );
 
-                    working = RecomposeDerivedBoards(definition: working, previous: previous);
-                    working = RebaseCellTraits(candidate: working, mutation: member, original: previous, tick: tick);
+                        if (!TryComposeCellRemove(
+                            composed: out var composed,
+                            mutation: remove,
+                            reason: out reason,
+                            rows: workspace
+                        )) {
+                            candidate = current;
 
-                    break;
-                }
+                            return false;
+                        }
+
+                        PlaceRow(
+                            derivesBoards: workspaceDerivesBoards,
+                            rebaseCellKey: null,
+                            row: composed,
+                            tick: tick,
+                            engineTick: engineTick,
+                            working: working,
+                            workspace: workspace
+                        );
+                        workspaceDirty = true;
+                        writtenRow = remove.Row;
+
+                        break;
+                    }
+                default: {
+                        SyncWorkspace(
+                            working: ref working,
+                            workspace: workspace,
+                            workspaceDirty: ref workspaceDirty
+                        );
+                        workspace = null;
+
+                        var previous = working;
+
+                        if (!TryComposeCore(
+                            candidate: out var next,
+                            current: working,
+                            engineTick: engineTick,
+                            evictedKey: out evictedKey,
+                            instanceIdentity: instanceIdentity,
+                            mutation: member,
+                            patterns: patterns,
+                            reason: out reason,
+                            tick: tick
+                        )) {
+                            candidate = current;
+
+                            return false;
+                        }
+
+                        if (!PreservesReferencedRows(mutation: member)) {
+                            referencedRows = null;
+                        }
+
+                        working = next;
+                        writtenRow = StateRowOf(mutation: member);
+
+                        if (writtenRow is not null) {
+                            if (!TryRefreshReferenced(
+                                reason: out reason,
+                                referencedRows: ref referencedRows,
+                                rowName: writtenRow,
+                                working: ref working,
+                                workspace: null,
+                                workspaceDirty: ref workspaceDirty
+                            )) {
+                                candidate = current;
+
+                                return false;
+                            }
+
+                            writtenRow = null;
+                        }
+
+                        working = RecomposeDerivedBoards(
+                            definition: working,
+                            previous: previous
+                        );
+                        working = RebaseCellTraits(
+                            candidate: working,
+                            mutation: member,
+                            original: previous,
+                            tick: tick,
+                            engineTick: engineTick
+                        );
+
+                        break;
+                    }
             }
 
             if (writtenRow is null) {
@@ -157,7 +234,14 @@ public sealed partial class WorldServer {
 
             var dirtyBeforeRefresh = workspaceDirty;
 
-            if (!TryRefreshReferenced(working: ref working, referencedRows: ref referencedRows, rowName: writtenRow, workspace: workspace, workspaceDirty: ref workspaceDirty, reason: out reason)) {
+            if (!TryRefreshReferenced(
+                reason: out reason,
+                referencedRows: ref referencedRows,
+                rowName: writtenRow,
+                working: ref working,
+                workspace: workspace,
+                workspaceDirty: ref workspaceDirty
+            )) {
                 candidate = current;
 
                 return false;
@@ -167,19 +251,50 @@ public sealed partial class WorldServer {
             // from it — the workspace list is no longer what `working.State` holds, so the next cell write opens a
             // fresh one over the document that rehydration produced rather than continuing to write into a list
             // nothing downstream still reads from.
-            if (dirtyBeforeRefresh && !workspaceDirty) {
+            if (
+                dirtyBeforeRefresh &&
+                !workspaceDirty
+            ) {
                 workspace = null;
             }
         }
 
-        SyncWorkspace(working: ref working, workspace: workspace, workspaceDirty: ref workspaceDirty);
+        SyncWorkspace(
+            working: ref working,
+            workspace: workspace,
+            workspaceDirty: ref workspaceDirty
+        );
 
-        foreach (var cell in batch.ExpectedCells ?? []) {
+        foreach (var cell in (batch.ExpectedCells ?? [])) {
             if (cell.Change is not { } change) { continue; }
-            if (!WorldStateReader.TryRead(current, cell.Row, cell.Key, tick, out var beforeRow, out var before, out _) ||
-                !WorldStateReader.TryRead(working, cell.Row, cell.Key, tick, out var afterRow, out var after, out _) ||
-                before is null || after is null || beforeRow.Kind != afterRow.Kind || (Int128)after.Value - before.Value != change ||
-                (afterRow.Min is { } minimum && after.Value < minimum) || (afterRow.Max is { } maximum && after.Value > maximum)) {
+            if (
+                !WorldStateReader.TryRead(
+                current,
+                cell.Row,
+                cell.Key,
+                tick,
+                engineTick,
+                out var beforeRow,
+                out var before,
+                out _
+            ) ||
+                !WorldStateReader.TryRead(
+                working,
+                cell.Row,
+                cell.Key,
+                tick,
+                engineTick,
+                out var afterRow,
+                out var after,
+                out _
+            ) ||
+                (before is null) ||
+                (after is null) ||
+                (beforeRow.Kind != afterRow.Kind) ||
+                ((((Int128)after.Value) - before.Value) != change) ||
+                ((afterRow.Min is { } minimum) && (after.Value < minimum)) ||
+                ((afterRow.Max is { } maximum) && (after.Value > maximum))
+            ) {
                 candidate = current;
                 reason = $"state '{cell.Row}' constraints prevent the exact required change";
                 return false;
@@ -199,7 +314,7 @@ public sealed partial class WorldServer {
 
         derivesBoards = false;
 
-        for (var index = 0; index < rows.Count; index++) {
+        for (var index = 0; (index < rows.Count); index++) {
             if (rows[index].Inverse is not null) {
                 derivesBoards = true;
 
@@ -215,17 +330,31 @@ public sealed partial class WorldServer {
     // not reflect this call's own or an earlier placement's row values: RebaseCellTraits and
     // RecomposeDerivedBoardsFedBy read the row being replaced from the workspace itself, and every other section
     // they touch (dynamics, topology) is unchanged by a cell write.
-    private static void PlaceRow(WorldDefinition working, List<WorldStateRow> workspace, WorldStateRow row, string? rebaseCellKey, ulong tick, bool derivesBoards) {
-        var index = IndexOfStateRow(rows: workspace, name: row.Name);
+    private static void PlaceRow(WorldDefinition working, List<WorldStateRow> workspace, WorldStateRow row, string? rebaseCellKey, ulong tick, ulong engineTick, bool derivesBoards) {
+        var index = IndexOfStateRow(
+            rows: workspace,
+            name: row.Name
+        );
         var originalRow = workspace[index];
 
         workspace[index] = ((rebaseCellKey is null)
             ? row
-            : RebaseCellTraits(cellKey: rebaseCellKey, original: working, originalRow: originalRow, row: row, tick: tick)
+            : RebaseCellTraits(
+                cellKey: rebaseCellKey,
+                original: working,
+                originalRow: originalRow,
+                row: row,
+                tick: tick,
+                engineTick: engineTick
+            )
         );
 
         if (derivesBoards) {
-            RecomposeDerivedBoardsFedBy(definition: working, rows: workspace, sourceName: row.Name.Value);
+            RecomposeDerivedBoardsFedBy(
+                definition: working,
+                rows: workspace,
+                sourceName: row.Name.Value
+            );
         }
     }
     // Re-seats `working` over the workspace's current content — the one point a batch's private scratch list is
@@ -249,49 +378,74 @@ public sealed partial class WorldServer {
 
         if (referencedRows is null) {
             referencedRows = new HashSet<string>(comparer: StringComparer.Ordinal);
-            WorldStateDocumentValues.CollectReferencedRows(definition: working, rows: referencedRows);
+            WorldStateDocumentValues.CollectReferencedRows(
+                definition: working,
+                rows: referencedRows
+            );
         }
 
         if (!referencedRows.Contains(item: rowName)) {
             return true;
         }
 
-        SyncWorkspace(working: ref working, workspace: workspace, workspaceDirty: ref workspaceDirty);
+        SyncWorkspace(
+            working: ref working,
+            workspace: workspace,
+            workspaceDirty: ref workspaceDirty
+        );
 
         return WorldStateDocumentValues.TryRehydrate(
             definition: working,
-            refreshed: out working,
-            reason: out reason
+            reason: out reason,
+            refreshed: out working
         );
     }
     // The workspace form of RecomposeDerivedBoards: only a board whose tokens or codes row is the one just
     // written can have changed, so only those recompute.
     private static void RecomposeDerivedBoardsFedBy(WorldDefinition definition, List<WorldStateRow> rows, string sourceName) {
-        for (var index = 0; index < rows.Count; index++) {
+        for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
 
             if (
                 (row.Inverse is not { } inverse) ||
-                (!string.Equals(a: inverse.Tokens.Value, b: sourceName, comparisonType: StringComparison.Ordinal) &&
-                 !string.Equals(a: inverse.Codes.Value, b: sourceName, comparisonType: StringComparison.Ordinal)) ||
+                (!string.Equals(
+                a: inverse.Tokens.Value,
+                b: sourceName,
+                comparisonType: StringComparison.Ordinal
+            ) &&
+                 !string.Equals(
+                a: inverse.Codes.Value,
+                b: sourceName,
+                comparisonType: StringComparison.Ordinal
+            )) ||
                 (row.EffectiveDomain is not StateDomain.CellsOf board)
             ) {
                 continue;
             }
 
-            if (WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
+            if (WorldTopologyCompilation.Find(
+                definition: definition,
+                name: board.Topology
+            ) is not { } topology) {
                 continue;
             }
 
-            var derived = DerivedBoards.Compose(rows: rows, inverse: inverse, topology: topology);
+            var derived = DerivedBoards.Compose(
+                inverse: inverse,
+                rows: rows,
+                topology: topology
+            );
 
-            if (!SameCells(left: row.Cells, right: derived)) {
+            if (!SameCells(
+                left: row.Cells,
+                right: derived
+            )) {
                 rows[index] = (row with { Cells = derived });
             }
         }
     }
     private static int IndexOfStateRow(List<WorldStateRow> rows, CellName name) {
-        for (var index = 0; index < rows.Count; index++) {
+        for (var index = 0; (index < rows.Count); index++) {
             if (rows[index].Name == name) {
                 return index;
             }

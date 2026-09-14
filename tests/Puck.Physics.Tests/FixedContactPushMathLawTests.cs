@@ -9,13 +9,17 @@ namespace Puck.Physics.Tests;
 public sealed class FixedContactPushMathLawTests {
     // cos(60 degrees): the default world's walkable-slope limit.
     private static readonly FixedQ4816 GroundedThreshold = FixedQ4816.FromDouble(value: 0.5d);
-    private static readonly FixedVector3 Up = Vector(x: 0d, y: 1d, z: 0d);
+    private static readonly FixedVector3 Up = Vector(
+        x: 0d,
+        y: 1d,
+        z: 0d
+    );
 
-    private static FixedVector3 Vector(double x, double y, double z) =>
-        new(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
+    private static void AssertNear(FixedQ4816 actual, double expected, double tolerance = 0.002d) =>
+        Assert.InRange(
+            actual: ((double)actual),
+            high: (expected + tolerance),
+            low: (expected - tolerance)
         );
     // The outward normal of a ramp face rising toward -Z at the given slope: tilted from +Y toward +Z.
     private static FixedVector3 SlopeNormal(double degrees) =>
@@ -24,22 +28,62 @@ public sealed class FixedContactPushMathLawTests {
             y: Math.Cos(d: (degrees * (Math.PI / 180d))),
             z: Math.Sin(a: (degrees * (Math.PI / 180d)))
         );
-    private static void AssertNear(FixedQ4816 actual, double expected, double tolerance = 0.002d) =>
-        Assert.InRange(
-            actual: (double)actual,
-            high: (expected + tolerance),
-            low: (expected - tolerance)
+    private static FixedVector3 Vector(double x, double y, double z) =>
+        new(
+            X: FixedQ4816.FromDouble(value: x),
+            Y: FixedQ4816.FromDouble(value: y),
+            Z: FixedQ4816.FromDouble(value: z)
         );
 
-    [Theory]
+    [Fact]
+    public void ACeilingPushesDownAlongItsNormalAndClampsTheRise() {
+        var normal = Vector(
+            x: 0d,
+            y: -1d,
+            z: 0d
+        );
+        var penetration = FixedQ4816.FromDouble(value: 0.05d);
+        var velocity = Vector(
+            x: 2d,
+            y: 5d,
+            z: 0d
+        );
+
+        var trial = FixedContactPushMath.ComputeOrdinary(
+            groundedThreshold: GroundedThreshold,
+            normal: normal,
+            penetration: penetration,
+            up: Up,
+            velocity: in velocity
+        );
+
+        Assert.False(condition: trial.Grounded);
+        Assert.Equal(
+            actual: trial.PositionDelta,
+            expected: (normal * penetration)
+        );
+        Assert.Equal(
+            actual: (velocity + trial.VelocityDelta),
+            expected: Vector(
+                x: 2d,
+                y: 0d,
+                z: 0d
+            )
+        );
+    }
     [InlineData(65d)]
     [InlineData(75d)]
     [InlineData(89d)]
+    [Theory]
     public void ASteeperThanWalkableFacePushesAcrossUpAndNeverLifts(double degrees) {
         var normal = SlopeNormal(degrees: degrees);
         var penetration = FixedQ4816.FromDouble(value: 0.12d);
         // Walking into the face (-Z) while falling: the wall may only cancel the -Z approach.
-        var velocity = Vector(x: 0d, y: -3d, z: -4d);
+        var velocity = Vector(
+            x: 0d,
+            y: -3d,
+            z: -4d
+        );
 
         var trial = FixedContactPushMath.ComputeOrdinary(
             groundedThreshold: GroundedThreshold,
@@ -79,12 +123,15 @@ public sealed class FixedContactPushMathLawTests {
             expected: -3d
         );
     }
-
     [Fact]
     public void AWalkableSlopeGroundsAlongItsNormal() {
         var normal = SlopeNormal(degrees: 45d);
         var penetration = FixedQ4816.FromDouble(value: 0.1d);
-        var velocity = Vector(x: 0d, y: -3d, z: 0d);
+        var velocity = Vector(
+            x: 0d,
+            y: -3d,
+            z: 0d
+        );
 
         var trial = FixedContactPushMath.ComputeOrdinary(
             groundedThreshold: GroundedThreshold,
@@ -100,30 +147,5 @@ public sealed class FixedContactPushMathLawTests {
             expected: (normal * penetration)
         );
         Assert.True(condition: (trial.PositionDelta.Y > FixedQ4816.Zero));
-    }
-
-    [Fact]
-    public void ACeilingPushesDownAlongItsNormalAndClampsTheRise() {
-        var normal = Vector(x: 0d, y: -1d, z: 0d);
-        var penetration = FixedQ4816.FromDouble(value: 0.05d);
-        var velocity = Vector(x: 2d, y: 5d, z: 0d);
-
-        var trial = FixedContactPushMath.ComputeOrdinary(
-            groundedThreshold: GroundedThreshold,
-            normal: normal,
-            penetration: penetration,
-            up: Up,
-            velocity: in velocity
-        );
-
-        Assert.False(condition: trial.Grounded);
-        Assert.Equal(
-            actual: trial.PositionDelta,
-            expected: (normal * penetration)
-        );
-        Assert.Equal(
-            actual: (velocity + trial.VelocityDelta),
-            expected: Vector(x: 2d, y: 0d, z: 0d)
-        );
     }
 }

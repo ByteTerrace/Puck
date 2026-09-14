@@ -7,10 +7,10 @@ namespace Puck.World.Server;
 /// and copies them into a bounded wire queue; no socket writes run on the authority tick.</summary>
 internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority, Func<int> revision,
     Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, WorldPrincipal? recipient = null) : IClientSink {
-    private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(
-        new BoundedChannelOptions(8) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
+    private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(options: new BoundedChannelOptions(capacity: 8) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
     private readonly WorldProjectionSampler m_sampler = new(updateSeconds: disclosure().Policy.UpdateSeconds);
     private EntitySnapshot[] m_redacted = [];
+
     private bool m_invalidated;
 
     private bool Current() {
@@ -20,63 +20,112 @@ internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, st
         m_frames.Writer.TryComplete();
         return false;
     }
-    private void Write(WorldFederationResponse kind, byte[] body) {
-        if (!m_frames.Writer.TryWrite((kind, body))) {
-            m_frames.Writer.TryComplete(new IOException("federation observer exceeded its bounded projection backlog"));
+    private async Task PumpAsync(Stream output, CancellationToken ct) {
+        await foreach (var item in m_frames.Reader.ReadAllAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)) {
+            await WorldFederationCodec.WriteResponseAsync(
+                body: item.Body,
+                ct: ct,
+                kind: item.Kind,
+                stream: output
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        }
+        if (m_invalidated) {
+            await WorldFederationCodec.WriteResponseAsync(
+                body: default,
+                ct: ct,
+                kind: WorldFederationResponse.ProjectionInvalidated,
+                stream: output
+            ).ConfigureAwait(continueOnCapturedContext: false);
         }
     }
-    public void PrimeRoute(in WorldAuthorityRouteDescription route) => Write(WorldFederationResponse.Route,
-        WorldFederationCodec.EncodeRoute(in route, tier, authority, revision(), recipient));
+    private void Write(WorldFederationResponse kind, byte[] body) {
+        if (!m_frames.Writer.TryWrite(item: (kind, body))) {
+            m_frames.Writer.TryComplete(error: new IOException(message: "federation observer exceeded its bounded projection backlog"));
+        }
+    }
+
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverComposition(WorldComposition composition) { }
-    public void DeliverSessionLever(WorldSessionLever lever) { }
     public void DeliverDefinition(WorldDefinition definition) {
-        if (Current()) { Write(WorldFederationResponse.Definition, WorldFederationCodec.EncodeDocument(definition, tier, authority, revision(), recipient)); }
+        if (Current()) { Write(
+            WorldFederationResponse.Definition,
+            WorldFederationCodec.EncodeDocument(
+                definition,
+                tier,
+                authority,
+                revision(),
+                recipient
+            )
+        ); }
     }
-    // The wire carries one definition-frame kind; a value-only delivery rides the same encode until the wire
-    // grammar grows its own state/definition split.
-    public void DeliverState(WorldDefinition definition) => DeliverDefinition(definition);
+    public void DeliverSessionLever(WorldSessionLever lever) { }
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         if (!Current()) {
             return;
         }
         var currentDisclosure = disclosure();
+
         m_sampler.SetUpdateSeconds(updateSeconds: currentDisclosure.Policy.UpdateSeconds);
-        if (!m_sampler.TryProject(snapshot: in snapshot, projected: out var projected)) {
+        if (!m_sampler.TryProject(
+            projected: out var projected,
+            snapshot: in snapshot
+        )) {
             return;
         }
         if (!currentDisclosure.IsFull) {
             projected = WorldOutputHub.Redact(
                 disclosure: in currentDisclosure,
-                snapshot: in projected,
-                scratch: ref m_redacted
+                scratch: ref m_redacted,
+                snapshot: in projected
             );
         }
-        Write(WorldFederationResponse.Snapshot, WorldFederationCodec.EncodeSnapshot(snapshot: in projected));
+        Write(
+            WorldFederationResponse.Snapshot,
+            WorldFederationCodec.EncodeSnapshot(snapshot: in projected)
+        );
     }
-
+    // The wire carries one definition-frame kind; a value-only delivery rides the same encode until the wire
+    // grammar grows its own state/definition split.
+    public void DeliverState(WorldDefinition definition) => DeliverDefinition(definition: definition);
+    public void PrimeRoute(in WorldAuthorityRouteDescription route) => Write(
+        WorldFederationResponse.Route,
+        WorldFederationCodec.EncodeRoute(
+            in route,
+            tier,
+            authority,
+            revision(),
+            recipient
+        )
+    );
     public Task StreamAsync(Stream output, CancellationToken ct) =>
-        WorldProjectionStream.RunAsync(output, token => PumpAsync(output, token), ct);
-    private async Task PumpAsync(Stream output, CancellationToken ct) {
-        await foreach (var item in m_frames.Reader.ReadAllAsync(ct).ConfigureAwait(false)) {
-            await WorldFederationCodec.WriteResponseAsync(output, item.Kind, item.Body, ct).ConfigureAwait(false);
-        }
-        if (m_invalidated) {
-            await WorldFederationCodec.WriteResponseAsync(output, WorldFederationResponse.ProjectionInvalidated, default, ct).ConfigureAwait(false);
-        }
-    }
+        WorldProjectionStream.RunAsync(
+            output,
+            token => PumpAsync(
+                ct: token,
+                output: output
+            ),
+            ct
+        );
 }
-
 /// <summary>Ends a one-way projection when either its producer ends or its consumer disconnects.</summary>
 internal static class WorldProjectionStream {
     public static async Task RunAsync(Stream output, Func<CancellationToken, Task> produce, CancellationToken ct) {
-        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
         var pump = produce(lifetime.Token);
         // Projection is one-way. EOF or unexpected input terminates it even while the world is paused.
-        var closed = output.ReadAsync(new byte[1], lifetime.Token).AsTask();
-        await Task.WhenAny(pump, closed).ConfigureAwait(false);
+        var closed = output.ReadAsync(
+            buffer: new byte[1],
+            cancellationToken: lifetime.Token
+        ).AsTask();
+
+        await Task.WhenAny(
+            task1: pump,
+            task2: closed
+        ).ConfigureAwait(continueOnCapturedContext: false);
         lifetime.Cancel();
-        try { await Task.WhenAll(pump, closed).ConfigureAwait(false); }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+        try { await Task.WhenAll(
+            pump,
+            closed
+        ).ConfigureAwait(continueOnCapturedContext: false); } catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
     }
 }

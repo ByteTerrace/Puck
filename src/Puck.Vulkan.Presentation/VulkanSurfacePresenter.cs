@@ -54,17 +54,6 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
         m_compositor.Initialize();
     }
     /// <inheritdoc/>
-    /// <remarks>Releases the presentation stack (compositor blit resources, swapchain chain, window surface) but
-    /// KEEPS the device alive: the renderer is the published device-context capability, and node resources are
-    /// children of its device — a backend switch away from Vulkan must not destroy it under them. The device itself
-    /// is torn down once, by the renderer's own container-owned disposal at host shutdown (mirroring the Direct3D 12
-    /// presenter, whose Deactivate has always left its device-context singleton alive).</remarks>
-    public void Deactivate() {
-        ReleaseCaptureResources();
-        m_compositor.Dispose();
-        m_renderer.ReleasePresentation();
-    }
-    /// <inheritdoc/>
     public void BeginFrame(uint width, uint height) {
         m_renderer.BeginFrame(
             height: height,
@@ -76,6 +65,21 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
         // ring depth. Full drain remains the resize/device-loss/shutdown path (BeginFrame recreation,
         // RecoverFromDeviceLoss, teardown WaitIdle).
         m_renderer.WaitForFrameSlot();
+    }
+    /// <inheritdoc/>
+    /// <remarks>Releases the presentation stack (compositor blit resources, swapchain chain, window surface) but
+    /// KEEPS the device alive: the renderer is the published device-context capability, and node resources are
+    /// children of its device — a backend switch away from Vulkan must not destroy it under them. The device itself
+    /// is torn down once, by the renderer's own container-owned disposal at host shutdown (mirroring the Direct3D 12
+    /// presenter, whose Deactivate has always left its device-context singleton alive).</remarks>
+    public void Deactivate() {
+        ReleaseCaptureResources();
+        m_compositor.Dispose();
+        m_renderer.ReleasePresentation();
+    }
+    /// <inheritdoc/>
+    public void Dispose() {
+        Deactivate();
     }
     /// <inheritdoc/>
     public void Present(Surface surface) {
@@ -119,14 +123,16 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
 
     /// <inheritdoc/>
     public PresentTimingSample LastPresentTiming =>
-        (m_renderer.TryGetPresentTiming(presentCount: out var presentCount, presentTimestampTicks: out var presentTimestampTicks)
-            ? new PresentTimingSample(PresentCount: presentCount, PresentTimestampTicks: presentTimestampTicks)
-            : PresentTimingSample.Unavailable);
+        (m_renderer.TryGetPresentTiming(
+            presentCount: out var presentCount,
+            presentTimestampTicks: out var presentTimestampTicks
+        )
+            ? new PresentTimingSample(
+                PresentCount: presentCount,
+                PresentTimestampTicks: presentTimestampTicks
+            )
+            : PresentTimingSample.Unavailable
+        );
     /// <inheritdoc/>
     public ulong SkippedPresentCount => m_renderer.SkippedPresentCount;
-
-    /// <inheritdoc/>
-    public void Dispose() {
-        Deactivate();
-    }
 }

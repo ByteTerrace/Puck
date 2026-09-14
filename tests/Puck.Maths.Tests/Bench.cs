@@ -15,34 +15,6 @@ internal static class Bench {
     /// <summary>A sink that keeps measured loops from being optimized away.</summary>
     public static long Sink;
 
-    /// <summary>The machine fingerprint keying the baselines: CPU identifier plus logical core count.</summary>
-    /// <returns>The fingerprint string.</returns>
-    public static string Fingerprint() {
-        var processor = (Environment.GetEnvironmentVariable(variable: "PROCESSOR_IDENTIFIER") ?? System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString());
-
-        return $"{processor} x{Environment.ProcessorCount}";
-    }
-    /// <summary>Measures a fixed spin-calibration loop, best-of-five, in nanoseconds — the busy-machine proxy.</summary>
-    /// <returns>The best observed wall time of the calibration work.</returns>
-    public static double Calibrate() {
-        const long Iterations = 20_000_000L;
-        var best = double.MaxValue;
-
-        for (var run = 0; (run < 5); ++run) {
-            var start = Stopwatch.GetTimestamp();
-            var accumulator = 0L;
-
-            for (var i = 0L; (i < Iterations); ++i) {
-                accumulator = unchecked(((accumulator * 6364136223846793005L) + 1L));
-            }
-
-            Sink ^= accumulator;
-
-            best = Math.Min(val1: best, val2: ((Stopwatch.GetTimestamp() - start) * NsPerTick));
-        }
-
-        return best;
-    }
     /// <summary>Best-of-N nanoseconds per operation for a loop returning a guard value.</summary>
     /// <param name="ops">The operation count the loop performs.</param>
     /// <param name="runs">The number of measured runs; the best is taken.</param>
@@ -61,12 +33,46 @@ internal static class Bench {
 
             guard ^= loop();
 
-            best = Math.Min(val1: best, val2: ((Stopwatch.GetTimestamp() - start) * NsPerTick));
+            best = Math.Min(
+                val1: best,
+                val2: ((Stopwatch.GetTimestamp() - start) * NsPerTick)
+            );
         }
 
         Sink ^= guard;
 
         return (best / ops);
+    }
+    /// <summary>Measures a fixed spin-calibration loop, best-of-five, in nanoseconds — the busy-machine proxy.</summary>
+    /// <returns>The best observed wall time of the calibration work.</returns>
+    public static double Calibrate() {
+        const long Iterations = 20_000_000L;
+        var best = double.MaxValue;
+
+        for (var run = 0; (run < 5); ++run) {
+            var start = Stopwatch.GetTimestamp();
+            var accumulator = 0L;
+
+            for (var i = 0L; (i < Iterations); ++i) {
+                accumulator = unchecked(((accumulator * 6364136223846793005L) + 1L));
+            }
+
+            Sink ^= accumulator;
+
+            best = Math.Min(
+                val1: best,
+                val2: ((Stopwatch.GetTimestamp() - start) * NsPerTick)
+            );
+        }
+
+        return best;
+    }
+    /// <summary>The machine fingerprint keying the baselines: CPU identifier plus logical core count.</summary>
+    /// <returns>The fingerprint string.</returns>
+    public static string Fingerprint() {
+        var processor = (Environment.GetEnvironmentVariable(variable: "PROCESSOR_IDENTIFIER") ?? System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString());
+
+        return $"{processor} x{Environment.ProcessorCount}";
     }
     /// <summary>The median of a sample.</summary>
     /// <param name="values">The sample.</param>
@@ -77,7 +83,8 @@ internal static class Bench {
 
         return (((count & 1) == 1)
             ? sorted[(count / 2)]
-            : (0.5 * (sorted[((count / 2) - 1)] + sorted[(count / 2)])));
+            : (0.5 * (sorted[((count / 2) - 1)] + sorted[(count / 2)]))
+        );
     }
     /// <summary>The median absolute deviation of a sample.</summary>
     /// <param name="values">The sample.</param>
@@ -92,21 +99,21 @@ internal static class Bench {
 internal sealed class BenchEntry {
     /// <summary>Gets or sets the bench id.</summary>
     public string Id { get; set; } = "";
+    /// <summary>Gets or sets the median absolute deviation of <see cref="Runs"/>.</summary>
+    public double Mad { get; set; }
     /// <summary>Gets or sets the recorded median ratio.</summary>
     public double Median { get; set; }
     /// <summary>Gets or sets the recorded per-run ratios the median and MAD derive from.</summary>
     public List<double> Runs { get; set; } = [];
-    /// <summary>Gets or sets the median absolute deviation of <see cref="Runs"/>.</summary>
-    public double Mad { get; set; }
 }
 /// <summary>The recorded baseline for one machine fingerprint.</summary>
 internal sealed class MachineBaseline {
-    /// <summary>Gets or sets the machine fingerprint.</summary>
-    public string Fingerprint { get; set; } = "";
-    /// <summary>Gets or sets the fixed spin-calibration nanoseconds; a live run more than 2× off is environment-suspect.</summary>
-    public double CalibrationNs { get; set; }
     /// <summary>Gets or sets the per-bench baselines.</summary>
     public List<BenchEntry> Benches { get; set; } = [];
+    /// <summary>Gets or sets the fixed spin-calibration nanoseconds; a live run more than 2× off is environment-suspect.</summary>
+    public double CalibrationNs { get; set; }
+    /// <summary>Gets or sets the machine fingerprint.</summary>
+    public string Fingerprint { get; set; } = "";
 }
 /// <summary>The committed per-machine bench baselines.</summary>
 internal sealed class BaselineModel {
@@ -121,6 +128,13 @@ internal static class BenchState {
     /// <summary>Gets whether the bench tier ran this session.</summary>
     public static bool Ran { get; private set; }
 
+    /// <summary>Gets the recorded observations.</summary>
+    /// <returns>A snapshot of the observations.</returns>
+    public static IReadOnlyList<Observation> Observations() {
+        lock (Gate) {
+            return [.. ObservationList];
+        }
+    }
     /// <summary>Records one bench observation.</summary>
     /// <param name="id">The bench id.</param>
     /// <param name="median">The measured median ratio.</param>
@@ -131,14 +145,13 @@ internal static class BenchState {
         lock (Gate) {
             Ran = true;
 
-            ObservationList.Add(item: new Observation(Band: band, BaselineMedian: baselineMedian, Id: id, Median: median, Status: status));
-        }
-    }
-    /// <summary>Gets the recorded observations.</summary>
-    /// <returns>A snapshot of the observations.</returns>
-    public static IReadOnlyList<Observation> Observations() {
-        lock (Gate) {
-            return [.. ObservationList];
+            ObservationList.Add(item: new Observation(
+                Band: band,
+                BaselineMedian: baselineMedian,
+                Id: id,
+                Median: median,
+                Status: status
+            ));
         }
     }
 
@@ -153,22 +166,6 @@ internal static class BenchState {
 /// <summary>The measured latency loops for the seeded bench, kept out of line so the JIT cannot fold the by-parameter
 /// algebra descriptor to a constant.</summary>
 internal static class BenchLoops {
-    /// <summary>The hand-written <see cref="FixedComplex"/> unit-rotation chain.</summary>
-    /// <param name="seed">The chain seed.</param>
-    /// <param name="rotation">The per-step rotation.</param>
-    /// <param name="iterations">The iteration count.</param>
-    /// <returns>A guard value.</returns>
-    public static long ComplexHand(FixedComplex seed, FixedComplex rotation, long iterations) {
-        var accumulator = seed;
-        var sink = 0L;
-
-        for (var n = 0L; (n < iterations); ++n) {
-            accumulator = (accumulator * rotation);
-            sink ^= accumulator.Real.Value;
-        }
-
-        return sink;
-    }
     /// <summary>The generic <see cref="QuadraticAlgebra{TScalar}"/> multiply chain for the same rotation.</summary>
     /// <param name="algebra">The by-parameter algebra descriptor.</param>
     /// <param name="seed">The chain seed.</param>
@@ -181,8 +178,27 @@ internal static class BenchLoops {
         var sink = 0L;
 
         for (var n = 0L; (n < iterations); ++n) {
-            accumulator = algebra.Multiply(left: accumulator, right: step);
+            accumulator = algebra.Multiply(
+                left: accumulator,
+                right: step
+            );
             sink ^= accumulator.U.Value;
+        }
+
+        return sink;
+    }
+    /// <summary>The hand-written <see cref="FixedComplex"/> unit-rotation chain.</summary>
+    /// <param name="seed">The chain seed.</param>
+    /// <param name="rotation">The per-step rotation.</param>
+    /// <param name="iterations">The iteration count.</param>
+    /// <returns>A guard value.</returns>
+    public static long ComplexHand(FixedComplex seed, FixedComplex rotation, long iterations) {
+        var accumulator = seed;
+        var sink = 0L;
+
+        for (var n = 0L; (n < iterations); ++n) {
+            accumulator = (accumulator * rotation);
+            sink ^= accumulator.Real.Value;
         }
 
         return sink;

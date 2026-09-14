@@ -105,7 +105,10 @@ public sealed class WorldGroupAnchors {
             return (state.Centroid, state.Spread);
         }
 
-        var alpha = FirstOrderLag.Alpha(rate: group.SmoothRate, deltaSeconds: deltaSeconds);
+        var alpha = FirstOrderLag.Alpha(
+            rate: group.SmoothRate,
+            deltaSeconds: deltaSeconds
+        );
 
         state.Centroid = Vector3.Lerp(
             amount: alpha,

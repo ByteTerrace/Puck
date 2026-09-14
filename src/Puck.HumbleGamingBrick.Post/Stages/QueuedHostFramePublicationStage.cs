@@ -10,27 +10,32 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal sealed class QueuedHostFramePublicationStage : IPostStage<PostContext> {
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "queued-host-frame-publication";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyFramePublication(
             withContent: () => new MachineHost(
+                bootMode: MachineBootMode.Fast,
                 model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create()
             ),
-            empty: () => new MachineHost(model: ConsoleModel.DmgC)
+            empty: () => new MachineHost(
+                model: ConsoleModel.DmgC,
+                bootMode: MachineBootMode.Fast
+            )
         );
 
         return (result.Passed
             ? PostStageOutcome.Pass(detail: result.Detail)
-            : PostStageOutcome.Fail(detail: result.Detail));
+            : PostStageOutcome.Fail(detail: result.Detail)
+        );
     }
 }

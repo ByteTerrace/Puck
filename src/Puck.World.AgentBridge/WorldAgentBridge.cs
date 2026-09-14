@@ -34,7 +34,10 @@ public sealed class WorldAgentBridge {
         ArgumentNullException.ThrowIfNull(argument: dispatcher);
         ArgumentNullException.ThrowIfNull(argument: channels);
         ArgumentOutOfRangeException.ThrowIfNegative(value: bodyIndex);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: bodyIndex, other: WorldBodiesLimits.CapacityCeiling);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: bodyIndex,
+            other: WorldBodiesLimits.CapacityCeiling
+        );
         if (principal.Kind is not (PrincipalKind.Seat or PrincipalKind.Console or PrincipalKind.Addon or PrincipalKind.Peer)) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(principal),
@@ -52,39 +55,95 @@ public sealed class WorldAgentBridge {
 
     /// <summary>Gets the 0-based body this bridge controls.</summary>
     public int BodyIndex { get; }
-
     /// <summary>Gets the identity stamped on every bridge operation.</summary>
     public WorldPrincipal Principal { get; }
 
-    /// <summary>Reads one body-scoped authoritative observation.</summary>
-    /// <param name="kind">The observation to read.</param>
-    /// <param name="cancellationToken">Cancels waiting for a link completion.</param>
-    /// <returns>The server-composed answer and refusal verdict.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is unknown.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is canceled before the
-    /// link completes.</exception>
-    public async ValueTask<WorldAgentObservation> ObserveAsync(
-        WorldAgentObservationKind kind,
-        CancellationToken cancellationToken = default
-    ) {
-        WorldQuery query = kind switch {
-            WorldAgentObservationKind.Pose => new WorldQuery.PlayerWhere(Index: BodyIndex),
-            WorldAgentObservationKind.Channels => new WorldQuery.PlayerChannels(Index: BodyIndex),
-            WorldAgentObservationKind.State => new WorldQuery.PlayerState(Index: BodyIndex),
-            WorldAgentObservationKind.Targets => new WorldQuery.PlayerTargets(Index: BodyIndex),
-            WorldAgentObservationKind.Contacts => new WorldQuery.Contacts(Index: (BodyIndex + 1)),
-            WorldAgentObservationKind.Properties => new WorldQuery.Properties(BodyIndex: BodyIndex),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown world-agent observation kind."),
-        };
-        var answer = await QueryAsync(query, cancellationToken).ConfigureAwait(false);
+    private WorldChannelTable CurrentChannels() => (m_channels() ?? throw new InvalidOperationException(message: "The live world channel source returned null."));
+    private IReadOnlyList<WorldAgentChannel> DescribeChannels() {
+        var channels = CurrentChannels();
+        var result = new WorldAgentChannel[channels.ChannelCount];
 
-        return new WorldAgentObservation(
+        for (var ordinal = 0; (ordinal < result.Length); ordinal++) {
+            result[ordinal] = new WorldAgentChannel(
+                IsMotionRole: channels.IsRole(ordinal: ordinal),
+                Name: channels.Name(ordinal: ordinal)!,
+                Ordinal: ordinal,
+                Shape: channels.Shape(ordinal: ordinal)
+            );
+        }
+
+        return result;
+    }
+    private async ValueTask<QueryAnswer> QueryAsync(WorldQuery query, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+        var completion = new TaskCompletionSource<QueryAnswer>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.Register(
+            callback: static state => {
+                var (source, token) = (((TaskCompletionSource<QueryAnswer>, CancellationToken))state!);
+                source.TrySetCanceled(cancellationToken: token);
+            },
+            state: (completion, cancellationToken)
+        );
+
+        _ = await m_dispatcher.InvokeAsync(
+            operation: () => {
+                m_link.Query(
+                    completion: answer => completion.TrySetResult(result: answer),
+                    principal: Principal,
+                    query: query
+                );
+
+                return true;
+            },
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return await completion.Task.ConfigureAwait(continueOnCapturedContext: false);
+    }
+    private static void RequireFinite(double value, string parameterName) {
+        if (!double.IsFinite(d: value)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: value,
+                message: "Agent action values must be finite.",
+                paramName: parameterName
+            );
+        }
+    }
+    private static float RequirePositiveFiniteFloat(double value, string parameterName) {
+        if (
+            !double.IsFinite(d: value) ||
+            (value <= 0d) ||
+            (value > float.MaxValue)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: value,
+                message: "Agent action durations must be positive finite float values.",
+                paramName: parameterName
+            );
+        }
+
+        return ((float)value);
+    }
+    private WorldAgentActionReceipt Submit(string action, WorldCommand command) {
+        var correlationId = m_link.SubmitEnvelope(
+            payload: new WorldSubmissionPayload.Command(Value: command),
+            principal: Principal
+        );
+        var correlated = (correlationId != 0L);
+
+        return new WorldAgentActionReceipt(
+            Action: action,
             BodyIndex: BodyIndex,
-            Kind: kind,
-            Refused: answer.Refused,
-            Text: answer.Text
+            Correlated: correlated,
+            CorrelationId: correlationId,
+            Message: (correlated
+            ? "Submitted to Puck authority. This receipt does not claim the action was authorized or applied; observe the body to verify the outcome."
+            : "No local correlation was minted. The link may have minted the envelope remotely or refused it before authority; observe the body to verify the outcome.")
         );
     }
+    private static bool VerdictAllows(QueryAnswer answer) => (!answer.Refused &&
+        (answer.Payload is GrantVerdict verdict) &&
+        verdict.IsAllowed);
 
     /// <summary>Reads current Observe/Drive grants and the live channel vocabulary for this body.</summary>
     /// <param name="cancellationToken">Cancels waiting for link completions.</param>
@@ -101,7 +160,7 @@ public sealed class WorldAgentBridge {
                 Subject: subject
             ),
             cancellationToken: cancellationToken
-        ).ConfigureAwait(false);
+        ).ConfigureAwait(continueOnCapturedContext: false);
         var drive = await QueryAsync(
             query: new WorldQuery.GrantAllows(
                 Capability: WorldCapability.Drive,
@@ -109,12 +168,12 @@ public sealed class WorldAgentBridge {
                 Subject: subject
             ),
             cancellationToken: cancellationToken
-        ).ConfigureAwait(false);
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
         var channels = await m_dispatcher.InvokeAsync(
-            operation: DescribeChannels,
-            cancellationToken: cancellationToken
-        ).ConfigureAwait(false);
+            cancellationToken: cancellationToken,
+            operation: DescribeChannels
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
         return new WorldAgentAffordances(
             AuthorityText: [observe.Text, drive.Text],
@@ -125,7 +184,6 @@ public sealed class WorldAgentBridge {
             Principal: Principal.Describe()
         );
     }
-
     /// <summary>Submits a timed six-axis motion segment using the live world's declared motion roles.</summary>
     /// <param name="forward">MoveAdvance in fixed-point input units.</param>
     /// <param name="strafe">MoveStrafe in fixed-point input units.</param>
@@ -149,13 +207,35 @@ public sealed class WorldAgentBridge {
         double seconds,
         CancellationToken cancellationToken = default
     ) {
-        RequireFinite(value: forward, parameterName: nameof(forward));
-        RequireFinite(value: strafe, parameterName: nameof(strafe));
-        RequireFinite(value: up, parameterName: nameof(up));
-        RequireFinite(value: yaw, parameterName: nameof(yaw));
-        RequireFinite(value: pitch, parameterName: nameof(pitch));
-        RequireFinite(value: roll, parameterName: nameof(roll));
-        var duration = RequirePositiveFiniteFloat(value: seconds, parameterName: nameof(seconds));
+        RequireFinite(
+            value: forward,
+            parameterName: nameof(forward)
+        );
+        RequireFinite(
+            value: strafe,
+            parameterName: nameof(strafe)
+        );
+        RequireFinite(
+            value: up,
+            parameterName: nameof(up)
+        );
+        RequireFinite(
+            value: yaw,
+            parameterName: nameof(yaw)
+        );
+        RequireFinite(
+            value: pitch,
+            parameterName: nameof(pitch)
+        );
+        RequireFinite(
+            value: roll,
+            parameterName: nameof(roll)
+        );
+        var duration = RequirePositiveFiniteFloat(
+            value: seconds,
+            parameterName: nameof(seconds)
+        );
+
         return m_dispatcher.InvokeAsync(
             operation: () => {
                 var roles = CurrentChannels().RoleOrdinals;
@@ -180,7 +260,42 @@ public sealed class WorldAgentBridge {
             cancellationToken: cancellationToken
         );
     }
+    /// <summary>Reads one body-scoped authoritative observation.</summary>
+    /// <param name="kind">The observation to read.</param>
+    /// <param name="cancellationToken">Cancels waiting for a link completion.</param>
+    /// <returns>The server-composed answer and refusal verdict.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is unknown.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> is canceled before the
+    /// link completes.</exception>
+    public async ValueTask<WorldAgentObservation> ObserveAsync(
+        WorldAgentObservationKind kind,
+        CancellationToken cancellationToken = default
+    ) {
+        WorldQuery query = kind switch {
+            WorldAgentObservationKind.Pose => new WorldQuery.PlayerWhere(Index: BodyIndex),
+            WorldAgentObservationKind.Channels => new WorldQuery.PlayerChannels(Index: BodyIndex),
+            WorldAgentObservationKind.State => new WorldQuery.PlayerState(Index: BodyIndex),
+            WorldAgentObservationKind.Targets => new WorldQuery.PlayerTargets(Index: BodyIndex),
+            WorldAgentObservationKind.Contacts => new WorldQuery.Contacts(Index: (BodyIndex + 1)),
+            WorldAgentObservationKind.Properties => new WorldQuery.Properties(BodyIndex: BodyIndex),
+            _ => throw new ArgumentOutOfRangeException(
+            nameof(kind),
+            kind,
+            "Unknown world-agent observation kind."
+        ),
+        };
+        var answer = await QueryAsync(
+            cancellationToken: cancellationToken,
+            query: query
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
+        return new WorldAgentObservation(
+            BodyIndex: BodyIndex,
+            Kind: kind,
+            Refused: answer.Refused,
+            Text: answer.Text
+        );
+    }
     /// <summary>Submits a named channel press using the current live channel table.</summary>
     /// <param name="channel">The authored channel name.</param>
     /// <param name="value">The raw channel value; authority applies the authored shape and grant ceilings.</param>
@@ -198,17 +313,30 @@ public sealed class WorldAgentBridge {
         CancellationToken cancellationToken = default
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: channel);
-        RequireFinite(value: value, parameterName: nameof(value));
+        RequireFinite(
+            value: value,
+            parameterName: nameof(value)
+        );
         var duration = ((holdSeconds is { } seconds)
-            ? RequirePositiveFiniteFloat(value: seconds, parameterName: nameof(holdSeconds))
+            ? RequirePositiveFiniteFloat(
+                value: seconds,
+                parameterName: nameof(holdSeconds)
+            )
             : (float?)null
         );
 
         return m_dispatcher.InvokeAsync(
             operation: () => {
                 var channels = CurrentChannels();
-                if (!channels.TryGetOrdinal(name: channel, ordinal: out var ordinal)) {
-                    throw new ArgumentException(message: $"The live world declares no channel named '{channel}'.", paramName: nameof(channel));
+
+                if (!channels.TryGetOrdinal(
+                    name: channel,
+                    ordinal: out var ordinal
+                )) {
+                    throw new ArgumentException(
+                        message: $"The live world declares no channel named '{channel}'.",
+                        paramName: nameof(channel)
+                    );
                 }
 
                 return Submit(
@@ -225,7 +353,6 @@ public sealed class WorldAgentBridge {
             cancellationToken: cancellationToken
         );
     }
-
     /// <summary>Clears the body's movement tape and held channels.</summary>
     /// <param name="cancellationToken">Cancels the action while it is waiting in the dispatcher.</param>
     /// <returns>A submission receipt.</returns>
@@ -240,87 +367,4 @@ public sealed class WorldAgentBridge {
             ),
             cancellationToken: cancellationToken
         );
-
-    private static bool VerdictAllows(QueryAnswer answer) => !answer.Refused &&
-        (answer.Payload is GrantVerdict verdict) &&
-        verdict.IsAllowed;
-
-    private static void RequireFinite(double value, string parameterName) {
-        if (!double.IsFinite(value)) {
-            throw new ArgumentOutOfRangeException(parameterName, value, "Agent action values must be finite.");
-        }
-    }
-
-    private static float RequirePositiveFiniteFloat(double value, string parameterName) {
-        if (!double.IsFinite(value) || (value <= 0d) || (value > float.MaxValue)) {
-            throw new ArgumentOutOfRangeException(parameterName, value, "Agent action durations must be positive finite float values.");
-        }
-
-        return (float)value;
-    }
-
-    private WorldChannelTable CurrentChannels() => (m_channels() ?? throw new InvalidOperationException(
-        message: "The live world channel source returned null."
-    ));
-
-    private IReadOnlyList<WorldAgentChannel> DescribeChannels() {
-        var channels = CurrentChannels();
-        var result = new WorldAgentChannel[channels.ChannelCount];
-
-        for (var ordinal = 0; ordinal < result.Length; ordinal++) {
-            result[ordinal] = new WorldAgentChannel(
-                IsMotionRole: channels.IsRole(ordinal: ordinal),
-                Name: channels.Name(ordinal: ordinal)!,
-                Ordinal: ordinal,
-                Shape: channels.Shape(ordinal: ordinal)
-            );
-        }
-
-        return result;
-    }
-
-    private async ValueTask<QueryAnswer> QueryAsync(WorldQuery query, CancellationToken cancellationToken) {
-        cancellationToken.ThrowIfCancellationRequested();
-        var completion = new TaskCompletionSource<QueryAnswer>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var registration = cancellationToken.Register(
-            callback: static state => {
-                var (source, token) = ((TaskCompletionSource<QueryAnswer>, CancellationToken))state!;
-                source.TrySetCanceled(cancellationToken: token);
-            },
-            state: (completion, cancellationToken)
-        );
-
-        _ = await m_dispatcher.InvokeAsync(
-            operation: () => {
-                m_link.Query(
-                    completion: answer => completion.TrySetResult(result: answer),
-                    principal: Principal,
-                    query: query
-                );
-
-                return true;
-            },
-            cancellationToken: cancellationToken
-        ).ConfigureAwait(false);
-
-        return await completion.Task.ConfigureAwait(false);
-    }
-
-    private WorldAgentActionReceipt Submit(string action, WorldCommand command) {
-        var correlationId = m_link.SubmitEnvelope(
-            payload: new WorldSubmissionPayload.Command(Value: command),
-            principal: Principal
-        );
-        var correlated = (correlationId != 0L);
-
-        return new WorldAgentActionReceipt(
-            Action: action,
-            BodyIndex: BodyIndex,
-            Correlated: correlated,
-            CorrelationId: correlationId,
-            Message: (correlated
-                ? "Submitted to Puck authority. This receipt does not claim the action was authorized or applied; observe the body to verify the outcome."
-                : "No local correlation was minted. The link may have minted the envelope remotely or refused it before authority; observe the body to verify the outcome.")
-        );
-    }
 }

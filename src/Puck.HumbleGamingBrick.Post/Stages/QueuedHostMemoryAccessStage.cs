@@ -12,19 +12,20 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal sealed class QueuedHostMemoryAccessStage : IPostStage<PostContext> {
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "queued-host-memory-access";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyConcurrentMemoryAccess(
             withContent: () => new MachineHost(
+                bootMode: MachineBootMode.Fast,
                 model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create()
             ),
@@ -35,6 +36,7 @@ internal sealed class QueuedHostMemoryAccessStage : IPostStage<PostContext> {
 
         return (result.Passed
             ? PostStageOutcome.Pass(detail: result.Detail)
-            : PostStageOutcome.Fail(detail: result.Detail));
+            : PostStageOutcome.Fail(detail: result.Detail)
+        );
     }
 }

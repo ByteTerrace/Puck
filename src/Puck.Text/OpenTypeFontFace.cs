@@ -29,6 +29,8 @@ internal sealed class OpenTypeFontFace {
     private readonly ushort m_numberOfGlyphs;
     private readonly ushort m_numberOfHMetrics;
 
+    private FontGenerationBudget? m_budget;
+
     private OpenTypeFontFace(
         CffFontOutlines? cffOutlines,
         ReadOnlyMemory<byte> cmap,
@@ -500,6 +502,7 @@ internal sealed class OpenTypeFontFace {
             var transform = linearTransform with { M31 = translation.X, M32 = translation.Y };
 
             foreach (var contour in component.Contours) {
+                m_budget?.Geometry(amount: contour.Points.Count);
                 pointCount = checked((pointCount + contour.Points.Count));
 
                 if (pointCount > 1_000_000) {
@@ -539,6 +542,7 @@ internal sealed class OpenTypeFontFace {
         );
     }
     private TrueTypeGlyphOutline LoadGlyph(ushort glyphId, HashSet<ushort> activeGlyphs) {
+        m_budget?.Work();
         if (m_glyphCache.TryGetValue(
             key: glyphId,
             value: out var cached
@@ -616,7 +620,7 @@ internal sealed class OpenTypeFontFace {
             glyphId: glyphId
         );
     }
-    private static TrueTypeGlyphOutline LoadSimpleGlyph(ReadOnlySpan<byte> bytes, short contourCount, ushort glyphId) {
+    private TrueTypeGlyphOutline LoadSimpleGlyph(ReadOnlySpan<byte> bytes, short contourCount, ushort glyphId) {
         if (contourCount == 0) {
             return new TrueTypeGlyphOutline(
                 Contours: [],
@@ -644,6 +648,8 @@ internal sealed class OpenTypeFontFace {
         }
 
         var pointCount = checked((endPoints[^1] + 1));
+
+        m_budget?.Geometry(amount: pointCount);
 
         if (pointCount > 1_000_000) {
             throw new InvalidDataException(message: "A glyph exceeds Puck's one-million-point safety limit.");
@@ -1080,6 +1086,7 @@ internal sealed class OpenTypeFontFace {
     /// pairs, otherwise the legacy <c>kern</c> table. X advances are in font units.</summary>
     public IReadOnlyList<OpenTypeKerningPair> GetKerningPairs(IReadOnlyCollection<ushort> includedGlyphs) {
         return OpenTypeKerningReader.Read(
+            budget: m_budget,
             gpos: m_gpos,
             includedGlyphs: includedGlyphs,
             kern: m_kern
@@ -1093,6 +1100,7 @@ internal sealed class OpenTypeFontFace {
         if (m_cffOutlines is not null) {
             return (
                 Geometry: m_cffOutlines.LoadGlyph(
+                budget: m_budget,
                 glyphId: glyphId,
                 scale: scale
             ),
@@ -1102,6 +1110,8 @@ internal sealed class OpenTypeFontFace {
 
         var outline = LoadGlyph(glyphId: glyphId);
 
+        m_budget?.Geometry(amount: outline.Contours.Sum(selector: static contour => contour.Points.Count));
+
         return (
             Geometry: TrueTypeOutlineSegments.Build(
             outline: outline,
@@ -1110,7 +1120,8 @@ internal sealed class OpenTypeFontFace {
             MetricGlyphId: outline.MetricGlyphId
         );
     }
-    public static OpenTypeFontFace Parse(ReadOnlyMemory<byte> fontBytes, int faceIndex) {
+    public static OpenTypeFontFace Parse(ReadOnlyMemory<byte> fontBytes, int faceIndex, FontGenerationBudget? budget = null) {
+        budget?.Work(amount: fontBytes.Length);
         var bytes = fontBytes.Span;
         var sfntOffset = FindSfntOffset(
             bytes: bytes,
@@ -1419,7 +1430,7 @@ internal sealed class OpenTypeFontFace {
             underlinePosition: underlinePosition,
             underlineThickness: underlineThickness,
             unitsPerEm: unitsPerEm
-        );
+        ) { m_budget = budget };
     }
 
     private readonly record struct TableRecord(int Length, int Offset);

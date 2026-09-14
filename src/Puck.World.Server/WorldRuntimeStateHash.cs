@@ -14,7 +14,6 @@ public enum WorldStateHashScope : byte {
     /// <summary><see cref="World"/> plus poses, rule latches, body/identity action state, and live field cells.</summary>
     Authoritative,
 }
-
 /// <summary>Computes deterministic hashes over explicitly named live-state boundaries.</summary>
 public static partial class WorldRuntimeStateHash {
     private const ulong WorldDomain = 0x574f524c44535431UL; // "WORLDST1"
@@ -26,14 +25,22 @@ public static partial class WorldRuntimeStateHash {
         ArgumentNullException.ThrowIfNull(argument: server);
 
         return scope switch {
-            WorldStateHashScope.Capture => HashCapture(server: server, tick: tick),
+            WorldStateHashScope.Capture => HashCapture(
+            server: server,
+            tick: tick
+        ),
             WorldStateHashScope.Pose => WorldReplaySnapshot.HashState(population: server.Population),
-            WorldStateHashScope.World => HashWorld(server: server, tick: tick),
-            WorldStateHashScope.Authoritative => HashAuthoritative(server: server, tick: tick),
+            WorldStateHashScope.World => HashWorld(
+            server: server,
+            tick: tick
+        ),
+            WorldStateHashScope.Authoritative => HashAuthoritative(
+            server: server,
+            tick: tick
+        ),
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(scope)),
         };
     }
-
     /// <summary>Hashes the document-owned state substrate, including stored traits and the values they resolve to at
     /// <paramref name="tick"/>. Declaration order and cell order are significant.</summary>
     public static ulong HashWorld(WorldServer server, ulong tick) {
@@ -50,7 +57,6 @@ public static partial class WorldRuntimeStateHash {
 
         return hash.Value;
     }
-
     /// <summary>Hashes the state system's authoritative live lanes: world rows and traits, fields, rule/interaction
     /// latches, body action, cached navigation and flock perception, slot generations, prior travel, and poses. The rest of the world document, grants, presentation caches, pending
     /// transport work, diagnostics, and screen-machine cores are deliberately outside this boundary.</summary>
@@ -80,7 +86,7 @@ public static partial class WorldRuntimeStateHash {
         hash.Add(value: WorldReplaySnapshot.HashState(population: server.Population));
 
         foreach (var row in server.Definition.State) {
-            var cells = row.Cells ?? [];
+            var cells = (row.Cells ?? []);
 
             if (!catalog.TryResolve(
                 lane: StateLane.Document,
@@ -101,7 +107,8 @@ public static partial class WorldRuntimeStateHash {
                     rawValue: out var rawValue,
                     row: out _,
                     text: out var text,
-                    tick: tick
+                    tick: tick,
+                    engineTick: server.CompletedEngineTicks
                 )) {
                     continue;
                 }
@@ -124,18 +131,20 @@ public static partial class WorldRuntimeStateHash {
 
         return hash.Value;
     }
-
     private static void AppendAdvance(ref Fnv1aHash hash, StateAdvance? advance) {
-        hash.Add(value: ((byte)(advance is null ? 0 : 1)));
+        hash.Add(value: ((byte)((advance is null)
+            ? 0
+            : 1)));
 
         if (advance is not null) {
-            hash.Add(value: advance.RateNumerator);
-            hash.Add(value: advance.RateDenominator);
-            hash.Add(value: advance.EpochTick);
+            hash.Add(value: advance.PerSecondNumerator);
+            hash.Add(value: advance.PerSecondDenominator);
         }
     }
     private static void AppendCycle(ref Fnv1aHash hash, StateCycle? cycle) {
-        hash.Add(value: ((byte)(cycle is null ? 0 : 1)));
+        hash.Add(value: ((byte)((cycle is null)
+            ? 0
+            : 1)));
 
         if (cycle is not null) {
             var word = cycle.Word;
@@ -149,70 +158,113 @@ public static partial class WorldRuntimeStateHash {
             hash.Add(value: cycle.Power);
             hash.Add(value: ((byte)cycle.Output));
             hash.Add(value: cycle.TicksPerStep);
-            hash.Add(value: cycle.EpochTick);
-            hash.Add(value: cycle.SubstepTicks);
         }
     }
     private static void AppendDynamics(ref Fnv1aHash hash, StateDynamics? dynamics) {
-        hash.Add(value: ((byte)(dynamics is null ? 0 : 1)));
+        hash.Add(value: ((byte)((dynamics is null)
+            ? 0
+            : 1)));
 
         if (dynamics is not null) {
-            AppendString(hash: ref hash, value: dynamics.Row);
-            hash.Add(value: dynamics.Y0);
-            hash.Add(value: dynamics.V0);
-            hash.Add(value: dynamics.EpochTick);
+            AppendString(
+                hash: ref hash,
+                value: dynamics.Row
+            );
+        }
+    }
+    private static void AppendClock(ref Fnv1aHash hash, StateCellClock? clock) {
+        hash.Add(value: ((byte)((clock is null)
+            ? 0
+            : 1)));
+
+        if (clock is not null) {
+            hash.Add(value: clock.EpochTick);
+            hash.Add(value: clock.EpochEngineTick);
+            hash.Add(value: clock.Y0);
+            hash.Add(value: clock.V0);
+            hash.Add(value: clock.SubstepTicks);
         }
     }
     private static void AppendDraw(ref Fnv1aHash hash, Draw? draw) {
-        hash.Add(value: ((byte)(draw is null ? 0 : 1)));
+        hash.Add(value: ((byte)((draw is null)
+            ? 0
+            : 1)));
 
         if (draw is not null) {
-            AppendString(hash: ref hash, value: draw.Source?.Value);
-            AppendGenerator(hash: ref hash, generator: draw.Generator);
+            AppendString(
+                hash: ref hash,
+                value: draw.Source?.Value
+            );
+            AppendGenerator(
+                hash: ref hash,
+                generator: draw.Generator
+            );
             hash.Add(value: ((byte)draw.Timing));
-            hash.Add((byte)(draw.Secret is null ? 0 : 1));
-            if (draw.Secret is { } secret) { hash.Add(secret.Word0); hash.Add(secret.Word1); hash.Add(secret.Word2); hash.Add(secret.Word3); }
+            hash.Add(value: ((byte)((draw.Secret is null)
+                ? 0
+                : 1)));
+            if (draw.Secret is { } secret) { hash.Add(value: secret.Word0); hash.Add(value: secret.Word1); hash.Add(value: secret.Word2); hash.Add(value: secret.Word3); }
         }
     }
     private static void AppendGenerator(ref Fnv1aHash hash, StateGenerator? generator) {
-        hash.Add(value: ((byte)(generator is null ? 0 : 1)));
+        hash.Add(value: ((byte)((generator is null)
+            ? 0
+            : 1)));
 
         if (generator is null) {
             return;
         }
 
         hash.Add(value: ((byte)generator.Source));
-        AppendString(hash: ref hash, value: generator.Start?.Value);
+        AppendString(
+            hash: ref hash,
+            value: generator.Start?.Value
+        );
         hash.Add(value: ((uint)generator.Bound));
         hash.Add(value: ((byte)generator.Mode));
-        hash.Add(value: ((byte)(generator.RangeMin is null ? 0 : 1)));
+        hash.Add(value: ((byte)((generator.RangeMin is null)
+            ? 0
+            : 1)));
         hash.Add(value: (generator.RangeMin ?? 0L));
-        hash.Add(value: ((byte)(generator.RangeMax is null ? 0 : 1)));
+        hash.Add(value: ((byte)((generator.RangeMax is null)
+            ? 0
+            : 1)));
         hash.Add(value: (generator.RangeMax ?? 0L));
 
-        var contexts = generator.Contexts ?? [];
+        var contexts = (generator.Contexts ?? []);
 
         hash.Add(value: ((uint)contexts.Count));
 
         for (var contextIndex = 0; (contextIndex < contexts.Count); contextIndex++) {
             var context = contexts[contextIndex];
-            var alternatives = context.Alternatives ?? [];
+            var alternatives = (context.Alternatives ?? []);
 
-            AppendString(hash: ref hash, value: context.Key.Value);
+            AppendString(
+                hash: ref hash,
+                value: context.Key.Value
+            );
             hash.Add(value: ((uint)alternatives.Count));
 
             for (var alternativeIndex = 0; (alternativeIndex < alternatives.Count); alternativeIndex++) {
                 var alternative = alternatives[alternativeIndex];
 
-                AppendString(hash: ref hash, value: alternative.Token);
+                AppendString(
+                    hash: ref hash,
+                    value: alternative.Token
+                );
                 hash.Add(value: alternative.Weight);
-                AppendString(hash: ref hash, value: alternative.Next.Value);
-                hash.Add(value: ((byte)(alternative.Multiplicity is null ? 0 : 1)));
+                AppendString(
+                    hash: ref hash,
+                    value: alternative.Next.Value
+                );
+                hash.Add(value: ((byte)((alternative.Multiplicity is null)
+                    ? 0
+                    : 1)));
                 hash.Add(value: ((uint)(alternative.Multiplicity ?? 0)));
             }
         }
 
-        var weighted = generator.Weighted ?? [];
+        var weighted = (generator.Weighted ?? []);
 
         hash.Add(value: ((uint)weighted.Count));
 
@@ -221,12 +273,16 @@ public static partial class WorldRuntimeStateHash {
 
             hash.Add(value: outcome.Value);
             hash.Add(value: outcome.Weight);
-            hash.Add(value: ((byte)(outcome.Multiplicity is null ? 0 : 1)));
+            hash.Add(value: ((byte)((outcome.Multiplicity is null)
+                ? 0
+                : 1)));
             hash.Add(value: ((uint)(outcome.Multiplicity ?? 0)));
         }
     }
     private static void AppendLattice(ref Fnv1aHash hash, WorldStateFieldTrait? lattice) {
-        hash.Add(value: ((byte)(lattice is null ? 0 : 1)));
+        hash.Add(value: ((byte)((lattice is null)
+            ? 0
+            : 1)));
 
         if (lattice is null) {
             return;
@@ -236,10 +292,15 @@ public static partial class WorldRuntimeStateHash {
         hash.Add(value: BitConverter.SingleToUInt32Bits(value: lattice.Min));
         hash.Add(value: BitConverter.SingleToUInt32Bits(value: lattice.Max));
         hash.Add(value: BitConverter.SingleToUInt32Bits(value: lattice.HeightScale));
-        AppendString(hash: ref hash, value: lattice.Color);
-        hash.Add(value: ((byte)(lattice.Medium is null ? 0 : 1)));
+        AppendString(
+            hash: ref hash,
+            value: lattice.Color
+        );
+        hash.Add(value: ((byte)((lattice.Medium is null)
+            ? 0
+            : 1)));
 
-        var paint = lattice.Paint ?? [];
+        var paint = (lattice.Paint ?? []);
 
         hash.Add(value: ((uint)paint.Count));
 
@@ -270,8 +331,14 @@ public static partial class WorldRuntimeStateHash {
                     break;
                 case WorldLatticeFill.Draw draw:
                     hash.Add(value: ((byte)4));
-                    AppendString(hash: ref hash, value: draw.Source?.Value);
-                    AppendGenerator(hash: ref hash, generator: draw.Generator);
+                    AppendString(
+                        hash: ref hash,
+                        value: draw.Source?.Value
+                    );
+                    AppendGenerator(
+                        hash: ref hash,
+                        generator: draw.Generator
+                    );
                     break;
                 default:
                     throw new InvalidOperationException(message: $"unsupported lattice fill '{paint[paintIndex].GetType().Name}'");
@@ -291,7 +358,10 @@ public static partial class WorldRuntimeStateHash {
         }
     }
     private static void AppendWorld(ref Fnv1aHash hash, WorldServer server, ulong tick) {
-        AppendDiscreteTopologies(ref hash, server.Definition.StateRaw);
+        AppendDiscreteTopologies(
+            hash: ref hash,
+            state: server.Definition.StateRaw
+        );
         var rows = server.Definition.State;
         var catalog = server.Definition.StateCatalog;
 
@@ -299,73 +369,140 @@ public static partial class WorldRuntimeStateHash {
 
         for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
             var row = rows[rowIndex];
-            var cells = row.Cells ?? [];
+            var cells = (row.Cells ?? []);
             var hasHandle = catalog.TryResolve(
                 lane: StateLane.Document,
                 name: row.Name,
                 handle: out var handle
             );
 
-            AppendString(hash: ref hash, value: row.Name.Value);
+            AppendString(
+                hash: ref hash,
+                value: row.Name.Value
+            );
             hash.Add(value: ((byte)row.Kind));
-            hash.Add(value: ((byte)(row.Min is null ? 0 : 1)));
+            hash.Add(value: ((byte)((row.Min is null)
+                ? 0
+                : 1)));
             hash.Add(value: (row.Min ?? 0L));
-            hash.Add(value: ((byte)(row.Max is null ? 0 : 1)));
+            hash.Add(value: ((byte)((row.Max is null)
+                ? 0
+                : 1)));
             hash.Add(value: (row.Max ?? 0L));
-            hash.Add(value: ((byte)(row.Capacity is null ? 0 : 1)));
+            hash.Add(value: ((byte)((row.Capacity is null)
+                ? 0
+                : 1)));
             hash.Add(value: ((uint)(row.Capacity ?? 0)));
-            hash.Add(value: ((byte)(row.NonNegative ? 1 : 0)));
-            hash.Add(value: ((byte)(row.GatesDrive ? 1 : 0)));
-            hash.Add(value: ((byte)(row.Evicts ? 1 : 0)));
+            hash.Add(value: ((byte)row.Overflow));
+            hash.Add(value: ((byte)(row.GatesDrive
+                ? 1
+                : 0)));
+            hash.Add(value: ((byte)(row.Evicts
+                ? 1
+                : 0)));
             hash.Add(value: row.DrawCursor);
-            AppendDiscreteRow(ref hash, row);
-            AppendAdvance(hash: ref hash, advance: row.Advance);
-            AppendDraw(hash: ref hash, draw: row.Draw);
-            AppendDynamics(hash: ref hash, dynamics: row.Dynamics);
-            AppendLattice(hash: ref hash, lattice: row.Field);
-            AppendCycle(hash: ref hash, cycle: row.Cycle);
+            AppendDiscreteRow(
+                hash: ref hash,
+                row: row
+            );
+            AppendAdvance(
+                hash: ref hash,
+                advance: row.Advance
+            );
+            AppendDraw(
+                hash: ref hash,
+                draw: row.Draw
+            );
+            AppendDynamics(
+                hash: ref hash,
+                dynamics: row.Dynamics
+            );
+            AppendLattice(
+                hash: ref hash,
+                lattice: row.Field
+            );
+            AppendCycle(
+                hash: ref hash,
+                cycle: row.Cycle
+            );
             hash.Add(value: ((uint)cells.Count));
 
             for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
                 var cell = cells[cellIndex];
 
-                AppendVisibility(ref hash, cell.Visibility);
-                AppendString(hash: ref hash, value: cell.Key.Value);
+                AppendVisibility(
+                    hash: ref hash,
+                    visibility: cell.Visibility
+                );
+                AppendString(
+                    hash: ref hash,
+                    value: cell.Key.Value
+                );
                 hash.Add(value: cell.Value);
-                hash.Add(value: (byte)(cell.Observation is null ? 0 : 1));
-                if (cell.Observation is { } observed) { hash.Add(value: observed.Tick); hash.Add(value: (byte)(observed.Visible ? 1 : 0)); }
-                AppendString(hash: ref hash, value: cell.Text);
-                AppendString(hash: ref hash, value: cell.Provenance);
-                AppendAdvance(hash: ref hash, advance: cell.Advance);
-                AppendDynamics(hash: ref hash, dynamics: cell.Dynamics);
-                AppendCycle(hash: ref hash, cycle: cell.Cycle);
+                hash.Add(value: ((byte)((cell.Observation is null)
+                    ? 0
+                    : 1)));
+                if (cell.Observation is { } observed) { hash.Add(value: observed.Tick); hash.Add(value: ((byte)(observed.Visible
+                    ? 1
+                    : 0))); }
+                AppendString(
+                    hash: ref hash,
+                    value: cell.Text
+                );
+                AppendString(
+                    hash: ref hash,
+                    value: cell.Provenance
+                );
+                AppendAdvance(
+                    hash: ref hash,
+                    advance: cell.Advance
+                );
+                AppendDynamics(
+                    hash: ref hash,
+                    dynamics: cell.Dynamics
+                );
+                AppendCycle(
+                    hash: ref hash,
+                    cycle: cell.Cycle
+                );
+                hash.Add(value: ((byte)cell.Behavior));
+                AppendClock(
+                    clock: cell.Clock,
+                    hash: ref hash
+                );
 
                 if (
                     hasHandle &&
                     WorldStateReader.TryReadHandle(
-                        catalog: catalog,
-                        definition: server.Definition,
-                        handle: handle,
-                        key: cell.Key,
-                        rawValue: out var resolved,
-                        row: out _,
-                        text: out var resolvedText,
-                        tick: tick
-                    )
+                    catalog: catalog,
+                    definition: server.Definition,
+                    handle: handle,
+                    key: cell.Key,
+                    rawValue: out var resolved,
+                    row: out _,
+                    text: out var resolvedText,
+                    tick: tick,
+                    engineTick: server.CompletedEngineTicks
+                )
                 ) {
                     hash.Add(value: ((byte)1));
                     hash.Add(value: (resolved ?? 0L));
-                    AppendString(hash: ref hash, value: resolvedText);
+                    AppendString(
+                        hash: ref hash,
+                        value: resolvedText
+                    );
                 } else {
                     hash.Add(value: ((byte)0));
                 }
             }
 
-            hash.Add(value: (byte)(row.Phase is null ? 0 : 1));
+            hash.Add(value: ((byte)((row.Phase is null)
+                ? 0
+                : 1)));
             if (row.Phase is { } phase) {
                 hash.Add(value: phase.Sequence);
             }
-            var masks = row.DrawnMasks ?? [];
+            var masks = (row.DrawnMasks ?? []);
 
             hash.Add(value: ((uint)masks.Count));
 
@@ -377,7 +514,9 @@ public static partial class WorldRuntimeStateHash {
             }
         }
 
-        hash.Add(value: ((byte)(server.Population.Fields is null ? 0 : 1)));
+        hash.Add(value: ((byte)((server.Population.Fields is null)
+            ? 0
+            : 1)));
         server.Population.Fields?.AppendStateHash(hash: ref hash);
     }
 }

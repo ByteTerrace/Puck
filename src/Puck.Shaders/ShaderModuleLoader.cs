@@ -26,9 +26,9 @@ public sealed class ShaderModuleLoader : IShaderModuleLoader {
 
     public ShaderModuleLoader(IAssetSource assetSource)
         : this(
-            assetSource: assetSource,
-            maxCachedShaders: DefaultMaxCachedShaders
-        ) {
+        assetSource: assetSource,
+        maxCachedShaders: DefaultMaxCachedShaders
+    ) {
     }
 
     public ShaderStageInfo ValidateShader(ShaderStage stage, string path) {

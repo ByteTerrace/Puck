@@ -11,14 +11,14 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </summary>
 internal sealed class StateRoundTripStage : IPostStage<PostContext> {
     /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
+    /// <inheritdoc/>
     public string Name =>
         "state-round-trip";
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
-    /// <inheritdoc/>
-    public bool IsConcurrent =>
-        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -43,6 +43,7 @@ internal sealed class StateRoundTripStage : IPostStage<PostContext> {
 
         return ((failures == 0)
             ? PostStageOutcome.Pass(detail: $"all {total} micro-ROMs snapshot/restore byte-identical (frame-boundary, mid-frame, double-restore)")
-            : PostStageOutcome.Fail(detail: $"{failures}/{total} micro-ROM(s) diverged after a savestate round-trip"));
+            : PostStageOutcome.Fail(detail: $"{failures}/{total} micro-ROM(s) diverged after a savestate round-trip")
+        );
     }
 }

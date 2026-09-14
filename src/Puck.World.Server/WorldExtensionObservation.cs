@@ -10,23 +10,21 @@ public interface IWorldConfiguredObservationProvider {
     /// <returns>The owned source.</returns>
     IWorldExtensionObservationSource BindObservation(JsonElement settings, int maximumItems);
 }
-
 /// <summary>A read-only source. It must cooperate with cancellation and never return a partial collection as complete.</summary>
 public interface IWorldExtensionObservationSource : IDisposable {
     /// <summary>Gets the provider-declared read specialization, for host diagnostics only (never interpreted by the
     /// engine, which learns no cloud noun for it).</summary>
     string Kind { get; }
+
     /// <summary>Reads a complete detached snapshot outside the simulation. Failures retain the previous world projection.</summary>
     /// <param name="cancellationToken">Host lifetime and request deadline.</param>
     /// <returns>Stable keyed items, with only fields approved for world disclosure.</returns>
     ValueTask<IReadOnlyList<WorldExtensionObservationItem>> ReadAsync(CancellationToken cancellationToken);
 }
-
 /// <summary>One external collection item. Fields are bounded textual values; this projection makes no universal SDK ontology.</summary>
 /// <param name="Key">Stable, case-sensitive Puck cell key.</param>
 /// <param name="Fields">Provider-approved fields. Credentials and arbitrary response bodies must never enter this map.</param>
 public sealed record WorldExtensionObservationItem(string Key, IReadOnlyDictionary<string, string> Fields);
-
 /// <summary>Maps a provider collection into existing authored state rows of any cell kind, and nothing else.</summary>
 /// <param name="Name">Unique observation name.</param>
 /// <param name="Provider">Configured provider instance.</param>
@@ -39,7 +37,6 @@ public sealed record WorldExtensionObservationItem(string Key, IReadOnlyDictiona
 /// <param name="MaximumItems">Complete collection ceiling, 1–128. Rendering admission can impose a smaller practical limit.</param>
 public sealed record WorldExtensionObservationSettings(string Name, string Provider, string Client, JsonElement Settings,
     IReadOnlyDictionary<string, string> Fields, int RefreshTicks = 14400, int MaximumItems = 64);
-
 /// <summary>Host read-back for collection freshness and the amount of projected work. Counts describe observed items, not telemetry.</summary>
 /// <param name="Name">Configured observation name.</param>
 /// <param name="Kind">The bound source's own <see cref="IWorldExtensionObservationSource.Kind"/>.</param>

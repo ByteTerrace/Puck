@@ -52,76 +52,13 @@ public sealed record TrustListEntry(
     TimeSpan? RootBindingMaximumAge = null,
     TimeSpan? SubjectBindingMaximumAge = null
 ) {
-    private static void ValidateOptionalDuration(TimeSpan? value, string name) {
-        if (
-            (value is not null) &&
-            ((value.Value <= TimeSpan.Zero) || ((value.Value.Ticks % TimeSpan.TicksPerSecond) != 0))
-        ) {
-            throw new ArgumentOutOfRangeException(
-                message: "An attestation maximum age must be positive and expressible as whole wire seconds.",
-                paramName: name
-            );
-        }
-    }
-
-    /// <summary>
-    /// Validates that <see cref="PublicKeySubjectPublicKeyInfo"/> actually hashes to <see cref="PinnedId"/>,
-    /// that the pinned algorithm is a known signing algorithm (a sealing key can never admit a claim), that
-    /// the id's shape matches <see cref="Mode"/>, and every optional duration is well-formed — everything
-    /// <see cref="ValidateKeyMaterial"/> does NOT need to actually import <see cref="PublicKeySubjectPublicKeyInfo"/>
-    /// as a key, so it holds on every platform, including one with no <see cref="ECDsa"/> backing
-    /// (<see cref="OperatingSystem.IsBrowser"/>).
-    /// </summary>
+    /// <summary>Validates <see cref="ValidateShape"/> and <see cref="ValidateKeyMaterial"/> together — every check
+    /// this entry needs on a platform with an <see cref="ECDsa"/> backing. <see cref="TrustList"/> calls this for
+    /// every entry at construction, so an unvalidated list cannot reach the verifier.</summary>
     /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
-    public void ValidateShape() {
-        ValidateOptionalDuration(
-            value: MaximumAge,
-            name: nameof(MaximumAge)
-        );
-        ValidateOptionalDuration(
-            value: RootBindingMaximumAge,
-            name: nameof(RootBindingMaximumAge)
-        );
-        ValidateOptionalDuration(
-            value: SubjectBindingMaximumAge,
-            name: nameof(SubjectBindingMaximumAge)
-        );
-
-        if (!string.Equals(
-            a: KeyId.ComputeKeyHash(subjectPublicKeyInfo: PublicKeySubjectPublicKeyInfo.Span),
-            b: PinnedId.KeyHash,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            throw new ArgumentException(message: "A trust list entry's public key does not hash to its own pinned id — it is not self-certifying.");
-        }
-
-        if (
-            !AttestationAlgorithms.IsKnown(algorithm: PinnedId.Algorithm) ||
-            (AttestationAlgorithms.Resolve(algorithm: PinnedId.Algorithm).Role != AttestationKeyRole.Signing)
-        ) {
-            throw new ArgumentException(message: $"A trust list entry pins algorithm '{PinnedId.Algorithm}', which is not an attestation SIGNING algorithm — a trust entry can only pin a key that signs.");
-        }
-
-        if (
-            (Mode == AttestationTrustMode.Vouches) &&
-            !PinnedId.IsRoot
-        ) {
-            throw new ArgumentException(message: "A vouching trust list entry must pin a root id — the chain it walks is always exactly two hops beneath a root.");
-        }
-
-        if (
-            (Mode == AttestationTrustMode.SignsDirectly) &&
-            (PinnedId.Subject is null)
-        ) {
-            throw new ArgumentException(message: "A directly-signing trust list entry must pin a SUBJECT key — only a subject key signs claims, and a root or issuing key that signed one would be indistinguishable from a binding.");
-        }
-
-        if (
-            (Mode == AttestationTrustMode.SignsDirectly) &&
-            ((RootBindingMaximumAge is not null) || (SubjectBindingMaximumAge is not null))
-        ) {
-            throw new ArgumentException(message: "A directly-signing trust list entry cannot author binding-age policy because no binding is walked beneath it.");
-        }
+    public void Validate() {
+        ValidateShape();
+        ValidateKeyMaterial();
     }
     /// <summary>
     /// Imports <see cref="PublicKeySubjectPublicKeyInfo"/> the same way <c>AttestationVerifier.VerifySignature</c>
@@ -161,13 +98,67 @@ public sealed record TrustListEntry(
             throw new ArgumentException(message: $"A trust list entry's public key is not on the curve algorithm '{PinnedId.Algorithm}' names.");
         }
     }
-    /// <summary>Validates <see cref="ValidateShape"/> and <see cref="ValidateKeyMaterial"/> together — every check
-    /// this entry needs on a platform with an <see cref="ECDsa"/> backing. <see cref="TrustList"/> calls this for
-    /// every entry at construction, so an unvalidated list cannot reach the verifier.</summary>
+    /// <summary>
+    /// Validates that <see cref="PublicKeySubjectPublicKeyInfo"/> actually hashes to <see cref="PinnedId"/>,
+    /// that the pinned algorithm is a known signing algorithm (a sealing key can never admit a claim), that
+    /// the id's shape matches <see cref="Mode"/>, and every optional duration is well-formed — everything
+    /// <see cref="ValidateKeyMaterial"/> does NOT need to actually import <see cref="PublicKeySubjectPublicKeyInfo"/>
+    /// as a key, so it holds on every platform, including one with no <see cref="ECDsa"/> backing
+    /// (<see cref="OperatingSystem.IsBrowser"/>).
+    /// </summary>
     /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
-    public void Validate() {
-        ValidateShape();
-        ValidateKeyMaterial();
+    public void ValidateShape() {
+        TrustList.ValidateOptionalDuration(
+            value: MaximumAge,
+            name: nameof(MaximumAge),
+            subject: "maximum age"
+        );
+        TrustList.ValidateOptionalDuration(
+            value: RootBindingMaximumAge,
+            name: nameof(RootBindingMaximumAge),
+            subject: "maximum age"
+        );
+        TrustList.ValidateOptionalDuration(
+            value: SubjectBindingMaximumAge,
+            name: nameof(SubjectBindingMaximumAge),
+            subject: "maximum age"
+        );
+
+        if (!string.Equals(
+            a: KeyId.ComputeKeyHash(subjectPublicKeyInfo: PublicKeySubjectPublicKeyInfo.Span),
+            b: PinnedId.KeyHash,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            throw new ArgumentException(message: "A trust list entry's public key does not hash to its own pinned id — it is not self-certifying.");
+        }
+
+        if (
+            !AttestationAlgorithms.IsKnown(algorithm: PinnedId.Algorithm) ||
+            (AttestationAlgorithms.Resolve(algorithm: PinnedId.Algorithm).Role != AttestationKeyRole.Signing)
+        ) {
+            throw new ArgumentException(message: $"A trust list entry pins algorithm '{PinnedId.Algorithm}', which is not an attestation SIGNING algorithm — a trust entry can only pin a key that signs.");
+        }
+
+        if (
+            (Mode == AttestationTrustMode.Vouches) &&
+            !PinnedId.IsRoot
+        ) {
+            throw new ArgumentException(message: "A vouching trust list entry must pin a root id — the chain it walks is always exactly two hops beneath a root.");
+        }
+
+        if (
+            (Mode == AttestationTrustMode.SignsDirectly) &&
+            (PinnedId.Subject is null)
+        ) {
+            throw new ArgumentException(message: "A directly-signing trust list entry must pin a SUBJECT key — only a subject key signs claims, and a root or issuing key that signed one would be indistinguishable from a binding.");
+        }
+
+        if (
+            (Mode == AttestationTrustMode.SignsDirectly) &&
+            ((RootBindingMaximumAge is not null) || (SubjectBindingMaximumAge is not null))
+        ) {
+            throw new ArgumentException(message: "A directly-signing trust list entry cannot author binding-age policy because no binding is walked beneath it.");
+        }
     }
 }
 /// <summary>
@@ -210,19 +201,23 @@ public sealed record TrustList {
     ) {
         ValidateOptionalDuration(
             value: defaultMaximumAge,
-            name: nameof(defaultMaximumAge)
+            name: nameof(defaultMaximumAge),
+            subject: "maximum age"
         );
         ValidateOptionalDuration(
             value: defaultRootBindingMaximumAge,
-            name: nameof(defaultRootBindingMaximumAge)
+            name: nameof(defaultRootBindingMaximumAge),
+            subject: "maximum age"
         );
         ValidateOptionalDuration(
             value: defaultSubjectBindingMaximumAge,
-            name: nameof(defaultSubjectBindingMaximumAge)
+            name: nameof(defaultSubjectBindingMaximumAge),
+            subject: "maximum age"
         );
         ValidateOptionalDuration(
             value: replayAcceptanceHorizon,
-            name: nameof(replayAcceptanceHorizon)
+            name: nameof(replayAcceptanceHorizon),
+            subject: "replay horizon"
         );
 
         var seen = new HashSet<(string Domain, string? Subject, AttestationTrustMode Mode)>();
@@ -319,21 +314,23 @@ public sealed record TrustList {
 
         return null;
     }
-
-    private static TrustListEntry CreateDetachedEntry(TrustListEntry entry) => entry with {
-        PublicKeySubjectPublicKeyInfo = entry.PublicKeySubjectPublicKeyInfo.ToArray(),
-    };
-    private static void ValidateOptionalDuration(TimeSpan? value, string name) {
+    // Both the entry's own durations and the verifier's defaults are wire-seconds windows, so one guard serves both;
+    // `subject` names which family the caller is validating so the refusal still says what it refused.
+    internal static void ValidateOptionalDuration(TimeSpan? value, string name, string subject) {
         if (
             (value is not null) &&
             ((value.Value <= TimeSpan.Zero) || ((value.Value.Ticks % TimeSpan.TicksPerSecond) != 0))
         ) {
             throw new ArgumentOutOfRangeException(
-                message: "An attestation maximum age or replay horizon must be positive and expressible as whole wire seconds.",
+                message: $"An attestation {subject} must be positive and expressible as whole wire seconds.",
                 paramName: name
             );
         }
     }
+
+    private static TrustListEntry CreateDetachedEntry(TrustListEntry entry) => entry with {
+        PublicKeySubjectPublicKeyInfo = entry.PublicKeySubjectPublicKeyInfo.ToArray(),
+    };
 
     /// <summary>
     /// Finds the <see cref="AttestationTrustMode.SignsDirectly"/> entry pinning one subject's own signing key,

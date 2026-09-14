@@ -33,7 +33,8 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
     /// <summary>The resolved identifier.</summary>
     public string Value => (m_isResolved
         ? m_value!
-        : throw new InvalidOperationException(message: $"document identifier reference '{Reference}' has not been resolved by its containing document."));
+        : throw new InvalidOperationException(message: $"document identifier reference '{Reference}' has not been resolved by its containing document.")
+    );
 
     /// <inheritdoc/>
     public void Detach() {
@@ -60,8 +61,16 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
 
     /// <inheritdoc/>
     public bool Equals(DocumentIdentifier? other) => ((other is not null) && ((Reference is { } reference)
-        ? string.Equals(a: reference, b: other.Reference, comparisonType: StringComparison.Ordinal)
-        : ((other.Reference is null) && string.Equals(a: m_value, b: other.m_value, comparisonType: StringComparison.Ordinal))));
+        ? string.Equals(
+            a: reference,
+            b: other.Reference,
+            comparisonType: StringComparison.Ordinal
+        )
+        : ((other.Reference is null) && string.Equals(
+            a: m_value,
+            b: other.m_value,
+            comparisonType: StringComparison.Ordinal
+        ))));
     /// <inheritdoc/>
     public override bool Equals(object? obj) => ((obj is DocumentIdentifier other) && Equals(other: other));
     /// <inheritdoc/>
@@ -69,7 +78,10 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
     /// <inheritdoc/>
     public override string ToString() => Value;
 
-    internal static DocumentIdentifier FromReference(string reference) => new(_: true, reference: reference);
+    internal static DocumentIdentifier FromReference(string reference) => new(
+        _: true,
+        reference: reference
+    );
 }
 /// <summary>Reads literal identifiers and state references while preserving both as JSON strings.</summary>
 public sealed class DocumentIdentifierJsonConverter : JsonConverter<DocumentIdentifier>, IJsonSchemaStringConverter {
@@ -88,9 +100,13 @@ public sealed class DocumentIdentifierJsonConverter : JsonConverter<DocumentIden
             throw new JsonException(message: "a document identifier must be a non-null string.");
         }
 
-        return (value.StartsWith(comparisonType: StringComparison.Ordinal, value: DocumentIdentifier.ReferencePrefix)
+        return (value.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: DocumentIdentifier.ReferencePrefix
+        )
             ? DocumentIdentifier.FromReference(reference: value)
-            : new DocumentIdentifier(value: value));
+            : new DocumentIdentifier(value: value)
+        );
     }
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, DocumentIdentifier value, JsonSerializerOptions options) =>

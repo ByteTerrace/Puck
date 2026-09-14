@@ -25,6 +25,32 @@ public sealed class PostBattery<TContext> {
         m_stages = stages;
     }
 
+    private static void Announce(PostStageResult result) =>
+        Console.Out.WriteLine(value: $"[{result.Tier}] {result.Name}: {result.Outcome.Verdict} | {PostReport.FormatDuration(duration: result.Duration)} | {result.Outcome.Detail}");
+    private static PostStageResult RunOne(IPostStage<TContext> stage, TContext context, bool announce = true) {
+        var stageStart = Stopwatch.GetTimestamp();
+        PostStageOutcome outcome;
+
+        try {
+            outcome = stage.Run(context: context);
+        } catch (Exception exception) {
+            outcome = PostStageOutcome.Infra(detail: $"threw {exception.GetType().Name}: {exception.Message}");
+        }
+
+        var result = new PostStageResult(
+            Duration: Stopwatch.GetElapsedTime(startingTimestamp: stageStart),
+            Name: stage.Name,
+            Outcome: outcome,
+            Tier: stage.Tier
+        );
+
+        if (announce) {
+            Announce(result: result);
+        }
+
+        return result;
+    }
+
     /// <summary>Runs every stage and returns the aggregate report.</summary>
     /// <param name="context">The shared run context.</param>
     /// <returns>The aggregate report.</returns>
@@ -82,31 +108,5 @@ public sealed class PostBattery<TContext> {
             duration: Stopwatch.GetElapsedTime(startingTimestamp: batteryStart),
             results: results
         );
-    }
-
-    private static void Announce(PostStageResult result) =>
-        Console.Out.WriteLine(value: $"[{result.Tier}] {result.Name}: {result.Outcome.Verdict} | {PostReport.FormatDuration(duration: result.Duration)} | {result.Outcome.Detail}");
-    private static PostStageResult RunOne(IPostStage<TContext> stage, TContext context, bool announce = true) {
-        var stageStart = Stopwatch.GetTimestamp();
-        PostStageOutcome outcome;
-
-        try {
-            outcome = stage.Run(context: context);
-        } catch (Exception exception) {
-            outcome = PostStageOutcome.Infra(detail: $"threw {exception.GetType().Name}: {exception.Message}");
-        }
-
-        var result = new PostStageResult(
-            Duration: Stopwatch.GetElapsedTime(startingTimestamp: stageStart),
-            Name: stage.Name,
-            Outcome: outcome,
-            Tier: stage.Tier
-        );
-
-        if (announce) {
-            Announce(result: result);
-        }
-
-        return result;
     }
 }

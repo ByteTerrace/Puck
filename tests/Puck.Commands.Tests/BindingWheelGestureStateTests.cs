@@ -12,6 +12,18 @@ public sealed class BindingWheelGestureStateTests {
     // depends on another's numbering.
     private long m_sequence;
 
+    private bool Select(BindingWheelGestureState state, float x, float y) {
+        return state.TrySelect(
+            axis: new Vector2(
+                x: x,
+                y: y
+            ),
+            deadZoneSquared: DeadZoneSquared,
+            sequence: ++m_sequence,
+            switchThresholdSquared: SwitchThresholdSquared
+        );
+    }
+
     [Fact]
     public void AClosedGestureAcceptsNothing() {
         var state = new BindingWheelGestureState();
@@ -30,63 +42,34 @@ public sealed class BindingWheelGestureStateTests {
         Assert.False(condition: state.AxisKnown);
     }
     [Fact]
-    public void OpeningClearsCancellationAndEverySampleFromThePriorGesture() {
+    public void ANeutralReadingRetainsTheThrowThatEarnedTheSwitchThreshold() {
         var state = new BindingWheelGestureState();
 
         state.Open();
+
+        // A weak flick, then a full throw: the full throw is the stable direction the neutral return retains.
         Assert.True(condition: Select(
             state: state,
-            x: 1f,
+            x: 0.2f,
             y: 0f
         ));
-        Assert.True(condition: state.TryCaptureSpatialNeutral(position: new Vector2(
-            x: 7f,
-            y: 8f
-        )));
-        state.Cancel();
+        Assert.True(condition: Select(
+            state: state,
+            x: 0f,
+            y: 0.9f
+        ));
+        Assert.True(condition: Select(
+            state: state,
+            x: 0f,
+            y: 0f
+        ));
 
-        Assert.False(condition: state.CanArm);
-
-        state.Open();
-
-        Assert.True(condition: state.CanArm);
-        Assert.False(condition: state.Cancelled);
-        Assert.False(condition: state.AxisKnown);
-        Assert.False(condition: state.SpatialNeutralKnown);
-        Assert.Equal(expected: Vector2.Zero, actual: state.Axis);
-        Assert.Equal(expected: 0L, actual: state.AxisSequence);
-    }
-    [Fact]
-    public void CancellationOutlivesCloseSoALateReleaseStillReportsIt() {
-        var state = new BindingWheelGestureState();
-
-        state.Open();
-        state.Cancel();
-        state.Close();
-
-        Assert.True(condition: state.Cancelled);
-        Assert.False(condition: state.Opened);
-        Assert.False(condition: state.CanArm);
-    }
-    [Fact]
-    public void TheFirstSpatialPositionOfAGestureIsTheOriginAndLaterOnesCannotMoveIt() {
-        var state = new BindingWheelGestureState();
-
-        state.Open();
-
-        Assert.True(condition: state.TryCaptureSpatialNeutral(position: new Vector2(
-            x: 10f,
-            y: 20f
-        )));
-        Assert.False(condition: state.TryCaptureSpatialNeutral(position: new Vector2(
-            x: 30f,
-            y: 40f
-        )));
+        Assert.True(condition: state.AxisNeutral);
         Assert.Equal(
-            actual: state.SpatialNeutral,
+            actual: state.Axis,
             expected: new Vector2(
-                x: 10f,
-                y: 20f
+                x: 0f,
+                y: 0.9f
             )
         );
     }
@@ -131,56 +114,14 @@ public sealed class BindingWheelGestureStateTests {
         Assert.False(condition: state.AxisKnown);
     }
     [Fact]
-    public void ANeutralReadingRetainsTheThrowThatEarnedTheSwitchThreshold() {
-        var state = new BindingWheelGestureState();
-
-        state.Open();
-
-        // A weak flick, then a full throw: the full throw is the stable direction the neutral return retains.
-        Assert.True(condition: Select(
-            state: state,
-            x: 0.2f,
-            y: 0f
-        ));
-        Assert.True(condition: Select(
-            state: state,
-            x: 0f,
-            y: 0.9f
-        ));
-        Assert.True(condition: Select(
-            state: state,
-            x: 0f,
-            y: 0f
-        ));
-
-        Assert.True(condition: state.AxisNeutral);
-        Assert.Equal(
-            actual: state.Axis,
-            expected: new Vector2(
-                x: 0f,
-                y: 0.9f
-            )
-        );
-    }
-    [Fact]
-    public void AnExcursionThatNeverReachesTheSwitchThresholdRetainsItsPeak() {
+    public void ASecondNeutralReadingChangesNothing() {
         var state = new BindingWheelGestureState();
 
         state.Open();
 
         Assert.True(condition: Select(
             state: state,
-            x: 0.2f,
-            y: 0f
-        ));
-        Assert.True(condition: Select(
-            state: state,
-            x: 0.35f,
-            y: 0f
-        ));
-        Assert.True(condition: Select(
-            state: state,
-            x: 0.15f,
+            x: 0.9f,
             y: 0f
         ));
         Assert.True(condition: Select(
@@ -189,13 +130,16 @@ public sealed class BindingWheelGestureStateTests {
             y: 0f
         ));
 
-        Assert.True(condition: state.AxisNeutral);
+        var sequence = state.AxisSequence;
+
+        Assert.False(condition: Select(
+            state: state,
+            x: 0.05f,
+            y: 0f
+        ));
         Assert.Equal(
-            actual: state.Axis,
-            expected: new Vector2(
-                x: 0.35f,
-                y: 0f
-            )
+            expected: sequence,
+            actual: state.AxisSequence
         );
     }
     [Fact]
@@ -243,14 +187,24 @@ public sealed class BindingWheelGestureStateTests {
         );
     }
     [Fact]
-    public void ASecondNeutralReadingChangesNothing() {
+    public void AnExcursionThatNeverReachesTheSwitchThresholdRetainsItsPeak() {
         var state = new BindingWheelGestureState();
 
         state.Open();
 
         Assert.True(condition: Select(
             state: state,
-            x: 0.9f,
+            x: 0.2f,
+            y: 0f
+        ));
+        Assert.True(condition: Select(
+            state: state,
+            x: 0.35f,
+            y: 0f
+        ));
+        Assert.True(condition: Select(
+            state: state,
+            x: 0.15f,
             y: 0f
         ));
         Assert.True(condition: Select(
@@ -259,25 +213,80 @@ public sealed class BindingWheelGestureStateTests {
             y: 0f
         ));
 
-        var sequence = state.AxisSequence;
+        Assert.True(condition: state.AxisNeutral);
+        Assert.Equal(
+            actual: state.Axis,
+            expected: new Vector2(
+                x: 0.35f,
+                y: 0f
+            )
+        );
+    }
+    [Fact]
+    public void CancellationOutlivesCloseSoALateReleaseStillReportsIt() {
+        var state = new BindingWheelGestureState();
 
-        Assert.False(condition: Select(
+        state.Open();
+        state.Cancel();
+        state.Close();
+
+        Assert.True(condition: state.Cancelled);
+        Assert.False(condition: state.Opened);
+        Assert.False(condition: state.CanArm);
+    }
+    [Fact]
+    public void OpeningClearsCancellationAndEverySampleFromThePriorGesture() {
+        var state = new BindingWheelGestureState();
+
+        state.Open();
+        Assert.True(condition: Select(
             state: state,
-            x: 0.05f,
+            x: 1f,
             y: 0f
         ));
-        Assert.Equal(expected: sequence, actual: state.AxisSequence);
-    }
+        Assert.True(condition: state.TryCaptureSpatialNeutral(position: new Vector2(
+            x: 7f,
+            y: 8f
+        )));
+        state.Cancel();
 
-    private bool Select(BindingWheelGestureState state, float x, float y) {
-        return state.TrySelect(
-            axis: new Vector2(
-                x: x,
-                y: y
-            ),
-            deadZoneSquared: DeadZoneSquared,
-            sequence: ++m_sequence,
-            switchThresholdSquared: SwitchThresholdSquared
+        Assert.False(condition: state.CanArm);
+
+        state.Open();
+
+        Assert.True(condition: state.CanArm);
+        Assert.False(condition: state.Cancelled);
+        Assert.False(condition: state.AxisKnown);
+        Assert.False(condition: state.SpatialNeutralKnown);
+        Assert.Equal(
+            expected: Vector2.Zero,
+            actual: state.Axis
+        );
+        Assert.Equal(
+            expected: 0L,
+            actual: state.AxisSequence
+        );
+    }
+    [Fact]
+    public void TheFirstSpatialPositionOfAGestureIsTheOriginAndLaterOnesCannotMoveIt() {
+        var state = new BindingWheelGestureState();
+
+        state.Open();
+
+        Assert.True(condition: state.TryCaptureSpatialNeutral(position: new Vector2(
+            x: 10f,
+            y: 20f
+        )));
+        Assert.False(condition: state.TryCaptureSpatialNeutral(position: new Vector2(
+            x: 30f,
+            y: 40f
+        )));
+        Assert.Equal(
+            actual: state.SpatialNeutral,
+            expected: new Vector2(
+                x: 10f,
+                y: 20f
+            )
         );
     }
 }

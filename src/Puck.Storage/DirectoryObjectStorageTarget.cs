@@ -5,13 +5,12 @@ namespace Puck.Storage;
 /// <remarks>The host must protect the root and its ancestors from other identities. Unsupported platforms and
 /// Windows network roots fail closed. Filesystem crash durability remains a deployment responsibility.</remarks>
 public sealed record DirectoryObjectStorageTarget : ObjectStorageTarget {
-    /// <summary>Gets the directory every object's blobs are rooted under.</summary>
-    public string RootPath { get; }
-
     /// <summary>Gets the maximum bytes read or written for one blob.</summary>
     public int MaximumBlobBytes { get; }
     /// <summary>Gets the maximum visited entries in one listing, including directories and storage metadata.</summary>
     public int MaximumListEntries { get; }
+    /// <summary>Gets the directory every object's blobs are rooted under.</summary>
+    public string RootPath { get; }
 
     /// <summary>Initializes the target.</summary>
     /// <param name="rootPath">The root directory, resolved to an absolute path now and created on first write.</param>
@@ -22,7 +21,7 @@ public sealed record DirectoryObjectStorageTarget : ObjectStorageTarget {
     public DirectoryObjectStorageTarget(string rootPath, int maximumBlobBytes = 67108864, int maximumListEntries = 100000) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: rootPath);
 
-        RootPath = Path.GetFullPath(rootPath);
+        RootPath = Path.GetFullPath(path: rootPath);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumBlobBytes);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumListEntries);
         MaximumBlobBytes = maximumBlobBytes;

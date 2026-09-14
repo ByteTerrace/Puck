@@ -38,11 +38,11 @@ public sealed class VulkanGpuStorageImage : IGpuStorageImage {
     }
 
     /// <inheritdoc/>
+    public uint Height { get; }
+    /// <inheritdoc/>
     public nint ImageHandle => m_imageHandle;
     /// <inheritdoc/>
     public nint ImageViewHandle => m_imageViewHandle;
-    /// <inheritdoc/>
-    public uint Height { get; }
     /// <inheritdoc/>
     public uint Width { get; }
 
@@ -55,12 +55,19 @@ public sealed class VulkanGpuStorageImage : IGpuStorageImage {
         m_disposed = true;
 
         if (0 != m_imageViewHandle) {
-            m_framebufferSetApi.DestroyImageView(deviceHandle: m_deviceHandle, imageViewHandle: m_imageViewHandle);
+            m_framebufferSetApi.DestroyImageView(
+                deviceHandle: m_deviceHandle,
+                imageViewHandle: m_imageViewHandle
+            );
             m_imageViewHandle = 0;
         }
 
         if (0 != m_imageHandle) {
-            m_offscreenImageApi.DestroyColorImage(deviceHandle: m_deviceHandle, imageHandle: m_imageHandle, memoryHandle: m_memoryHandle);
+            m_offscreenImageApi.DestroyColorImage(
+                deviceHandle: m_deviceHandle,
+                imageHandle: m_imageHandle,
+                memoryHandle: m_memoryHandle
+            );
             m_imageHandle = 0;
         }
     }

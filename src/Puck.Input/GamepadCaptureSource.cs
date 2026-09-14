@@ -127,6 +127,31 @@ public sealed class GamepadCaptureSource {
             _ = m_analogLatches.Remove(key: deviceId);
         }
     }
+    private bool EmitGyro(InputDeviceId deviceId, Vector3 gyro, ulong tick, bool wasActive) {
+        if (gyro != Vector3.Zero) {
+            m_router.Capture(signal: new InputSignal(
+                CaptureTick: tick,
+                DeviceId: deviceId,
+                Phase: CommandPhase.Active,
+                Source: InputSources.Gamepad.Gyro,
+                Value: CommandValue.Axis(value: gyro)
+            ));
+
+            return true;
+        }
+
+        if (wasActive) {
+            m_router.Capture(signal: new InputSignal(
+                CaptureTick: tick,
+                DeviceId: deviceId,
+                Phase: CommandPhase.Active,
+                Source: InputSources.Gamepad.Gyro,
+                Value: CommandValue.Axis(value: Vector3.Zero)
+            ));
+        }
+
+        return false;
+    }
     // The accelerometer reads gravity at rest, so a device that has one streams continuously and drives the fused
     // orientation on the same gate. The first missing sample explicitly clears both carried values; this matters to
     // future tilt controls just as the gyro clear matters to current motion look.
@@ -172,31 +197,6 @@ public sealed class GamepadCaptureSource {
         ));
 
         return true;
-    }
-    private bool EmitGyro(InputDeviceId deviceId, Vector3 gyro, ulong tick, bool wasActive) {
-        if (gyro != Vector3.Zero) {
-            m_router.Capture(signal: new InputSignal(
-                CaptureTick: tick,
-                DeviceId: deviceId,
-                Phase: CommandPhase.Active,
-                Source: InputSources.Gamepad.Gyro,
-                Value: CommandValue.Axis(value: gyro)
-            ));
-
-            return true;
-        }
-
-        if (wasActive) {
-            m_router.Capture(signal: new InputSignal(
-                CaptureTick: tick,
-                DeviceId: deviceId,
-                Phase: CommandPhase.Active,
-                Source: InputSources.Gamepad.Gyro,
-                Value: CommandValue.Axis(value: Vector3.Zero)
-            ));
-        }
-
-        return false;
     }
     private void EmitSignals(in GamepadDrain drain, ulong frameTick) {
         var deviceId = drain.DeviceId;

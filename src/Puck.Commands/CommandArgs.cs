@@ -6,8 +6,7 @@ namespace Puck.Commands;
 /// The console verbs' shared argument-parsing helpers — invariant-culture <see cref="float"/>/<see cref="int"/>
 /// parsing for the trailing token-list arguments every command-module/logic handler receives. Lives here
 /// (<c>Puck.Commands</c>) because shared invariant-culture argument parsing is command-dispatch substrate every
-/// console consumer needs, not a demo-only convenience — the earlier "engine stays lean" fence that kept this
-/// Demo-side was lifted 2026-07. Every command module/logic class that parses a numeric argument should call these
+/// console consumer needs, not a demo-only convenience. Every command module/logic class that parses a numeric argument should call these
 /// instead of re-declaring <c>float.TryParse</c>/<c>int.TryParse</c> locally, so the parsing rule (invariant
 /// culture, no thousands separators) can never drift between verbs.
 /// </summary>

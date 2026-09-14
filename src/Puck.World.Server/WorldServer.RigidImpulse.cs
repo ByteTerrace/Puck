@@ -11,35 +11,72 @@ public sealed partial class WorldServer {
     // Forward in this engine's body-local frame is -Z (WorldBody's own private UnitZ convention, mirrored here since
     // an impulse strikes a different body than the one supplying the heading — every existing facing read stays
     // inside WorldBody itself).
-    private static readonly FixedVector3 RigidImpulseLocalForward = new(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: -FixedQ4816.One);
+    private static readonly FixedVector3 RigidImpulseLocalForward = new(
+        X: FixedQ4816.Zero,
+        Y: FixedQ4816.Zero,
+        Z: -FixedQ4816.One
+    );
 
     // Returns true (refused) or false (applied/skipped) on the same terms FireBodyEffect/FireFieldPaint already do.
     private bool FireRigidImpulseEffect(RigidImpulseEffect effect, string ruleName, ulong tick, bool preflight) {
-        var targetIndex = ResolveBodyRef(bodyRef: effect.Target, tick: tick);
+        var targetIndex = ResolveBodyRef(
+            bodyRef: effect.Target,
+            tick: tick
+        );
 
         if (Body(index: targetIndex) is not { } target) {
-            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"applyRigidImpulse key resolves to no active body (index {targetIndex})");
+            m_evaluator.ReportRefusal(
+                detail: $"applyRigidImpulse key resolves to no active body (index {targetIndex})",
+                effect: effect,
+                refusal: WorldRuleEffectRefusal.BodyInactive,
+                ruleName: ruleName,
+                tick: tick
+            );
 
             return true;
         }
         if (!target.IsRigid) {
-            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.RigidBodyRequired, ruleName: ruleName, effect: effect, tick: tick, detail: $"body:{targetIndex} carries no rigid kit facet — see world.rigid");
+            m_evaluator.ReportRefusal(
+                detail: $"body:{targetIndex} carries no rigid kit facet — see world.rigid",
+                effect: effect,
+                refusal: WorldRuleEffectRefusal.RigidBodyRequired,
+                ruleName: ruleName,
+                tick: tick
+            );
 
             return true;
         }
 
-        var headingIndex = ResolveBodyRef(bodyRef: effect.Heading, tick: tick);
+        var headingIndex = ResolveBodyRef(
+            bodyRef: effect.Heading,
+            tick: tick
+        );
 
         if (Body(index: headingIndex) is not { } heading) {
-            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"applyRigidImpulse headingKey resolves to no active body (index {headingIndex})");
+            m_evaluator.ReportRefusal(
+                detail: $"applyRigidImpulse headingKey resolves to no active body (index {headingIndex})",
+                effect: effect,
+                refusal: WorldRuleEffectRefusal.BodyInactive,
+                ruleName: ruleName,
+                tick: tick
+            );
 
             return true;
         }
 
-        var magnitudeFact = effect.Magnitude.Read(reader: (IRuleReader)this);
+        var magnitudeFact = effect.Magnitude.Read(reader: ((IRuleReader)this));
 
-        if (magnitudeFact.IsAbsent || magnitudeFact.IsForever) {
-            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.RigidImpulseOutOfRange, ruleName: ruleName, effect: effect, tick: tick, detail: "applyRigidImpulse magnitude cell is absent");
+        if (
+            magnitudeFact.IsAbsent ||
+            magnitudeFact.IsForever
+        ) {
+            m_evaluator.ReportRefusal(
+                detail: "applyRigidImpulse magnitude cell is absent",
+                effect: effect,
+                refusal: WorldRuleEffectRefusal.RigidImpulseOutOfRange,
+                ruleName: ruleName,
+                tick: tick
+            );
 
             return true;
         }
@@ -51,8 +88,17 @@ public sealed partial class WorldServer {
         var magnitude = FixedQ4816.FromRawBits(value: magnitudeFact.ToRaw(kind: CellKind.Fixed));
         var direction = heading.FixedOrientation.Rotate(vector: RigidImpulseLocalForward);
 
-        if (!target.TryApplyRigidImpulse(impulse: (direction * magnitude), velocityCeiling: m_population.RigidVelocityCeiling)) {
-            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.RigidImpulseOutOfRange, ruleName: ruleName, effect: effect, tick: tick, detail: $"body:{targetIndex} impulse is not representable or would exceed the world's declared speed ceiling ({(double)m_population.RigidVelocityCeiling:0.###})");
+        if (!target.TryApplyRigidImpulse(
+            impulse: (direction * magnitude),
+            velocityCeiling: m_population.RigidVelocityCeiling
+        )) {
+            m_evaluator.ReportRefusal(
+                refusal: WorldRuleEffectRefusal.RigidImpulseOutOfRange,
+                ruleName: ruleName,
+                effect: effect,
+                tick: tick,
+                detail: $"body:{targetIndex} impulse is not representable or would exceed the world's declared speed ceiling ({((double)m_population.RigidVelocityCeiling):0.###})"
+            );
 
             return true;
         }

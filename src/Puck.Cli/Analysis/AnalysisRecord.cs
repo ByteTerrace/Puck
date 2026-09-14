@@ -15,17 +15,22 @@ internal readonly record struct AnalysisRecord(string Path, int Line, int Column
 // produced them — each verb owns its own ordering, and both orderings are total — so the emitter never
 // reorders and never adds a summary line: stdout carries records and nothing else.
 internal static class AnalysisEmitter {
-    // 0 when anything was found, 1 when nothing was.
-    public static int Emit(IReadOnlyList<AnalysisRecord> records, bool json, bool quiet) {
-        if (!quiet) {
-            foreach (var record in records) {
-                Console.Out.WriteLine(value: (json ? ToJson(record: record) : ToText(record: record)));
-            }
+    // One JSON object per line, keys in a fixed order; `detail` is present only when there is one.
+    private static string ToJson(AnalysisRecord record) {
+        var builder = new StringBuilder(value: "{")
+            .Append(value: "\"path\":").Append(value: ScanJsonl.JsonString(value: record.Path)).Append(value: ',')
+            .Append(value: "\"line\":").Append(value: record.Line.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ',')
+            .Append(value: "\"column\":").Append(value: record.Column.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ',')
+            .Append(value: "\"relation\":").Append(value: ScanJsonl.JsonString(value: record.Relation)).Append(value: ',')
+            .Append(value: "\"kind\":").Append(value: ScanJsonl.JsonString(value: record.Kind)).Append(value: ',')
+            .Append(value: "\"name\":").Append(value: ScanJsonl.JsonString(value: record.Name));
+
+        if (record.Detail is { Length: > 0 } detail) {
+            builder.Append(value: ",\"detail\":").Append(value: ScanJsonl.JsonString(value: detail));
         }
 
-        return ((records.Count > 0) ? 0 : 1);
+        return builder.Append(value: '}').ToString();
     }
-
     // `path:line:col relation [kind] name[ : detail]` — the path leads so a line parses like a search hit
     // and pastes into an editor as a jump target.
     private static string ToText(AnalysisRecord record) {
@@ -50,20 +55,20 @@ internal static class AnalysisEmitter {
 
         return builder.ToString();
     }
-    // One JSON object per line, keys in a fixed order; `detail` is present only when there is one.
-    private static string ToJson(AnalysisRecord record) {
-        var builder = new StringBuilder(value: "{")
-            .Append(value: "\"path\":").Append(value: ScanJsonl.JsonString(value: record.Path)).Append(value: ',')
-            .Append(value: "\"line\":").Append(value: record.Line.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ',')
-            .Append(value: "\"column\":").Append(value: record.Column.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ',')
-            .Append(value: "\"relation\":").Append(value: ScanJsonl.JsonString(value: record.Relation)).Append(value: ',')
-            .Append(value: "\"kind\":").Append(value: ScanJsonl.JsonString(value: record.Kind)).Append(value: ',')
-            .Append(value: "\"name\":").Append(value: ScanJsonl.JsonString(value: record.Name));
 
-        if (record.Detail is { Length: > 0 } detail) {
-            builder.Append(value: ",\"detail\":").Append(value: ScanJsonl.JsonString(value: detail));
+    // 0 when anything was found, 1 when nothing was.
+    public static int Emit(IReadOnlyList<AnalysisRecord> records, bool json, bool quiet) {
+        if (!quiet) {
+            foreach (var record in records) {
+                Console.Out.WriteLine(value: (json
+                    ? ToJson(record: record)
+                    : ToText(record: record)));
+            }
         }
 
-        return builder.Append(value: '}').ToString();
+        return ((records.Count > 0)
+            ? 0
+            : 1
+        );
     }
 }

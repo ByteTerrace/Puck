@@ -11,18 +11,17 @@ namespace Puck.World.Client;
 public sealed class WorldSeatViewState {
     private readonly Lock m_gate = new();
     private readonly SdfCameraBoomFollower m_boom = new();
+    private Quaternion m_upAlignment = Quaternion.Identity;
+    private Vector3 m_alignedUp = Vector3.UnitY;
+    private readonly WorldCameraRigCompiler.Cache m_rigCache = new();
 
+    // Within this much of the antipode the world-derived alignment carries no usable twist and is not taken at all:
+    // cos(10 degrees) from straight down.
+    private const float AntipodeGuard = -0.985f;
     // How much of the world-derived alignment is taken back per update once it is trustworthy again. Small enough
     // that the carried frame is what the seat feels moment to moment, large enough that a lap's accumulated drift is
     // gone within a second of leaving the pole.
     private const float ReanchorFraction = 0.08f;
-    // Within this much of the antipode the world-derived alignment carries no usable twist and is not taken at all:
-    // cos(10 degrees) from straight down.
-    private const float AntipodeGuard = -0.985f;
-
-    private Quaternion m_upAlignment = Quaternion.Identity;
-    private Vector3 m_alignedUp = Vector3.UnitY;
-    private readonly WorldCameraRigCompiler.Cache m_rigCache = new();
 
     private float m_pitch;
     private float m_yaw;
@@ -30,6 +29,9 @@ public sealed class WorldSeatViewState {
     public float Pitch { get { lock (m_gate) { return m_pitch; } } }
     public float Yaw { get { lock (m_gate) { return m_yaw; } } }
 
+    // The rig's authored pitch, for the live-pitch clamp: a BOUND pitch has no single authored value, so the clamp
+    // is taken about the rest angle.
+    private static float AuthoredPitch(WorldViewDefaults views) => (views.SeatRig.OrbitOp?.Pitch.Literal ?? 0f);
     // min/max pitch bound the TOTAL orbit pitch (the authored rig's pitch plus the live delta), so the live
     // delta is clamped against the bounds shifted by the authored pitch.
     private static float ClampLivePitch(float livePitch, float authoredPitch, WorldSeatViewControl control) => Math.Clamp(
@@ -37,9 +39,6 @@ public sealed class WorldSeatViewState {
         min: (control.MinPitch - authoredPitch),
         max: (control.MaxPitch - authoredPitch)
     );
-    // The rig's authored pitch, for the live-pitch clamp: a BOUND pitch has no single authored value, so the clamp
-    // is taken about the rest angle.
-    private static float AuthoredPitch(WorldViewDefaults views) => (views.SeatRig.OrbitOp?.Pitch.Literal ?? 0f);
     private static float Wrap(float radians) => (radians - (MathF.Tau * MathF.Round(x: (radians / MathF.Tau))));
 
     /// <summary>The rotation carrying world up to the seat's own up, CARRIED across updates rather than rebuilt.
@@ -99,6 +98,48 @@ public sealed class WorldSeatViewState {
             return m_upAlignment;
         }
     }
+    /// <summary>The follow camera's step: eases the live facing yaw so it closes on
+    /// <paramref name="targetYaw"/> (the body's heading — "behind the body") by the fraction
+    /// <c>1 - exp(-rate · dt)</c>. Presentation-only; a World yaw reference is required by the validator. Camera
+    /// program orbit offsets are deliberately excluded, so a state-bound look-behind angle never turns the body.</summary>
+    /// <param name="targetYaw">The heading to close on, in radians.</param>
+    /// <param name="rate">The exponential closing rate per second.</param>
+    /// <param name="deltaSeconds">The step.</param>
+    public void Follow(float targetYaw, float rate, float deltaSeconds) {
+        var fraction = FirstOrderLag.Alpha(
+            deltaSeconds: deltaSeconds,
+            rate: rate
+        );
+
+        lock (m_gate) {
+            var current = Wrap(radians: m_yaw);
+            var delta = Wrap(radians: (targetYaw - current));
+
+            m_yaw = Wrap(radians: (m_yaw + (delta * fraction)));
+        }
+    }
+    /// <summary>The chase boom's second-order ease: eases <paramref name="eye"/> toward <paramref name="target"/> by
+    /// <paramref name="dynamics"/> while this seat frames through its own chase rig.</summary>
+    /// <param name="dynamics">The chase rig's reported response.</param>
+    /// <param name="enabled">Whether the boom should ease this frame — <see langword="false"/> reseeds and passes
+    /// the pose through untouched.</param>
+    /// <param name="deltaSeconds">The frame step.</param>
+    /// <param name="eye">The resolved eye, eased in place.</param>
+    /// <param name="target">The resolved target, read but never moved.</param>
+    public void Follow(in SdfCameraDynamics dynamics, bool enabled, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
+        lock (m_gate) {
+            if (enabled) {
+                m_boom.Apply(
+                    deltaSeconds: deltaSeconds,
+                    dynamics: in dynamics,
+                    eye: ref eye,
+                    target: ref target
+                );
+            } else {
+                m_boom.Reseed();
+            }
+        }
+    }
     /// <summary>The total orbit pitch — the authored rig pitch plus the live delta — in radians.</summary>
     public float LogicalPitch(WorldViewDefaults views) {
         ArgumentNullException.ThrowIfNull(argument: views);
@@ -143,21 +184,11 @@ public sealed class WorldSeatViewState {
             );
         }
     }
-    /// <summary>The follow camera's step: eases the live facing yaw so it closes on
-    /// <paramref name="targetYaw"/> (the body's heading — "behind the body") by the fraction
-    /// <c>1 - exp(-rate · dt)</c>. Presentation-only; a World yaw reference is required by the validator. Camera
-    /// program orbit offsets are deliberately excluded, so a state-bound look-behind angle never turns the body.</summary>
-    /// <param name="targetYaw">The heading to close on, in radians.</param>
-    /// <param name="rate">The exponential closing rate per second.</param>
-    /// <param name="deltaSeconds">The step.</param>
-    public void Follow(float targetYaw, float rate, float deltaSeconds) {
-        var fraction = FirstOrderLag.Alpha(deltaSeconds: deltaSeconds, rate: rate);
-
+    public void Recenter() {
         lock (m_gate) {
-            var current = Wrap(radians: m_yaw);
-            var delta = Wrap(radians: (targetYaw - current));
-
-            m_yaw = Wrap(radians: (m_yaw + (delta * fraction)));
+            m_yaw = 0f;
+            m_pitch = 0f;
+            m_boom.Reseed();
         }
     }
     /// <summary>Turns the camera round BEHIND the body: the live yaw is set so the resulting logical facing is
@@ -173,13 +204,6 @@ public sealed class WorldSeatViewState {
                 ? 0f
                 : Wrap(radians: targetYaw)
             );
-        }
-    }
-    public void Recenter() {
-        lock (m_gate) {
-            m_yaw = 0f;
-            m_pitch = 0f;
-            m_boom.Reseed();
         }
     }
     public void Reclamp(WorldViewDefaults views) {
@@ -234,27 +258,5 @@ public sealed class WorldSeatViewState {
         );
 
         return rig;
-    }
-    /// <summary>The chase boom's second-order ease: eases <paramref name="eye"/> toward <paramref name="target"/> by
-    /// <paramref name="dynamics"/> while this seat frames through its own chase rig.</summary>
-    /// <param name="dynamics">The chase rig's reported response.</param>
-    /// <param name="enabled">Whether the boom should ease this frame — <see langword="false"/> reseeds and passes
-    /// the pose through untouched.</param>
-    /// <param name="deltaSeconds">The frame step.</param>
-    /// <param name="eye">The resolved eye, eased in place.</param>
-    /// <param name="target">The resolved target, read but never moved.</param>
-    public void Follow(in SdfCameraDynamics dynamics, bool enabled, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
-        lock (m_gate) {
-            if (enabled) {
-                m_boom.Apply(
-                    deltaSeconds: deltaSeconds,
-                    dynamics: in dynamics,
-                    eye: ref eye,
-                    target: ref target
-                );
-            } else {
-                m_boom.Reseed();
-            }
-        }
     }
 }

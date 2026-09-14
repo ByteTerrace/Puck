@@ -15,6 +15,35 @@ internal static class SeatCommandArgs {
     /// <returns>The formatted command result.</returns>
     internal static CommandResult Echo(int slot, string verb, string detail) =>
         new(Output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} {detail}]");
+    /// <summary>Resolves the acting seat exactly like <see cref="ResolveSlot"/>, additionally requiring it to be
+    /// JOINED — the gate a verb that DRIVES or MUTATES a live seat needs, in the ONE wording every call site shares.
+    /// A pure read-back names no joined requirement of its own (see <see cref="ResolveSlot"/>): it describes
+    /// whatever slot it is asked about, joined or not.</summary>
+    /// <param name="roster">The player roster.</param>
+    /// <param name="context">The invocation context.</param>
+    /// <param name="args">The verb args.</param>
+    /// <param name="at">The trailing seat token's index.</param>
+    /// <param name="verb">The verb name for error text.</param>
+    /// <param name="defaultSlot">See <see cref="ResolveSlot"/>.</param>
+    /// <returns>The resolved 0-based slot, or an error result on a malformed index or an unjoined seat.</returns>
+    internal static (int Slot, CommandResult? Error) ResolveJoinedSeat(PlayerRoster roster, CommandContext context, in WireArgs args, int at, string verb, int? defaultSlot = null) {
+        var (slot, error) = ResolveSlot(
+            args: in args,
+            at: at,
+            context: context,
+            defaultSlot: defaultSlot,
+            verb: verb
+        );
+
+        if (error is not null) {
+            return (Slot: slot, Error: error);
+        }
+
+        return (roster.IsJoined(slot: slot)
+            ? (Slot: slot, Error: null)
+            : (Slot: slot, Error: CommandResult.Error(output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} is not joined]"))
+        );
+    }
     /// <summary>Resolves the acting seat: a present trailing [seat] token (1..4) is authoritative; an absent one
     /// falls back to <paramref name="defaultSlot"/> when given, otherwise to <see cref="CommandContext.Slot"/> — the
     /// pressing device's seat for a bound chord act, and 0 for an unseated administrative stdin line, but the
@@ -47,34 +76,5 @@ internal static class SeatCommandArgs {
         }
 
         return (Slot: PlayerRoster.SlotFromDisplay(number: seat), Error: null);
-    }
-    /// <summary>Resolves the acting seat exactly like <see cref="ResolveSlot"/>, additionally requiring it to be
-    /// JOINED — the gate a verb that DRIVES or MUTATES a live seat needs, in the ONE wording every call site shares.
-    /// A pure read-back names no joined requirement of its own (see <see cref="ResolveSlot"/>): it describes
-    /// whatever slot it is asked about, joined or not.</summary>
-    /// <param name="roster">The player roster.</param>
-    /// <param name="context">The invocation context.</param>
-    /// <param name="args">The verb args.</param>
-    /// <param name="at">The trailing seat token's index.</param>
-    /// <param name="verb">The verb name for error text.</param>
-    /// <param name="defaultSlot">See <see cref="ResolveSlot"/>.</param>
-    /// <returns>The resolved 0-based slot, or an error result on a malformed index or an unjoined seat.</returns>
-    internal static (int Slot, CommandResult? Error) ResolveJoinedSeat(PlayerRoster roster, CommandContext context, in WireArgs args, int at, string verb, int? defaultSlot = null) {
-        var (slot, error) = ResolveSlot(
-            args: in args,
-            at: at,
-            context: context,
-            defaultSlot: defaultSlot,
-            verb: verb
-        );
-
-        if (error is not null) {
-            return (Slot: slot, Error: error);
-        }
-
-        return (roster.IsJoined(slot: slot)
-            ? (Slot: slot, Error: null)
-            : (Slot: slot, Error: CommandResult.Error(output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} is not joined]"))
-        );
     }
 }

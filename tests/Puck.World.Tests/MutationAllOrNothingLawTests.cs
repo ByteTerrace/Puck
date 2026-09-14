@@ -20,25 +20,38 @@ namespace Puck.World.Tests;
 /// <see cref="AuthorityAdministrationLawTests"/> for the authority law).
 /// </summary>
 public sealed class MutationAllOrNothingLawTests {
+    private static bool ApplyAndObserveChange(WorldFixture fixture, string name) {
+        var before = fixture.DefinitionBytes();
+        var row = new WorldStateRow(
+            Name: CellName.Parse(candidate: name),
+            Kind: CellKind.Int
+        );
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
+            Principal: WorldPrincipal.Console,
+            Row: row
+        ));
+        fixture.Step();
+
+        var after = fixture.DefinitionBytes();
+
+        return !before.AsSpan().SequenceEqual(other: after);
+    }
+
     [Fact]
     public void InvalidRowLeavesDocumentUnchanged_ValidRowChangesIt() {
         using var fixture = Fixtures.FreshServer();
 
         Laws.RefusalWithControl(
             lawId: "mutation.upsert-state-row-all-or-nothing",
-            deniedOutcome: () => ApplyAndObserveChange(fixture: fixture, name: $"{WorldStateRow.ReservedNamePrefix}illegal"),
-            controlOutcome: () => ApplyAndObserveChange(fixture: fixture, name: "probe"));
-    }
-
-    private static bool ApplyAndObserveChange(WorldFixture fixture, string name) {
-        var before = fixture.DefinitionBytes();
-        var row = new WorldStateRow(Name: CellName.Parse(candidate: name), Kind: CellKind.Int);
-
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(Principal: WorldPrincipal.Console, Row: row));
-        fixture.Step();
-
-        var after = fixture.DefinitionBytes();
-
-        return !before.AsSpan().SequenceEqual(other: after);
+            deniedOutcome: () => ApplyAndObserveChange(
+                fixture: fixture,
+                name: $"{WorldStateRow.ReservedNamePrefix}illegal"
+            ),
+            controlOutcome: () => ApplyAndObserveChange(
+                fixture: fixture,
+                name: "probe"
+            )
+        );
     }
 }

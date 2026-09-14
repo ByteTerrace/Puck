@@ -42,7 +42,10 @@ public static class WorldBindingComposer {
                 value: out var existing
             )) {
                 if (merge is not null) {
-                    merge(into[existing], item);
+                    merge(
+                        into[existing],
+                        item
+                    );
                 } else {
                     into[existing] = adopt(item);
                 }
@@ -61,9 +64,8 @@ public static class WorldBindingComposer {
         into: into,
         items: (layer.Contexts ?? []),
         key: static row => (((row is null) || string.IsNullOrEmpty(value: row.Family) || string.IsNullOrEmpty(value: row.State))
-            ? null
-            : $"{row.Family}\0{row.State}"
-        )
+        ? null
+        : $"{row.Family}\0{row.State}")
     );
     private static void MergeModifiers(List<BindingModifierDefinition> into, Dictionary<string, int> index, BindingProfileDocument layer, List<MutableRow> rows, Dictionary<string, int> rowIndex) {
         foreach (var modifier in (layer.Modifiers ?? [])) {

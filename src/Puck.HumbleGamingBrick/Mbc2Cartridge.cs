@@ -34,6 +34,45 @@ public sealed class Mbc2Cartridge : CartridgeBase {
         m_ramEnabled;
 
     /// <inheritdoc/>
+    protected override void LoadRegisters(StateReader reader) {
+        m_ramEnabled = reader.ReadBoolean();
+        m_romBank = reader.ReadInt32();
+    }
+    /// <inheritdoc/>
+    protected override int MapRamOffset(ushort address) =>
+        (address - MemoryMap.ExternalRamStart) & RamMask;
+    /// <inheritdoc/>
+    protected override int MapRomOffset(ushort address) =>
+        MapStandardRomOffset(
+            address: address,
+            bankSize: RomBankSize,
+            romBank: m_romBank
+        );
+    /// <inheritdoc/>
+    protected override void SaveRegisters(StateWriter writer) {
+        writer.WriteBoolean(value: m_ramEnabled);
+        writer.WriteInt32(value: m_romBank);
+    }
+
+    /// <summary>Reads a byte from the built-in RAM, returning the stored nibble in the low four bits with the high nibble
+    /// driven to ones, or open-bus <c>0xFF</c> when the RAM is disabled.</summary>
+    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
+    /// <returns>The value <c>0xF0 | nibble</c>, or <c>0xFF</c> when disabled.</returns>
+    public override byte ReadRam(ushort address) =>
+        (RamAccessible
+            ? (byte)(0xF0 | (base.ReadRam(address: address) & 0x0F))
+            : (byte)0xFF
+        );
+    /// <inheritdoc/>
+    /// <remarks>Overridden: <see cref="ReadRam"/>/<see cref="WriteRam"/> apply the built-in RAM's nibble mask, so the
+    /// window is not a pure array offset — it stays on the interface path.</remarks>
+    public override bool TryComputeRamWindow(out int offset, out int length) {
+        offset = 0;
+        length = 0;
+
+        return false;
+    }
+    /// <inheritdoc/>
     public override void WriteControl(ushort address, byte value) {
         // Only the 0x0000-0x3FFF region carries registers; address bit 8 selects between the two.
         if (address > MemoryMap.RomBank0End) {
@@ -54,50 +93,12 @@ public sealed class Mbc2Cartridge : CartridgeBase {
             m_romBank = 1;
         }
     }
-    /// <summary>Reads a byte from the built-in RAM, returning the stored nibble in the low four bits with the high nibble
-    /// driven to ones, or open-bus <c>0xFF</c> when the RAM is disabled.</summary>
-    /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
-    /// <returns>The value <c>0xF0 | nibble</c>, or <c>0xFF</c> when disabled.</returns>
-    public override byte ReadRam(ushort address) =>
-        (RamAccessible
-        ? (byte)(0xF0 | (base.ReadRam(address: address) & 0x0F))
-        : (byte)0xFF);
     /// <summary>Writes the low four bits of <paramref name="value"/> to the built-in RAM; dropped when disabled.</summary>
     /// <param name="address">An address in <c>[0xA000, 0xBFFF]</c>.</param>
     /// <param name="value">The value whose low nibble is stored.</param>
     public override void WriteRam(ushort address, byte value) =>
         base.WriteRam(
-        address: address,
-        value: ((byte)(value & 0x0F))
-    );
-    /// <inheritdoc/>
-    /// <remarks>Overridden: <see cref="ReadRam"/>/<see cref="WriteRam"/> apply the built-in RAM's nibble mask, so the
-    /// window is not a pure array offset — it stays on the interface path.</remarks>
-    public override bool TryComputeRamWindow(out int offset, out int length) {
-        offset = 0;
-        length = 0;
-
-        return false;
-    }
-
-    /// <inheritdoc/>
-    protected override int MapRomOffset(ushort address) =>
-        MapStandardRomOffset(
             address: address,
-            bankSize: RomBankSize,
-            romBank: m_romBank
+            value: ((byte)(value & 0x0F))
         );
-    /// <inheritdoc/>
-    protected override int MapRamOffset(ushort address) =>
-        (address - MemoryMap.ExternalRamStart) & RamMask;
-    /// <inheritdoc/>
-    protected override void SaveRegisters(StateWriter writer) {
-        writer.WriteBoolean(value: m_ramEnabled);
-        writer.WriteInt32(value: m_romBank);
-    }
-    /// <inheritdoc/>
-    protected override void LoadRegisters(StateReader reader) {
-        m_ramEnabled = reader.ReadBoolean();
-        m_romBank = reader.ReadInt32();
-    }
 }

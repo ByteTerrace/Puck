@@ -19,15 +19,6 @@ public sealed class ContributionAuthoringValidationLawTests {
     private const string SlotCreation = "plinth";
     private const string SlotId = "plaza-slot";
 
-    private static void AssertValidates(WorldDefinition definition) {
-        Assert.True(
-            condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: definition,
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-    }
     private static void AssertRefusedNaming(WorldDefinition definition, string needle) {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: definition,
@@ -36,6 +27,15 @@ public sealed class ContributionAuthoringValidationLawTests {
         Assert.Contains(
             actualString: reason,
             expectedSubstring: needle
+        );
+    }
+    private static void AssertValidates(WorldDefinition definition) {
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: definition,
+                reason: out var reason
+            ),
+            userMessage: reason
         );
     }
     private static WorldPrototype Creation(string id) {
@@ -70,6 +70,12 @@ public sealed class ContributionAuthoringValidationLawTests {
             HashRaw: canonical.Hash
         );
     }
+    private static WorldPlacementContribution WellFormed() => new(
+        Tenure: WorldContributionTenure.Presence,
+        SlotCreationId: SlotCreation,
+        Link: SafeName.Parse(candidate: LinkName),
+        GraceSeconds: 30f
+    );
     private static WorldDefinition With(WorldPlacementContribution contribution) {
         var document = Fixtures.BuildDocument();
 
@@ -77,83 +83,52 @@ public sealed class ContributionAuthoringValidationLawTests {
             CreationsRaw = [Creation(id: SlotCreation)],
             PlacementRowsRaw = [
                 new WorldPlacement(
-                    Id: SlotId,
-                    PrototypeId: SlotCreation,
-                    Position: new DocumentVector3(value: Vector3.Zero),
-                    YawDegrees: 0f,
-                    Scale: 1f,
-                    Contribution: contribution
-                ),
+                Id: SlotId,
+                PrototypeId: SlotCreation,
+                Position: new DocumentVector3(value: Vector3.Zero),
+                YawDegrees: 0f,
+                Scale: 1f,
+                Contribution: contribution
+            ),
             ],
             References = [
                 new WorldReference(
-                    Name: SafeName.Parse(candidate: "peer"),
-                    Document: "peer.world.json",
-                    Owner: null,
-                    World: null
-                ),
+                Name: SafeName.Parse(candidate: "peer"),
+                Document: "peer.world.json",
+                Owner: null,
+                World: null
+            ),
             ],
             Destinations = [
                 new WorldDestination(
-                    Name: SafeName.Parse(candidate: "peer"),
-                    Reference: "peer",
-                    Durability: WorldDestinationDurability.Persisted,
-                    Scope: WorldDestinationScope.Global
-                ),
+                Name: SafeName.Parse(candidate: "peer"),
+                Reference: "peer",
+                Durability: WorldDestinationDurability.Persisted,
+                Scope: WorldDestinationScope.Global
+            ),
             ],
             Adjacencies = [
                 new WorldAdjacency(
-                    Name: SafeName.Parse(candidate: LinkName),
-                    Destination: "peer",
-                    Counterpart: "south",
-                    Boundary: new WorldAdjacencyBoundary(
-                        Center: new DocumentVector3(value: new Vector3(x: 0f, y: 0f, z: -12f)),
-                        OutwardYawDegrees: 0f,
-                        OutwardPitchDegrees: 0f,
-                        Width: 24f,
-                        Height: 16f
-                    ),
-                    LivenessGraceSeconds: 1f
+                Name: SafeName.Parse(candidate: LinkName),
+                Destination: "peer",
+                Counterpart: "south",
+                Boundary: new WorldAdjacencyBoundary(
+                    Center: new DocumentVector3(value: new Vector3(
+                        x: 0f,
+                        y: 0f,
+                        z: -12f
+                    )),
+                    OutwardYawDegrees: 0f,
+                    OutwardPitchDegrees: 0f,
+                    Width: 24f,
+                    Height: 16f
                 ),
+                LivenessGraceSeconds: 1f
+            ),
             ],
         });
     }
-    private static WorldPlacementContribution WellFormed() => new(
-        Tenure: WorldContributionTenure.Presence,
-        SlotCreationId: SlotCreation,
-        Link: SafeName.Parse(candidate: LinkName),
-        GraceSeconds: 30f
-    );
 
-    /// <summary>DENIAL: a presence slot naming an adjacency row the world does not declare. CONTROL: the same slot
-    /// naming the row it does.</summary>
-    [Fact]
-    public void PresenceLinkMustNameADeclaredAdjacency() {
-        AssertRefusedNaming(
-            definition: With(contribution: (WellFormed() with { Link = SafeName.Parse(candidate: "elsewhere") })),
-            needle: "contribution.link 'elsewhere' names no adjacencies row"
-        );
-        AssertRefusedNaming(
-            definition: With(contribution: (WellFormed() with { Link = null })),
-            needle: "contribution.link is required for tenure 'Presence'"
-        );
-        AssertValidates(definition: With(contribution: WellFormed()));
-    }
-    /// <summary>DENIAL: a grace outside its declared band, on both ends. CONTROL: the boundary values themselves
-    /// validate.</summary>
-    [Fact]
-    public void GraceSecondsMustSitInsideItsBand() {
-        AssertRefusedNaming(
-            definition: With(contribution: (WellFormed() with { GraceSeconds = -1f })),
-            needle: "contribution.graceSeconds -1 must be finite and within"
-        );
-        AssertRefusedNaming(
-            definition: With(contribution: (WellFormed() with { GraceSeconds = (WorldContributionCapacity.MaxGraceSeconds + 1f) })),
-            needle: "contribution.graceSeconds"
-        );
-        AssertValidates(definition: With(contribution: (WellFormed() with { GraceSeconds = 0f })));
-        AssertValidates(definition: With(contribution: (WellFormed() with { GraceSeconds = WorldContributionCapacity.MaxGraceSeconds })));
-    }
     /// <summary>DENIAL: an endowed slot carrying the presence-only fields. CONTROL: the same tenure with neither.</summary>
     [Fact]
     public void EndowedTenureRefusesTheLinkAndGraceFields() {
@@ -174,32 +149,24 @@ public sealed class ContributionAuthoringValidationLawTests {
             needle: "is refused for tenure 'Endowed' — an endowed piece runs no grace"
         );
         AssertValidates(definition: With(contribution: new WorldPlacementContribution(
-                Tenure: WorldContributionTenure.Endowed,
-                SlotCreationId: SlotCreation
-            )));
+            Tenure: WorldContributionTenure.Endowed,
+            SlotCreationId: SlotCreation
+        )));
     }
-    /// <summary>DENIAL: a slotCreationId naming no creation row. CONTROL: the declared one.</summary>
+    /// <summary>DENIAL: a grace outside its declared band, on both ends. CONTROL: the boundary values themselves
+    /// validate.</summary>
     [Fact]
-    public void SlotCreationIdMustResolve() {
+    public void GraceSecondsMustSitInsideItsBand() {
         AssertRefusedNaming(
-            definition: With(contribution: (WellFormed() with { SlotCreationId = "no-such-creation" })),
-            needle: "contribution.slotCreationId 'no-such-creation' names no creation row"
-        );
-        AssertValidates(definition: With(contribution: WellFormed()));
-    }
-    /// <summary>DENIAL: an unfilled slot carrying a deadline, and a filled slot still showing its slotCreationId.
-    /// CONTROL: the coherent unfilled spelling.</summary>
-    [Fact]
-    public void StampedHalfMustCohereWithTheFillState() {
-        AssertRefusedNaming(
-            definition: With(contribution: (WellFormed() with { RetractDeadlineTick = 99L })),
-            needle: "stands on an unfilled slot"
+            definition: With(contribution: (WellFormed() with { GraceSeconds = -1f })),
+            needle: "contribution.graceSeconds -1 must be finite and within"
         );
         AssertRefusedNaming(
-            definition: With(contribution: (WellFormed() with { Contributor = Puck.World.Protocol.WorldPrincipal.Seat(slot: 1) })),
-            needle: "its prototypeId still reads slotCreationId"
+            definition: With(contribution: (WellFormed() with { GraceSeconds = (WorldContributionCapacity.MaxGraceSeconds + 1f) })),
+            needle: "contribution.graceSeconds"
         );
-        AssertValidates(definition: With(contribution: WellFormed()));
+        AssertValidates(definition: With(contribution: (WellFormed() with { GraceSeconds = 0f })));
+        AssertValidates(definition: With(contribution: (WellFormed() with { GraceSeconds = WorldContributionCapacity.MaxGraceSeconds })));
     }
     /// <summary>DENIAL: a misspelled tenure token is a hard PARSE failure, never a silent default to the first enum
     /// member. CONTROL: the correctly spelled token round-trips.</summary>
@@ -226,10 +193,47 @@ public sealed class ContributionAuthoringValidationLawTests {
 
         Assert.Equal(
             actual: WorldDefinitionRows.FindPlacement(
-            id: SlotId,
-            placements: parsed.Placements
-        )!.Contribution!.Tenure,
+                id: SlotId,
+                placements: parsed.Placements
+            )!.Contribution!.Tenure,
             expected: WorldContributionTenure.Presence
         );
+    }
+    /// <summary>DENIAL: a presence slot naming an adjacency row the world does not declare. CONTROL: the same slot
+    /// naming the row it does.</summary>
+    [Fact]
+    public void PresenceLinkMustNameADeclaredAdjacency() {
+        AssertRefusedNaming(
+            definition: With(contribution: (WellFormed() with { Link = SafeName.Parse(candidate: "elsewhere") })),
+            needle: "contribution.link 'elsewhere' names no adjacencies row"
+        );
+        AssertRefusedNaming(
+            definition: With(contribution: (WellFormed() with { Link = null })),
+            needle: "contribution.link is required for tenure 'Presence'"
+        );
+        AssertValidates(definition: With(contribution: WellFormed()));
+    }
+    /// <summary>DENIAL: a slotCreationId naming no creation row. CONTROL: the declared one.</summary>
+    [Fact]
+    public void SlotCreationIdMustResolve() {
+        AssertRefusedNaming(
+            definition: With(contribution: (WellFormed() with { SlotCreationId = "no-such-creation" })),
+            needle: "contribution.slotCreationId 'no-such-creation' names no creation row"
+        );
+        AssertValidates(definition: With(contribution: WellFormed()));
+    }
+    /// <summary>DENIAL: an unfilled slot carrying a deadline, and a filled slot still showing its slotCreationId.
+    /// CONTROL: the coherent unfilled spelling.</summary>
+    [Fact]
+    public void StampedHalfMustCohereWithTheFillState() {
+        AssertRefusedNaming(
+            definition: With(contribution: (WellFormed() with { RetractDeadlineTick = 99L })),
+            needle: "stands on an unfilled slot"
+        );
+        AssertRefusedNaming(
+            definition: With(contribution: (WellFormed() with { Contributor = Puck.World.Protocol.WorldPrincipal.Seat(slot: 1) })),
+            needle: "its prototypeId still reads slotCreationId"
+        );
+        AssertValidates(definition: With(contribution: WellFormed()));
     }
 }

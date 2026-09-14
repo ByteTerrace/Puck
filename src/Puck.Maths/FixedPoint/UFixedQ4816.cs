@@ -433,7 +433,7 @@ public readonly partial record struct UFixedQ4816(ulong Value)
     /// <remarks>The product is computed at full 128-bit width; the result is truncated rather than rounded and is not range-checked. The rounding <c>*</c> operator builds on the remainder reported here.</remarks>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static UFixedQ4816 MultiplyUnchecked(UFixedQ4816 x, UFixedQ4816 y, out ulong remainder) {
-        // Measured 2026-07 (.NET 10.0.10 x64, full-width 4096-element sets): this UInt128 form was ~4% faster at
+        // Benchmark results (.NET x64, full-width 4096-element sets): this UInt128 form is ~4% faster at
         // the median than Math.BigMul plus manual high/low recombination. Re-measure before replacing.
         var product = (((UInt128)x.Value) * y.Value);
 

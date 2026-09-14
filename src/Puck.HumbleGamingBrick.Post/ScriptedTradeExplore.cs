@@ -15,467 +15,150 @@ namespace Puck.HumbleGamingBrick.Post;
 /// diagnostic, not a self-checking stage.
 /// </summary>
 internal static class ScriptedTradeExplore {
-    /// <summary>Dispatches <c>--trade-explore</c>. Usage:
-    /// <c>--trade-explore &lt;rom&gt; [--linked] [--scriptA path] [--scriptB path] [--frames N] [--dump-every M]
-    /// [--out DIR]</c>. Without <c>--linked</c> a lone side-A machine is driven; with it, side A and side B are linked.
-    /// Returns false (battery runs) when the flag is absent.</summary>
-    /// <param name="args">The command-line arguments.</param>
-    /// <param name="exitCode">The exit code (0).</param>
-    /// <returns><see langword="true"/> when the flag was handled.</returns>
-    public static bool TryRun(string[] args, out int exitCode) {
-        exitCode = 0;
-
-        // --trade-export [--out DIR]: write the two crafted trade saves (side A RATTATA, side B PIDGEY) + a README to an
-        // artifacts location the demo can point per-cabinet saves at. No ROM is needed because the save is a pure
-        // function of the crafted trainers.
-        if (Array.IndexOf(
-            array: args,
-            value: "--trade-export"
-        ) >= 0) {
-            ExportSaves(outDir: (CommandLineArguments.Value(
-                args: args,
-                name: "--out"
-            ) ?? Path.Combine(
-                path1: "artifacts",
-                path2: "gb-post",
-                path3: "trade-saves"
-            )));
-
-            return true;
-        }
-
-        // --trade-run <rom> [--frames N] [--dump-every M] [--out DIR]: drive the full peek-gated scripted trade
-        // (ScriptedTradeDriver) with per-frame phase logging + periodic framebuffer/peek dumps — the tool that authors and
-        // debugs the trade phase conditions.
-        // --trade-pc <rom>: continue to the overworld, then hold DOWN and histogram the CPU program counter over many
-        // instructions — a liveness probe distinguishing "overworld loop running" (wide PC spread) from "stuck in a tight
-        // halt/loop" (a handful of PCs).
-        // --trade-talk <rom>: continue, tap UP to face the crafted receptionist, then mash A — logging facing, the
-        // receptionist object, and script/link state each step to see whether the interaction fires.
-        var talkIndex = Array.IndexOf(
-            array: args,
-            value: "--trade-talk"
-        );
-
-        if (talkIndex >= 0) {
-            var talkRom = (((talkIndex + 1) < args.Length)
-                ? args[(talkIndex + 1)]
-                : null);
-
-            if (
-                (talkRom is null) ||
-                !File.Exists(path: talkRom)
-            ) {
-                Console.WriteLine(value: "  --trade-talk needs a trade-cart ROM path");
-
-                return true;
-            }
-
-            ProbeTalk(rom: File.ReadAllBytes(path: talkRom));
-
-            return true;
-        }
-
-        // --trade-warp <rom>: test the self-contained WARP-reload trick — set wBackupMap to POKECENTER_2F itself so the
-        // (0,7) down-stairs (dest POKECENTER_2F / warp -1, the dynamic "return to backup" warp) re-enters POKECENTER_2F via
-        // MapSetupScript_Warp (SpawnPlayer + LoadMapObjects), spawning the receptionists the CONTINUE path skips. Walk the
-        // player to (0,7), step the warp, and report whether wObject1Struct (the receptionist) came alive.
-        var warpIndex = Array.IndexOf(
-            array: args,
-            value: "--trade-warp"
-        );
-
-        if (warpIndex >= 0) {
-            var warpRom = (((warpIndex + 1) < args.Length)
-                ? args[(warpIndex + 1)]
-                : null);
-
-            if (
-                (warpRom is null) ||
-                !File.Exists(path: warpRom)
-            ) {
-                Console.WriteLine(value: "  --trade-warp needs a trade-cart ROM path");
-
-                return true;
-            }
-
-            ProbeWarp(rom: File.ReadAllBytes(path: warpRom));
-
-            return true;
-        }
-
-        // --trade-capture <rom>: craft a save with wSpawnAfterChampion=SPAWN_LANCE (SRAM 0x2043), which routes the
-        // CONTINUE through the post-E4 WARP entry path (MapSetupScript_Warp -> SpawnPlayer + LoadMapObjects) so the game
-        // fully populates wObjectStructs + wMapObjects from ROM — a clean source to capture a real, active standing player
-        // object struct (and NPC structs) to bake into the crafted save (the CONTINUE path never spawns them).
-        var capIndex = Array.IndexOf(
-            array: args,
-            value: "--trade-capture"
-        );
-
-        if (capIndex >= 0) {
-            var capRom = (((capIndex + 1) < args.Length)
-                ? args[(capIndex + 1)]
-                : null);
-
-            if (
-                (capRom is null) ||
-                !File.Exists(path: capRom)
-            ) {
-                Console.WriteLine(value: "  --trade-capture needs a trade-cart ROM path");
-
-                return true;
-            }
-
-            ProbeCapture(rom: File.ReadAllBytes(path: capRom));
-
-            return true;
-        }
-
-        // --trade-diff <rom>: continue to overworld, then report which HRAM/WRAM bytes change over one idle frame (liveness)
-        // and which change when a button is held (input reach) — address-agnostic freeze diagnosis.
-        var diffIndex = Array.IndexOf(
-            array: args,
-            value: "--trade-diff"
-        );
-
-        if (diffIndex >= 0) {
-            var diffRom = (((diffIndex + 1) < args.Length)
-                ? args[(diffIndex + 1)]
-                : null);
-
-            if (
-                (diffRom is null) ||
-                !File.Exists(path: diffRom)
-            ) {
-                Console.WriteLine(value: "  --trade-diff needs a trade-cart ROM path");
-
-                return true;
-            }
-
-            ProbeDiff(rom: File.ReadAllBytes(path: diffRom));
-
-            return true;
-        }
-
-        var pcIndex = Array.IndexOf(
-            array: args,
-            value: "--trade-pc"
-        );
-
-        if (pcIndex >= 0) {
-            var pcRom = (((pcIndex + 1) < args.Length)
-                ? args[(pcIndex + 1)]
-                : null);
-
-            if (
-                (pcRom is null) ||
-                !File.Exists(path: pcRom)
-            ) {
-                Console.WriteLine(value: "  --trade-pc needs a trade-cart ROM path");
-
-                return true;
-            }
-
-            ProbePc(
-                rom: File.ReadAllBytes(path: pcRom),
-                hold: (CommandLineArguments.Value(
-                    args: args,
-                    name: "--hold"
-                ) ?? "Down")
-            );
-
-            return true;
-        }
-
-        var tradeIndex = Array.IndexOf(
-            array: args,
-            value: "--trade-run"
-        );
-
-        if (tradeIndex >= 0) {
-            var tradeRom = (((tradeIndex + 1) < args.Length)
-                ? args[(tradeIndex + 1)]
-                : null);
-
-            if (
-                (tradeRom is null) ||
-                !File.Exists(path: tradeRom)
-            ) {
-                Console.WriteLine(value: "  --trade-run needs a trade-cart ROM path");
-
-                return true;
-            }
-
-            RunTrade(
-                rom: File.ReadAllBytes(path: tradeRom),
-                dumpEvery: IntArg(
-                    args: args,
-                    fallback: 60,
-                    name: "--dump-every"
-                ),
-                outDir: (CommandLineArguments.Value(
-                    args: args,
-                    name: "--out"
-                ) ?? Path.Combine(
-                    path1: Path.GetTempPath(),
-                    path2: "trade-run"
-                ))
-            );
-
-            return true;
-        }
-
-        var index = Array.IndexOf(
-            array: args,
-            value: "--trade-explore"
-        );
-
-        if (index < 0) {
-            return false;
-        }
-
-        var romPath = (((index + 1) < args.Length)
-            ? args[(index + 1)]
-            : null);
-
-        if (
-            (romPath is null) ||
-            !File.Exists(path: romPath)
-        ) {
-            Console.WriteLine(value: "  --trade-explore needs a trade-cart ROM path");
-
-            return true;
-        }
-
-        var rom = File.ReadAllBytes(path: romPath);
-        var frames = IntArg(
-            args: args,
-            fallback: 1200,
-            name: "--frames"
-        );
-        var dumpEvery = IntArg(
-            args: args,
-            fallback: 120,
-            name: "--dump-every"
-        );
-        var outDir = (CommandLineArguments.Value(
-            args: args,
-            name: "--out"
-        ) ?? Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: "trade-explore"
-        ));
-        var linked = (Array.IndexOf(
-            array: args,
-            value: "--linked"
-        ) >= 0);
-
-        SpawnOverride = CommandLineArguments.Value(
-            args: args,
-            name: "--spawn"
-        );
-
-        var bootRomPath = CommandLineArguments.Value(
-            args: args,
-            name: "--bootrom"
-        );
-
-        BootRom = (((bootRomPath is not null) && File.Exists(path: bootRomPath))
-            ? File.ReadAllBytes(path: bootRomPath)
-            : null);
-        s_model = (CommandLineArguments.Value(
-            args: args,
-            name: "--model"
-        )?.ToLowerInvariant()) switch {
-            "dmg" => ConsoleModel.DmgC,
-            "agb" => ConsoleModel.Agb,
-            _ => ConsoleModel.CgbE,
-        };
-
-        var scriptA = LoadScript(path: CommandLineArguments.Value(
-            args: args,
-            name: "--scriptA"
-        ));
-        var scriptB = LoadScript(path: CommandLineArguments.Value(
-            args: args,
-            name: "--scriptB"
-        ));
-
-        Directory.CreateDirectory(path: outDir);
-
-        if (linked) {
-            RunLinked(
-                dumpEvery: dumpEvery,
-                frames: frames,
-                outDir: outDir,
-                rom: rom,
-                scriptA: scriptA,
-                scriptB: scriptB
-            );
-        } else {
-            RunLone(
-                dumpEvery: dumpEvery,
-                frames: frames,
-                outDir: outDir,
-                rom: rom,
-                script: scriptA
-            );
-        }
-
-        return true;
-    }
-
-    private static string? SpawnOverride;
-    private static byte[]? BootRom;
-
-    private static void ProbeTalk(byte[] rom) {
-        using var machine = ScriptedTradeHarness.Build(
-            rom: rom,
-            trainer: TradeSaveFactory.SideA
-        );
-
-        var joypad = machine.GetRequiredService<IJoypad>();
-        var bus = machine.GetRequiredService<ISystemBus>();
-        var script = ScriptedTradeHarness.ContinueScript();
-
-        void Run(JoypadButtons b, int frames) {
-            for (var f = 0; (f < frames); ++f) {
-                joypad.SetButtons(pressed: b);
-                machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
-            }
-        }
-
-        void Log(string tag) =>
-            Console.WriteLine(value: (((string)$"  {tag}: yx={bus.ReadByte(address: 0xDA02):X2},{bus.ReadByte(address: 0xDA03):X2} pDir={bus.ReadByte(address: 0xD205):X2} pFacing={bus.ReadByte(address: 0xD20A):X2} rcpSprite={bus.ReadByte(address: 0xD225):X2} rcpMapY={bus.ReadByte(address: (0xD225 + 17)):X2} rcpMapX={bus.ReadByte(address: (0xD225 + 16)):X2} ")
-                + $"SC={bus.ReadByte(address: 0xFF02):X2} linkMode={bus.ReadByte(address: 0xD042):X2} scriptVar={bus.ReadByte(address: 0xD173):X2} scriptBank={bus.ReadByte(address: 0xD08C):X2} scriptRunning={bus.ReadByte(address: 0xD160):X2}"));
-
-        for (var frame = 0; (frame < 600); ++frame) {
-            joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
-            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
-        }
-
-        Log(tag: "spawned");
-        Run(
-            b: JoypadButtons.Up,
-            frames: 2
-        );
-        Run(
-            b: JoypadButtons.None,
-            frames: 4
-        );
-        Log(tag: "faced-up");
-
-        var cpu = machine.GetRequiredService<Puck.HumbleGamingBrick.Interfaces.ICpu>();
-        var fb = machine.GetRequiredService<IFramebuffer>();
-
-        void DumpFb(string name) {
-            var pixels = fb.Pixels;
-            var rgba = new byte[(pixels.Length * 4)];
-
-            for (var p = 0; (p < pixels.Length); ++p) {
-                rgba[(p * 4)] = ((byte)(pixels[p] >> 16));
-                rgba[((p * 4) + 1)] = ((byte)(pixels[p] >> 8));
-                rgba[((p * 4) + 2)] = ((byte)pixels[p]);
-                rgba[((p * 4) + 3)] = 0xFF;
-            }
-
-            PngEncoder.Write(
-                path: Path.Combine(
-                    path1: Path.GetTempPath(),
-                    path2: name
-                ),
-                rgba: rgba,
-                width: fb.Width,
-                height: fb.Height
-            );
-        }
-
-        for (var tap = 0; (tap < 10); ++tap) {
-            Run(
-                b: JoypadButtons.A,
-                frames: 2
-            );
-            Run(
-                b: JoypadButtons.None,
-                frames: 6
-            );
-            Log(tag: $"A#{tap} PC={cpu.ProgramCounter:X4} SP={cpu.StackPointer:X4}");
-            DumpFb(name: $"trade-talk-{tap}.png");
-        }
-    }
-    private static void ProbeWarp(byte[] rom) {
+    // Builds side A, honoring a debug --spawn group:map:y:x override (decimal) and --model when present.
+    private static MachineInstance BuildSideA(byte[] rom) {
         var save = TradeSaveFactory.CreateSaveFile(trainer: TradeSaveFactory.SideA);
 
-        // wBackupWarpNumber 0x285D / wBackupMapGroup 0x285E / wBackupMapNumber 0x285F: point the dynamic return warp back
-        // at POKECENTER_2F (group 20 / map 1), warp 0 = the (0,7) stairs.
-        save[0x285D] = 0;
-        save[0x285E] = 20;
-        save[0x285F] = 1;
+        if (SpawnOverride is { } spawn) {
+            var parts = spawn.Split(separator: ':');
 
-        // Spawn the player at (X=1, Y=7), one tile right of the (0,7) down-stairs, so a single LEFT step triggers the warp.
-        // Patch wXCoord/wYCoord AND the player object struct's Map/Last/Init X/Y (map coords = tile + 4).
-        save[0x286A] = 7; // wYCoord
-        save[0x286B] = 1; // wXCoord
-        byte mx = (1 + 4), my = (7 + 4);
+            TradeSaveFactory.PatchSpawn(
+                saveFile: save,
+                group: byte.Parse(s: parts[0]),
+                map: byte.Parse(s: parts[1]),
+                y: byte.Parse(s: parts[2]),
+                x: byte.Parse(s: parts[3])
+            );
+            Console.WriteLine(value: $"  [debug spawn override -> group {parts[0]} map {parts[1]} y {parts[2]} x {parts[3]}]");
+        }
 
-        save[0x2075] = mx; save[0x2076] = my; // MapX/MapY
-        save[0x2077] = mx; save[0x2078] = my; // LastMapX/LastMapY
-        save[0x2079] = mx; save[0x207A] = my; // InitX/InitY
-        TradeSaveFactory.RewriteChecksum(saveFile: save);
-
-        using var machine = ScriptedTradeHarness.BuildFromSave(
+        return ScriptedTradeHarness.BuildFromSave(
+            bootRom: BootRom,
+            model: s_model,
             rom: rom,
             save: save
         );
-
-        var joypad = machine.GetRequiredService<IJoypad>();
-        var bus = machine.GetRequiredService<ISystemBus>();
-        var script = ScriptedTradeHarness.ContinueScript();
-
-        byte X() => bus.ReadByte(address: 0xDA03);
-        byte Y() => bus.ReadByte(address: 0xDA02);
-        void Hold(JoypadButtons b, int frames) {
-            for (var f = 0; (f < frames); ++f) {
-                joypad.SetButtons(pressed: b);
-                machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
-            }
-        }
-
-        for (var frame = 0; (frame < 600); ++frame) {
-            joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
-            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
-        }
-
-        Console.WriteLine(value: $"  spawned: map={bus.ReadByte(address: 0xDA00):X2}/{bus.ReadByte(address: 0xDA01):X2} yx={Y():X2},{X():X2}");
-
-        // Walk toward the (0,7) stairs. Movement is a continuous hold (~16 frames/step); log the path in 16-frame slices.
-        void WalkLog(JoypadButtons b, string tag, int steps) {
-            for (var s = 0; (s < steps); ++s) {
-                Hold(
-                    b: b,
-                    frames: 16
-                );
-                Console.WriteLine(value: $"    {tag}[{s}] yx={Y():X2},{X():X2} map={bus.ReadByte(address: 0xDA00):X2}/{bus.ReadByte(address: 0xDA01):X2}");
-            }
-        }
-
-        WalkLog(
-            b: JoypadButtons.Left,
-            steps: 6,
-            tag: "LEFT"
-        );
-
-        Hold(
-            b: JoypadButtons.None,
-            frames: 60
-        );
-
-        var recSprite = bus.ReadByte(address: 0xD225); // wObject1Struct sprite ($D225).
-        var recSprite2 = bus.ReadByte(address: ((ushort)(0xD225 + 40))); // wObject2Struct.
-
-        Console.WriteLine(value: $"  after warp: map={bus.ReadByte(address: 0xDA00):X2}/{bus.ReadByte(address: 0xDA01):X2} yx={Y():X2},{X():X2} obj1Sprite=0x{recSprite:X2} obj2Sprite=0x{recSprite2:X2} playerSprite=0x{bus.ReadByte(address: 0xD1FD):X2}");
     }
+    private static void Dump(MachineInstance machine, string outDir, string tag, int frame) {
+        var framebuffer = machine.GetRequiredService<IFramebuffer>();
+        var pixels = framebuffer.Pixels;
+        var rgba = FramebufferRgba.Pack(pixels: pixels);
+
+        var path = Path.Combine(
+            path1: outDir,
+            path2: $"{tag}_{frame:D5}.png"
+        );
+
+        PngEncoder.Write(
+            path: path,
+            rgba: rgba,
+            width: framebuffer.Width,
+            height: framebuffer.Height
+        );
+
+        var status = ScriptedTradeHarness.ConnectionStatus(machine: machine);
+        var control = ScriptedTradeHarness.Peek(
+            address: 0xFF02,
+            machine: machine
+        );
+        var lead = TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: machine));
+        var group = ScriptedTradeHarness.Peek(
+            address: 0xDA00,
+            machine: machine
+        );
+        var map = ScriptedTradeHarness.Peek(
+            address: 0xDA01,
+            machine: machine
+        );
+        var yCoord = ScriptedTradeHarness.Peek(
+            address: 0xDA02,
+            machine: machine
+        );
+        var xCoord = ScriptedTradeHarness.Peek(
+            address: 0xDA03,
+            machine: machine
+        );
+        var lcdc = ScriptedTradeHarness.Peek(
+            address: 0xFF40,
+            machine: machine
+        );
+        var ly = ScriptedTradeHarness.Peek(
+            address: 0xFF44,
+            machine: machine
+        );
+        var key1 = ScriptedTradeHarness.Peek(
+            address: 0xFF4D,
+            machine: machine
+        );
+        var iflag = ScriptedTradeHarness.Peek(
+            address: 0xFF0F,
+            machine: machine
+        );
+        var ienable = ScriptedTradeHarness.Peek(
+            address: 0xFFFF,
+            machine: machine
+        );
+
+        Console.WriteLine(value: $"    [{frame:D5}] {tag} -> {Path.GetFileName(path: path)} fb=0x{Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: pixels)):X16} status=0x{status:X2} SC=0x{control:X2} lead=0x{lead:X2} map={group:X2}/{map:X2} yx={yCoord:X2},{xCoord:X2} LCDC={lcdc:X2} LY={ly:X2} KEY1={key1:X2} IF={iflag:X2} IE={ienable:X2}");
+    }
+    // Writes the two crafted trade saves + a README to outDir (created if absent). Each .sav is [32 KiB SRAM][48-byte MBC3
+    // RTC footer] — exactly what the demo's GamingBrickChildNode battery import consumes.
+    private static void ExportSaves(string outDir) {
+        Directory.CreateDirectory(path: outDir);
+
+        var sideA = TradeSaveFactory.CreateSaveFile(trainer: TradeSaveFactory.SideA);
+        var sideB = TradeSaveFactory.CreateSaveFile(trainer: TradeSaveFactory.SideB);
+        var pathA = Path.Combine(
+            path1: outDir,
+            path2: "trade-side-a-rattata.sav"
+        );
+        var pathB = Path.Combine(
+            path1: outDir,
+            path2: "trade-side-b-pidgey.sav"
+        );
+
+        File.WriteAllBytes(
+            bytes: sideA,
+            path: pathA
+        );
+        File.WriteAllBytes(
+            bytes: sideB,
+            path: pathB
+        );
+        File.WriteAllText(
+            path: Path.Combine(
+                path1: outDir,
+                path2: "README.md"
+            ),
+            contents: ReadmeText()
+        );
+
+        Console.WriteLine(value: $"  --trade-export -> {pathA} ({sideA.Length} bytes)");
+        Console.WriteLine(value: $"  --trade-export -> {pathB} ({sideB.Length} bytes)");
+        Console.WriteLine(value: $"  --trade-export -> {Path.Combine(
+            path1: outDir,
+            path2: "README.md"
+        )}");
+    }
+    private static int IntArg(string[] args, string name, int fallback) {
+        var value = CommandLineArguments.Value(
+            args: args,
+            name: name
+        );
+
+        return (((value is not null) && int.TryParse(
+            result: out var parsed,
+            s: value
+        ))
+            ? parsed
+            : fallback
+        );
+    }
+    private static LinkInputScript LoadScript(string? path) =>
+        (((path is not null) && File.Exists(path: path))
+            ? LinkInputScript.Load(path: path)
+            : new LinkInputScript()
+        );
     private static void ProbeCapture(byte[] rom) {
         var save = TradeSaveFactory.CreateSaveFile(trainer: TradeSaveFactory.SideA);
 
@@ -667,38 +350,38 @@ internal static class ScriptedTradeExplore {
 
         static string StateLine(MachineInstance m) =>
             ((((string)$"yx={ScriptedTradeHarness.Peek(
-            address: 0xDA02,
-            machine: m
-        ):X2},{ScriptedTradeHarness.Peek(
-            address: 0xDA03,
-            machine: m
-        ):X2} pState={ScriptedTradeHarness.Peek(
-            address: 0xD682,
-            machine: m
-        ):X2} pDir={ScriptedTradeHarness.Peek(
-            address: 0xD205,
-            machine: m
-        ):X2} pFacing={ScriptedTradeHarness.Peek(
-            address: 0xD20A,
-            machine: m
-        ):X2} ")
+                address: 0xDA02,
+                machine: m
+            ):X2},{ScriptedTradeHarness.Peek(
+                address: 0xDA03,
+                machine: m
+            ):X2} pState={ScriptedTradeHarness.Peek(
+                address: 0xD682,
+                machine: m
+            ):X2} pDir={ScriptedTradeHarness.Peek(
+                address: 0xD205,
+                machine: m
+            ):X2} pFacing={ScriptedTradeHarness.Peek(
+                address: 0xD20A,
+                machine: m
+            ):X2} ")
             + $"linkMode={ScriptedTradeHarness.Peek(
-            address: 0xD042,
-            machine: m
-        ):X2} scriptVar={ScriptedTradeHarness.Peek(
-            address: 0xD173,
-            machine: m
-        ):X2} ")
+                address: 0xD042,
+                machine: m
+            ):X2} scriptVar={ScriptedTradeHarness.Peek(
+                address: 0xD173,
+                machine: m
+            ):X2} ")
             + $"vblank={ScriptedTradeHarness.Peek(
-            address: 0xFF8C,
-            machine: m
-        ):X2} hJoypadDown={ScriptedTradeHarness.Peek(
-            address: 0xFF9C,
-            machine: m
-        ):X2} hJoyDown={ScriptedTradeHarness.Peek(
-            address: 0xFFA0,
-            machine: m
-        ):X2}");
+                address: 0xFF8C,
+                machine: m
+            ):X2} hJoypadDown={ScriptedTradeHarness.Peek(
+                address: 0xFF9C,
+                machine: m
+            ):X2} hJoyDown={ScriptedTradeHarness.Peek(
+                address: 0xFFA0,
+                machine: m
+            ):X2}");
 
         Console.WriteLine(value: $"  no-input : {StateLine(m: machine)}");
 
@@ -729,7 +412,8 @@ internal static class ScriptedTradeExplore {
                 value: out var count
             )
                 ? (count + 1)
-                : 1);
+                : 1
+            );
 
             if (cpu.IsHalted) {
                 ++haltCount;
@@ -750,6 +434,248 @@ internal static class ScriptedTradeExplore {
         foreach (var entry in histogram.OrderByDescending(keySelector: e => e.Value).Take(count: 20)) {
             Console.WriteLine(value: $"    PC 0x{entry.Key:X4}: {entry.Value}");
         }
+    }
+    private static void ProbeTalk(byte[] rom) {
+        using var machine = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideA
+        );
+
+        var joypad = machine.GetRequiredService<IJoypad>();
+        var bus = machine.GetRequiredService<ISystemBus>();
+        var script = ScriptedTradeHarness.ContinueScript();
+
+        void Run(JoypadButtons b, int frames) {
+            for (var f = 0; (f < frames); ++f) {
+                joypad.SetButtons(pressed: b);
+                machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
+            }
+        }
+
+        void Log(string tag) =>
+            Console.WriteLine(value: (((string)$"  {tag}: yx={bus.ReadByte(address: 0xDA02):X2},{bus.ReadByte(address: 0xDA03):X2} pDir={bus.ReadByte(address: 0xD205):X2} pFacing={bus.ReadByte(address: 0xD20A):X2} rcpSprite={bus.ReadByte(address: 0xD225):X2} rcpMapY={bus.ReadByte(address: (0xD225 + 17)):X2} rcpMapX={bus.ReadByte(address: (0xD225 + 16)):X2} ")
+                + $"SC={bus.ReadByte(address: 0xFF02):X2} linkMode={bus.ReadByte(address: 0xD042):X2} scriptVar={bus.ReadByte(address: 0xD173):X2} scriptBank={bus.ReadByte(address: 0xD08C):X2} scriptRunning={bus.ReadByte(address: 0xD160):X2}"));
+
+        for (var frame = 0; (frame < 600); ++frame) {
+            joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
+        }
+
+        Log(tag: "spawned");
+        Run(
+            b: JoypadButtons.Up,
+            frames: 2
+        );
+        Run(
+            b: JoypadButtons.None,
+            frames: 4
+        );
+        Log(tag: "faced-up");
+
+        var cpu = machine.GetRequiredService<Puck.HumbleGamingBrick.Interfaces.ICpu>();
+        var fb = machine.GetRequiredService<IFramebuffer>();
+
+        void DumpFb(string name) {
+            var pixels = fb.Pixels;
+            var rgba = new byte[(pixels.Length * 4)];
+
+            for (var p = 0; (p < pixels.Length); ++p) {
+                rgba[(p * 4)] = ((byte)(pixels[p] >> 16));
+                rgba[((p * 4) + 1)] = ((byte)(pixels[p] >> 8));
+                rgba[((p * 4) + 2)] = ((byte)pixels[p]);
+                rgba[((p * 4) + 3)] = 0xFF;
+            }
+
+            PngEncoder.Write(
+                path: Path.Combine(
+                    path1: Path.GetTempPath(),
+                    path2: name
+                ),
+                rgba: rgba,
+                width: fb.Width,
+                height: fb.Height
+            );
+        }
+
+        for (var tap = 0; (tap < 10); ++tap) {
+            Run(
+                b: JoypadButtons.A,
+                frames: 2
+            );
+            Run(
+                b: JoypadButtons.None,
+                frames: 6
+            );
+            Log(tag: $"A#{tap} PC={cpu.ProgramCounter:X4} SP={cpu.StackPointer:X4}");
+            DumpFb(name: $"trade-talk-{tap}.png");
+        }
+    }
+    private static void ProbeWarp(byte[] rom) {
+        var save = TradeSaveFactory.CreateSaveFile(trainer: TradeSaveFactory.SideA);
+
+        // wBackupWarpNumber 0x285D / wBackupMapGroup 0x285E / wBackupMapNumber 0x285F: point the dynamic return warp back
+        // at POKECENTER_2F (group 20 / map 1), warp 0 = the (0,7) stairs.
+        save[0x285D] = 0;
+        save[0x285E] = 20;
+        save[0x285F] = 1;
+
+        // Spawn the player at (X=1, Y=7), one tile right of the (0,7) down-stairs, so a single LEFT step triggers the warp.
+        // Patch wXCoord/wYCoord AND the player object struct's Map/Last/Init X/Y (map coords = tile + 4).
+        save[0x286A] = 7; // wYCoord
+        save[0x286B] = 1; // wXCoord
+        byte mx = (1 + 4), my = (7 + 4);
+
+        save[0x2075] = mx; save[0x2076] = my; // MapX/MapY
+        save[0x2077] = mx; save[0x2078] = my; // LastMapX/LastMapY
+        save[0x2079] = mx; save[0x207A] = my; // InitX/InitY
+        TradeSaveFactory.RewriteChecksum(saveFile: save);
+
+        using var machine = ScriptedTradeHarness.BuildFromSave(
+            rom: rom,
+            save: save
+        );
+
+        var joypad = machine.GetRequiredService<IJoypad>();
+        var bus = machine.GetRequiredService<ISystemBus>();
+        var script = ScriptedTradeHarness.ContinueScript();
+
+        byte X() => bus.ReadByte(address: 0xDA03);
+        byte Y() => bus.ReadByte(address: 0xDA02);
+        void Hold(JoypadButtons b, int frames) {
+            for (var f = 0; (f < frames); ++f) {
+                joypad.SetButtons(pressed: b);
+                machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
+            }
+        }
+
+        for (var frame = 0; (frame < 600); ++frame) {
+            joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
+        }
+
+        Console.WriteLine(value: $"  spawned: map={bus.ReadByte(address: 0xDA00):X2}/{bus.ReadByte(address: 0xDA01):X2} yx={Y():X2},{X():X2}");
+
+        // Walk toward the (0,7) stairs. Movement is a continuous hold (~16 frames/step); log the path in 16-frame slices.
+        void WalkLog(JoypadButtons b, string tag, int steps) {
+            for (var s = 0; (s < steps); ++s) {
+                Hold(
+                    b: b,
+                    frames: 16
+                );
+                Console.WriteLine(value: $"    {tag}[{s}] yx={Y():X2},{X():X2} map={bus.ReadByte(address: 0xDA00):X2}/{bus.ReadByte(address: 0xDA01):X2}");
+            }
+        }
+
+        WalkLog(
+            b: JoypadButtons.Left,
+            steps: 6,
+            tag: "LEFT"
+        );
+
+        Hold(
+            b: JoypadButtons.None,
+            frames: 60
+        );
+
+        var recSprite = bus.ReadByte(address: 0xD225); // wObject1Struct sprite ($D225).
+        var recSprite2 = bus.ReadByte(address: ((ushort)(0xD225 + 40))); // wObject2Struct.
+
+        Console.WriteLine(value: $"  after warp: map={bus.ReadByte(address: 0xDA00):X2}/{bus.ReadByte(address: 0xDA01):X2} yx={Y():X2},{X():X2} obj1Sprite=0x{recSprite:X2} obj2Sprite=0x{recSprite2:X2} playerSprite=0x{bus.ReadByte(address: 0xD1FD):X2}");
+    }
+    private static string ReadmeText() =>
+        """
+        # Crafted cross-gen trade-cart saves
+
+        Two byte-exact battery saves for the cross-gen trade cart, produced by `TradeSaveFactory`
+        (`src/Puck.HumbleGamingBrick.Post`). Each file is `[32 KiB SRAM][48-byte MBC3 RTC footer]`
+        (32 816 bytes total) — the straight concatenation `Mbc3Cartridge` imports/exports, i.e. exactly what the
+        demo's per-cabinet battery load (`GamingBrickChildNode`) consumes. Point two trade-cart cabinets at these two
+        files and each boots a distinct, CONTINUE-able trainer.
+
+        | File | Trainer | ID | Lead |
+        |---|---|---|---|
+        | `trade-side-a-rattata.sav` | GOLD | 0x1234 | RATTATA (Lv.5) |
+        | `trade-side-b-pidgey.sav` | SILVER | 0x5678 | PIDGEY (Lv.5) |
+
+        Both spawn on the shared POKECENTER_2F Cable Club floor (map group 20 / map 1) one tile below the Trade
+        Center receptionist, with the `EVENT_GAVE_MYSTERY_EGG_TO_ELM` gate flag set (the sole Cable-Club-access
+        requirement), current HP == max HP, a valid primary checksum + check bytes, and a clean (halt/carry-clear)
+        RTC footer so no clock-reset prompt appears. Regenerate with:
+
+            dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --trade-export --out <dir>
+
+        The crafted saves are CONTINUE-accepted, the loaded overworld renders + is navigable, and the fully-scripted
+        two-machine Cable Club trade runs end-to-end on them: the `link-lock` Post stage drives both sides through the
+        rendezvous, the TRADE_CENTER warp, the mon-selection menus, the species swap (auto-saved on both sides), and the
+        CANCEL exit back to the overworld.
+        """;
+    private static void RunLinked(byte[] rom, LinkInputScript scriptA, LinkInputScript scriptB, int frames, int dumpEvery, string outDir) {
+        using var machineA = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideA
+        );
+        using var machineB = ScriptedTradeHarness.Build(
+            rom: rom,
+            trainer: TradeSaveFactory.SideB
+        );
+
+        Console.WriteLine(value: $"== trade-explore (linked Cgb↔Cgb) {frames} frames, dump every {dumpEvery} ==");
+
+        var result = LinkReplay.Run(
+            first: machineA,
+            firstScript: scriptA,
+            second: machineB,
+            secondScript: scriptB,
+            frames: frames,
+            onFrame: frame => {
+                if (
+                    (((frame + 1) % dumpEvery) == 0) ||
+                    ((frame + 1) == frames)
+                ) {
+                    Dump(
+                        frame: (frame + 1),
+                        machine: machineA,
+                        outDir: outDir,
+                        tag: "A"
+                    );
+                    Dump(
+                        frame: (frame + 1),
+                        machine: machineB,
+                        outDir: outDir,
+                        tag: "B"
+                    );
+                }
+            }
+        );
+
+        Console.WriteLine(value: $"  A: masterSends={result.First.MasterSends} completions={result.First.Completions} status=0x{ScriptedTradeHarness.ConnectionStatus(machine: machineA):X2} lead=0x{TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: machineA)):X2}");
+        Console.WriteLine(value: $"  B: masterSends={result.Second.MasterSends} completions={result.Second.Completions} status=0x{ScriptedTradeHarness.ConnectionStatus(machine: machineB):X2} lead=0x{TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: machineB)):X2}");
+    }
+    private static void RunLone(byte[] rom, LinkInputScript script, int frames, int dumpEvery, string outDir) {
+        using var machine = BuildSideA(rom: rom);
+
+        var joypad = machine.GetRequiredService<IJoypad>();
+
+        Console.WriteLine(value: $"== trade-explore (lone Cgb, side A) {frames} frames, dump every {dumpEvery} ==");
+
+        for (var frame = 0; (frame < frames); ++frame) {
+            joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
+
+            if (
+                (((frame + 1) % dumpEvery) == 0) ||
+                ((frame + 1) == frames)
+            ) {
+                Dump(
+                    frame: (frame + 1),
+                    machine: machine,
+                    outDir: outDir,
+                    tag: "A"
+                );
+            }
+        }
+
+        ScanForMapSpawn(machine: machine);
     }
     // Drives the full peek-gated scripted trade, dumping each side's framebuffer + peek panel every dumpEvery frames and
     // logging every phase transition + the resolved rendezvous roles, so an operator can watch the receptionist walk, the
@@ -777,7 +703,8 @@ internal static class ScriptedTradeExplore {
                     comparisonType: StringComparison.Ordinal
                 )
                     ? 16
-                    : 80);
+                    : 80
+                );
 
                 if (((frame.Frame + 1) % logEvery) == 0) {
                     var a = frame.Driver.MachineA;
@@ -828,32 +755,6 @@ internal static class ScriptedTradeExplore {
         Console.WriteLine(value: $"  A: lead=0x{result.LeadA:X2} checksumOk={result.ChecksumOkA} masterSends={result.TrafficA.MasterSends} completions={result.TrafficA.Completions} traffic=0x{result.TrafficA.TrafficHash:X16}");
         Console.WriteLine(value: $"  B: lead=0x{result.LeadB:X2} checksumOk={result.ChecksumOkB} masterSends={result.TrafficB.MasterSends} completions={result.TrafficB.Completions} traffic=0x{result.TrafficB.TrafficHash:X16}");
     }
-    private static void RunLone(byte[] rom, LinkInputScript script, int frames, int dumpEvery, string outDir) {
-        using var machine = BuildSideA(rom: rom);
-
-        var joypad = machine.GetRequiredService<IJoypad>();
-
-        Console.WriteLine(value: $"== trade-explore (lone Cgb, side A) {frames} frames, dump every {dumpEvery} ==");
-
-        for (var frame = 0; (frame < frames); ++frame) {
-            joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
-            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
-
-            if (
-                (((frame + 1) % dumpEvery) == 0) ||
-                ((frame + 1) == frames)
-            ) {
-                Dump(
-                    frame: (frame + 1),
-                    machine: machine,
-                    outDir: outDir,
-                    tag: "A"
-                );
-            }
-        }
-
-        ScanForMapSpawn(machine: machine);
-    }
     // Empirically locate wMapGroup in live WRAM by scanning 0xC000..0xDFFF for the crafted spawn signature
     // (group 20 / map 1, i.e. 0x14 0x01) — resolves "did the map actually load?" and pins the absolute WRAM address
     // of the map-position block for later peek-gated phases (this cart's WRAM addresses are specific to it).
@@ -872,218 +773,328 @@ internal static class ScriptedTradeExplore {
             }
         }
     }
-    private static void RunLinked(byte[] rom, LinkInputScript scriptA, LinkInputScript scriptB, int frames, int dumpEvery, string outDir) {
-        using var machineA = ScriptedTradeHarness.Build(
-            rom: rom,
-            trainer: TradeSaveFactory.SideA
-        );
-        using var machineB = ScriptedTradeHarness.Build(
-            rom: rom,
-            trainer: TradeSaveFactory.SideB
+
+    /// <summary>Dispatches <c>--trade-explore</c>. Usage:
+    /// <c>--trade-explore &lt;rom&gt; [--linked] [--scriptA path] [--scriptB path] [--frames N] [--dump-every M]
+    /// [--out DIR]</c>. Without <c>--linked</c> a lone side-A machine is driven; with it, side A and side B are linked.
+    /// Returns false (battery runs) when the flag is absent.</summary>
+    /// <param name="args">The command-line arguments.</param>
+    /// <param name="exitCode">The exit code (0).</param>
+    /// <returns><see langword="true"/> when the flag was handled.</returns>
+    public static bool TryRun(string[] args, out int exitCode) {
+        exitCode = 0;
+
+        // --trade-export [--out DIR]: write the two crafted trade saves (side A RATTATA, side B PIDGEY) + a README to an
+        // artifacts location the demo can point per-cabinet saves at. No ROM is needed because the save is a pure
+        // function of the crafted trainers.
+        if (Array.IndexOf(
+            array: args,
+            value: "--trade-export"
+        ) >= 0) {
+            ExportSaves(outDir: (CommandLineArguments.Value(
+                args: args,
+                name: "--out"
+            ) ?? Path.Combine(
+                path1: "artifacts",
+                path2: "gb-post",
+                path3: "trade-saves"
+            )));
+
+            return true;
+        }
+
+        // --trade-run <rom> [--frames N] [--dump-every M] [--out DIR]: drive the full peek-gated scripted trade
+        // (ScriptedTradeDriver) with per-frame phase logging + periodic framebuffer/peek dumps — the tool that authors and
+        // debugs the trade phase conditions.
+        // --trade-pc <rom>: continue to the overworld, then hold DOWN and histogram the CPU program counter over many
+        // instructions — a liveness probe distinguishing "overworld loop running" (wide PC spread) from "stuck in a tight
+        // halt/loop" (a handful of PCs).
+        // --trade-talk <rom>: continue, tap UP to face the crafted receptionist, then mash A — logging facing, the
+        // receptionist object, and script/link state each step to see whether the interaction fires.
+        var talkIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-talk"
         );
 
-        Console.WriteLine(value: $"== trade-explore (linked Cgb↔Cgb) {frames} frames, dump every {dumpEvery} ==");
+        if (talkIndex >= 0) {
+            var talkRom = (((talkIndex + 1) < args.Length)
+                ? args[(talkIndex + 1)]
+                : null
+            );
 
-        var result = LinkReplay.Run(
-            first: machineA,
-            firstScript: scriptA,
-            second: machineB,
-            secondScript: scriptB,
-            frames: frames,
-            onFrame: frame => {
-                if (
-                    (((frame + 1) % dumpEvery) == 0) ||
-                    ((frame + 1) == frames)
-                ) {
-                    Dump(
-                        frame: (frame + 1),
-                        machine: machineA,
-                        outDir: outDir,
-                        tag: "A"
-                    );
-                    Dump(
-                        frame: (frame + 1),
-                        machine: machineB,
-                        outDir: outDir,
-                        tag: "B"
-                    );
-                }
+            if (
+                (talkRom is null) ||
+                !File.Exists(path: talkRom)
+            ) {
+                Console.WriteLine(value: "  --trade-talk needs a trade-cart ROM path");
+
+                return true;
             }
+
+            ProbeTalk(rom: File.ReadAllBytes(path: talkRom));
+
+            return true;
+        }
+
+        // --trade-warp <rom>: test the self-contained WARP-reload trick — set wBackupMap to POKECENTER_2F itself so the
+        // (0,7) down-stairs (dest POKECENTER_2F / warp -1, the dynamic "return to backup" warp) re-enters POKECENTER_2F via
+        // MapSetupScript_Warp (SpawnPlayer + LoadMapObjects), spawning the receptionists the CONTINUE path skips. Walk the
+        // player to (0,7), step the warp, and report whether wObject1Struct (the receptionist) came alive.
+        var warpIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-warp"
         );
 
-        Console.WriteLine(value: $"  A: masterSends={result.First.MasterSends} completions={result.First.Completions} status=0x{ScriptedTradeHarness.ConnectionStatus(machine: machineA):X2} lead=0x{TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: machineA)):X2}");
-        Console.WriteLine(value: $"  B: masterSends={result.Second.MasterSends} completions={result.Second.Completions} status=0x{ScriptedTradeHarness.ConnectionStatus(machine: machineB):X2} lead=0x{TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: machineB)):X2}");
-    }
-    private static void Dump(MachineInstance machine, string outDir, string tag, int frame) {
-        var framebuffer = machine.GetRequiredService<IFramebuffer>();
-        var pixels = framebuffer.Pixels;
-        var rgba = FramebufferRgba.Pack(pixels: pixels);
+        if (warpIndex >= 0) {
+            var warpRom = (((warpIndex + 1) < args.Length)
+                ? args[(warpIndex + 1)]
+                : null
+            );
 
-        var path = Path.Combine(
-            path1: outDir,
-            path2: $"{tag}_{frame:D5}.png"
-        );
+            if (
+                (warpRom is null) ||
+                !File.Exists(path: warpRom)
+            ) {
+                Console.WriteLine(value: "  --trade-warp needs a trade-cart ROM path");
 
-        PngEncoder.Write(
-            path: path,
-            rgba: rgba,
-            width: framebuffer.Width,
-            height: framebuffer.Height
-        );
+                return true;
+            }
 
-        var status = ScriptedTradeHarness.ConnectionStatus(machine: machine);
-        var control = ScriptedTradeHarness.Peek(
-            address: 0xFF02,
-            machine: machine
-        );
-        var lead = TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: machine));
-        var group = ScriptedTradeHarness.Peek(
-            address: 0xDA00,
-            machine: machine
-        );
-        var map = ScriptedTradeHarness.Peek(
-            address: 0xDA01,
-            machine: machine
-        );
-        var yCoord = ScriptedTradeHarness.Peek(
-            address: 0xDA02,
-            machine: machine
-        );
-        var xCoord = ScriptedTradeHarness.Peek(
-            address: 0xDA03,
-            machine: machine
-        );
-        var lcdc = ScriptedTradeHarness.Peek(
-            address: 0xFF40,
-            machine: machine
-        );
-        var ly = ScriptedTradeHarness.Peek(
-            address: 0xFF44,
-            machine: machine
-        );
-        var key1 = ScriptedTradeHarness.Peek(
-            address: 0xFF4D,
-            machine: machine
-        );
-        var iflag = ScriptedTradeHarness.Peek(
-            address: 0xFF0F,
-            machine: machine
-        );
-        var ienable = ScriptedTradeHarness.Peek(
-            address: 0xFFFF,
-            machine: machine
+            ProbeWarp(rom: File.ReadAllBytes(path: warpRom));
+
+            return true;
+        }
+
+        // --trade-capture <rom>: craft a save with wSpawnAfterChampion=SPAWN_LANCE (SRAM 0x2043), which routes the
+        // CONTINUE through the post-E4 WARP entry path (MapSetupScript_Warp -> SpawnPlayer + LoadMapObjects) so the game
+        // fully populates wObjectStructs + wMapObjects from ROM — a clean source to capture a real, active standing player
+        // object struct (and NPC structs) to bake into the crafted save (the CONTINUE path never spawns them).
+        var capIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-capture"
         );
 
-        Console.WriteLine(value: $"    [{frame:D5}] {tag} -> {Path.GetFileName(path: path)} fb=0x{Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: pixels)):X16} status=0x{status:X2} SC=0x{control:X2} lead=0x{lead:X2} map={group:X2}/{map:X2} yx={yCoord:X2},{xCoord:X2} LCDC={lcdc:X2} LY={ly:X2} KEY1={key1:X2} IF={iflag:X2} IE={ienable:X2}");
+        if (capIndex >= 0) {
+            var capRom = (((capIndex + 1) < args.Length)
+                ? args[(capIndex + 1)]
+                : null
+            );
+
+            if (
+                (capRom is null) ||
+                !File.Exists(path: capRom)
+            ) {
+                Console.WriteLine(value: "  --trade-capture needs a trade-cart ROM path");
+
+                return true;
+            }
+
+            ProbeCapture(rom: File.ReadAllBytes(path: capRom));
+
+            return true;
+        }
+
+        // --trade-diff <rom>: continue to overworld, then report which HRAM/WRAM bytes change over one idle frame (liveness)
+        // and which change when a button is held (input reach) — address-agnostic freeze diagnosis.
+        var diffIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-diff"
+        );
+
+        if (diffIndex >= 0) {
+            var diffRom = (((diffIndex + 1) < args.Length)
+                ? args[(diffIndex + 1)]
+                : null
+            );
+
+            if (
+                (diffRom is null) ||
+                !File.Exists(path: diffRom)
+            ) {
+                Console.WriteLine(value: "  --trade-diff needs a trade-cart ROM path");
+
+                return true;
+            }
+
+            ProbeDiff(rom: File.ReadAllBytes(path: diffRom));
+
+            return true;
+        }
+
+        var pcIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-pc"
+        );
+
+        if (pcIndex >= 0) {
+            var pcRom = (((pcIndex + 1) < args.Length)
+                ? args[(pcIndex + 1)]
+                : null
+            );
+
+            if (
+                (pcRom is null) ||
+                !File.Exists(path: pcRom)
+            ) {
+                Console.WriteLine(value: "  --trade-pc needs a trade-cart ROM path");
+
+                return true;
+            }
+
+            ProbePc(
+                rom: File.ReadAllBytes(path: pcRom),
+                hold: (CommandLineArguments.Value(
+                    args: args,
+                    name: "--hold"
+                ) ?? "Down")
+            );
+
+            return true;
+        }
+
+        var tradeIndex = Array.IndexOf(
+            array: args,
+            value: "--trade-run"
+        );
+
+        if (tradeIndex >= 0) {
+            var tradeRom = (((tradeIndex + 1) < args.Length)
+                ? args[(tradeIndex + 1)]
+                : null
+            );
+
+            if (
+                (tradeRom is null) ||
+                !File.Exists(path: tradeRom)
+            ) {
+                Console.WriteLine(value: "  --trade-run needs a trade-cart ROM path");
+
+                return true;
+            }
+
+            RunTrade(
+                rom: File.ReadAllBytes(path: tradeRom),
+                dumpEvery: IntArg(
+                    args: args,
+                    fallback: 60,
+                    name: "--dump-every"
+                ),
+                outDir: (CommandLineArguments.Value(
+                    args: args,
+                    name: "--out"
+                ) ?? Path.Combine(
+                    path1: Path.GetTempPath(),
+                    path2: "trade-run"
+                ))
+            );
+
+            return true;
+        }
+
+        var index = Array.IndexOf(
+            array: args,
+            value: "--trade-explore"
+        );
+
+        if (index < 0) {
+            return false;
+        }
+
+        var romPath = (((index + 1) < args.Length)
+            ? args[(index + 1)]
+            : null
+        );
+
+        if (
+            (romPath is null) ||
+            !File.Exists(path: romPath)
+        ) {
+            Console.WriteLine(value: "  --trade-explore needs a trade-cart ROM path");
+
+            return true;
+        }
+
+        var rom = File.ReadAllBytes(path: romPath);
+        var frames = IntArg(
+            args: args,
+            fallback: 1200,
+            name: "--frames"
+        );
+        var dumpEvery = IntArg(
+            args: args,
+            fallback: 120,
+            name: "--dump-every"
+        );
+        var outDir = (CommandLineArguments.Value(
+            args: args,
+            name: "--out"
+        ) ?? Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: "trade-explore"
+        ));
+        var linked = (Array.IndexOf(
+            array: args,
+            value: "--linked"
+        ) >= 0);
+
+        SpawnOverride = CommandLineArguments.Value(
+            args: args,
+            name: "--spawn"
+        );
+
+        var bootRomPath = CommandLineArguments.Value(
+            args: args,
+            name: "--bootrom"
+        );
+
+        BootRom = (((bootRomPath is not null) && File.Exists(path: bootRomPath))
+            ? File.ReadAllBytes(path: bootRomPath)
+            : null
+        );
+        s_model = (CommandLineArguments.Value(
+            args: args,
+            name: "--model"
+        )?.ToLowerInvariant()) switch {
+            "dmg" => ConsoleModel.DmgC,
+            "agb" => ConsoleModel.Agb,
+            _ => ConsoleModel.CgbE,
+        };
+
+        var scriptA = LoadScript(path: CommandLineArguments.Value(
+            args: args,
+            name: "--scriptA"
+        ));
+        var scriptB = LoadScript(path: CommandLineArguments.Value(
+            args: args,
+            name: "--scriptB"
+        ));
+
+        Directory.CreateDirectory(path: outDir);
+
+        if (linked) {
+            RunLinked(
+                dumpEvery: dumpEvery,
+                frames: frames,
+                outDir: outDir,
+                rom: rom,
+                scriptA: scriptA,
+                scriptB: scriptB
+            );
+        } else {
+            RunLone(
+                dumpEvery: dumpEvery,
+                frames: frames,
+                outDir: outDir,
+                rom: rom,
+                script: scriptA
+            );
+        }
+
+        return true;
     }
 
     internal static ConsoleModel s_model = ConsoleModel.CgbE;
 
-    // Builds side A, honoring a debug --spawn group:map:y:x override (decimal) and --model when present.
-    private static MachineInstance BuildSideA(byte[] rom) {
-        var save = TradeSaveFactory.CreateSaveFile(trainer: TradeSaveFactory.SideA);
-
-        if (SpawnOverride is { } spawn) {
-            var parts = spawn.Split(separator: ':');
-
-            TradeSaveFactory.PatchSpawn(
-                saveFile: save,
-                group: byte.Parse(s: parts[0]),
-                map: byte.Parse(s: parts[1]),
-                y: byte.Parse(s: parts[2]),
-                x: byte.Parse(s: parts[3])
-            );
-            Console.WriteLine(value: $"  [debug spawn override -> group {parts[0]} map {parts[1]} y {parts[2]} x {parts[3]}]");
-        }
-
-        return ScriptedTradeHarness.BuildFromSave(
-            bootRom: BootRom,
-            model: s_model,
-            rom: rom,
-            save: save
-        );
-    }
-    // Writes the two crafted trade saves + a README to outDir (created if absent). Each .sav is [32 KiB SRAM][48-byte MBC3
-    // RTC footer] — exactly what the demo's GamingBrickChildNode battery import consumes.
-    private static void ExportSaves(string outDir) {
-        Directory.CreateDirectory(path: outDir);
-
-        var sideA = TradeSaveFactory.CreateSaveFile(trainer: TradeSaveFactory.SideA);
-        var sideB = TradeSaveFactory.CreateSaveFile(trainer: TradeSaveFactory.SideB);
-        var pathA = Path.Combine(
-            path1: outDir,
-            path2: "trade-side-a-rattata.sav"
-        );
-        var pathB = Path.Combine(
-            path1: outDir,
-            path2: "trade-side-b-pidgey.sav"
-        );
-
-        File.WriteAllBytes(
-            bytes: sideA,
-            path: pathA
-        );
-        File.WriteAllBytes(
-            bytes: sideB,
-            path: pathB
-        );
-        File.WriteAllText(
-            path: Path.Combine(
-                path1: outDir,
-                path2: "README.md"
-            ),
-            contents: ReadmeText()
-        );
-
-        Console.WriteLine(value: $"  --trade-export -> {pathA} ({sideA.Length} bytes)");
-        Console.WriteLine(value: $"  --trade-export -> {pathB} ({sideB.Length} bytes)");
-        Console.WriteLine(value: $"  --trade-export -> {Path.Combine(
-            path1: outDir,
-            path2: "README.md"
-        )}");
-    }
-    private static string ReadmeText() =>
-        """
-        # Crafted cross-gen trade-cart saves
-
-        Two byte-exact battery saves for the cross-gen trade cart, produced by `TradeSaveFactory`
-        (`src/Puck.HumbleGamingBrick.Post`). Each file is `[32 KiB SRAM][48-byte MBC3 RTC footer]`
-        (32 816 bytes total) — the straight concatenation `Mbc3Cartridge` imports/exports, i.e. exactly what the
-        demo's per-cabinet battery load (`GamingBrickChildNode`) consumes. Point two trade-cart cabinets at these two
-        files and each boots a distinct, CONTINUE-able trainer.
-
-        | File | Trainer | ID | Lead |
-        |---|---|---|---|
-        | `trade-side-a-rattata.sav` | GOLD | 0x1234 | RATTATA (Lv.5) |
-        | `trade-side-b-pidgey.sav` | SILVER | 0x5678 | PIDGEY (Lv.5) |
-
-        Both spawn on the shared POKECENTER_2F Cable Club floor (map group 20 / map 1) one tile below the Trade
-        Center receptionist, with the `EVENT_GAVE_MYSTERY_EGG_TO_ELM` gate flag set (the sole Cable-Club-access
-        requirement), current HP == max HP, a valid primary checksum + check bytes, and a clean (halt/carry-clear)
-        RTC footer so no clock-reset prompt appears. Regenerate with:
-
-            dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --trade-export --out <dir>
-
-        The crafted saves are CONTINUE-accepted, the loaded overworld renders + is navigable, and the fully-scripted
-        two-machine Cable Club trade runs end-to-end on them: the `link-lock` Post stage drives both sides through the
-        rendezvous, the TRADE_CENTER warp, the mon-selection menus, the species swap (auto-saved on both sides), and the
-        CANCEL exit back to the overworld.
-        """;
-    private static LinkInputScript LoadScript(string? path) =>
-        (((path is not null) && File.Exists(path: path))
-        ? LinkInputScript.Load(path: path)
-        : new LinkInputScript());
-    private static int IntArg(string[] args, string name, int fallback) {
-        var value = CommandLineArguments.Value(
-            args: args,
-            name: name
-        );
-
-        return (((value is not null) && int.TryParse(
-            result: out var parsed,
-            s: value
-        ))
-            ? parsed
-            : fallback);
-    }
+    private static byte[]? BootRom;
+    private static string? SpawnOverride;
 }

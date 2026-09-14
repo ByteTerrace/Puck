@@ -9,6 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Puck.Azure.Functions.Middleware;
 using Puck.Azure.Functions.Services;
+using Puck.Storage;
 
 namespace Puck.Azure.Functions.HttpTriggers;
 
@@ -28,8 +29,7 @@ public sealed class AttestKeys(
     IOptionsMonitor<PublicStorageOptions> publicStorageOptions,
     TimeProvider timeProvider,
     IUserCredentialContext userCredentialContext
-)
-{
+) {
     [FeatureGate(features: nameof(AttestKeys))]
     [Function(name: nameof(AttestKeys))]
     public async Task<IActionResult> Run(
@@ -71,13 +71,16 @@ public sealed class AttestKeys(
         var attestations = new List<object>();
 
         await foreach (var blobItem in containerClient.GetBlobsAsync(
-            BlobTraits.None,
-            BlobStates.None,
-            "private/keys/",
-            cancellationToken
+            cancellationToken: cancellationToken,
+            prefix: "private/keys/",
+            states: BlobStates.None,
+            traits: BlobTraits.None
         )) {
             // Expected shape: private/keys/{type}/fingerprints/sha256:{fp}/public.pem
-            if (!blobItem.Name.EndsWith(value: "/public.pem", comparisonType: StringComparison.Ordinal)) {
+            if (!blobItem.Name.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "/public.pem"
+            )) {
                 continue;
             }
 
@@ -89,14 +92,16 @@ public sealed class AttestKeys(
 
             var keyType = segments[2];
             var fingerprintSegment = segments[4]; // "sha256:{fp}"
-            var keyPath = string.Join(separator: '/', value: segments[1..5]); // "keys/{type}/fingerprints/sha256:{fp}"
+            var keyPath = string.Join(
+                separator: '/',
+                value: segments[1..5]
+            ); // "keys/{type}/fingerprints/sha256:{fp}"
             var publicKeyBlobClient = containerClient.GetBlobClient(blobName: blobItem.Name);
             var publicKeyPem = Encoding.UTF8.GetString(bytes: (await publicKeyBlobClient
                 .DownloadContentAsync(cancellationToken: cancellationToken))
                 .Value
                 .Content
-                .ToArray()
-            );
+                .ToArray());
             var pemFields = PemEncoding.Find(pemData: publicKeyPem);
             var publicKey = new byte[pemFields.DecodedDataLength];
 
@@ -123,9 +128,8 @@ public sealed class AttestKeys(
                     now: now
                 );
                 reattested = true;
-            }
-            catch (RequestFailedException e)
-            when (404 == e.Status) {
+            } catch (RequestFailedException e)
+              when ((404 == e.Status)) {
                 result = await bindingService.MintSubjectKeyBindingAsync(
                     cancellationToken: cancellationToken,
                     now: now,
@@ -148,7 +152,7 @@ public sealed class AttestKeys(
                 }
             );
 
-            attestations.Add(new {
+            attestations.Add(item: new {
                 KeyId = result.KeyId,
                 KeyType = keyType,
                 NotAfter = result.NotAfter,

@@ -6,7 +6,7 @@ namespace Puck.Launcher.Release;
 /// <param name="RefusalReason">Why the source could not answer, when <paramref name="Found"/> is false.</param>
 public sealed record ReleaseSourceResult(bool Found, byte[] ManifestBytes, string? RefusalReason);
 /// <summary>
-/// Reaches an <c>app</c>'s published <c>puck.release.v1</c> manifest and the content-addressed files it names. A
+/// Reaches an <c>app</c>'s published <c>puck.release.manifest.v1</c> manifest and the content-addressed files it names. A
 /// real transport (<see cref="HttpReleaseSource"/>) and a loopback twin (<see cref="DirectoryReleaseSource"/>) —
 /// the same "a real transport plus a loopback twin" shape this repository's own game-protocol layer already
 /// establishes for its server link.

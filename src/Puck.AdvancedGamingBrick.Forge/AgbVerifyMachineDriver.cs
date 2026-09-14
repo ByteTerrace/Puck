@@ -39,53 +39,6 @@ public sealed class AgbVerifyMachineDriver : IDisposable {
         m_machine.DirectBoot();
     }
 
-    /// <summary>Reads one byte through the bus's clock-free debug path.</summary>
-    /// <param name="address">The 32-bit bus address.</param>
-    /// <returns>The byte at <paramref name="address"/>.</returns>
-    public byte ReadByte(uint address) => m_bus.DebugRead8(address: address);
-    /// <summary>Reads a little-endian halfword through the clock-free debug path.</summary>
-    /// <param name="address">The 32-bit bus address.</param>
-    /// <returns>The halfword at <paramref name="address"/>.</returns>
-    public ushort ReadHalf(uint address) =>
-        ((ushort)(ReadByte(address: address) | (ReadByte(address: (address + 1u)) << 8)));
-    /// <summary>Reads a little-endian word through the clock-free debug path.</summary>
-    /// <param name="address">The 32-bit bus address.</param>
-    /// <returns>The word at <paramref name="address"/>.</returns>
-    public uint ReadWord(uint address) =>
-        ((uint)ReadHalf(address: address)) | (((uint)ReadHalf(address: (address + 2u))) << 16);
-    /// <summary>Reads one framebuffer pixel as the PPU's packed 0xAABBGGRR value.</summary>
-    /// <param name="x">The pixel column (0..239).</param>
-    /// <param name="y">The pixel row (0..159).</param>
-    /// <returns>The packed pixel.</returns>
-    public uint ReadPixel(int x, int y) => m_machine.Framebuffer[((y * AgbHw.ScreenWidth) + x)];
-    /// <summary>Reads a CPU general-purpose register as the currently visible bank sees it.</summary>
-    /// <param name="index">The register number, 0–15.</param>
-    /// <returns>The register value.</returns>
-    public uint ReadRegister(int index) => m_machine.Cpu.GetRegister(index: index);
-    /// <summary>Runs whole frames with a key set held (the KEYINPUT register is refreshed before every frame).</summary>
-    /// <param name="keys">The active-high keys to hold.</param>
-    /// <param name="frames">The number of frames to run.</param>
-    public void RunFrames(AgbKeys keys, int frames) {
-        for (var frame = 0; (frame < frames); frame++) {
-            m_machine.SetKeyInput(keys: ((ushort)(AgbHw.KeyMask & ~((ushort)keys))));
-            _ = m_machine.RunFrame();
-        }
-    }
-    /// <summary>Presses a key set: hold <see cref="FramesPerPress"/> frames, release <see cref="FramesPerRelease"/>.</summary>
-    /// <param name="keys">The active-high keys to press.</param>
-    public void Press(AgbKeys keys) {
-        RunFrames(frames: FramesPerPress, keys: keys);
-        RunFrames(frames: FramesPerRelease, keys: AgbKeys.None);
-    }
-    /// <summary>Executes single instructions (for emitter probes that assert per-instruction effects).</summary>
-    /// <param name="count">The number of instructions to step.</param>
-    public void StepInstructions(int count) {
-        for (var step = 0; (step < count); step++) {
-            m_machine.Step();
-        }
-    }
-    /// <inheritdoc/>
-    public void Dispose() => m_instance.Dispose();
     /// <summary>Throws when a verify condition does not hold.</summary>
     /// <param name="condition">The condition that must hold.</param>
     /// <param name="message">What failed, in observable terms.</param>
@@ -95,8 +48,68 @@ public sealed class AgbVerifyMachineDriver : IDisposable {
             throw new InvalidOperationException(message: $"{label} ROM verification failed: {message}");
         }
     }
+    /// <inheritdoc/>
+    public void Dispose() => m_instance.Dispose();
+    /// <summary>Presses a key set: hold <see cref="FramesPerPress"/> frames, release <see cref="FramesPerRelease"/>.</summary>
+    /// <param name="keys">The active-high keys to press.</param>
+    public void Press(AgbKeys keys) {
+        RunFrames(
+            frames: FramesPerPress,
+            keys: keys
+        );
+        RunFrames(
+            frames: FramesPerRelease,
+            keys: AgbKeys.None
+        );
+    }
+    /// <summary>Reads one byte through the bus's clock-free debug path.</summary>
+    /// <param name="address">The 32-bit bus address.</param>
+    /// <returns>The byte at <paramref name="address"/>.</returns>
+    public byte ReadByte(uint address) => m_bus.DebugRead8(address: address);
+    /// <summary>Reads a little-endian halfword through the clock-free debug path.</summary>
+    /// <param name="address">The 32-bit bus address.</param>
+    /// <returns>The halfword at <paramref name="address"/>.</returns>
+    /// <remarks>
+    /// Goes through the bus's own halfword peek rather than pairing byte reads: an input/output register is a halfword
+    /// register, and a byte read of its odd address matches no case and yields zero.
+    /// </remarks>
+    public ushort ReadHalf(uint address) => m_bus.DebugRead16(address: address);
+    /// <summary>Reads one framebuffer pixel as the PPU's packed 0xAABBGGRR value.</summary>
+    /// <param name="x">The pixel column (0..239).</param>
+    /// <param name="y">The pixel row (0..159).</param>
+    /// <returns>The packed pixel.</returns>
+    public uint ReadPixel(int x, int y) => m_machine.Framebuffer[((y * AgbHw.ScreenWidth) + x)];
+    /// <summary>Reads a CPU general-purpose register as the currently visible bank sees it.</summary>
+    /// <param name="index">The register number, 0–15.</param>
+    /// <returns>The register value.</returns>
+    public uint ReadRegister(int index) => m_machine.Cpu.GetRegister(index: index);
+    /// <summary>Reads a little-endian word through the clock-free debug path.</summary>
+    /// <param name="address">The 32-bit bus address.</param>
+    /// <returns>The word at <paramref name="address"/>.</returns>
+    public uint ReadWord(uint address) =>
+        ((uint)ReadHalf(address: address)) | (((uint)ReadHalf(address: (address + 2u))) << 16);
     /// <summary>Throws when a verify condition does not hold, using this driver's label.</summary>
     /// <param name="condition">The condition that must hold.</param>
     /// <param name="message">What failed, in observable terms.</param>
-    public void Require(bool condition, string message) => Assert(condition: condition, label: m_label, message: message);
+    public void Require(bool condition, string message) => Assert(
+        condition: condition,
+        label: m_label,
+        message: message
+    );
+    /// <summary>Runs whole frames with a key set held (the KEYINPUT register is refreshed before every frame).</summary>
+    /// <param name="keys">The active-high keys to hold.</param>
+    /// <param name="frames">The number of frames to run.</param>
+    public void RunFrames(AgbKeys keys, int frames) {
+        for (var frame = 0; (frame < frames); frame++) {
+            m_machine.SetKeyInput(keys: ((ushort)(AgbHw.KeyMask & ~((ushort)keys))));
+            _ = m_machine.RunFrame();
+        }
+    }
+    /// <summary>Executes single instructions (for emitter probes that assert per-instruction effects).</summary>
+    /// <param name="count">The number of instructions to step.</param>
+    public void StepInstructions(int count) {
+        for (var step = 0; (step < count); step++) {
+            m_machine.Step();
+        }
+    }
 }

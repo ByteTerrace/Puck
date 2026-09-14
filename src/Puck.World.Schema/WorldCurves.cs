@@ -11,13 +11,13 @@ namespace Puck.World;
 /// document validator and the compiled primitive read); this class holds only the row/section sizing this document
 /// layer owns.</summary>
 public static class WorldCurves {
+    /// <summary>The greatest |rate| a <c>Puck.Physics.Motion.BodyTargetSource.Curve</c> target may declare, in the
+    /// curve's own arc units per second.</summary>
+    public const float MaxFollowRate = 128f;
     /// <summary>The greatest number of knots a single curve row may declare.</summary>
     public const int MaxKnots = 64;
     /// <summary>The greatest number of curve rows the section may declare.</summary>
     public const int MaxRows = 64;
-    /// <summary>The greatest |rate| a <c>Puck.Physics.Motion.BodyTargetSource.Curve</c> target may declare, in the
-    /// curve's own arc units per second.</summary>
-    public const float MaxFollowRate = 128f;
 }
 /// <summary>The compiled <c>curves</c> row name→ordinal table a <c>Puck.Physics.Motion.BodyTargetSource.Curve</c>
 /// target resolves against — the <see cref="WorldTargetRegisterTable"/> shape, sharing no ordinal space with it (a
@@ -33,12 +33,10 @@ public sealed class WorldCurveTable {
     public static WorldCurveTable Empty { get; } = new(table: OrdinalTable.Empty);
 
     /// <summary>Compiles the section's row names in declaration order.</summary>
-    public static WorldCurveTable Compile(IReadOnlyList<WorldCurveRow> curves) => new(
-        table: OrdinalTable.Build(
-            names: curves.Select(selector: static row => row.Name).ToArray(),
-            comparer: StringComparer.Ordinal
-        )
-    );
+    public static WorldCurveTable Compile(IReadOnlyList<WorldCurveRow> curves) => new(table: OrdinalTable.Build(
+        names: curves.Select(selector: static row => row.Name).ToArray(),
+        comparer: StringComparer.Ordinal
+    ));
     /// <summary>Resolves a declared curve row name to its compact index.</summary>
     public bool TryGetIndex(string name, out int index) => m_table.TryGetOrdinal(
         name: name,

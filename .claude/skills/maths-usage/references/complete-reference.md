@@ -30,7 +30,7 @@ presented-algebra tier for graph, lattice and language questions. It is
 organized as **eight wings** — one folder and one README each — plus a set of
 root-level types. The **human** entry point (prose, worked examples, the full
 root catalogue) is
-[src/Puck.Maths/README.md](../../../../src/Puck.Maths/README.md); this file is the
+[Deterministic numerics](../../../../docs/reference/maths.md); this file is the
 agent's.
 
 | Your question | Wing | What lives there | Read first |
@@ -43,7 +43,7 @@ agent's.
 | The subject is a graph, a lattice, a language or a finite structure rather than a number — reachability, convolution and inversion, pattern matching, homology, group orbits | [Oracle](../../../../src/Puck.Maths/Oracle/README.md) | One presented-algebra product over swappable materials: `Presentations`, `PresentedAlgebra`, `DivisibilityAlgebra`, `TokenPattern`/`PatternMatcher`, `ExteriorCalculus`/`IntegerHomology`, `ReflectionSystem`/`PresentedGroup` | "Choosing an entry point", then "Contracts every consumer inherits" |
 | An exploratory or open-problem question — continued-fraction tails, Sturmian and quasicrystal words, Fibonacci and metallic means, real-quadratic orders | [Research](../../../../src/Puck.Maths/Research/README.md) | Exact, certificate-bearing, off the hot path; a budget-exhausted search (`SearchLimitReached`) is never conflated with a proof or a counterexample | "At a glance" — and the namespace split stated above it |
 | A frequency- or sequency-domain transform, or a cyclic convolution | [Transforms](../../../../src/Puck.Maths/Transforms/README.md) | Exact: `NumberTheoreticTransform`/`NumberTheoreticTransformPlan` (over `PrimeField64`), `WalshHadamardTransform` (any binary integer, no plan). Fixed-point, measured bounds: `FixedFourierTransform`/`FixedFourierTransformPlan` (over `FixedComplex`), `FixedCosineTransform`/`FixedCosineTransformPlan` (over `FixedQ4816`). All in place; `Convolve` on both spectral transforms | "At a glance", then the transform's own section |
-| A per-tick state hash, an exact allocation over intervals, bucket routing, an exact real-quadratic value, a bit trick or a GCD | root level (owns no wing) | `Fnv1aHash`, `DiscreteMeasure`/`CompiledDiscreteMeasure64`, `MonotonicPartitioner`, `RealQuadratic`, `ContinuedFraction`, `CyclicRotation`, `SymmetryLattice`, `NumberTheoryFunctions`, and the integer kit (`BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions`) | [the root README](../../../../src/Puck.Maths/README.md) — "The root-level catalogue", then "Integer routines" |
+| A per-tick state hash, an exact allocation over intervals, bucket routing, an exact real-quadratic value, a bit trick or a GCD | root level (owns no wing) | `Fnv1aHash`, `DiscreteMeasure`/`CompiledDiscreteMeasure64`, `MonotonicPartitioner`, `RealQuadratic`, `ContinuedFraction`, `CyclicRotation`, `SymmetryLattice`, `NumberTheoryFunctions`, and the integer kit (`BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions`) | [Root-level types](../../../../docs/reference/maths.md#root-level-types) |
 
 **Depth lives in the wing READMEs**, and this skill never restates their
 contract tables or re-argues a rule they own. When one disagrees with this file,
@@ -100,7 +100,7 @@ carries it back whenever it is still below one.
 | A forward-mode sensitivity | `FixedDual<FixedQ4816>` (`FixedDual.Variable` seeds it) |
 | Rate → quantity over ticks, with no drift | `FixedRateAccumulator` / `FixedVector3RateAccumulator` — the sub-unit division remainder carries across calls, and **is authoritative snapshot state** |
 | To interpolate or clamp | `FixedQ4816.Lerp` / `.Clamp`, `FixedVector2.Lerp` / `FixedVector3.Lerp`, `FixedQuaternion.Slerp`, `FixedRigidTransform.ScLerp`. Never a hand-rolled `a + (b − a)·t` |
-| A pole-matched second-order response (a target that eases, overshoots, or anticipates rather than snapping) | `SecondOrderDynamics` (`FixedPoint/SecondOrderDynamics.cs`) — `Create(f, ζ, r)` derives the coefficients once, `Compile(stepTicks, ticksPerSecond)` gives a `SecondOrderStep` for a per-tick/per-frame `Step`, `Evaluate(y0, v0, target, elapsedTicks, ticksPerSecond)` is the closed form for a lazily-read state cell. A float twin (`Puck.SdfVm.Views.SecondOrderFollower.cs`) exists for presentation-only followers (camera booms, stamped parts); never feed it back into simulation state |
+| A pole-matched second-order response (a target that eases, overshoots, or anticipates rather than snapping) | `SecondOrderDynamics` (`FixedPoint/SecondOrderDynamics.cs`) — `Create(f, ζ, r)` derives the coefficients once, `Compile(stepTicks, ticksPerSecond)` gives a `SecondOrderStep` for a per-tick/per-frame `Step`, `Evaluate(y0, v0, target, elapsedTicks, ticksPerSecond)` is the closed form for a lazily-read state cell. A float twin ([SecondOrderFollower](../../../../src/Puck.SdfVm/Views/SecondOrderFollower.cs)) exists for presentation-only followers (camera booms, stamped parts); never feed it back into simulation state |
 
 Products in this family are **fused**: the whole expression accumulates exactly
 and the result rounds once per returned component. Do not decompose one into
@@ -226,14 +226,11 @@ stable, and never add a path that reproduces old-wrong behaviour.
   2×2 integer matrix, continued-fraction step, or rate/remainder carrier,
   search for it (route through `content-search` in the main `SKILL.md`). If the
   shape genuinely is missing, add it to the library rather than beside it.
-  This failure mode is present in the tree today, and this paragraph is the
-  surviving record of the finding: an engine-absorption audit found five
-  `AlignUp`/`AlignDown`/`CeilDiv`/`FloorDiv` hand-rollings across
-  `Puck.SdfVm`, `Puck.Platform`, and `Puck.World` — one of them,
-  `WorldQueryBaker`, hash-bearing, which makes the divergence class
-  determinism-adjacent. Their landing site is the `BinaryIntegerFunctions`
-  generics, and the migration awaits the owner's go. Re-derive the exact call
-  sites with `puck search` rather than trusting the count.
+  Signed floor/ceiling division is the one this tree has re-grown most often,
+  and a hash-bearing caller makes the divergence class determinism-adjacent:
+  route every one through `BinaryIntegerFunctions.FloorDivide`/`CeilingDivide`,
+  which are correct for a negative dividend where the built-in `/` truncates
+  toward zero.
 - **Bound an unbounded search from inside it, with two clauses.** A search whose
   termination rests on a theorem rather than on a validation — the Selfridge
   parameter walk, the descent to the smallest non-residue — fails by HANGING,
@@ -310,11 +307,13 @@ at one of these**:
 | You touched | Also run |
 |---|---|
 | A rounding path, a value kernel, an exhaustive claim | the suite again with `--settings tests/Puck.Maths.Tests/deep.runsettings` — Deep is the tier that has to pass before a rounding change lands |
-| `FixedPosition` | `… -- --stage worldcoord3` — the stage kept its pre-rename name; it is the stage a `FixedPosition` change owes |
-| `BinaryPolynomial` / `BinaryField` / `BinaryFields` | `… -- --stage binary-field` |
-| `DigitalNetSampler` / `StratifiedShuffle` / `InvertibleBitMix` | `… -- --stage digital-net` |
-| `MonotonicPartitioner` | `… -- --stage monotonic-partitioner` |
-| `BinaryIntegerFunctions`, `SecureRandom`'s refusal edge | `… -- --stage binary-integer-functions` |
+| `FixedPosition` | the `position.*` law family (`laws/position.json`) — not `laws/world-coord.json`, which despite its name covers only `BinaryIntegerFunctions` |
+| `BinaryPolynomial` | the `polynomial.*` law family (`laws/polynomial.json`) |
+| `BinaryField` / `BinaryFields` | the `binary-field.*` law family (`laws/binary-field.json`) |
+| `DigitalNetSampler` / `StratifiedShuffle` / `InvertibleBitMix` | the `sampling.*` law family — cases live in `laws/sampling.json`, and `DigitalNetSampler`'s also in `laws/digital-net.json` |
+| `MonotonicPartitioner` | the `core.*` law family — cases live in `laws/monotonic-partitioner.json` |
+| `BinaryIntegerFunctions` | the `core.*` law family (`laws/core.json`) |
+| `SecureRandom`'s refusal edge | the `sampling.*` law family (`laws/sampling.json`) |
 | The presented algebra (`Oracle/`) | the `presented.*` law families, which run as Default-tier cases; the Default tier is the gate of record |
 | `QuadraticAlgebra` / `MonogenicAlgebra` / `GeometricAlgebra` / `DoublingAlgebra` | the matching law family — see [Algebra → Verifying changes](../../../../src/Puck.Maths/Algebra/README.md#verifying-changes) |
 | `PrimeField64` / `QuadraticExtensionField64` | the `prime-field.*` and `extension-field.*` law families |

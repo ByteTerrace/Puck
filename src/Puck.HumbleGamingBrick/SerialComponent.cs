@@ -75,10 +75,157 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
         m_supportsColor = configuration.Model.SupportsColor();
     }
 
+    /// <summary>Gets whether a transfer is armed or in flight (SC bit 7 set) — the port has not yet shifted its eighth
+    /// bit, so severing the cable now would abandon a round no console can recover from.</summary>
+    internal bool IsTransferActive =>
+        ((m_control & TransferActive) == TransferActive);
+
+    // Whether the fast-clock bit (SC bit 1) exists at all: Color silicon running a compatibility-mode cartridge
+    // cannot reach it either, the same "CGB mode only" fact KEY1/RP/SVBK answer through DmgCompatibilityState.
+    private bool HasFastClock =>
+        (m_supportsColor && !m_dmgCompatibility.IsActive);
+
+    /// <summary>An optional observer invoked with each byte the program WRITES to the serial data register (SB), at the
+    /// write itself — the value the program intends to send, before any transfer is armed. Like <see
+    /// cref="ByteTransmitted"/> it is a pure host-side observation seam, never serialized and <see langword="null"/> in a
+    /// normal run. It differs from <see cref="ByteTransmitted"/> only when the program re-arms a still-running transfer:
+    /// <see cref="ByteTransmitted"/> reports SB as latched when the new transfer starts (which a free-running shifter may
+    /// already have shifted, exactly as on hardware), while this reports the freshly-written value. It is what a harness
+    /// wants when it needs the program's INTENDED output rather than the wire reality — e.g. reading a DMG
+    /// acceptance-suite result signature, whose output routine deliberately re-arms a transfer that has not finished
+    /// at the normal clock.</summary>
+    public Action<byte>? ByteQueued { get; set; }
+    /// <summary>An optional observer invoked with the byte an internal-clock transfer sends, at the instant the transfer
+    /// starts. It is a host-side observation seam — conformance harnesses use it to read a ROM's serial output — and is
+    /// not emulated state: it is never serialized, so setting it cannot perturb determinism, and it is <see
+    /// langword="null"/> in a normal run. It observes alongside the link peer, never instead of it.</summary>
+    public Action<byte>? ByteTransmitted { get; set; }
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
+    /// <summary>Gets whether a link peer is attached (see <see cref="SerialLinkSession"/>).</summary>
+    public bool IsLinked =>
+        (m_peer is not null);
+    /// <summary>An optional observer invoked the instant a transfer's eighth bit shifts — the same instant this port
+    /// raises its serial interrupt — carrying the final shifted-in byte (SB). It fires for BOTH roles: an internal-clock
+    /// (master) transfer completing in <see cref="Tick"/> and an external-clock (slave) transfer completing under the
+    /// peer's clock. Like <see cref="ByteTransmitted"/> it is a pure host-side observation seam — never serialized, so
+    /// setting it cannot perturb determinism — the honest way a link harness or a live cable link counts completed
+    /// exchanges (serial IRQs) on each side, master and slave alike, without the cartridge's cooperation. An observer
+    /// that replaces an existing one must chain to it, since a live link holds one for the cable's lifetime.</summary>
+    public Action<byte>? TransferCompleted { get; set; }
 
+    // The ISerialPeer seam: one serial clock edge arriving over the cable from the peer's internal clock — exchange one
+    // bit. Returns this port's outgoing bit (its shifter's MSB) and shifts the incoming bit in, mirroring the
+    // simultaneous exchange of the hardware shift registers. An armed external-clock transfer counts the edge and
+    // completes (SC bit 7 clears, the serial interrupt fires) on the eighth; an idle port still shifts but raises
+    // nothing. A stopped port is frozen (the line reads idle-high, nothing shifts), and a port driving its OWN internal
+    // clock ignores the peer's edges — two masters on one cable each keep their own transfer consistent, deterministically.
+    bool ISerialPeer.ShiftBit(bool incoming) {
+        if (m_key1.IsStopped) {
+            return true;
+        }
+
+        if ((m_control & (TransferActive | ClockSelect)) == (TransferActive | ClockSelect)) {
+            return ((m_data & 0x80) != 0);
+        }
+
+        var outgoing = ((m_data & 0x80) != 0);
+
+        m_data = ((byte)((m_data << 1) | (incoming
+            ? 0x01
+            : 0x00)));
+
+        if (
+            ((m_control & TransferActive) == TransferActive) &&
+            (m_bitsRemaining > 0) &&
+            (--m_bitsRemaining == 0)
+        ) {
+            CompleteTransfer();
+        }
+
+        return outgoing;
+    }
+
+    // Attaches a one-directional device peer (e.g. the link-cable printer) to a port that drives its own internal clock.
+    // Unlike Connect the device is NOT wired back as this port's clock source: a printer never initiates a transfer, it
+    // only answers the bits the console shifts out over the internal clock. Guarded like Connect against double-linking.
+    internal static void AttachPeer(SerialComponent port, ISerialPeer peer) {
+        ArgumentNullException.ThrowIfNull(argument: peer);
+
+        if (port.m_peer is not null) {
+            throw new InvalidOperationException(message: "A serial port is already linked; disconnect its session first.");
+        }
+
+        port.m_peer = peer;
+    }
+    // Wires two ports as link peers. Internal (not public) on purpose: SerialLinkSession is the one blessed connect
+    // seam, because a connected pair must also be STEPPED as a pair — the session owns both halves.
+    internal static void Connect(SerialComponent first, SerialComponent second) {
+        if (ReferenceEquals(
+            objA: first,
+            objB: second
+        )) {
+            throw new ArgumentException(
+                message: "A serial port cannot be linked to itself.",
+                paramName: nameof(second)
+            );
+        }
+
+        if (
+            (first.m_peer is not null) ||
+            (second.m_peer is not null)
+        ) {
+            throw new InvalidOperationException(message: "A serial port is already linked; disconnect its session first.");
+        }
+
+        first.m_peer = second;
+        second.m_peer = first;
+    }
+    // Severs a device peer attached with AttachPeer; a no-op for an unlinked port. A device peer holds no back-reference,
+    // so only this port's peer is cleared.
+    internal static void DetachPeer(SerialComponent port) =>
+        port.m_peer = null;
+    // Severs a port's link, clearing both ends; a no-op for an unlinked port. Only a linked port (another
+    // SerialComponent) holds a symmetric back-reference to clear; a one-directional device peer does not.
+    internal static void Disconnect(SerialComponent port) {
+        if (port.m_peer is { } peer) {
+            if (peer is SerialComponent peerPort) {
+                peerPort.m_peer = null;
+            }
+
+            port.m_peer = null;
+        }
+    }
+
+    // The transfer-completion epilogue both shift paths share (the internally-clocked tick and the peer's external
+    // clock edge): SC bit 7 clears, the serial interrupt is requested, and the assembled byte is published.
+    private void CompleteTransfer() {
+        m_control &= unchecked((byte)~TransferActive);
+
+        m_interrupts.Request(kind: InterruptKind.Serial);
+        TransferCompleted?.Invoke(obj: m_data);
+    }
+    // The DIV bit driving the shifter: the Color fast clock (SC bit 1) selects a bit 32x faster than the normal rate.
+    private bool DivBit() {
+        var bit = (((m_control & FastClock) != 0)
+            ? FastDivBit
+            : NormalDivBit
+        );
+
+        return ((m_timer.DivCounter & (1 << bit)) != 0);
+    }
+
+    /// <inheritdoc/>
+    public void ApplyModel(ConsoleModel model) =>
+        m_supportsColor = model.SupportsColor();
+    /// <inheritdoc/>
+    public void LoadState(StateReader reader) {
+        m_data = reader.ReadByte();
+        m_control = reader.ReadByte();
+        m_bitsRemaining = reader.ReadInt32();
+        m_lastDivBit = reader.ReadBoolean();
+    }
     /// <summary>Returns how many further T-cycles this unit can absorb without shifting: unbounded with no
     /// internal-clock transfer in flight, else every cycle before the next falling edge of its DIV bit.</summary>
     public int QuietCycles() {
@@ -99,42 +246,25 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
 
         return ((period - (m_timer.DivCounter & (period - 1))) - 1);
     }
+    /// <inheritdoc/>
+    public byte ReadRegister(ushort address) =>
+        ((address == MemoryMap.SerialData)
+            ? m_data
+            : (byte)(m_control | UnusedBits | (HasFastClock
+                ? (byte)0x00
+                : FastClock))
+        );
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        writer.WriteByte(value: m_data);
+        writer.WriteByte(value: m_control);
+        writer.WriteInt32(value: m_bitsRemaining);
+        writer.WriteBoolean(value: m_lastDivBit);
+    }
     /// <summary>Absorbs T-cycles that <see cref="QuietCycles"/> allowed, after the divider has advanced: only the
     /// edge detector's last sample follows.</summary>
     public void Skip() =>
         m_lastDivBit = DivBit();
-    /// <summary>An optional observer invoked with the byte an internal-clock transfer sends, at the instant the transfer
-    /// starts. It is a host-side observation seam — conformance harnesses use it to read a ROM's serial output — and is
-    /// not emulated state: it is never serialized, so setting it cannot perturb determinism, and it is <see
-    /// langword="null"/> in a normal run. It observes alongside the link peer, never instead of it.</summary>
-    public Action<byte>? ByteTransmitted { get; set; }
-    /// <summary>An optional observer invoked with each byte the program WRITES to the serial data register (SB), at the
-    /// write itself — the value the program intends to send, before any transfer is armed. Like <see
-    /// cref="ByteTransmitted"/> it is a pure host-side observation seam, never serialized and <see langword="null"/> in a
-    /// normal run. It differs from <see cref="ByteTransmitted"/> only when the program re-arms a still-running transfer:
-    /// <see cref="ByteTransmitted"/> reports SB as latched when the new transfer starts (which a free-running shifter may
-    /// already have shifted, exactly as on hardware), while this reports the freshly-written value. It is what a harness
-    /// wants when it needs the program's INTENDED output rather than the wire reality — e.g. reading a DMG
-    /// acceptance-suite result signature, whose output routine deliberately re-arms a transfer that has not finished
-    /// at the normal clock.</summary>
-    public Action<byte>? ByteQueued { get; set; }
-    /// <summary>An optional observer invoked the instant a transfer's eighth bit shifts — the same instant this port
-    /// raises its serial interrupt — carrying the final shifted-in byte (SB). It fires for BOTH roles: an internal-clock
-    /// (master) transfer completing in <see cref="Tick"/> and an external-clock (slave) transfer completing under the
-    /// peer's clock. Like <see cref="ByteTransmitted"/> it is a pure host-side observation seam — never serialized, so
-    /// setting it cannot perturb determinism — the honest way a link harness or a live cable link counts completed
-    /// exchanges (serial IRQs) on each side, master and slave alike, without the cartridge's cooperation. An observer
-    /// that replaces an existing one must chain to it, since a live link holds one for the cable's lifetime.</summary>
-    public Action<byte>? TransferCompleted { get; set; }
-    /// <summary>Gets whether a link peer is attached (see <see cref="SerialLinkSession"/>).</summary>
-    public bool IsLinked =>
-        (m_peer is not null);
-
-    /// <summary>Gets whether a transfer is armed or in flight (SC bit 7 set) — the port has not yet shifted its eighth
-    /// bit, so severing the cable now would abandon a round no console can recover from.</summary>
-    internal bool IsTransferActive =>
-        ((m_control & TransferActive) == TransferActive);
-
     /// <inheritdoc/>
     public void Tick() {
         if (m_key1.IsStopped) {
@@ -169,18 +299,6 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
             CompleteTransfer();
         }
     }
-    // Whether the fast-clock bit (SC bit 1) exists at all: Color silicon running a compatibility-mode cartridge
-    // cannot reach it either, the same "CGB mode only" fact KEY1/RP/SVBK answer through DmgCompatibilityState.
-    private bool HasFastClock =>
-        (m_supportsColor && !m_dmgCompatibility.IsActive);
-
-    /// <inheritdoc/>
-    public byte ReadRegister(ushort address) =>
-        ((address == MemoryMap.SerialData)
-        ? m_data
-        : (byte)(m_control | UnusedBits | (HasFastClock
-            ? (byte)0x00
-            : FastClock)));
     /// <inheritdoc/>
     public void WriteRegister(ushort address, byte value) {
         if (address == MemoryMap.SerialData) {
@@ -211,122 +329,5 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
                 ByteTransmitted?.Invoke(obj: m_data);
             }
         }
-    }
-    /// <inheritdoc/>
-    public void ApplyModel(ConsoleModel model) =>
-        m_supportsColor = model.SupportsColor();
-    /// <inheritdoc/>
-    public void SaveState(StateWriter writer) {
-        writer.WriteByte(value: m_data);
-        writer.WriteByte(value: m_control);
-        writer.WriteInt32(value: m_bitsRemaining);
-        writer.WriteBoolean(value: m_lastDivBit);
-    }
-    /// <inheritdoc/>
-    public void LoadState(StateReader reader) {
-        m_data = reader.ReadByte();
-        m_control = reader.ReadByte();
-        m_bitsRemaining = reader.ReadInt32();
-        m_lastDivBit = reader.ReadBoolean();
-    }
-
-    // Wires two ports as link peers. Internal (not public) on purpose: SerialLinkSession is the one blessed connect
-    // seam, because a connected pair must also be STEPPED as a pair — the session owns both halves.
-    internal static void Connect(SerialComponent first, SerialComponent second) {
-        if (ReferenceEquals(
-            objA: first,
-            objB: second
-        )) {
-            throw new ArgumentException(
-                message: "A serial port cannot be linked to itself.",
-                paramName: nameof(second)
-            );
-        }
-
-        if (
-            (first.m_peer is not null) ||
-            (second.m_peer is not null)
-        ) {
-            throw new InvalidOperationException(message: "A serial port is already linked; disconnect its session first.");
-        }
-
-        first.m_peer = second;
-        second.m_peer = first;
-    }
-    // Attaches a one-directional device peer (e.g. the link-cable printer) to a port that drives its own internal clock.
-    // Unlike Connect the device is NOT wired back as this port's clock source: a printer never initiates a transfer, it
-    // only answers the bits the console shifts out over the internal clock. Guarded like Connect against double-linking.
-    internal static void AttachPeer(SerialComponent port, ISerialPeer peer) {
-        ArgumentNullException.ThrowIfNull(argument: peer);
-
-        if (port.m_peer is not null) {
-            throw new InvalidOperationException(message: "A serial port is already linked; disconnect its session first.");
-        }
-
-        port.m_peer = peer;
-    }
-    // Severs a device peer attached with AttachPeer; a no-op for an unlinked port. A device peer holds no back-reference,
-    // so only this port's peer is cleared.
-    internal static void DetachPeer(SerialComponent port) =>
-        port.m_peer = null;
-    // Severs a port's link, clearing both ends; a no-op for an unlinked port. Only a linked port (another
-    // SerialComponent) holds a symmetric back-reference to clear; a one-directional device peer does not.
-    internal static void Disconnect(SerialComponent port) {
-        if (port.m_peer is { } peer) {
-            if (peer is SerialComponent peerPort) {
-                peerPort.m_peer = null;
-            }
-
-            port.m_peer = null;
-        }
-    }
-
-    // The ISerialPeer seam: one serial clock edge arriving over the cable from the peer's internal clock — exchange one
-    // bit. Returns this port's outgoing bit (its shifter's MSB) and shifts the incoming bit in, mirroring the
-    // simultaneous exchange of the hardware shift registers. An armed external-clock transfer counts the edge and
-    // completes (SC bit 7 clears, the serial interrupt fires) on the eighth; an idle port still shifts but raises
-    // nothing. A stopped port is frozen (the line reads idle-high, nothing shifts), and a port driving its OWN internal
-    // clock ignores the peer's edges — two masters on one cable each keep their own transfer consistent, deterministically.
-    bool ISerialPeer.ShiftBit(bool incoming) {
-        if (m_key1.IsStopped) {
-            return true;
-        }
-
-        if ((m_control & (TransferActive | ClockSelect)) == (TransferActive | ClockSelect)) {
-            return ((m_data & 0x80) != 0);
-        }
-
-        var outgoing = ((m_data & 0x80) != 0);
-
-        m_data = ((byte)((m_data << 1) | (incoming
-            ? 0x01
-            : 0x00)));
-
-        if (
-            ((m_control & TransferActive) == TransferActive) &&
-            (m_bitsRemaining > 0) &&
-            (--m_bitsRemaining == 0)
-        ) {
-            CompleteTransfer();
-        }
-
-        return outgoing;
-    }
-
-    // The transfer-completion epilogue both shift paths share (the internally-clocked tick and the peer's external
-    // clock edge): SC bit 7 clears, the serial interrupt is requested, and the assembled byte is published.
-    private void CompleteTransfer() {
-        m_control &= unchecked((byte)~TransferActive);
-
-        m_interrupts.Request(kind: InterruptKind.Serial);
-        TransferCompleted?.Invoke(obj: m_data);
-    }
-    // The DIV bit driving the shifter: the Color fast clock (SC bit 1) selects a bit 32x faster than the normal rate.
-    private bool DivBit() {
-        var bit = (((m_control & FastClock) != 0)
-            ? FastDivBit
-            : NormalDivBit);
-
-        return ((m_timer.DivCounter & (1 << bit)) != 0);
     }
 }

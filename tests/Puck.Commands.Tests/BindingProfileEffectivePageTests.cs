@@ -19,7 +19,10 @@ public sealed class BindingProfileEffectivePageTests {
                 Chord: [],
                 Group: "play",
                 Page: new BindingPageDefinition(
-                    Entries: [new BindingPageEntryDefinition(Command: "play.a", Sources: ["keyboard.a"])],
+                    Entries: [new BindingPageEntryDefinition(
+                            Command: "play.a",
+                            Sources: ["keyboard.a"]
+                        )],
                     Id: "play-base"
                 )
             ),
@@ -27,7 +30,10 @@ public sealed class BindingProfileEffectivePageTests {
                 Chord: [],
                 Group: "menu",
                 Page: new BindingPageDefinition(
-                    Entries: [new BindingPageEntryDefinition(Command: "menu.z", Sources: ["keyboard.z"])],
+                    Entries: [new BindingPageEntryDefinition(
+                            Command: "menu.z",
+                            Sources: ["keyboard.z"]
+                        )],
                     Id: "menu-base"
                 )
             ),
@@ -35,7 +41,10 @@ public sealed class BindingProfileEffectivePageTests {
                 Chord: ["keyboard.leftShift"],
                 Group: "play",
                 Page: new BindingPageDefinition(
-                    Entries: [new BindingPageEntryDefinition(Command: "play.b", Sources: ["keyboard.b"])],
+                    Entries: [new BindingPageEntryDefinition(
+                            Command: "play.b",
+                            Sources: ["keyboard.b"]
+                        )],
                     Id: "crossed",
                     Inherits: "menu-base"
                 )
@@ -62,7 +71,7 @@ public sealed class BindingProfileEffectivePageTests {
         );
     }
     [Fact]
-    public void AnEmptyInheritsIsRefusedByBothCompileAndFromPage() {
+    public void ACycleIsRefusedByBothCompileAndFromPage() {
         var document = new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
             Modifiers: [],
@@ -71,26 +80,39 @@ public sealed class BindingProfileEffectivePageTests {
                     Chord: [],
                     Group: "play",
                     Page: new BindingPageDefinition(
-                        Entries: [new BindingPageEntryDefinition(Command: "play.a", Sources: ["keyboard.a"])],
+                        Entries: [new BindingPageEntryDefinition(
+                                Command: "play.a",
+                                Sources: ["keyboard.a"]
+                            )],
                         Id: "play-base",
-                        Inherits: ""
+                        Inherits: "modal"
+                    )
+                ),
+                new BindingChordDefinition(
+                    Chord: ["keyboard.leftShift"],
+                    Group: "play",
+                    Page: new BindingPageDefinition(
+                        Entries: [new BindingPageEntryDefinition(
+                                Command: "play.b",
+                                Sources: ["keyboard.b"]
+                            )],
+                        Id: "modal",
+                        Inherits: "play-base"
                     )
                 ),
             ]
         );
-        var compileRefusal = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: document));
-        var planRefusal = Assert.Throws<ArgumentException>(testCode: () => BindingSessionPlan.FromPage(
-            document: document,
-            pageId: "play-base"
-        ));
 
         Assert.Contains(
-            actualString: compileRefusal.Message,
-            expectedSubstring: "carries an empty inherited page id"
+            actualString: Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: document)).Message,
+            expectedSubstring: "contains a cycle"
         );
         Assert.Contains(
-            actualString: planRefusal.Message,
-            expectedSubstring: "carries an empty inherited page id"
+            actualString: Assert.Throws<ArgumentException>(testCode: () => BindingSessionPlan.FromPage(
+                document: document,
+                pageId: "modal"
+            )).Message,
+            expectedSubstring: "contains a cycle"
         );
     }
     [Fact]
@@ -103,7 +125,10 @@ public sealed class BindingProfileEffectivePageTests {
                     Chord: [],
                     Group: "play",
                     Page: new BindingPageDefinition(
-                        Entries: [new BindingPageEntryDefinition(Command: "play.a", Sources: ["keyboard.a"])],
+                        Entries: [new BindingPageEntryDefinition(
+                                Command: "play.a",
+                                Sources: ["keyboard.a"]
+                            )],
                         Id: "play-base"
                     )
                 ),
@@ -111,7 +136,10 @@ public sealed class BindingProfileEffectivePageTests {
                     Chord: ["keyboard.leftShift"],
                     Group: "play",
                     Page: new BindingPageDefinition(
-                        Entries: [new BindingPageEntryDefinition(Command: "play.b", Sources: ["keyboard.b"])],
+                        Entries: [new BindingPageEntryDefinition(
+                                Command: "play.b",
+                                Sources: ["keyboard.b"]
+                            )],
                         Id: "modal",
                         Inherits: "play-base"
                     )
@@ -132,7 +160,7 @@ public sealed class BindingProfileEffectivePageTests {
         );
     }
     [Fact]
-    public void ACycleIsRefusedByBothCompileAndFromPage() {
+    public void AnEmptyInheritsIsRefusedByBothCompileAndFromPage() {
         var document = new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
             Modifiers: [],
@@ -141,33 +169,29 @@ public sealed class BindingProfileEffectivePageTests {
                     Chord: [],
                     Group: "play",
                     Page: new BindingPageDefinition(
-                        Entries: [new BindingPageEntryDefinition(Command: "play.a", Sources: ["keyboard.a"])],
+                        Entries: [new BindingPageEntryDefinition(
+                                Command: "play.a",
+                                Sources: ["keyboard.a"]
+                            )],
                         Id: "play-base",
-                        Inherits: "modal"
-                    )
-                ),
-                new BindingChordDefinition(
-                    Chord: ["keyboard.leftShift"],
-                    Group: "play",
-                    Page: new BindingPageDefinition(
-                        Entries: [new BindingPageEntryDefinition(Command: "play.b", Sources: ["keyboard.b"])],
-                        Id: "modal",
-                        Inherits: "play-base"
+                        Inherits: ""
                     )
                 ),
             ]
         );
+        var compileRefusal = Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: document));
+        var planRefusal = Assert.Throws<ArgumentException>(testCode: () => BindingSessionPlan.FromPage(
+            document: document,
+            pageId: "play-base"
+        ));
 
         Assert.Contains(
-            actualString: Assert.Throws<ArgumentException>(testCode: () => BindingProfile.Compile(document: document)).Message,
-            expectedSubstring: "contains a cycle"
+            actualString: compileRefusal.Message,
+            expectedSubstring: "carries an empty inherited page id"
         );
         Assert.Contains(
-            actualString: Assert.Throws<ArgumentException>(testCode: () => BindingSessionPlan.FromPage(
-                document: document,
-                pageId: "modal"
-            )).Message,
-            expectedSubstring: "contains a cycle"
+            actualString: planRefusal.Message,
+            expectedSubstring: "carries an empty inherited page id"
         );
     }
 }

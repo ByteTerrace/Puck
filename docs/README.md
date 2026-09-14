@@ -1,0 +1,22 @@
+# Puck documentation
+
+Puck is a C# engine for document-defined interactive worlds. Start with the
+[overview](overview.md) to understand the components, or
+[build and run Puck](getting-started.md) to try the application.
+
+| I want to… | Start here |
+|---|---|
+| Understand how the engine works | [Engine architecture](architecture/README.md): documents, simulation, presentation, and world hosting. |
+| Use the simulation libraries in my own host | [State and rules](reference/state.md), [Commands and input](reference/commands.md), [Deterministic numerics](reference/maths.md), and [Physics kernels](reference/physics.md). |
+| Connect devices and provide feedback | [Device input](reference/input.md): controllers, motion, haptics, and lighting. |
+| Create or change content | [Authoring content](authoring/README.md): world documents, the DSL, shader pipelines, and cartridges. |
+| Work on graphics or emulation | [Rendering](rendering/README.md) or [Machine emulation](emulation/README.md): introductions followed by detailed technical guides. |
+| Investigate or change the code | [Development](development/README.md): project ownership, debugging, verification, and releases. |
+| Look up a command, schema, or API | [Reference](reference/README.md): the precise contracts and their owning projects. |
+
+[Plans](plans/README.md) describe proposed work and its completion criteria.
+[Design decisions](decisions/README.md) explain important engineering choices.
+The [reference game](game/README.md) has its own design and artwork; it is not
+required reading for using the engine libraries.
+
+📚 [Repository overview](../README.md) · 🛠️ [Writing documentation](development/documentation.md) · 🎨 [Branding](../branding/README.md)

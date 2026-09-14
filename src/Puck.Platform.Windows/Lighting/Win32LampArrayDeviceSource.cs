@@ -24,17 +24,6 @@ public sealed class Win32LampArrayDeviceSource : ILampArrayDeviceSource {
     /// <inheritdoc />
     public IReadOnlyList<ILampArrayDevice> Devices { get => m_devices; }
 
-    /// <inheritdoc />
-    public void Rescan() {
-        ObjectDisposedException.ThrowIf(condition: m_isDisposed, instance: this);
-
-        if (!OperatingSystem.IsWindowsVersionAtLeast(major: 5, minor: 1, build: 2600)) {
-            return;
-        }
-
-        RescanCore();
-    }
-
     [SupportedOSPlatform(platformName: "windows5.1.2600")]
     private void RescanCore() {
         var present = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -42,7 +31,10 @@ public sealed class Win32LampArrayDeviceSource : ILampArrayDeviceSource {
         foreach (var interfaceInfo in Win32HumanInterfaceDevice.EnumerateInterfaces()) {
             var path = interfaceInfo.Path;
 
-            if (!present.Add(item: path) || m_devicesByPath.ContainsKey(key: path)) {
+            if (
+                !present.Add(item: path) ||
+                m_devicesByPath.ContainsKey(key: path)
+            ) {
                 continue;
             }
 
@@ -78,5 +70,22 @@ public sealed class Win32LampArrayDeviceSource : ILampArrayDeviceSource {
 
         m_devicesByPath.Clear();
         m_devices = [];
+    }
+    /// <inheritdoc />
+    public void Rescan() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_isDisposed,
+            instance: this
+        );
+
+        if (!OperatingSystem.IsWindowsVersionAtLeast(
+            major: 5,
+            minor: 1,
+            build: 2600
+        )) {
+            return;
+        }
+
+        RescanCore();
     }
 }

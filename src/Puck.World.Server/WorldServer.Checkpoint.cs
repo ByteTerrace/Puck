@@ -71,6 +71,7 @@ public sealed partial class WorldServer {
                 current: candidate,
                 mutation: entry.Mutation,
                 tick: entry.Tick,
+                engineTick: entry.EngineTick,
                 instanceIdentity: InstanceIdentity,
                 candidate: out var next,
                 reason: out var composeReason,
@@ -86,15 +87,16 @@ public sealed partial class WorldServer {
                 );
             }
 
-            // An advancing or easing cell's trait re-bases to the ORIGINAL journal tick it was set at, exactly as it
-            // did on the live apply this replays — see RebaseCellTraits' remarks. Doing this BEFORE revalidation is
-            // what lets world.undo rewind a regen row's accumulation, or a dynamics cell's follower state,
-            // bit-identically, same as it already does for a generator's $cursor.
+            // An advancing or easing cell's trait re-bases to the ORIGINAL journal tick/engine tick it was set at,
+            // exactly as it did on the live apply this replays — see RebaseCellTraits' remarks. Doing this BEFORE
+            // revalidation is what lets world.undo rewind a regen row's accumulation, or a dynamics cell's follower
+            // state, bit-identically, same as it already does for a generator's $cursor.
             next = RebaseCellTraits(
                 original: candidate,
                 candidate: next,
                 mutation: entry.Mutation,
-                tick: entry.Tick
+                tick: entry.Tick,
+                engineTick: entry.EngineTick
             );
 
             // Cross-document claims were proved before the journal was admitted; replay repeats only local checks.
@@ -177,6 +179,7 @@ public sealed partial class WorldServer {
         WorldPrincipal[]? newTickWrittenPrincipal = null;
         bool[]? newTickCollided = null;
         var addonPlanCommitted = false;
+        IWorldMachinePreparedPlan? machinePlan = null;
 
         // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
         // shape for why: addonPlan starts null, so a refusal before TryPrepare ever succeeds leaves the finally a
@@ -209,6 +212,19 @@ public sealed partial class WorldServer {
                 }
             }
 
+            if (!m_machines.TryPrepare(
+                candidate: candidate,
+                current: m_definition,
+                plan: out machinePlan,
+                reason: out var machineReason
+            )) {
+                return RefuseUndo(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    refusal: $"undo refused: the restored document's machines could not prepare — {machineReason}"
+                );
+            }
+
             var previousDefinition = m_definition;
 
             SwapSolids(solids: undoSolids);
@@ -217,9 +233,12 @@ public sealed partial class WorldServer {
                 rebuildPopulation: true
             );
             RepaintChangedLatticeDraws(
-                previous: previousDefinition,
-                current: candidate
+                current: candidate,
+                previous: previousDefinition
             );
+
+            m_machines.Commit(plan: machinePlan!);
+            m_machines.Finish(plan: machinePlan!);
 
             if (addonPlan is not null) {
                 m_addons!.Commit(plan: addonPlan);
@@ -232,6 +251,7 @@ public sealed partial class WorldServer {
                 }
             }
         } finally {
+            machinePlan?.Dispose();
             if (!addonPlanCommitted) {
                 addonPlan?.Dispose();
             }
@@ -315,7 +335,6 @@ public sealed partial class WorldServer {
             Principal: principal
         ));
     }
-
     /// <summary>Bounds the journal to at most <c>host.journalDepth</c> trailing entries (0 = unbounded, the default —
     /// a no-op). The oldest entries past the horizon fold forward, in order, into the base the journal already
     /// keeps — the same per-entry compose-and-rebase <see cref="ApplyUndo"/>'s own replay performs, run forward
@@ -345,6 +364,7 @@ public sealed partial class WorldServer {
                     current: candidate,
                     mutation: entry.Mutation,
                     tick: entry.Tick,
+                    engineTick: entry.EngineTick,
                     instanceIdentity: InstanceIdentity,
                     candidate: out var next,
                     reason: out _,
@@ -358,13 +378,17 @@ public sealed partial class WorldServer {
                     original: candidate,
                     candidate: next,
                     mutation: entry.Mutation,
-                    tick: entry.Tick
+                    tick: entry.Tick,
+                    engineTick: entry.EngineTick
                 );
             }
 
             m_base = candidate;
             m_baseOrigin = $"the journal depth horizon (host.journalDepth {depth})";
-            m_journal.RemoveRange(index: 0, count: excess);
+            m_journal.RemoveRange(
+                count: excess,
+                index: 0
+            );
         }
     }
 
@@ -375,7 +399,7 @@ public sealed partial class WorldServer {
         byte[] DefinitionJson,
         byte[] BaseDefinitionJson,
         string BaseOrigin,
-        IReadOnlyList<(ulong Tick, WorldMutation Mutation)> Journal,
+        IReadOnlyList<(ulong Tick, ulong EngineTick, WorldMutation Mutation)> Journal,
         ulong LastCompletedTick,
         ulong LastCompletedEngineTicks,
         ulong LastStepTicks,
@@ -400,7 +424,8 @@ public sealed partial class WorldServer {
     /// <summary>The engine-tick threshold beyond which a checkpoint capture is refused rather than silently taken
     /// against state this record graph cannot represent — see <see cref="TryCaptureCheckpoint"/>.</summary>
     /// <returns><see langword="true"/> when this server's live state is outside what a checkpoint can capture.</returns>
-    private bool AnyUncapturableStateEverLatched() => (AnyAddonEverPumped || AnyMachineEverPumped || AnyScreenOpEverApplied);
+    private bool AnyUncapturableStateEverLatched() => (AnyAddonEverPumped ||
+        (AnyMachineEverPumped && (m_machines is not IWorldMachineCheckpointHost)) || AnyScreenOpEverApplied);
 
     /// <summary>Builds a fresh server from a previously captured checkpoint — the sequence
     /// <see cref="WorldReplaySnapshot.Drive"/> already follows for an offline rehydration (population, machine
@@ -410,8 +435,8 @@ public sealed partial class WorldServer {
     /// <param name="checkpoint">The captured image to restore from.</param>
     /// <param name="profiles">The profile catalog this server's identities resolve against — a fresh instance the
     /// caller loads from this row's own owned-worlds directory, exactly as a boot composition root does.</param>
-    /// <param name="machines">The machine host this server steps — empty for a checkpoint the arm gate has already
-    /// proven never stepped one.</param>
+    /// <param name="machines">A fresh machine host prepared from the captured definition. A nonempty saved machine
+    /// inventory requires <see cref="IWorldMachineCheckpointHost"/> support.</param>
     /// <param name="instanceIdentity">This row's own running-instance identity.</param>
     /// <returns>The restored server and the population it owns.</returns>
     public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity) {
@@ -437,9 +462,9 @@ public sealed partial class WorldServer {
     }
     /// <summary>Captures a full simulation-state image of this server and every subsystem it owns, under
     /// <see cref="m_authorityGate"/>. Refuses by name (returns <see langword="false"/>) when this server has ever
-    /// pumped an addon, stepped a machine, or applied a screen op — machine core state and addon guest state are not
-    /// capturable today (the arm gate <c>replay.record</c> already reuses,
-    /// <see cref="AnyAddonEverPumped"/>/<see cref="AnyMachineEverPumped"/>/<see cref="AnyScreenOpEverApplied"/>) —
+    /// pumped an addon, stepped a machine without durable checkpoint support, or applied a screen operation.
+    /// Supported machine hosts drain accepted steps and capture their complete runtime images; unsupported
+    /// runtime state, including live coupled links and enabled rewind history, refuses capture by name —
     /// or when <see cref="m_pending"/> or <see cref="m_ordered"/> is non-empty at the moment of the call, which the
     /// caller must retry at the NEXT master boundary rather than treat as a hard refusal (a live console submission
     /// landed in the window between this boundary and the last drain).</summary>
@@ -454,11 +479,14 @@ public sealed partial class WorldServer {
         lock (m_authorityGate) {
             if (AnyUncapturableStateEverLatched()) {
                 checkpoint = null;
-                reason = "a checkpoint cannot capture a server that has ever pumped an addon, stepped a machine, or applied a screen op — machine core and addon guest state are not capturable today";
+                reason = "a checkpoint cannot capture pumped addon guests, a stepped machine without durable checkpoint support, or applied screen operations";
 
                 return false;
             }
-            if (m_pending.Count != 0 || m_recordedContributions.Count != 0) {
+            if (
+                (m_pending.Count != 0) ||
+                (m_recordedContributions.Count != 0)
+            ) {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture while a buffered live-edit op is pending drain — retry at the next master boundary";
 
@@ -473,10 +501,20 @@ public sealed partial class WorldServer {
 
             m_engagement.AssertCheckpointQuiescent();
 
-            var journal = new (ulong, WorldMutation)[m_journal.Count];
+            WorldMachineHostCheckpoint? machines = null;
+
+            if (m_machines is IWorldMachineCheckpointHost machineHost) {
+                try { machines = machineHost.CaptureCheckpoint(); } catch (Exception error) when ((error is InvalidOperationException or IOException or ArgumentException)) {
+                    checkpoint = null;
+                    reason = $"machine checkpoint refused: {error.Message}";
+                    return false;
+                }
+            }
+
+            var journal = new (ulong, ulong, WorldMutation)[m_journal.Count];
 
             for (var index = 0; (index < m_journal.Count); index++) {
-                journal[index] = (m_journal[index].Tick, m_journal[index].Mutation);
+                journal[index] = (m_journal[index].Tick, m_journal[index].EngineTick, m_journal[index].Mutation);
             }
 
             var ruleGateHeld = new List<(string, bool)>(capacity: m_ruleGateHeld.Count);
@@ -524,7 +562,8 @@ public sealed partial class WorldServer {
                 HostRow: hostRow,
                 Fields: m_population.Fields?.Capture(),
                 Search: m_search.Capture(),
-                BoardEnforcement: CaptureBoardEnforcement()
+                BoardEnforcement: CaptureBoardEnforcement(),
+                Machines: machines
             );
             reason = string.Empty;
 
@@ -550,17 +589,33 @@ public sealed partial class WorldServer {
         m_population.ValidateCheckpoint(checkpoint: checkpoint.Population);
 
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
+
         m_events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
-        ValidateDecisionCheckpoint(server, restoredDefinition);
+        ValidateDecisionCheckpoint(
+            checkpoint: server,
+            definition: restoredDefinition
+        );
+
+        var machineCheckpoint = (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty);
+
+        if (m_machines is IWorldMachineCheckpointHost machineHost) {
+            machineHost.RestoreCheckpoint(checkpoint: machineCheckpoint);
+        } else if (
+            (machineCheckpoint.Instances.Count != 0) ||
+            machineCheckpoint.AnyEverPumped
+        ) {
+            throw new InvalidOperationException(message: "checkpoint contains machine state that this host cannot restore");
+        }
 
         m_definition = restoredDefinition;
         m_base = WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson);
         m_baseOrigin = server.BaseOrigin;
         m_journal.Clear();
-        foreach (var (tick, mutation) in server.Journal) {
+        foreach (var (tick, engineTick, mutation) in server.Journal) {
             m_journal.Add(item: new JournalEntry(
                 Mutation: mutation,
-                Tick: tick
+                Tick: tick,
+                EngineTick: engineTick
             ));
         }
         m_lastCompletedTick = server.LastCompletedTick;
@@ -623,6 +678,14 @@ public sealed partial class WorldServer {
         // so this reads the SAME cells the live server had when it captured.
         m_population.SyncBodyScale(definition: m_definition);
         m_grants.Restore(checkpoint: checkpoint.Grants);
+        // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before
+        // any post-restore admission/read path can consult Allows, so role-specific membership and group ownership
+        // cannot remain empty (deny-all) or fall back to a stale role-less projection.
+        m_grants.RestoreGroups(
+            groups: (m_definition.Groups ?? WorldGroupsSection.Empty).Groups,
+            kinds: (m_definition.Groups ?? WorldGroupsSection.Empty).Kinds,
+            ownership: (m_definition.Groups ?? WorldGroupsSection.Empty).Ownership
+        );
 
         // A restored parked PEER generation is released right here, not at its grace deadline: the connection that
         // occupied it did not survive the restore and peer body-resume does not exist, so — exactly as the
@@ -650,7 +713,7 @@ public sealed partial class WorldServer {
         m_events.Restore(checkpoint: checkpoint.EventFeed);
         m_profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
         RecompileRules(definition: m_definition);
-        RestoreDecisions(server.Decisions);
+        RestoreDecisions(rows: server.Decisions);
         m_search.Restore(checkpoint: (checkpoint.Search ?? SearchCheckpoint.Empty));
         RestoreBoardEnforcement(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
     }
@@ -661,15 +724,20 @@ public sealed partial class WorldServer {
     /// recorded, and the caller should refuse the activation rather than diverge silently.</summary>
     /// <param name="mutation">The recorded mutation.</param>
     /// <param name="tick">The recorded application tick.</param>
+    /// <param name="engineTick">The recorded application engine tick — the exact coordinate the live apply rebased
+    /// an Advance epoch against; never re-derived from <paramref name="tick"/> at any rate.</param>
     /// <returns><see langword="true"/> when the mutation re-applied.</returns>
-    public bool TryApplyJournalTailMutation(WorldMutation mutation, ulong tick) => TryApplyMutation(
+    public bool TryApplyJournalTailMutation(WorldMutation mutation, ulong tick, ulong engineTick) => TryApplyMutation(
         connectionId: -1,
         correlationId: 0L,
         mutation: mutation,
         preMetered: false,
-        tick: tick
+        tick: tick,
+        engineTick: engineTick
     );
 
-    // One journal entry — the tick a mutation applied and the mutation itself (the edit history replay reproduces).
-    private readonly record struct JournalEntry(ulong Tick, WorldMutation Mutation);
+    // One journal entry — the tick and engine tick a mutation applied at, and the mutation itself (the edit history
+    // replay reproduces). The two clocks are independent: Tick is the simulation-tick coordinate undo/replay rebase
+    // a Cycle epoch against, EngineTick the engine-tick coordinate they rebase an Advance epoch against.
+    private readonly record struct JournalEntry(ulong Tick, ulong EngineTick, WorldMutation Mutation);
 }

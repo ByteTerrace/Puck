@@ -11,6 +11,24 @@ namespace Puck.World.Client;
 public static class WorldSeatAnchors {
     private const string SeatQualifier = "@seat:";
 
+    private static SdfAnchor RootPose(int body, WorldClient client) => new(
+        Orientation: client.Orientation(index: body),
+        Position: client.Position(index: body)
+    );
+    private static bool TryResolveBody(WorldAnchor? anchor, int slot, WorldClient client, WorldPerceptionAnchor perception, WorldSpeechClock speech, out int body) {
+        body = BodyOf(
+            anchor: anchor,
+            perception: perception,
+            slot: slot,
+            speech: speech
+        );
+
+        return (
+            (((uint)body) < ((uint)WorldClient.EntityCapacity)) &&
+            client.IsActive(index: body)
+        );
+    }
+
     /// <summary>Returns the body a seat-relative anchor rides for <paramref name="slot"/>, or -1 when it resolves
     /// nothing (an unjoined explicit seat still resolves its perceived body; a recent speaker resolves only once
     /// something has spoken). A non-seat-relative anchor returns -1.</summary>
@@ -23,7 +41,9 @@ public static class WorldSeatAnchors {
         ArgumentNullException.ThrowIfNull(argument: speech);
 
         return anchor switch {
-            WorldAnchor.Seat seat => perception.PerceivedBody(slot: ((seat.Number is { } number) ? (number - 1) : slot)),
+            WorldAnchor.Seat seat => perception.PerceivedBody(slot: ((seat.Number is { } number)
+            ? (number - 1)
+            : slot)),
             WorldAnchor.RecentSpeaker => speech.RecentSpeakerBody,
             _ => -1,
         };
@@ -52,6 +72,35 @@ public static class WorldSeatAnchors {
                 handler: $"{camera.Name}{SeatQualifier}{seat}"
             )
             : camera.Name
+        );
+    }
+    /// <summary>Selects the anchor a camera rides this frame for <paramref name="slot"/>: the bare
+    /// <see cref="WorldCamera.Anchor"/>, or the first <see cref="WorldCamera.Anchors"/> candidate whose condition
+    /// holds. <paramref name="candidateIndex"/> is that candidate's index, or -1 (bare anchor, or none holding —
+    /// which returns <see langword="null"/>, the world frame).</summary>
+    /// <param name="camera">The camera row.</param>
+    /// <param name="slot">The 0-based seat the view is resolved for.</param>
+    /// <param name="evaluator">The predicate evaluator; <see langword="null"/> treats every condition as holding.</param>
+    /// <param name="candidateIndex">The winning candidate's index, or -1.</param>
+    public static WorldAnchor? SelectAnchor(WorldCamera camera, int slot, IOverlayPredicateEvaluator? evaluator, out int candidateIndex) {
+        ArgumentNullException.ThrowIfNull(argument: camera);
+
+        if (camera.Anchors is not { Count: > 0 } candidates) {
+            candidateIndex = -1;
+
+            return camera.Anchor;
+        }
+
+        candidateIndex = OverlayRanking.FirstHolding(
+            candidates: candidates,
+            evaluator: evaluator,
+            slot: slot,
+            when: static candidate => candidate.When
+        );
+
+        return ((candidateIndex >= 0)
+            ? candidates[candidateIndex].Anchor
+            : null
         );
     }
     /// <summary>Resolves a seat-relative anchor's pose for <paramref name="slot"/> — the body's root pose, or its
@@ -98,49 +147,5 @@ public static class WorldSeatAnchors {
         );
 
         return true;
-    }
-    private static SdfAnchor RootPose(int body, WorldClient client) => new(
-        Orientation: client.Orientation(index: body),
-        Position: client.Position(index: body)
-    );
-    private static bool TryResolveBody(WorldAnchor? anchor, int slot, WorldClient client, WorldPerceptionAnchor perception, WorldSpeechClock speech, out int body) {
-        body = BodyOf(
-            anchor: anchor,
-            perception: perception,
-            slot: slot,
-            speech: speech
-        );
-
-        return ((((uint)body) < ((uint)WorldClient.EntityCapacity)) && client.IsActive(index: body));
-    }
-
-    /// <summary>Selects the anchor a camera rides this frame for <paramref name="slot"/>: the bare
-    /// <see cref="WorldCamera.Anchor"/>, or the first <see cref="WorldCamera.Anchors"/> candidate whose condition
-    /// holds. <paramref name="candidateIndex"/> is that candidate's index, or -1 (bare anchor, or none holding —
-    /// which returns <see langword="null"/>, the world frame).</summary>
-    /// <param name="camera">The camera row.</param>
-    /// <param name="slot">The 0-based seat the view is resolved for.</param>
-    /// <param name="evaluator">The predicate evaluator; <see langword="null"/> treats every condition as holding.</param>
-    /// <param name="candidateIndex">The winning candidate's index, or -1.</param>
-    public static WorldAnchor? SelectAnchor(WorldCamera camera, int slot, IOverlayPredicateEvaluator? evaluator, out int candidateIndex) {
-        ArgumentNullException.ThrowIfNull(argument: camera);
-
-        if (camera.Anchors is not { Count: > 0 } candidates) {
-            candidateIndex = -1;
-
-            return camera.Anchor;
-        }
-
-        candidateIndex = OverlayRanking.FirstHolding(
-            candidates: candidates,
-            evaluator: evaluator,
-            slot: slot,
-            when: static candidate => candidate.When
-        );
-
-        return ((candidateIndex >= 0)
-            ? candidates[candidateIndex].Anchor
-            : null
-        );
     }
 }

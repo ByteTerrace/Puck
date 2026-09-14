@@ -1,34 +1,52 @@
 ---
 name: sdf-world
-description: Working on the SDF VM and world renderer — src/Puck.SignedDistance (SdfProgram/SdfProgramBuilder, the packed instruction ISA, and Puck.SignedDistance.Queries' deterministic fixed-point interpreter behind Puck.Maths' IWorldQuery/IFieldEvaluator seams) and src/Puck.SdfVm (SdfWorldEngine/SdfEngineNode, the Assets/Shaders/Sdf kernels, the shared render assembly SdfWorldRenderSpec/SdfWorldRenderBuilder, the Puck.SdfVm.Debug inspection engine, the composition/anchor surface (ISdfSceneEmitter/SdfCompositionFrameSource/SdfMaterialScope/SdfAnchor), and Puck.SdfVm.Views (ViewStack/camera rigs)). Use whenever touching the SDF ISA or packed word layout, the world kernels or their HLSL includes, engine capacities/frames/screen sources, render-assembly/backend selection, the SDF debug/gallery/bench tooling, composing a world program from emitters, anchor/view/camera-rig plumbing, deterministic world queries, or debugging world-render parity or GPU cost. Carries the C#↔HLSL contract pairs and settled engine semantics so they aren't re-derived or accidentally forked.
+description: Working on the SDF VM and world renderer — src/Puck.SignedDistance (SdfProgram/SdfProgramBuilder, the packed instruction ISA, and Puck.SignedDistance.Queries' deterministic fixed-point interpreter behind Puck.Maths' IWorldQuery/IFieldEvaluator seams) and src/Puck.SdfVm (SdfWorldEngine/SdfEngineNode, the Assets/Shaders/Sdf kernels, the shared render assembly SdfWorldRenderSpec/SdfWorldRenderBuilder, the Puck.SdfVm.Debug inspection engine, the composition/anchor surface (ISdfSceneEmitter/SdfCompositionFrameSource/SdfAnchor, wrapping Puck.SignedDistance's SdfMaterialScope), and Puck.SdfVm.Views (ViewStack/camera rigs)). Use whenever touching the SDF ISA or packed word layout, the world kernels or their HLSL includes, engine capacities/frames/screen sources, render-assembly/backend selection, the SDF debug/gallery/bench tooling, composing a world program from emitters, anchor/view/camera-rig plumbing, deterministic world queries, or debugging world-render parity or GPU cost. Carries the C#↔HLSL contract pairs and settled engine semantics so they aren't re-derived or accidentally forked.
 ---
 
 # The SDF world: one contract, two languages
+
+Bounded flow/cloud media share a 64-entry frame budget. Keep
+`SdfVolume.VectorsPerEntry` (eleven `float4` rows), `PackVolumes`, and
+`shade-volumes.hlsli` aligned: family at 5.z, ramp at 6–9, cloud coverage and
+softness at 10.xy. Both the sky and views passes integrate volumes. The shader
+stops at the zeroed trailing bound and composites intersecting volumes in
+far-to-near entry order, resolving equal entries by descending index, without
+capacity-sized per-pixel arrays. This is whole-volume compositing, not a
+combined-density overlap integral. `world.budget` reports submitted volumes;
+verify sixteen jets in an eight-body scene before accepting its measurements.
+See the authoring README's bounded-volume section for controls and limits.
 
 For scoped material composition, `mapCore` must save/reset/restore
 `sdfMaterialBlendWeight` and `sdfMaterialBlendOther` alongside distance/material.
 A losing scope must not tint the parent; a winning hard-union scope must retain
 its internal seam. Verify both cases with contrasting scoped materials against
 an unrelated ground surface. The two-material outer-seam behavior is described
-in `docs/sdf-wiki/materials-and-primitives.md`.
+in `docs/rendering/sdf/materials-and-primitives.md`.
 
 Factual and procedural only: settled contracts, their exact sync points, and
 how to verify. The user's current instruction outranks it — if this file
 argues against a demanded change, it is stale; update it in the same change.
 The render-assembly reference that used to describe its boundary, capacity
-envelope, content seams, and unsupported graph requests was deleted on
-2026-08-02 and has no replacement — read `SdfWorldRenderSpec`/
-`SdfWorldRenderBuilder` directly.
+envelope, content seams, and unsupported graph requests is deleted and has no
+replacement — read `SdfWorldRenderSpec`/`SdfWorldRenderBuilder` directly.
+
+Creation/shape AUTHORING — including `.puck` shape/prototype/placement sugar
+(e.g. `src/Puck.World/Assets/worlds/avatars/moth.puck`) — is `sdf-authoring`'s
+territory, not this skill's. `puck.creation.v1`/`puck.sdf.v1` are cited below
+only as wire formats this ISA reads and writes, never as an authoring path.
 
 World static-placement headroom must cover both emission classes. A scoped
-creation has one instance; a scope-free creation has one per shape.
-`WorldSceneEmitter` reserves each headroom copy in both independent probe floors,
-using `WorldPlacementPolicy.MaxShapesPerStamp` for the per-shape floor. Keep
-construction probing and `ComposeCandidate` accounting aligned. Verify through
-`WorldRenderEnvelopeLawTests` and a rendered live placement addition, since
+creation has one instance; a scope-free creation has one per shape, reserved
+at `CreationStampEmitter.PerCopyInstanceCount` probe chains per copy — a
+panelled shape charges two, since its one instance carries a second transform
+chain and shape. `WorldSceneEmitter` reserves each headroom copy in both
+independent probe floors, using `WorldPlacementPolicy.MaxShapesPerStamp` for
+the per-shape floor. Keep construction probing and `ComposeCandidate`
+accounting aligned. Verify through `WorldRenderEnvelopeLawTests` and
+`ShapePanelLawTests`' probe laws and a rendered live placement addition, since
 headless admission has no GPU capacity lease.
 
-> **Unification-contract alignment** (see docs/vision.md): world content is
+> **Unification-contract alignment** (see docs/decisions/engine-design.md): world content is
 > authored and loaded in-session — the `world.row.set`/`world.row.step`
 > document-row mutation verbs and `world.load`/`world.save` — never only
 > through a CLI flag. `Puck.World` has no content-authoring flags at all.
@@ -43,77 +61,43 @@ headless admission has no GPU capacity lease.
 > implementation of something, read that as: the capability is absent from
 > the running product.
 
-> **ISA admission rule (owner-ratified 2026-07-12).** An op or shape earns a
+> **ISA admission rule.** An op or shape earns a
 > switch case ONLY if it cannot be composed EXACTLY from existing vocabulary —
-> otherwise it ships as a builder macro emitting existing ops. Ratified but
-> never executed, and the SDF backlog that tracked it was deleted 2026-08-02, so
-> nothing schedules this now: `Star`/`RegularPolygon` retire
+> otherwise it ships as a builder macro emitting existing ops: `Star`/`RegularPolygon` retire
 > into `RepeatPolar`-based
 > builder macros; `Ellipse` STAYS as the one exact-curve citizen (`Ellipsoid`
 > #6 remains the approximate path); shapes join ops on the compiled
 > kernel-variant axis so unused vocabulary costs no register pressure.
 
-## The C# ↔ HLSL sync pairs (KEEP IN SYNC — the whole list)
+A named child render node produces and prepares once per host frame even when
+several view slots reference it. The first slot supplies its render extent;
+the compositor reconstructs that image into each destination slot. Keep
+`BuildCompositePush` word 3 (`childMask`, formerly padding) aligned with
+`CompositeParams2.childMask`: child sources use `GetDimensions`, while SDF
+sources use the valid region derived from render scale. Equal source and
+destination extents retain the exact-copy path. Child images must expose an
+RGBA8 storage view in General layout, including pipeline intermediate previews.
+An asynchronously compiling child may return an empty surface. Clear that slot's
+child bit for the frame so the compositor uses its initialized SDF source;
+never bind a zero image view while waiting for the first candidate.
 
-The C# ISA and the shader ISA are ONE contract. These are the live pairs;
-change either side only with its partner in the same change. Every C# member
-in the table below lives in `Puck.SignedDistance` (the field-as-data half,
-split from `Puck.SdfVm` — no GPU/shader-compiler dependency of any kind)
-unless it is `SdfWorldEngine`/`SdfEngineNode`/a `Views.*`/`Debug.*` member,
-which remain in `Puck.SdfVm` (the GPU engine that consumes
-`Puck.SignedDistance` for the program model); the HLSL side is unaffected —
-it has no assembly to move. Four rows straddle the cut and are called out by
-name: the ISA-identity row (`SdfIsa.Version` + `SdfProgram.ValidateIsa` move;
-the shader-set verification and report decode stay on `SdfShaderSetVerification`
-in `Puck.SdfVm`), the mask-width row (`SdfProgram.InstanceMaskWordCount`
-moves; the engine's push-word write stays), the `MaxScreenSurfaces` row (the
-constant moves to `SdfProgramBuilder`; `SdfWorldEngine.MaxScreenSurfaces`
-reads it rather than hand-syncing a second literal), and the
-`MaxScreenDecalCells`/decal row (the constant moves to the new
-`SdfScreenDecalLayout` in `Puck.SignedDistance`; `SetScreenDecal`/
-`sdfDecalCells` stay on the engine).
+## The C# ↔ HLSL sync pairs
 
-| C# | HLSL | Contract |
-|---|---|---|
-| `SdfIsa.Version` + `SdfProgram.ValidateIsa` + `SdfWorldEngine` initialization (via `SdfShaderSetVerification`) | `sdf-isa.hlsli` + the report branches in `sdf-beam.comp.hlsl`/both views variants + both `mapCore` dispatch switches | v1 ISA identity is reported by the actual production interpreter bytecode through a runtime GPU readback, cached per device+shader-set; mismatch refuses before `UploadProgram`, an undeclared host opcode refuses by numeric id/instruction index, and an unknown GPU opcode returns the diagnostic material instead of falling through |
-| `SdfProgram` packed `Words` layout, op/shape/blend enums | `sdf-vm.hlsli` decode (`evaluateShape`, op switch) | instruction stream |
-| `SdfProgram.InstanceMaskWordCount` (`max(1, ceil(n/32))`) | `sdfInstanceMaskWordCount` (reader's INNER word iteration only) | mask width formula |
-| `SdfWorldEngine` pushWords[7] = LIVE uploaded program's width | `CompositeParams.instanceMaskWordCount` / `worldInstanceMaskBase` (sdf-world.hlsli) | mask buffer INDEXING (entry width + tile base) — host-pushed, never shader-derived |
-| `PushConstantByteLength` = 32 B, words 0..7 | `CompositeParams` (8 uints: extent, tileGrid, viewportCount, childMask, screenMask, instanceMaskWordCount) | Stage 0/1 push |
-| `DynamicTransformByteLength` = 32 B/slot | `sdfDynamicTransforms` (2×float4: position, quaternion) | dynamic transforms |
-| `SdfProgramBuilder.MaxInstances` = 32768 | `SDF_MAX_INSTANCES` | instance cap, at most 1024 mask words/tile. `InstanceMaskWordCountFor` derives width from the declared program count; smaller programs pack identically. World reserves 128 shapes per stamp, so its boot reservation needs this larger ceiling. Changes require paired shader bytecode, `WorldRenderEnvelopeLawTests`, and real GPU validation; buffer growth must be measured with the actual reserved program. |
-| `SdfProgramBuilder.MaxScreenSurfaces` = 32 (raised from 8, the many-eyes arc leg 1; was 4 pre-Arc-3); material sentinel `ScreenMaterialId + 1 + screenIndex`; capped at 32 by the single-`uint` `screenMask` push word | 32 combined-image-sampler bindings (`screenSource0..31` at bindings 12-43 / registers t5-t36, samplers s0-s31; `sdfInstanceMasks`/`sdfScreenLights` shifted to t37/t38; the glyph atlas to binding 44 / t39 / s32) — the run is DERIVED (`ScreenSourceBindingBase + i`, `BuildScreenSourceBindings`), never hand-listed, so the descriptor pool auto-sizes from `GpuDescriptorPoolSizes.ForSets`; `SdfScreenLightEnv`/the screen-light buffer + grid rows all key off `MaxScreenSurfaces`; the HLSL side names the width `SdfScreenSurfaceCount` and `SdfScreenLightEnv` derives from it | diegetic screens. THE SENTINEL BAND IS CLOSED ON BOTH SIDES: `Build()` accepts only `ScreenMaterialId` (plain, reads no side table) or `ScreenMaterialId + 1 + i` for an `i` a DECLARED `SdfScreenSurface` occupies, and `sampleScreenSurface` bounds `screenIndex` against `SdfScreenSurfaceCount` before touching `screenSurfaces[]`/`sdfDecalCells[]` — the sibling of `sdf-world-rt-debug`'s `hitMaterial >= SDF_SCREEN_MATERIAL` guard, and for the same reason (D3D12 zeroes an OOB structured-buffer read by spec; Vulkan defines it only under `robustBufferAccess`). A surface's `Right`/`Up` MUST be unit and orthogonal, and its `HalfWidth`/`HalfHeight` strictly positive — both refused by `ScreenSlab`, by the `SdfProgram` ctor, and by `WorldDefinitionValidator` — because the shader projects the hit onto the two axes and DIVIDES by their half-extents (`dot(local, right)/right.w`), while the slab's geometry and the server's `WorldColliderSet.ScreenBox` ride the frame derived from them. The slab's DEPTH half-extent stays unconstrained: nothing divides by it |
-| `SdfWorldEngine.SetScreenSurface(index, origin, right, up, halfW, halfH)` — writes a host mirror; DIRTY-GATED (2026-07-16, perf plan Phase 1.2): the call compares against the mirror and is a no-op unless a value actually changed, so a MOVING screen slab (a walking creature's face) still samples correctly every frame `SdfEngineNode` polls per-index transform providers via `ISdfFrameSource.ScreenSurfaceTransforms` (default-implemented), while a static/unchanged poll costs no upload. Per-ring-slot dirty bits (`m_screenSurfaceDirty`, same pattern as `m_decalDirty`) — a real change dirties EVERY slot, `PrepareFrame` uploads + clears only the current slot's bit, so no slot ever renders a stale table. The screen-LIGHT buffer stays unconditional (excluded on purpose — see plan) | `screenSurfaces` StructuredBuffer read per pixel — NO kernel change was needed | moving screens |
-| `SdfWorldEngine` screen-light buffer via `SetScreenLight` + `SdfFrame.AmbientScale/SunScale` (entries cover screens 0..31 + env — sized by `MaxScreenSurfaces`) | `sdfScreenLights` (t38, after `sdfInstanceMasks` t37; the glyph atlas t39 and `sdfDecalCells` t40 follow) + `SdfScreenLightEnv` (= 32) decode; the `renderView` light loop iterates all 32 | per-frame screen glow + room dimming |
-| `SdfViewSnapshot.RenderScale` (default 1) → `PackViewports` quantizes ONE `RenderScaleQ` byte (1..255; child slots forced 255) into ViewportData's 6th float4 row (`ViewportByteLength` = 96 B) AND packs it 8-bit into `CompositeParams2.scaleQPacked` (`BuildCompositePush`) | `ViewportData.renderScale.x` + `worldRenderDims` (`max(1,(dim·q+127)/255)`, INTEGER — beam/instance-cull/views all derive the identical reduced extent) ↔ the composite's `scaleQPacked` unpack + bilinear upsample (`q == 255` = the exact-copy path, byte-identical) | per-view render scale — presentation-only downscale (reveal/immersed policy lives in `ScreenLayoutDirector`); native is bit-exact BY CONSTRUCTION. Post: `world-render-scale` (blur-envelope, calibrated live) |
-| Grid-lock overlay (`GridOverlayState` record struct, `Puck.SdfVm` root namespace since 2026-07-10 — the `From(SnapConfig,…)` factory stays demo-side as `Puck.Demo.Editing.GridOverlayFactory` → `SdfFrame.GridFlags`/`GridWorldPitch`/`GridFloorY`/`GridObjectOrigin`/`GridObjectFrame`/`GridObjectPitch`/`GridObjectPatchRadius`, packed by `SdfWorldEngine.PackScreenLights` into `sdfScreenLights` rows 9..12; `ScreenLightByteLength` = `(MaxScreenSurfaces + 5)` float4) | `sdfScreenLights[SdfGridWorld=9]` (x=flags bit0 world/bit1 object, y=floorY, zw=world pitch XZ), `[SdfGridObjOrigin=10]` (xyz origin, w pitch X), `[SdfGridObjFrame=11]` (frame quat), `[SdfGridObjParams=12]` (x pitch Z, y patch radius); the `applyWorldFloorGrid`/`applyObjectGrid` tints at the `renderView` material call site (guarded `#ifdef SDF_SCREEN_SOURCES`) | the editors' grid visualization — env row 8 STAYS put (it doubles as the screen-count loop bound); adding a grid lane touches BOTH sides + `PackScreenLights`. Session-only authoring state (never sim/wire format); default 0 = byte-identical upload |
-| The **tile-cull plane layout** — `SdfWorldEngine.TilePlaneCount` (= 4; sizes `m_tileBuffer` = `TilePlaneCount · viewportCap · tileGridX · tileGridY` floats) | `WorldTilePlaneCount` (= 4u) + `worldTileMarchStartIndex` (plane 0, no stride) / `worldTileFirstExitIndex` (1·stride) / `worldTileSecondEntryIndex` (2·stride) / `worldTileFarBoundIndex` ((count−1)·stride) in sdf-world.hlsli; stride = `tileGrid.x·tileGrid.y·viewportCount` | the four-bound teleport (Larsson "The Gunk") + the **F1 far bound** — plane 0 = the classic marchStart (the ONLY plane sdf-cull-args + the compositor read, so their indexing is stride-independent), planes 1/2 = the proven-empty gap `[firstExit, secondEntry]`, plane 3 = the far bound. sdf-beam WRITES all four (`TileBounds`), sdf-world-views READS planes 1/2/3. Every plane is a total function (the view's far distance = "no gap/no bound"). Growing the plane count touches `TilePlaneCount` + `WorldTilePlaneCount` + a new accessor on BOTH sides |
-| The **FAR DISTANCE** — `SdfFrame.FarDistance` (default `SdfFrame.DefaultFarDistance` = 40, the retired `MaxDistance` shader constant; refused by `PrepareFrame` unless finite and positive) packed by `SdfWorldEngine.PackViewports` into every viewport row's `renderScale.w` lane (the 96-byte `ViewportData` row's last lane; covered by the cadence signature) | `worldFarDistance(view)` (sdf-world.hlsli) — read by `coneMarchTileBounds`/`coneMarchFarBound` (the beam's entry/gap/tail proofs and every "nothing proven" plane sentinel), `renderView`'s far exit, `marchOvershootDepth`, and the depth/overshoot debug ramps; sdf-beam seeds `TileBounds` with it, sdf-world-views pushes the F1 "off" side to `farDistance + 1`. There is NO shader constant for it any more. The rt-debug kernel's twin is `RtParams.farDistance` (a push lane no live host packs; its `NoRayHit` sentinel is `SDF_FAR_DISTANCE`) | the depth every camera march ends at — WORLD DATA: `render.farDistance` (`WorldRenderDefaults.FarDistance`, nullable; `WorldRenderFarDistance.Resolve` in `Puck.World.Client` maps absent → the pinned 40, so an unauthored world marches unchanged), validated by name into `[WorldRenderDefaults.MinFarDistance = 1, MaxFarDistance = 8192]` (8192 = the largest power of two whose float spacing 2^13·2^-23 ≈ 0.00098 still resolves `SurfaceEpsilon`), re-read off the live definition every frame by `WorldFramePresenter` (a `world.row.set render` lands on the next frame), echoed by `world.budget` (reach multiplier, horizon-ray steps per unit of camera height against `SdfWorldEngine.PrimaryMarchSteps` = 128 — KEEP IN SYNC with `MaxSteps`, and the fog remnant `exp(−fogDensity·far)` at the far plane). The rows below say "the far distance" where they used to say MaxDistance |
-| The **F1 FAR BOUND** (perf plan Phase 5.1) — `SdfFrame.DisableFarBound` (default false = ON) packed by `SdfWorldEngine.PackScreenLights` into the far-field row `.x` at `(MaxScreenSurfaces + 7)`; `ScreenLightByteLength` = `(MaxScreenSurfaces + 8)` float4 | producer `coneMarchTileBounds`/`coneMarchFarBound` (sdf-beam) → `TileBounds.farBound` (plane 3); consumer `renderView`'s `if (traveled >= farBound) break;` beside the teleport; lever `sdfScreenLights[SdfFarFieldParams=39].x` → `worldFarBoundDisabled()` (disable pushes `farBound = farDistance+1` so the "off" side is exactly pre-F1) | the depth past which a tile's cone cannot produce any FOOTPRINT-ACCEPTED hit through the far distance. ⚠ LOAD-BEARING PROOF: the tail proves clearance against the FOOTPRINT-INFLATED threshold `min(map(center), sdfMapStepBound) − (chord + footprint)·t > SurfaceEpsilon`, stepping `≤ clearance/(1 + chord + footprint)` — NOT bare `ConeEpsilon` (the fine march accepts hits up to `footprint·t ≈ 0.001·t`, so an ε-proof is anti-conservative). footprint = `2·view.right.w / rectDims.y`, computed identically in beam (from `regionSizePx`) and views. OUTPUT-IDENTICAL on the shipped shading path (both render skyColor in `[farBound, farDistance]`); only step counts + the termination debug view change. March-path change (solidity + parity families + hero canary), re-golden the termination debug view only |
-| The **fine march's exit discipline** — no C# side (`renderView`, sdf-world.hlsli; the strict `SDF_STRICT_MARCH` path shares it) | (1) ONE accept rule, `fieldDistance < max(SurfaceEpsilon, pixelFootprint·traveled)`, applied by the in-loop hit arm AND by the exhaustion arm after the loop: the loop tracks the closest approach as `candidateMargin = min(fieldDistance − hitThreshold)` over every evaluated sample — an overshoot-skipped sample included, which is the only way a sample can satisfy the rule without being accepted in-loop — and a ray that ends (step cap or a far exit) unaccepted with `candidateMargin < 0` re-evaluates the field at `candidateT` and shades it (material, blend channel, terminal radius from that eval). No second threshold exists. (2) A far exit (`traveled >= farBound` or `> farDistance`) is taken only on a VALIDATED step: an over-relaxed advance (`stepLength > radius`) that would cross an exit is retaken as the plain step (`radius`, ω = 1, slope reset) first, and the ray exits only if that crosses too — the disjoint-sphere test that validates a relaxed step lives on the NEXT sample, which the exit would skip. (3) The termination debug view classifies "escaped" as `marchStep < MaxSteps` (a break), "exhausted" as the loop running out with no candidate | the rule that keeps adjacent silhouette pixels resolving the same way whichever arm ends them. The failure the validated exit closes is per-pixel, not per-tile: a ray leaving a near object's silhouette accelerates (ω → 10) and its relaxed step vaults the background surface past the far plane — visible as the escaped class dotted along every edge in the termination view, pixel-identical under `world.far-field off` because both exits shared it. Pixels whose relaxed step never crosses an exit are bit-identical to before; parity's per-tile pixel verdicts move only at silhouettes |
-| The **F2 SHADOW LIGHT-SIDE EXIT** (perf plan Phase 5.1) — `SdfFrame.DisableShadowFarExit` (default false = ON) packed by `SdfWorldEngine.PackScreenLights` into the SAME far-field row's `.y` lane at `(MaxScreenSurfaces + 7)` (F1 rides `.x`; no `ScreenLightByteLength` growth) | consumer `softShadow` (sdf-world.hlsli) reads `worldShadowFarExitDisabled()` (`sdfScreenLights[SdfFarFieldParams=39].y`); the exit returns the running `result` when `ShadowSharpness·(clearanceTrue − (reach − traveled)) >= result·reach` | the no-further-darkening early out: `result` is a running MIN and the field is 1-Lipschitz along the ray, so once `clearanceTrue ≥ (reach − traveled) + result·reach/ShadowSharpness` no future sample can lower it. SOUND vs the classic penumbra term AND the true continuous penumbra (`≥ ShadowSharpness·cMin/reach ≥ result`, `cMin = clearanceTrue − remaining > 0`). ⚠ NOT bit-identical: the Aaltonen closest-approach parabola can undershoot past the exit point (its worst case → 0 at the near-radial-escape knife-edge `c'/prev → 2`, just inside the `y≥c` guard), so NO finite margin closes the strong form — skipping it brightens toward truth, never above it. MARCH-PATH change (solidity + parity families) |
-| The **procedural sky** — `SdfFrame.SkyEnabled`/`SkyZenithColor`/`SkyHorizonColor`/`SkyGroundColor`/`SkyFogDensity`/`SkySunDiscRadians`/`SkySunDiscIntensity`/`SkyStarDensity`/`SkyStarBrightness`/`SkyStarSeed`, plus `SkyStarTwinkleShare`/`SkyStarTwinkleDepth`/`SkyStarTwinkleRate` and `SkyCloudColor`/`SkyCloudCoverage`/`SkyCloudSoftness`/`SkyCloudScale`/`SkyCloudSeed`/`SkyCloudDrift`/`SkyCloudSpin`/`SkyCloudCurl`/`SkyCloudShear`, packed by `SdfWorldEngine.PackSkyFrame` into nine rows AFTER the five lighting rows (`SdfSunFrameA..SdfAmbientColor`, `MaxScreenSurfaces+8..+12`); `ScreenLightByteLength` = `(MaxScreenSurfaces + 22)` float4; the twinkle rate is HOST-BAKED to a period in engine ticks (`EngineTicks.PerSecond / rate`) and the cloud drift and shear are HOST-INTEGRATED from `SampleIndex` into layer offsets wrapped modulo 4096 and the spin into an angle modulo 2π; the sun-disc `pow()` exponent is HOST-BAKED from `SkySunDiscRadians` (`ln(0.5)/ln(cos(discRadians))`, clamped) | `SdfSkyZenith=45`/`SdfSkyHorizon=46`/`SdfSkyGround=47`/`SdfSkySunStars=48`/`SdfSkyTwinkle=49`/`SdfSkyCloudsA=50`/`SdfSkyCloudsB=51`/`SdfSkyCloudsC=52`/`SdfSkyCloudsD=53` decode via `worldSkyEnabled`/`worldSkyZenithColor`/`worldSkyHorizonColor`/`worldSkyGroundColor`/`worldSkyFogDensity`/`worldSkySunDiscIntensity`/`worldSkySunDiscExponent`/`worldSkyStarDensity`/`worldSkyStarBrightness`/`worldSkyStarSeed`/`worldSkyStarTwinkleShare`/`worldSkyStarTwinkleDepth`/`worldSkyStarTwinklePeriodTicks`/`worldSkyCloudColor`/`worldSkyCloudCoverage`/`worldSkyCloudSoftness`/`worldSkyCloudScale`/`worldSkyCloudSeed`/`worldSkyCloudOffset`/`worldSkyCloudShearOffset`/`worldSkyCloudSpinAngle`/`worldSkyCloudCurl`; `skyColor` branches on `worldSkyEnabled` — false takes the PINNED two-stop gradient through the instructions it held before this section existed (bit-identical); true takes a three-stop gradient plus an additive sun disc plus `sdfStarField` (an octahedral cell grid, `sdfPcg3d`-keyed per cell, hash-placed star position, a second hash of the first giving each star its blackbody tint (`StarSpectrum`, ~3000–15000 K) and its power-law apparent luminosity (`N(>F) ∝ F^-3/2`, floor `StarLuminosityFloor` of the peak) and an optional twinkling share riding `params.sampleIndex % periodTicks` — no texture, no session state) and finally `sdfCloudLayer` lerped over all of it by its coverage mask (a plane at unit height, `direction.xz / direction.y`, turned by the spin angle plus a Coriolis curl `curl · 2r/(1+r²)`, domain-warped four-octave `sdfLatticeNoise` fbm — one `sdfPcg3d` per lattice corner — the shaping fbm read at its own shear offset, thresholded at `1 - coverage` with the authored softness, cores shaded by `CloudCoreShade`, faded below `CloudHorizonFade`; `worldSkyCloudCoverage() == 0` short-circuits) | authored via `render.lighting`/`render.sky` (`Puck.World.WorldRenderLighting`/`WorldRenderSky`). `worldSkyFogDensity` is read UNCONDITIONALLY (independent of the enabled gate) — its pinned default reproduces the retired `FogDensity` shader constant's exact bits, so an absent `render.sky` renders byte-identically to before this section existed. Every accessor carries an `#else` fallback for the `SDF_SCREEN_SOURCES`-undefined kernels, the same shape `worldSunDirection`'s fallback already takes, because `skyColor` (called from `renderView`) compiles into every kernel that includes sdf-world.hlsli regardless of that macro. `sdf-sky.comp` is `skyColor`'s SECOND caller (`renderView`'s miss branch is the first): a direct, un-culled pre-pass that writes `skyColor(cameraRayDirection(view, localUv))` into every pixel of every non-child viewport's source texture before `sdf-beam.comp` culls any tile, so a tile the beam later culls already holds real sky rather than a flat constant — it `#define`s `SDF_SCREEN_SOURCES` FOR THIS REASON (the only configuration under which the real, non-pinned-literal accessors — and `sdfScreenLights` itself — are declared at all), reusing Stage 1's own bindings array/descriptor set rather than declaring a second layout |
-| `sdfMaterialShade` takes accumulated `float3` radiance (not a scalar) | `sdfMaterialShade(..., float3 diffuse, ...)` — the two callers (`sdf-world.hlsli`, `sdf-world-rt-debug`) | shade funnel (colored lights) |
-| `DebugViewModes.Names` (`Puck.SdfVm` root namespace since 2026-07-10, order IS the wire value, 11 entries incl. mask/overshoot/evals) | `DebugViewModeCount` (= 11)/`DebugViewModeNormals` + the `viewMode` switch (sdf-world.hlsli `renderView`) — mode 10 (`evals`, perf-plan Phase 0 instrumentation) is the one mode besides final shading that forces `useFinalShading` true, so its `sdfEvalCount` tally (a per-thread static, incremented at every map()-family call site in sdf-world.hlsli — never inside mapCore/sdf-vm.hlsli) reflects the real epilogue cost, not a debug shortcut | debug views — adding a mode touches BOTH plus the switch |
-| `SdfDriftMonolith.Emit` (`Puck.SdfVm.Debug`, shared verbatim by the Post drift-ceiling stage and the demo gallery's monolith exhibit — CALIBRATED, change only with a recalibration) | n/a (host-side program emission only) | ⚠ the two hex-stride materials are reached POSITIONALLY through the `WallpaperFold` chain's `materialStride`, so `Emit` must be called into a builder holding NONE of the caller's own materials yet — it owns the whole material palette and must be emitted FIRST, or the positional stride reaches the wrong (caller-owned) material |
-| bound-analysis modes | `SDF_BOUND_*` skip in `map()` | bounds gate |
-| `SdfProgram.AnalyzeLipschitz` → per-program `stepScale` (1/L) baked into the segment-directory header's FREE `.y` lane (`PackBounds`), read back via `SdfProgram.StepScale` | `sdf-vm.hlsli` `mapCore` reads `asfloat(sdfWords[segmentOffset].y)` (guarded `> 0`) and multiplies its FINAL returned distance by it ONCE, after the walk | Lipschitz step clamp — a non-1-Lipschitz warp cannot overstep and hole. The warp factors are NOT one formula: a **Bend** (BendX/Y/Z) keys on a coordinate INSIDE the plane it rotates, so its exact operator norm is `1 + a` (a = rate·ρ), while **TwistY** keys OUTSIDE its rotated plane and collapses to `sqrt((2 + a² + a·sqrt(a²+4))/2)` — using the twist form for a bend under-clamps by up to 24% and HOLES the march (`BendOperatorNorm` vs `TwistOperatorNorm`). Log-spherical: factor `exp(w/2)`. Eccentric ellipsoid: factor = eccentricity. A **chamfer blend** is the one `SdfBlendOp` that is NOT 1-Lipschitz AND the only composition whose bound can exceed BOTH operands: the bevel-arm gradient is `(∇a ± ∇b)/√2`, so composing fields bounded by `La`/`Lb` carries `max(La, Lb, (La + Lb)/√2)`. That recurrence is folded PER COMPOSITION (`ComposeLipschitz`, walked in `mapCore`'s own order by a second pass over the stream), never per chain — a per-chain latch counts one √2 however many chamfers compose and understates by up to `(1 + √2)/√2 = 1.70711×`, which HOLES thin geometry under three or more chamfers. The accumulator seeds at the `SDF_FAR_DISTANCE` CONSTANT (L = 0), so the FIRST chamfer composition is the identity, TWO reach exactly √2 (byte-identical to the latched value), growth starts at the THIRD, and the fixed point is `1 + √2`. Segment splitting is NO protection — one accumulator crosses every `ResetPoint`. Smooth-min stays exactly 1. A **Displace/DomainWarp** sine field: factor `1 + amplitude·max|frequency_i|` — the INFINITY norm, not `‖f‖₂` (Displace's squared gradient norm is multilinear in the three squared sines ⇒ maximizes at a cube vertex; DomainWarp's `J - I` is a generalized permutation matrix whose spectral norm is its largest entry). `== 1.0f` EXACTLY for an isometric, chamfer/relief/warp-free program (byte-identical); the per-candidate `distanceScale` (Scale / the D2 log-spherical `r/density` correction) is a DISTINCT channel — never merged. Post: `sdf-lipschitz` (CPU bake assert; `warp-free stepScale == 1.0f` EXACTLY is the byte-identity contract) + `world-warp-solidity` / `world-log-sphere-solidity` (single-backend GPU solidity — parity CAN'T catch it, both backends overstep identically) + `world-chamfer` (chamfer cross-backend parity) |
-| `SdfOp.LogSphere` (id 21) / `SdfProgramBuilder.LogSphere(shellRatio, twist)` — Data0.x = w (`ln(shellRatio)`, HOST-BAKED), Data0.y = twist (radians/shell), Data0.z = 1/w (HOST-BAKED); `AnalyzeLipschitz` folds `exp(w/2)` into `stepScale` | `SDF_OP_LOG_SPHERE` (21u) in `mapCore` — nearest-shell radial log-fold (`round`, like Repeat), an unconditional Z-spin (isometry, the Droste spiral), then `distanceScale *= shellScale` (the `r/density` correction, SAME channel as `SDF_OP_SCALE`, composes multiplicatively); `SDF_LOGSPHERE_MIN_RADIUS` floors the origin | D2 log-spherical DOMAIN warp — tiles space into infinite self-similar Droste shells. Radial-only fold ⇒ NO polar pinching; the r/density correction rides `distanceScale` (never `stepScale`); the `exp(w/2)` factor keeps the OVER-RELAXED march (omega 1.2) hole-free across shell boundaries. `AnalyzeSegment` gives it `SDF_BOUND_NONE` (unbounded periodic domain, via the `default` case — do NOT add a case). Op-unused programs stay byte-identical. Post: `world-log-sphere` (parity, `WorldLsbExact`) + `world-log-sphere-solidity` |
-| PARKED instances (Arc 4): `SdfInstanceRange`/`BeginInstanceDynamic` carry an `Active` flag; an inactive slot packs the `SdfProgram.ParkedBoundRadius` (negative) bound sentinel — the reserved-pool "always fits by construction" contract is untouched, parked slots just become CHEAP | `collectInstanceMaskWord` (sdf-world.hlsli, the sphere-vs-cone tile test) and the full-eval enumeration (sdf-vm.hlsli, segment-range skip) each skip a negative-radius bound with ONE branch | parked-slot skip — beam/views cost tracks LIVE content, not reserved capacity. Demo-side, the pools (players/creator/companions) set `Active` per rebuild; a hidden-below-the-floor placement WITHOUT the flag is the pre-Arc-4 bug (264 always-tested instances = the 0.9→14.7ms regression) |
-| The **2D-primitive family** (Vesica id-7 precedent, generalized): `SdfShapeType.RoundedRectangle`=8, `.RegularPolygon`=9, `.Star`=10, `.Trapezoid`=12, `.Ellipse`=13 (enum contiguous 0-14; `RoundCone`=11, `ScreenSlab`=14 unchanged) + `SdfLift { Revolve = 0, Extrude = 1 }` (`SdfLift.cs`) | matching `SDF_SHAPE_ROUNDED_RECT`/`_REGULAR_POLYGON`/`_STAR`/`_TRAPEZOID`/`_ELLIPSE` ids + `SDF_LIFT_REVOLVE`/`SDF_LIFT_EXTRUDE` (packed into Data1.y, decoded `> 0.5`) | SHARED lane layout for the whole family: Data0.xyz = the 2D shape params, Data0.w = the lift amount (revolve offset o OR extrude half-height h), Data1.x = smooth radius, Data1.y = lift mode, Data1.zw = per-shape host-baked constants (e.g. Star's baked `cos`/`sin(π/m)` ecs) |
-| Builder methods `RoundedRectangle`/`RegularPolygon`/`Star`/`Trapezoid`/`Ellipse` (`SdfProgramBuilder`) + `SdfProgram.TryGetLocalBound` cases / `LiftedBoundRadius` helper | exact 2D cores `sdfRoundBox2D`/`sdfTrapezoid2D`/`sdfStar2D` (shared by RegularPolygon's m=2 case and Star)/`sdfEllipse2D`, lift ops `sdfExtrude2D`/`sdfRevolve2D`, lifted wrappers `sdfRoundedRect`/`sdfPolyStar`/`sdfTrapezoidSolid`/`sdfEllipseSolid` + their `evaluateShape` cases | evaluation + bounds for the family — each shape earns a REAL cull bound (unlike the approximate Ellipsoid #6); exact + factor-1 Lipschitz throughout (no `AnalyzeLipschitz` step clamp needed): extrusion is always exact, revolution is exact off-axis and a harmless conservative bound near the axis. Post: `world-2d-family` (both lift modes, cross-backend, `WorldHighContrast`) |
-| `SdfOp.CellJitter` (id 22) / `SdfProgramBuilder.CellJitter(spacing, jitter, seed, tumble, materialVariants, flavor)` — Data0.xyz = spacing (HOST-CLAMPED ≥0.001/axis), Data0.w = jitter (peak-to-peak), Data1.xyz = 1/spacing (HOST-BAKED), Data1.w = clamped tumble [0,1], Material = materialVariants, Shape = seed, **Blend lane (header.z) = `SdfNoiseFlavor` {White=0 byte-identical default, Blue=1 R3 fixed-point low-discrepancy, Gaussian=2 central-limit}** — flavor reshapes ONLY the POSITION offset r0 (tumble/material-variant unaffected); `AnalyzeLipschitz`'s dedicated case (`chainTranslateReach += (sqrt(3)/2) * \|Data0.w\|`, treated exactly like a Translate of that magnitude — the per-axis half-amplitude combines as a VECTOR, since `chainTranslateReach` is a Euclidean-length sum; summing the per-axis `0.5` as a scalar under-counts a jitter-under-a-warp chain and lets the over-relaxed march overstep. Tumble/fold are isometries so nothing else accumulates) | `SDF_OP_CELL_JITTER` (22u) in `mapCore` — repeats like `SDF_OP_REPEAT`, then per-cell hashed position jitter (branched on `SDF_NOISE_*` = header.z), an optional hashed tumble (isometric rotation gated on `data1.w > 0`), and an optional hashed material-variant recolor, all keyed off `sdfPcg3d` (canonical PCG3D on the two's-complement cell index xored with the header seed) | stochastic domain-repeat fold — scatters a prototype into a jittered field from one instruction. Exposed to `puck.sdf.v1` as the geometric-only `cellJitter` op (no materialVariants lane, so the positional-recolor repair the document door refuses to inherit is unreachable); the document decoder's `Replay` appends a trailing `ResetPoint` so a dangling fold can never leak into the next emitter's chain. The hash is INTEGER-ONLY, so cell decisions are bit-identical across both DXC targets; displacement and tumble are BOTH isometries (distanceScale untouched — only the jitter half-amplitude joins `AnalyzeLipschitz`, as a reach term, not a warp rate). ALL THREE flavors keep r0 in [0,1)^3, so the offset stays within ±jitter/2 per axis — the SAME bound White has — so NO Lipschitz change (the reach-independent `L_cj` clamp stays conservative for every flavor); Blue's lattice is INTEGER-ONLY (`asuint` + uint mul-add) so it too is bit-identical cross-backend. `AnalyzeSegment` gives it the `default` case (space-folding op, no world-space sphere is sound past it, segment not skippable — do NOT add a dedicated case). In-cell rule: jitter/2 + prototype reach ≤ min(spacing)/2, REFUSED at `Build()` by name (`CellJitterLipschitz` sees both halves; the old silent margin clamp collapsed `stepScale` toward ~1e-5 and rendered the WHOLE composed field as an immediate-accept solid — the dark-dome failure). `WorldSdfDocumentEmitter.Load` wraps the dry-build so a document violating it is a `world.sdf.load` rejection (`BuilderRejectedProgram`), never a crash. ⚠Containment ≠ nearest-copy (verified 2026-07-08, slice capture): even with the in-cell rule satisfied, the single-cell `round` fold can pick the WRONG copy near a cell wall (a copy jittered toward the boundary is nearer to the adjacent cell's query than that cell's own copy), so the field OVERestimates at boundaries — visible seams, grazing-angle hole risk; keep jitter conservative. The same wrong-neighbor class applies to plain `Repeat`: exact ONLY for an on-center prototype within half-spacing per axis; an off-center/oversized prototype creases the field at cell walls with a march-holing overestimate (`SdfProgramBuilder.Repeat`'s doc carries the contract; iq's 3^k neighbor check judged NOT worth the interpreter cost at current usage). Post: `world-cell-jitter` (parity) + `world-cell-jitter-solidity` (single-backend GPU solidity) |
-| `SdfOp.RepeatPolar` (id 23) / `SdfProgramBuilder.RepeatPolar(count, axis = SdfPolarAxis.Y, mirror = false, materialStride = 0)` — Shape = `SdfPolarAxis` {X, Y (default, XZ ground plane), Z}, Blend (header.z) = mirror flag, Material = per-sector stride, Data0 = (angle = 2π/count, 1/angle, count, 1/count) ALL HOST-BAKED, Data1 reserved | `SDF_OP_REPEAT_POLAR` (23u) in `mapCore` — folds the plane perpendicular to the axis into `count` equal angular sectors (nearest-sector `round` on the angle, like `SDF_OP_REPEAT`'s cell fold), an optional per-sector mirror (reflection across the sector bisector), then an optional per-sector material recolor | angular domain-repeat fold — the rotational sibling of `Repeat`/`WallpaperFold`: one authored prototype repeats around the axis (gears, wheels, rotunda columns, clock ticks, petals). The fold is a rotation (+ optional mirror reflection), BOTH isometries, so it is EXACTLY 1-Lipschitz — factor 1, NO `AnalyzeLipschitz` step clamp, same as `Repeat`/`WallpaperFold` (unlike `CellJitter`'s reach term or `LogSphere`'s `exp(w/2)` factor). Post: `world-repeat-polar` (cross-backend parity, Vulkan SPIR-V vs Direct3D 12 DXIL) |
-| `SdfOp.Displace` (id 24) / `SdfProgramBuilder.Displace(frequency, amplitude)` — a FIELD op, ordered after the shapes it displaces; Data0.xyz = frequency, Data0.w = amplitude | `SDF_OP_DISPLACE` (24u) in `mapCore` — `result.distance += amplitude·sin(fx·x)·sin(fy·y)·sin(fz·z)` at the current folded point, evaluated in the same FIELD-op slot as `SDF_OP_ONION`/`SDF_OP_DILATE` | sine-product surface relief — the SDF-native height/parallax map, except the relief is REAL geometry (self-shadows/occludes). Separable basis, deterministic float trig (±1 LSB like the twist/bend warps) — parity-safe with no hashed noise table; the integer-hash fBm sibling is `NoiseDisplace` (id 29). NOT 1-Lipschitz: gradient reaches `amplitude·‖frequency‖`, so `AnalyzeLipschitz` folds `1 + amplitude·‖frequency‖` into `chainDisplaceWarpProduct` (a reach-independent metric-stretch factor, the same channel `DomainWarp` multiplies into — like the log-sphere product). Post: `world-displace` (parity) + `world-displace-solidity` (single-backend, the clamp holds the over-relaxed march) + the `sdf-lipschitz` stepScale assert |
-| `SdfOp.NoiseDisplace` (id 29) / `SdfProgramBuilder.NoiseDisplace(frequency, amplitude, octaves, gain, lacunarity, seed)` — a FIELD op, ordered after the shapes it displaces; Data0 = (frequency, amplitude, gain, lacunarity), Data1.x = HOST-BAKED `1/Σ gainᵏ` normalization (the octave sum stays in [-1, 1] before amplitude), Shape = seed, Blend = octave count (≤ `MaxNoiseOctaves` = 8) | `SDF_OP_NOISE_DISPLACE` (29u) in `mapCore` — fBm over `sdfValueNoise3` (3D value noise: one integer-only `sdfPcg3d` per lattice corner keyed on the two's-complement cell xored with the per-octave seed streams, quintic-smoothed trilinear blend), and the analytic-gradient dual in `mapGradCore` via `sdfValueNoise3Grad` (KEEP the pair IN SYNC) | bound-preserving hash-lattice noise relief — the fBm/gradient-noise deferral is CLOSED (this row is the integer-hash basis `Displace` deferred to). Cell decisions are bit-identical cross-backend (integer hash); the blend is float mul/add (±1 LSB — silhouette winner flips only, inside the relaxed envelope). NOT 1-Lipschitz: `AnalyzeLipschitz` folds `1 + \|amp\|·freq·(15/4)·√3·Σ(gain·lacunarity)ᵏ/Σgainᵏ` into `chainDisplaceWarpProduct` (`NoiseDisplaceLipschitz`); outward surface reach is `\|amplitude\|` (`MaxScopedFieldReach`), and the op joins Onion/Dilate/Displace in every field-op classification (unmaskable when unscoped, parked-refusal, shadow-transparency). Exposed to `puck.sdf.v1` as the scoped-only `noiseDisplace` op (refused outside a push/pop pair — an unscoped document field op would displace the whole composed world field), and to `puck.creation.v1` as the creation-level `noise` facet (`CreationNoiseDocument`; static stamps only — `WorldPlacementStamper` emits it inside the stamp's field scope as its own shape-free chain, animated/attached/inhabited/look uses refuse at validation, and the canonicalizer refuses a declaration whose derived step factor exceeds `CreationNoiseDocument.MaxStepFactor`, computed by the shared `SdfProgram.NoiseDisplaceStepFactor`). `AnalyzeLipschitz` pass 2 folds a SHAPE-FREE chain's Displace/NoiseDisplace factor additively at the op's own instruction site (a shape-free chain never reaches a ShapeBlend compose, so pass 1's chain product alone would drop it; the op-site fold keeps the addition inside the scope the op acts on, so a Union pop keeps it instance-local instead of summing across instances — and the pop's baked 1/L scale then keeps the whole scope's tax off the global stepScale). Both Displace and NoiseDisplace take a FAR-BAND fast path in mapCore/mapGradCore (KEEP the four case bodies IN SYNC): the relief is bounded by \|amplitude\|, so past `4·\|amplitude\|` of accumulated field the op subtracts \|amplitude\| instead of evaluating — a valid conservative lower bound; the full evaluation runs only near the band that can matter. Note the band rarely fires for a camera standing ON the noised surface (every eval is near-band there) — do not author noiseDisplace on large walkable surfaces expecting the skip to save the frame; shape the walkable relief from geometry and keep noise for silhouette masses the camera stays off. Watch Ellipsoid eccentricity when authoring terrain: a flattened ellipsoid's eccentricity is a GLOBAL march factor too, and a 25:3.2 pancake costs ~7.8× on its own — build broad pads from exact cylinders and keep ellipsoids near-round. Creation-document shapes are exempt since 2026-09-03: every World stamper scopes an eccentric shape (`SdfSolidGeometry.StepFactor > 1` — a non-uniformly scaled `Sphere` baked as an `Ellipsoid`) inside its own `PushField`/`PopField`, or rides the group's/creation's scope, so the pop's 1/L clamps only that candidate (`WorldStampPool.EmitShape`/`GroupNeedsScope`, `CreationStampEmitter.EmitShapeChain` with `inScope`, the static probe reserving the pair). The shipped world went from `stepScale 0.625` to 1 with unchanged geometry (80 → 65 ms on the RTX 2060). `SdfProgram.StepScaleBinder` names the depth-0 chain that binds a global scale below 1 and `world.budget` echoes it ("bound by instance N (Ellipsoid x1.6 at instruction M, unscoped)"), so a program-emitting path that forgets the scope is visible, never silent. Stripped under `SDF_CORE_OPS` (views-core bytecode is byte-identical). Laws: `tests/Puck.SignedDistance.Tests/SdfNoiseDisplaceLawTests.cs` (bitwise step-clamp mirror, identity, refusals) + `tests/Puck.World.Tests/CreationNoiseLawTests.cs` (facet doors, scope emission, op-site clamp fold); no Post stage exists (quarantine) — cross-backend agreement was measured by hand on the real windowed world |
-| `SdfOp.DomainWarp` (id 25) / `SdfProgramBuilder.DomainWarp(frequency, amplitude)` — a POINT op, ordered before the shapes it warps; Data0.xyz = frequency, Data0.w = amplitude | `SDF_OP_DOMAIN_WARP` (25u) in `mapCore` — `localPosition += amplitude·(sin(fx·y), sin(fy·z), sin(fz·x))`, each axis driven by the NEXT axis's coordinate (non-separable), before the wrapped chain evaluates | cross-coupled organic domain warp — deterministic float trig, same parity posture as `Displace`. NOT an isometry: the Jacobian is `I` plus a perturbation of spectral norm ≤ `amplitude·‖frequency‖`, so the SAME `1 + amplitude·‖frequency‖` clamp joins `chainDisplaceWarpProduct`, and the point's max travel (`amplitude·√3`) additionally folds into a downstream twist/bend's reach term. Post: `world-domain-warp` (parity) + `world-domain-warp-solidity` (single-backend, the clamp holds the march) + the `sdf-lipschitz` stepScale assert |
-| `SdfOp.SymmetryPlane` (id 26) / `SdfProgramBuilder.SymmetryPlane(normal, offset = 0f)` — Data0.xyz = the UNIT plane normal (host-normalized), Data0.w = the plane offset | `SDF_OP_SYMMETRY_PLANE` (26u) in `mapCore` — `p -= 2·min(dot(p, n) + offset, 0)·n`; for `n = x̂, offset = 0` this is `abs(p.x)` to the bit, an exact superset of the RETIRED `SDF_OP_SYMMETRY_X` | arbitrary-plane reflection fold — the general-normal fold that REPLACED the `SymmetryX`/`SymmetryY`/`SymmetryZ` opcodes (ids 13–15 collapsed into id 26; the builder keeps `SymmetryX/Y/Z()` as sugar that emit it): everything on the plane's negative side mirrors onto its positive side, so one authored half repeats mirror-imaged across ANY plane (a kaleidoscope leaf, a bilateral body, the reflect atom of a KIFS fold). A reflection is an ISOMETRY, so it is EXACTLY 1-Lipschitz — factor 1, NO `AnalyzeLipschitz` step clamp, same as `WallpaperFold`/`RepeatPolar`. Post: `world-symmetry-plane` (cross-backend parity, Vulkan SPIR-V vs Direct3D 12 DXIL) |
-| The **Glyph op** — `SdfShapeType.Glyph` (SHAPE id 15, the next free shape after `ScreenSlab`=14) / `SdfProgramBuilder.Glyph(uvBottomLeft, uvTopRight, halfWidth, halfHeight, extrudeHalfDepth, distanceScale, material, blend, smooth)` + `SdfProgramBuilder.Text(atlas, text, origin, right, up, worldEmHeight, …)` (lays out via `Puck.Text.TextLayout`, emits one `ResetPoint`+`Translate`+`Rotate`+`Glyph` SEGMENT per char — the SdfVm→Puck.Text edge). LANE LAYOUT: Data0 = (`packedUvMin`, `packedUvMax` [each host-baked unorm2x16 of an atlas UV — packing frees a lane so Data1.x keeps the ISA-wide smooth], `distanceScale` [= atlas `DistanceRange`(texels) × worldPerTexel, HOST-BAKED], `extrudeHalfDepth`); Data1 = (`smooth`, `halfWidth`, `halfHeight`, 0). Uploaded ONCE via `SdfWorldEngine.SetGlyphAtlas(rgba, w, h)` (an `IGpuSurfaceUpload`), threaded through `ISdfFrameSource.GlyphAtlas` (`SdfGlyphAtlas` record, default null) polled once in `SdfEngineNode.EnsureEngine`. | `SDF_SHAPE_GLYPH` (15u) in `evaluateShape`, guarded on `SDF_GLYPH_ATLAS` (defined ONLY by `sdf-world-views.comp` — every other kernel gets the conservative extruded-quad fallback `sdfGlyphQuad`, so the beam cull/rt-debug see a solid cell box, never a hole). `sdfGlyph`: exact 2D quad distance `dQuad` FIRST, atlas tapped ONLY inside the band (`dQuad < 0.5·distanceScale`), `dPlane = max((0.5 − encoded)·distanceScale, dQuad)` then extruded — the band-cull is BOTH the perf trick and the conservative far field. Field from ALPHA (the true single-channel distance) via manual bilinear (`sdfGlyphSampleField`, `SampleLevel` explicit-LOD, s32/t39 combined-image-sampler at Vulkan binding 44 — DERIVED as `ScreenSourceBindingBase + MaxScreenSurfaces`, appended after the 32 screen sources in `SdfWorldEngine.viewsBindings` so D3D12 registers land t39/s32). | text as REAL world geometry: marchable, blendable, ENGRAVABLE (Subtraction) / EMBOSSABLE (Union proud of a slab — NEVER coplanar or the coincident zero-sets speckle) / floating. Reconstruction: GEOMETRY MARCHES THE TRUE SINGLE CHANNEL (alpha) — median-of-3 is C0-only at clash lines and must never be marched (the flat-coverage `GlyphDecal` tier LANDED 2026-07-09 — a SEPARATE material-level tier that samples the SAME atlas's ALPHA with a coverage threshold at SHADE TIME on a `ScreenSlab` carrier, NOT marched geometry: a per-screen decal table + shared cell buffer `sdfDecalCells` at Vulkan binding 45 / D3D12 t40 (after the glyph atlas t39; DERIVED as `GlyphAtlasBindingIndex + 1`), `SdfWorldEngine.SetScreenDecal`/`ClearScreenDecal` ↔ `sampleScreenSurface`'s decal-first branch, the `ISdfFrameSource.ScreenDecals` per-frame seam; Post `world-glyph-decal`; world-glyph geometry stays untouched, byte-identical when no decal is declared — an MSDF atlas would let the decal median-of-3, the alpha is what it samples now). Generation NOW: `Puck.Text.SdfCoverageAtlas.Generate` — an EXACT separable Euclidean distance transform (Felzenszwalb–Huttenlocher, deterministic) over a GDI+ coverage raster; the chamfer(1,√2) alternative overestimates ≤8.24% off-axis and would need a 1/1.0824 step-scale penalty, so exact-EDT + uniform worldPerTexel keeps Glyph FACTOR-1 (1-Lipschitz in texel space, bilinear preserves it — NO `AnalyzeLipschitz` case, like the 2D-lift family; a stretched cell is the caller's risk). Recommended marchable source is a pre-baked `msdf-atlas-gen` MTSDF atlas (true-distance in alpha by construction) — the runtime EDT is the no-toolchain fallback. Post: `world-glyph` (cross-backend parity, `WorldHighContrast` — sampled-texture/material-seam family; the fixture atlas is a deterministic in-process 5×7 font, no font-availability dependency; a no-atlas control proves the atlas reaches the shader). Adapted from SignedDistanceTerminal's `sdfMsdfGlyph`. |
-| The **SampledRegion op** — `SdfShapeType.SampledRegion` (SHAPE id 16, the next free shape after `Glyph`=15) / `SdfProgramBuilder.SampledRegion(boxMin, cellSize, dimX, dimY, dimZ, brickWordOffset, boundaryFloor, material, blend = Subtraction)` (`MaxSampledRegionDim = 1023`). LANE LAYOUT: Data0 = (`boxMinX`, `boxMinY`, `boxMinZ`, `cellSize`) — box extent derives as `dims·cellSize`; Data1 = (`smooth` [ISA-wide, = 0 for the hard subtraction a brick composes with], `packedDims` [uint bits: 3×10-bit dims ≤1023/axis, host-packed `dimX \| dimY<<10 \| dimZ<<20`], `brickWordOffset` [uint bits: the brick's base word in the pool], `boundaryFloor` [= margin/λ, host-baked outside-box lower-bound offset]). The two uint bit-fields ride the float lanes as reinterpreted bits (like Glyph's `PackUv`) and round-trip exactly through `WriteVector4`. `TryGetLocalBound` returns the box CIRCUMSPHERE (center = boxMin + extent/2, radius = |extent|/2) — a REAL cull bound, so `AnalyzeSegment`/`ShapeReachRadius`/`PackInstances` treat it as any Subtraction-blend instance and `IsShadowTransparentInstance` auto-flags it (Path B). `AnalyzeLipschitz` = factor 1 EXACTLY (λ is folded into the STORED values at bake, not `stepScale`), so brick-free scenes stay byte-identical AND a brick adds no global step tax. | `SDF_SHAPE_SAMPLED_REGION` (16u) in `evaluateShape` (NOT stripped under `SDF_CORE_OPS` — the core-ops views variant binds the pool), guarded on `SDF_SAMPLED_REGIONS` (the world-views + core-ops + beam kernels bind the pool as of **W0b**; the instance-cull/rt-debug/diagnostic kernels take the fallback). `sdfSampledRegion`: `local = (p−boxMin)/cellSize`; OUTSIDE the box returns `dist(p,box) + boundaryFloor` (a valid scaled lower bound — positive, so Subtraction stays saturated and the accumulator is exact); INSIDE, manual TRILINEAR over 8 `sdfBrickPool` loads (sample CENTRES at integer voxel indices, `sampleCoord = local − 0.5`, clamp-to-edge border half-voxel) with a `precise` lerp chain (fp-contraction pinned OFF → bit-stable SPIR-V/DXIL). WITHOUT `SDF_SAMPLED_REGIONS` (the instance-cull/rt-debug/diagnostic kernels): returns `SDF_FAR_DISTANCE` (the conservative UNION-HULL fallback — a Subtraction compose never bites, region renders uncarved, never holed — the Glyph quad-fallback precedent). WITH `SDF_SAMPLED_REGIONS` but a POOL-LESS engine (capacity-0 filler): `sdfSampledRegion` calls `sdfBrickPool.GetDimensions` and, seeing the single-float filler (`numVoxels <= 1`), takes the SAME `SDF_FAR_DISTANCE` fallback — so a filming view renders a SampledRegion world UNCARVED. ⚠GROUND TRUTH: the stored brick distances are `/√3` scaled, so a ZEROED read (an allocated-but-UNBAKED 64 MB pool, or a filler sampled without the gate) = stored distance 0 = the box interior sitting entirely on the carve surface ⟹ the Subtraction carves a box-shaped HOLE across the whole region. This was a LIVE defect for filmed carves: every offscreen filming view once allocated its own default 64 MB pool it never baked into, so filming a carved world rendered the carve box as a hole (and wasted ~4 GB at the 64-view cap). The GetDimensions gate + capacity-0 view engines fix both. Normals: the `evaluateShapeGradient` `default` arm's 4-tap FD (4 extra pool samples, hit-only). Pool: `[[vk::binding(46,0)]] StructuredBuffer<float> sdfBrickPool` (one f32/voxel), per-consumer D3D12 register via `SDF_BRICK_POOL_REGISTER` (views set t41 after `sdfDecalCells` t40; beam t4 after its mask t3 — the `SDF_INSTANCE_MASKS_REGISTER` pattern). | a SAMPLED distance-field brick: the settled-carve UNION field baked O(1) so the primary/shadow/AO marches stop paying O(carve-count), composed as ONE ordinary Subtraction instance (crack-free by construction — the subject stays fully analytic). W0a shipped the ISA + shape eval; W0b landed the engine tier — the persistent device-local pool (`SdfWorldEngineOptions.BrickPoolVoxelCapacity`, default 64 MB = `SdfWorldEngine.DefaultBrickPoolVoxelCapacity` = `SdfBrickPoolLayout.TotalVoxels`; frozen at construction, 0 = no pool: baking and rendering are SPLIT — a pool-less engine still ACCEPTS a SampledRegion program (rendered uncarved via the GetDimensions fallback, see the sdfSampledRegion row), only `RequestBrickBake` stays a loud rejection), the static `SdfBrickPoolLayout` (8 slots × 128³), the closed-form sphere-union baker `sdf-brick-bake.comp` (distances stored `/√3`, sliced ≤256K voxels/frame off the render's frame-timing bracket), and the `RequestBrickBake`/`GetBrickState` API with the two-revision-bump handoff (`BrickBakeState` Empty→Baking→Ready). `SdfViewsKernelVariants` classifies SampledRegion as CORE so a baked carve scene keeps the faster core-ops variant. ⚠ editing `sdf-world-views.comp.hlsl` does NOT reliably retrigger the `sdf-world-views-core.comp` recompile (it includes, not `#include`s a `.hlsli`) — the stale-bytecode gotcha bit W0b once; delete + rebuild the core `.spv`/`.dxil` after touching the views source. The planner (`SdfCarveBakePlanner`) is W1a. The carve-bake plan document was deleted 2026-08-02; there is no plan of record for the remaining carve-bake work, and the `world-sampled-region` stage that checked it went with `Puck.Post`'s quarantine — this shape is unverified by machine. |
-| The **scoped accumulator** — `SdfOp.PushField` (id 27) / `SdfOp.PopField` (id 28); `SdfProgramBuilder.PushField(compose = Union, smooth = 0f)` / `PopField()` (depth cap `SdfProgramBuilder.MaxFieldScopeDepth = 1`; the compose blend + smooth ride the POP instruction's Blend lane + Data1.x — the SAME lanes a `ShapeBlend` uses; PUSH carries no data) | `SDF_OP_PUSH_FIELD` (27u) / `SDF_OP_POP_FIELD` (28u) in `mapCore` (`SDF_MAX_FIELD_SCOPE_DEPTH = 1u`) — PUSH saves the running accumulator into a one-deep `(savedFieldDistance, savedFieldMaterial)` slot and reseeds `result` to `SDF_FAR_DISTANCE`; POP restores the parent as the blend LHS and feeds the scope's `result.distance` as a CANDIDATE into the **shared blend tail** (the material-winner switch + `blendShape`) SHAPE now also uses — so a POP costs no second copy of the ten-way blend switch (`composePending` gates the tail) | one-deep SCOPED FIELD ACCUMULATOR — the fix for "a field op / intersection shells the WHOLE scene": every accumulator-reading op (the intersection family, `Onion`/`Dilate`/`Displace`) between a balanced `PushField`/`PopField` acts on the scope's own shapes ONLY, then composes back with the POP's blend. A scope touches the FIELD, never the POINT (`localPosition`/`distanceScale`/`parityMaterialDelta`), so `ResetPoint` is unchanged and per-shape cull bounds after the Push stay sound. THE FUSION TRAP: a POP's candidate is ALREADY in world units — it is NOT re-multiplied by `distanceScale` and does NOT take `parityMaterialDelta` (unlike SHAPE). THE PER-SCOPE STEP CLAMP: `AnalyzeLipschitz` bakes each scope's own Lipschitz bound onto its POP as a `1/L_scope` candidate scale in the instruction's FREE Data1.y lane (patched in place before packing), and mapCore/mapGradCore (and the CPU evaluator's pop) multiply the scope's field by it at the pop — a positively scaled distance keeps its zero set and the scaled candidate is exactly 1-Lipschitz, so a scoped warp/relief/eccentricity taxes only its own candidate's march, never the GLOBAL stepScale. A factor-1 scope stays unpatched (Data1.y = 0 reads as no scale), keeping existing programs byte-identical; the global stepScale still covers everything UNSCOPED (an eccentric ellipsoid outside any scope is a global march factor — keep decor ellipsoids near-round; the World stampers scope creation-document eccentricity automatically and `world.budget` names any unscoped binder, see the NoiseDisplace row). Material tie-break is strict `<` (parent keeps its material on a tie). `AnalyzeSegment` gives a Push/Pop segment `segmentEligible = false` (never whole-skip a scope boundary) but leaves `chainBoundable` TRUE (correction #1 — bounds after the Push survive); `HasUnmaskableCompose` tracks scope depth so a SCOPED field op / intersection is NO LONGER unmaskable (the culling payoff — only a POP with an intersection-family compose at depth 0 is), and `MaxSmoothBlendRadius` folds a POP's soft compose halo. THE MARGIN RULE (the payoff's fine print): a scoped field op is maskable but GROWS the surface OUTWARD past the authored geometry bound, so `PackInstances` must inflate the instance's finite bound by that reach or the beam masks the tiles the grown shell reaches and the surface HOLES at the tile seams — `MaxScopedFieldReach` folds it in the same way `MaxSmoothBlendRadius` folds the POP compose halo (per-op: `Onion(t)` outer surface moves out by `t`, `Dilate(r)` by `r`, `Displace(a)` by `a`; field ops SUM within a scope, max across scopes; an UNscoped field op stays unmaskable, so its 1e30 sentinel covers it and no margin is computed). Verified 2026-07-08 by a scoped-`Dilate(1.5)` sphere with a bound covering only the un-dilated radius: pre-fix the beam clipped the shell into a blocky tile-truncated blob, post-fix the full dilated sphere renders intact. `AnalyzeLipschitz` folds a chamfer compose through the SAME per-composition recurrence a chamfer `ShapeBlend` takes, so repeated pops accumulate (`MaxFieldScopeDepth = 1` forbids nesting, not sequencing). Op-unused (scope-free) programs stay BYTE-IDENTICAL (verified: overworld render sha256-identical). Post: `world-scope` (scoped intersection renders as the intersection of its own members; a scoped instance is maskable with `instanced == flat`; its near-endpoint cluster + the CPU pin also prove `blendSmoothUnion`'s FAR + NEAR endpoints — the scope-seed prerequisite; there is NO separate `sdf-blend-endpoints` stage) |
-| `Puck.SignedDistance.Queries.SdfFieldEvaluator` (GRAVITY ARC Wave 1, `IWorldQuery`+`IFieldEvaluator`, the SECOND `IWorldQuery` provider after `BakedWorldQuery`) — a WARP-FREE CPU interpreter of the live `SdfProgram.Instructions` typed seam (not the packed `Words`), in `FixedQ4816`/`FixedVector3`. Ctor walks the stream once, asserting every op/shape is in the supported rigid subset (throws `ArgumentException` naming the first excluded one) and converting each instruction's Data0/Data1 floats to `FixedQ4816` ONCE into a cached `CompiledInstruction[]` — including a `Rotate`'s baked quaternion, transcribed via `rotatePointByInverseQuaternion`'s cross/mul/add form (no runtime sin/cos). It also refuses NON-UNIFORM `Scale`: the GPU's minimum-axis correction is a safe march lower bound, not Euclidean physical clearance. `SdfSolidGeometry.AppendScaledPrimitive` therefore bakes authored anisotropy into native Box, Sphere/Ellipsoid, axis-symmetric Capsule/Cylinder/Cone, and Plane spellings before a render/contact stream is shared; unsupported anisotropic primitive spellings fail loudly at field construction. `TryFieldGradient` is a 6-tap per-axis central difference over `TryDistance` (still not a `mapGradCore` dual port; the original 4-tap tetrahedron form of Decision B was replaced when its edge-aliasing — a spurious tangential normal component with a two-equal-components fingerprint at blend corners — was measured driving a deterministic tangential runaway in the wall-contact solve); the five `IWorldQuery` verbs sphere-trace `TryDistance` (`Exact` on convergence, `Bounded` on the three non-convergences: a RADIUS cast whose scaled field no longer clears its radius, the iteration budget running out, and a marched point the program's frame cannot express). TWO seam contracts that are NOT the shader's: (1) `TryDistance` evaluates the WHOLE `FixedPosition`, rebased against the world origin via `TryDelta` — the identity inside cell (0,0,0), correct across cells, and the reason a body past ±524,288 units (where `FixedPosition.FromLocal` carries a cell on its own) no longer reads the cell-0 field; (2) a march that exhausts its iteration budget resolves per VERB, by what that verb's TRUE half asserts — `Raycast`/`SphereCast` report a hit at the last marched point with `WorldQueryConfidence.Bounded` and `LineOfSight` reports BLOCKED, because "clear" is the assertion authoritative consumers (NPC visibility, `FixedFieldContactSolver.ResolveCore`) cannot survive being wrong about, while `TryGroundHeight` returns FALSE: it asserts a SURFACE, hands back a bare coordinate with no confidence channel, and a caller grounding a body on a fabricated Y is moved somewhere the world does not have. A shape-free program still MISSES rather than reading solid. THE MARCH APPLIES `SdfProgram.StepScale` (converted to `FixedQ4816` ONCE at construction, like every other program float): the interpreted OP subset is 1-Lipschitz but the BLEND TAIL is not — a chamfer, or an eccentric `Ellipsoid`, makes the field overestimate, and a raw advance tunnels a thin plate. Scale the FIELD then subtract the radius (`f·s − r`), never the clearance (`(f − r)·s` shrinks the radius too and is anti-conservative for a `SphereCast`). The raw clearance still owns exact convergence, but the SCALED clearance owns whether separation is proven: `Overlap` compares the directed-down product `floor(f·s)` with the radius, and a cast advances by `max(floor(f·s), one Q48.16 tick) − r` only while that value remains positive. It never floors an unproved advance upward. The tick floor sits on the FIELD, before the radius comes off, and exists because the accept arm tests the RAW field against `HitEpsilon` (raw 66) while the stop arm tests the SCALED field against zero: below `s = 978/65536` (~0.0149) the stop threshold sits ABOVE the accept threshold, so an unfloored descent stalls one raw tick short of a surface it has already proven is inside `HitEpsilon + 1 tick` and `TryGroundHeight` answers "no ground" over every column. Floored, a POINT cast always advances and can only overstep the true surface by less than one tick (1/66 of the accept band); for any radius of one tick or more `max(floor(f·s), tick) − r ≤ 0` exactly when `floor(f·s) − r ≤ 0`, so SPHERE casts are bit-identical and still never advance into the contact envelope. `StepScale` likewise converts by a directed floor; an extreme positive scale below one Q48.16 tick becomes zero, authorizing no scaled advance at all — a radius cast is `Bounded` at its origin, a point cast is `Bounded` after the one-tick reach, and a shape-bearing overlap is occupied — rather than inventing a larger unsafe multiplier. The iteration budget derives from `BaseMarchIterations · HitEpsilon / max(floor(HitEpsilon·s), one Q48.16 tick)`, keeping point-cast reach invariant at `512 · HitEpsilon` = raw 33,792 while bounding an extreme program at 33,792 iterations. `Overlap` treats a failed world-origin rebase as occupied for a shape-bearing program and false for a shape-free one | `mapCore`'s RIGID op cases (`SDF_OP_RESET`/`_TRANSLATE`/`_ROTATE`/`_SCALE`/`_REPEAT`/`_REPEAT_LIMITED`/`_SYMMETRY_PLANE`/`_ELONGATE`/`_ONION`/`_DILATE`/`_PUSH_FIELD`/`_POP_FIELD`/`_SHAPE`) + `evaluateShape`'s Sphere/Box/ScreenSlab/Torus/Plane/RoundCone/Capsule/Cylinder/Ellipsoid/Vesica/RoundedRectangle/Trapezoid bodies + `blendShape`/`blendSmoothUnion` — the shared blend tail's semantics, INCLUDING op-order effects (a strict material-winner compare before the distance blend), mirrored exactly | a SECOND, INDEPENDENT interpreter of the SAME instruction stream mapCore walks (a deliberate dual implementation, like `SdfProgram`'s own host-side `AnalyzeBounds`/`AnalyzeLipschitz` passes — NOT shader codegen). WARP-FREE means it rejects `TransformDynamic` (no per-frame dynamic-transform table in this evaluator's signature — a future wave could thread one through without touching any other op's status), `BendX`/`BendY`/`BendZ`/`TwistY`/`LogSphere`/`CellJitter`/`RepeatPolar`/`Displace`/`DomainWarp` (runtime trig this wave doesn't implement in fixed point — but `SymmetryPlane`/`RepeatLimited`/`RepeatPolar` each have a rigid-copy spelling in `SdfDomainExpansion`, which is how the contact paths carry a fold this evaluator cannot walk), and `WallpaperFold` (isometric and so tractable in principle, but its 17-group parity-keyed cell logic was judged real added surface, not a five-minute mirror — Wave 1's reconciliation finding: the plan's initial excluded-op list named 9 ops from `AnalyzeSegment`'s bound-skip default-case partition, which is a SUPERSET reflecting a DIFFERENT concern — "no sphere bound is sound past this op" — not "uninterpretable"; `Repeat`/`RepeatLimited`/`SymmetryPlane`/`Elongate`/`Onion`/`Dilate` and ISOTROPIC `Scale` are directly interpreted here as 1-Lipschitz operations). Three shapes are excluded for the same reason at the shape level (not itemized in the arc plan, a Wave 1 finding): `RegularPolygon`/`Star` (`sdfStar2D`'s runtime `atan2`) and `Ellipse` (`sdfEllipse2D`'s analytic cubic solve, `acos`/`pow`); `Glyph` needs texture sampling, while `SampledRegion` needs the engine-owned brick pool. `RoundedRectangle` is supported by mirroring the shader's exact `sdfRoundBox2D` plus lift wrapper. Gravity = `-gradient.Normalize()` is the CONSUMER's one-line derivation (`IFieldEvaluator`'s whole reason to exist as its own seam) — the field itself never encodes "planet" or "down". Verified (a Wave 1 scratch harness, not committed): hand-computed sphere/translated-box/rotated-capsule/SmoothUnion points match to <5e-7 (float-rounding-of-the-input floor, not fixed-point error); a 200-point random sweep vs. an independent double-precision reference measured max\|err\| ≈ 2.3e-5 for sphere and box; `TryFieldGradient` on a sphere at 10 points (axes, diagonals, near-degenerate) measured max\|err\| ≈ 2.2e-3 (measured against the retired 4-tap tetrahedron probe — the 6-tap central difference that replaced it has O(eps^2) truncation instead of O(eps) curvature aliasing; RE-MEASURE before freezing any gradient threshold) against the analytic radial unit vector, well inside GradientEpsilon's documented 0.01-world-unit probe; 1000 seeded points evaluated twice against a multi-op program (Translate+Rotate+Box+ResetPoint+SmoothUnion-Sphere) were BIT-IDENTICAL (0 mismatches on the raw `FixedQ4816.Value`) — the live `tests/Puck.SignedDistance.Tests` gate now pins direct query regressions, while the broader determinism/drift measurements remain without a live Post gate |
-| `DynamicTransform.CastsSoftShadow` (SdfFrame.cs; default `true` = casts) → `SdfWorldEngine.PackDynamicTransforms` packs it into the dynamic transform's POSITION row `.w` lane (0 = casts, 1 = shadow-suppressed) — the lane that was a hardcoded 0 pad, so a default-casts frame is BYTE-IDENTICAL | `sdfShadowParticipationActive` (a `static bool`, false default, declared under `SDF_DYNAMIC_TRANSFORMS` beside `sdfShadowMaskActive` in `sdf-vm.hlsli`) flipped `true`/`false` UNCONDITIONALLY around the ONE `softShadow` call in `sdf-world.hlsli` (matching `sdfShadowMaskActive`'s lifetime) → the per-instance skip in `sdfNextVisibleInstanceRange` (`sdfShadowParticipationActive && meta.x == SDF_BOUND_DYNAMIC && sdfDynamicTransforms[2u*meta.y].w > 0.5 ⟹ continue`, mirroring the parked-radius skip) + the gather-side twin `sdfInstanceShadowSuppressed` skip in `sdfShadowGather`'s two candidate loops (gated on the RAW condition — the gather runs BEFORE the flag flips and is inherently shadow-scoped) | per-frame per-instance soft-shadow PARTICIPATION — a suppressed dynamic instance drops out of the soft-shadow march ONLY (camera/AO/coverage marches keep the flag false and are untouched; static instances have no dynamic slot and always cast). Default = casts, byte-identical for every existing consumer; no program rebuild (it rides the per-frame dynamic-transform upload). Consumer: `Puck.World`'s `WorldFramePresenter` computes it per entry (local seats always cast; a stand-in casts iff within `WorldRenderSettings.ShadowCrowdRadius` of a joined seat — the 128-player crowd lever, `world.shadows [tier] [crowd-radius]`). The three soft-shadow fallback modes (gather cull / camera-tile / flat) all resolve through `sdfNextVisibleInstanceRange`, so the flag is set unconditionally to cover all three. ⚠ editing `sdf-world.hlsli`/`sdf-vm.hlsli` needs the `sdf-world-views-core.comp` `.spv`/`.dxil` deleted before build (the include-not-#include stale-bytecode gotcha). No dedicated Post stage (a demo/World-greenfield lever — the default-casts path keeps `world-shadow-cull`/`world-swarm` bit-identical) |
+The C# ISA and the shader ISA are ONE contract, kept in `references/sync-pairs.md`
+— read it before changing an op, shape, lane, packing rule, or any HLSL kernel that
+decodes the SDF ISA; change either side only with its partner in the same change.
 
+`SdfProgram.FieldScopeClamps` reads the non-unit scales already baked into
+`PopField.Data1.y`, with push/pop indices, instruction owner, and shape count.
+It does not change packed words. `StepScaleBinder` only identifies an unscoped
+shape-chain bound; global `StepScale == 1` does not mean scopes are unclamped.
+`SdfEngineNode.LiveProgramFieldScopeClamps` follows the uploaded program.
+`world.budget` reports scoped/shared counts and the worst scope;
+`puck creation stats` reports static/pooled unit-scale rest geometry through
+the live stampers, or explicitly marks text-atlas-dependent inspection
+unavailable. A warp sharing its enclosing scope remains valid; panel/trims/
+cells refusals protect field isolation. Clamp factors are field bounds, not
+measured march or GPU-time multipliers.
 
 > **Packed field-scope admission.** The public `SdfProgram` constructor enforces the builder's one-deep balanced
 > `PushField`/`PopField` structure and refuses a scope that crosses between the world stream and an instance-owned
@@ -127,7 +111,7 @@ reads it rather than hand-syncing a second literal), and the
 > parity key can't see, and it collapses to `p4`); it folds DIRECTLY to a fundamental wedge — a sign-based C4 reduction
 > about the cell centre, then one reflection across the offset diagonal `x + y = cell/2` (through the 2-fold centres, off
 > the 4-fold centres). Point group at the centre is C4, zero through-centre mirrors — the signature separating p4g from
-> p4m; gated by Post `world-wallpaper-p4g` (single-cell translation invariance, period-1 not period-2). For every
+> p4m; no live gate today — quarantined `Puck.Post` historically ran `world-wallpaper-p4g` (single-cell translation invariance, period-1 not period-2). For every
 > parity-keyed group (P2/PG/CM/PMG/PGG/CMM/P4/P4M) and for P3, the authored `cell` is the HALF-period: the pattern's
 > translation lattice is the centered/doubled cell (or the √3×√3 hex supercell for P3). `SDF_WPG_P4G` is the square-group
 > exception — its period is exactly `cell` (a pair of opposed 4-fold centres composes to the unit translation).
@@ -141,8 +125,8 @@ reads it rather than hand-syncing a second literal), and the
 > FIRST, against the empty accumulator. (`WorldChamferStage` was emitting its `ChamferIntersection` last and rendering
 > a lone wedge on empty sky while claiming three clusters — its 2-pixel cross-backend diff was the tell.)
 > That unbounded influence region is also why `SdfProgram` packs an instance carrying an intersection-family blend with
-> `UnmaskableBoundRadius`: no cull bound can contain it, and a parked one throws. Gated by `world-instanced`'s
-> intersection guard (its scene authors a deliberately under-covering bound the packer must override; note a merely
+> `UnmaskableBoundRadius`: no cull bound can contain it, and a parked one throws. No live gate today — quarantined
+> `Puck.Post` historically ran `world-instanced`'s intersection guard (its scene authors a deliberately under-covering bound the packer must override; note a merely
 > tight-but-covering bound hides the bug, because the beam cone-marches the UNMASKED field and empties exactly the
 > tiles where the mask would matter).
 >
@@ -152,7 +136,7 @@ reads it rather than hand-syncing a second literal), and the
 > quietly grows and goes hollow — it reads as "a slightly larger object" and no gate ever tripped on it. Weight review
 > attention accordingly. Corollary: **the forge/bake path is safe by construction, not by care** — a single-object
 > program's accumulator IS the object; the hazard begins the moment a program gains a floor or a second object.
-> (Evidence history: docs/sdf-accumulator-plan.md, retired 2026-07-09 — see git history.)
+> (Evidence history: `docs/sdf-accumulator-plan.md` in git history.)
 >
 > **A subtraction is a bound in its own void.** `max(a, −b)` is the exact distance only where the subject `a` is the
 > nearest solid; inside the carved void, wherever `−b < a`, it returns `a` — the subject's carved-away face — and
@@ -163,7 +147,7 @@ reads it rather than hand-syncing a second literal), and the
 > carve to extend past every point a body can reach in the void (`puck.world.json`'s `pit` runs from below the safety
 > net to above head height), or build the void from union geometry when it must be exact.
 >
-> **`Xor` is EXEMPT — maskable-exact with a covering, union-margin bound (settled 2026-07-08, real-GPU slice
+> **`Xor` is EXEMPT — maskable-exact with a covering, union-margin bound (verified via real-GPU slice
 > comparison).** `max(min(acc,b), -max(acc,b))` reduces to `min(acc,b)` ≡ plain union everywhere OUTSIDE the candidate
 > (`b > 0`) — the `-max(acc,b)` arm only wins when `acc + b < 0`, deeper inside than a first-hit march ever samples —
 > and the extra surface Xor carves (the overlap hole) lives strictly INSIDE the union hull, so inside any covering
@@ -194,7 +178,22 @@ reads it rather than hand-syncing a second literal), and the
   fire-and-forget (the live node; host pacing orders frames). Never blur them.
 - **Two content seams, don't conflate:**
   - A **child** occupies a viewport slot (childMask; beam/Stage 1 skip it; the
-    compositor copies its surface).
+    compositor copies its surface). `SdfWorldRenderSpec.Children` is keyed by
+    NAME (`IReadOnlyDictionary<string, IRenderNode>`), never a fixed slot
+    index: each frame's `SdfViewSnapshot.Child` (null = an SDF camera view)
+    names which registered child fills that slot, so the same name can sit at
+    a different viewport slot on a later frame as `SdfFrame.Views`' own order
+    moves. `SdfEngineNode` derives which slots are child slots EVERY produced
+    frame from that frame's bindings resolved against the registered names
+    and hands the engine the mask (`SdfWorldEngine.SetChildMask`, before its
+    `SetChildSource` calls) — a layout switch can turn any slot into a child
+    or back, so the engine allocates an SDF source texture for every slot. A
+    name the map lacks takes the ordinary SDF camera path for that slot
+    instead of throwing (`SdfEngineNode.HasChild` is the read-back a caller
+    uses to tell the two apart, e.g. `Puck.World`'s `world.view.state` echo);
+    `SdfEngineNode.RegisterChild` adds a child after construction (pump
+    thread only). The document-side authoring seam (a `views.layouts` slot's
+    `pipeline` field naming a `views.pipelines` row) is `puck-world`'s to describe.
   - A **screen source** is program-declared `ScreenSlab` shading: its lit face
     samples the bound image through a CRT glass treatment (barrel curve, rounded
     bezel, scanlines, vignette, fresnel glint, bloom — `sampleScreenSurface`),
@@ -230,10 +229,10 @@ reads it rather than hand-syncing a second literal), and the
   (`slot+1` must fit); the float-lane decode compares in DOUBLE because
   `(float)int.MaxValue` rounds up to 2³¹.
 
-## Composition, anchors, views, and queries (SDF VM Worlds arc, 2026-07-10)
+## Composition, anchors, views, and queries
 
 Pure C# — no HLSL counterpart (this layer assembles/consumes programs; it
-does not extend the ISA). Landed across Waves 1-6 of the SDF VM Worlds arc.
+does not extend the ISA). Landed across Waves 1-6 of the SDF VM Worlds architecture.
 
 **Composition (`Puck.SdfVm` root).** `ISdfSceneEmitter`/`SdfEmitContext` is
 the composable content contract — a room's fixed geometry, a sculpted scene,
@@ -266,9 +265,8 @@ snapshot, `System.Numerics` float) / `ISdfAnchorSource` (the read seam) /
 `SdfAnchorTable` (the sim-side per-tick registry: `BeginTick`/`Publish` key
 on NAME not insertion order, so a name that stops publishing stops resolving
 without ever being reassigned) / `SdfAnchorKind` (World/Body/Instance — the
-engine-side classification a host's own anchor kinds map onto, e.g.
-`CameraAnchorKind.Shape → Body`). **Float verdict (recalibration float
-sweep, 2026-07-10): PRESENTATION, not simulation state.** An anchor is
+engine-side classification a host's own anchor kinds map onto). **Float
+verdict: PRESENTATION, not simulation state.** An anchor is
 published FROM an already-computed sim pose (a `FixedVector3`/`FixedPosition`
 position converted to `Vector3` once at publish time) and its only consumer
 is `Views.SdfCameraView.Resolve` (a camera rig pose) — nothing reads
@@ -309,7 +307,7 @@ verdict: presentation (an `elapsedSeconds` render-clock parameter the caller
 advances deterministically, same shape as `ScreenLayoutDirector`'s existing
 pane easing — not simulation state). `ScreenSlotPriority` orders views
 informationally; a screen-SURFACE slot claim is the separate
-`Puck.Demo.Overworld.ScreenSlotLedger` arbitration.
+`Puck.World.WorldScreenBinder` arbitration.
 
 **Queries (seams in `Puck.Maths`, providers in `Puck.SignedDistance.Queries`).**
 `IWorldQuery` and `IFieldEvaluator` are declared in the numerics layer — they
@@ -323,8 +321,7 @@ live-program CPU evaluator). TWO providers now ship. `WorldQueryArtifact`
 (a `puck.worldquery.v1` CAS-blob-shaped heightfield + blocked bitmap,
 in-memory only — no document/CAS reference yet) baked by `WorldQueryBaker`
 (float-authored rectangles in, deterministic artifact out — the
-quantize-once-per-edge discipline, `Puck.Demo.World.WalkGridBaker`'s
-query-namespace sibling: every rectangle edge snaps to raw Q48.16 exactly
+quantize-once-per-edge discipline: every rectangle edge snaps to raw Q48.16 exactly
 once via `FixedQ4816.FromDouble`, every per-cell loop after that is pure
 integer arithmetic) and read by `BakedWorldQuery` (pure fixed-point,
 generalizing `FixedWalkGrid`) via `WorldQueryProviders.ForWorld` —
@@ -406,39 +403,28 @@ baker does. Each rectangle is degenerate at its cell's CENTER (half a cell from
 the boundary the baker's floor/ceil split, where one float rounding would claim
 the neighbour), and a region whose coordinates are coarser in float than
 `CellSize` is refused by name rather than baked into silently mis-addressed
-cells. Backs two Post
-stages, both measured-first and frozen at that measured reality, never
-tightened unasked: `world-field-evaluator-determinism` (Tier A — three
+cells. Historically backed two `Puck.Post` stages, both measured-first and frozen at that measured
+reality, never tightened unasked — quarantined now, with no live equivalent:
+`world-field-evaluator-determinism` (Tier A — three
 independently constructed evaluators over a fixed program/point set hash
 BIT-IDENTICAL) and `world-field-drift` (Tier B — measured 403/403, 100% GPU
 sign agreement outside a 0.75-world-unit shell, held at exactly 1.0 since the
 sphere-trace invariant PROVES it structurally, not just observes it; measured
 496/500, 99.2% baked ground-height agreement, frozen at 0.98 with headroom).
-The RTS proof scenario
-(`Puck.Demo.Rts.RtsScenario`) is `IWorldQuery`'s first consumer: its arena
-bounds/dais/boulder are AUTHORED float constants fed once through
-`WorldQueryBaker.Bake` into a deterministic artifact — never touched per
-tick — while the actual per-tick unit sim (`OverworldWorld.RtsUnit`,
-`AdvanceRtsUnits`) is 100% `FixedQ4816`.
 
 ## Render assembly (Puck.SdfVm)
 
-`SdfWorldRenderSpec` + `SdfWorldRenderBuilder.Build` — hoisted to `Puck.SdfVm`
-root namespace 2026-07-10 (previously lived in `Puck.Demo`) — own EVERY
+`SdfWorldRenderSpec` + `SdfWorldRenderBuilder.Build` — in `Puck.SdfVm`
+root namespace — own EVERY
 backend-specific choice from one `HostsOnDirectX` field: kernel bytecode
 extension (`.spv`/`.dxil`, resolved via `SdfWorldKernels.Load`'s one-arg
 default now that the Builder no longer threads a caller-supplied directory),
 child `directX` flags, and the `DecorateFrameSource` seam
 (`Func<ISdfFrameSource, ISdfFrameSource>?`) — an optional in-place decorator
 the Builder applies to `spec.FrameSource` before building the engine node,
-identity when absent. The Builder itself never names a host type; the demo's
-diegetic-UI coupling (binding bar + console mirrored into world geometry)
-lives entirely in `Puck.Demo.Overworld.DiegeticUiInstaller.Install`, wired in
-by the overworld's spec as `spec.DecorateFrameSource = fs =>
-DiegeticUiInstaller.Install(services, fs)` — reached through the ceiling-era
-forwarders `ForgeCommands.DecorateOverworldFrameSource`/
-`ResolveRenderTimingToggles` so `OverworldRenderNode` still names only one
-symbol. A caller never names a bytecode extension.
+identity when absent. The Builder itself never names a host type, and no
+live caller currently sets `spec.DecorateFrameSource`. A caller never names a
+bytecode extension.
 `GraphBuilder.UnsupportedReason` WAS the one owner of the world graph's
 deferred rejections (cross-backend `produce`, `live-camera` pending its
 child node) — pre-flighted in `Program` BEFORE the window host built, so
@@ -472,80 +458,95 @@ inactive bodies and smaller looks do not shrink their reserved bone ranges.
 
 ## Shader build mechanics
 
-`dotnet build src/Puck.SdfVm -c Release` runs DXC IN PLACE in the source tree
-(build FAILS without DXC; `/p:DxcCommand=` overrides) — commit the
-regenerated `.spv`/`.dxil` with the source change. Editing `sdf-world.hlsli`
-or `sdf-vm.hlsli` recompiles `sdf-instance-cull.comp`, `sdf-beam.comp`,
-`sdf-world-views.comp`, `sdf-sky.comp`, AND `sdf-cull-args.comp`.
-
-**Stage 1 compiles THREE variants** (`SdfViewsKernelVariant`, selected per
-program at `UploadProgram` — walk order Full → Folds → CoreOps): the full-ISA
-reference (`sdf-world-views.comp`), the fold-ops middle tier
-(`sdf-world-views-folds.comp`, `#define SDF_FOLD_OPS` — folds/scopes/simple
-exotic shapes kept, the HEAVY warp/noise family stripped), and the core-ops
-strip (`sdf-world-views-core.comp`). The strip macros in sdf-vm.hlsli are a
-two-tier ladder: `SDF_STRIP_ALL_EXOTIC` (core only) and `SDF_STRIP_HEAVY`
-(core + folds; TwistY/Bend*/LogSphere/CellJitter/Displace/DomainWarp/
-NoiseDisplace and the RegularPolygon/Star/Trapezoid/Ellipse shape bodies).
-KEEP the two sets IN SYNC with `SdfViewsKernelVariants.FirstHeavyTouch`/
-`FirstExoticTouch` — a case stripped under a macro must send `Select` to a
-fuller variant. The folds tier is why a world full of pattern folds and
-grass scopes no longer pays the full interpreter's ~38% occupancy: measured
-~1.5× on views for the shipped world.
-`ValidateShaderBytecodeSources` fails the build on bytecode without a
-same-stem `.hlsl` (Puck.SdfVm only; the other shader-shipping projects lack
-the guard — a known follow-up).
-
-**The MASK-FIRST pass order (the uniform-grid instance-cull arc), now preceded
-by the sky pre-pass.** SEVEN kernels per frame: `sdf-frame-upload.comp` (2026-09-03:
-copies this frame's host-written viewport rows, dynamic transforms, and frame
-instance grid from the ring slot's HOST-VISIBLE buffers into single
-DEVICE-LOCAL twins, one uint per thread — `SdfWorldEngine.RecordFrameUpload`,
-the `upload` timing pass, ~0.02 ms — because every march kernel used to bind
-the host-visible ring buffers directly and fetch across PCIe per sample: the
-instance-cull walk per tile, `sdfShadowGather` per lit pixel, `mapCore`'s
-`sdfDynamicTransforms` read on every dynamic-instance evaluation. The ring
-buffers stay the CPU's write target; the twins are what the beam/cull/views
-sets bind. Measured on the RTX 2060 shipped world: mask 5.2 → 4.0 ms, views
-−2 to −4 ms at the floor tier) → `sdf-sky.comp` (fills every
-non-child viewport's source pixel with `skyColor(cameraRayDirection(...))` —
-direct, not indirect, over the full render-dims rect, so a tile the beam
-later culls already holds real sky rather than stale device memory; it
-shares Stage 1's own bindings array/descriptor set — see the "procedural
-sky" sync-pair row) → `sdf-instance-cull.comp` (per-tile instance mask — the
-host-built CSR uniform grid from `SdfInstanceGrid`, bin-by-CENTER with the
-LOAD-BEARING `footprintPad` = max binned radius; dynamic/unmaskable instances
-ride an always-tested list; a disabled grid falls back to the flat
-per-instance loop, forced by `SdfProgramBuilder.Build(buildInstanceGrid:
-false)` / the demo's `sdf.grid off` verb) → `sdf-beam.comp` (cone march over
-the TILE-MASKED field via `mapMasked` — bit-exact per the bound-sizing
-contract because a masked-out instance's bound excludes the tile's whole
-cone; this is what flattened the O(instances) beam wall: 187.8→6.6 ms @4096,
-119→1.0 ms @1024 scattered carves) → `sdf-cull-args` → views → composite.
-The compositor (`sdf-world-composite.comp`) no longer carries an empty-tile
-flattening constant or a cull-buffer binding of its own — every source pixel
-is real content every frame, so it is a plain copy/upsample with no tile-cull
-knowledge.
-The instance cull is deliberately NOT fused into the beam (its register
-footprint cost the cone march ~12% occupancy, measured), and it uses direct
-mask-buffer bit writes, NOT a per-thread accumulation array (512 B/thread
-scratch, also measured worse). `sdfInstanceMasks`' D3D12 register is
-per-consumer: Stage 1 t13 (default), the beam t3 via
-`SDF_INSTANCE_MASKS_REGISTER` before the include. Timing pass labels are
-`["upload", "sky", "mask", "beam", "cull-args", "views", "composite"]` (`SdfWorldEngine.PassLabels`;
-`TimingCapacity` 8 is now exactly the mark count, so the next pass label needs the pool widened);
-the bench's beam column reports beam+mask so ladders stay comparable, and "views"
-is now a pure Stage-1 march number (the cull-args reduction closes its own mark). Gated by
-`world-grid-cull` (grid==flat bit-identical via the destructible-slab scene)
-plus the existing instanced==flat stages.
+Kept in `references/shader-build.md` — read it before touching DXC build steps,
+kernel variants, pass labels/timing, or descriptor/register wiring.
 
 ## Gotchas (verified, expensive to re-learn)
+
+- **Silhouette coverage requires observed background visibility.** The deferred
+  views pass checks cardinal neighbors in the completed primary cache before
+  blending toward sky. Check the beam's current-frame `TileEmpty` first: records
+  outside the indirect dispatch bbox can be stale. Bound neighbors to the
+  current viewport's reduced render extent, and exclude exhausted rays from
+  sky evidence. A local field rise does not prove sky behind grass or other
+  foreground geometry. The monolithic reference omits this filter. See
+  `docs/rendering/sdf/shading-ao-shadows.md` for the weight and verification cases.
+
+- **Sweep cull spheres must include the field's subtractive margin.**
+  `SdfProgram.Sweep.cs` encloses the control-point hull, maximum positive profile
+  radius, strand orbit and margin. The result bounds the uncapped candidate for
+  any closest-t choice. Admission requires margin <= 16 so the shader's 1e9
+  strand seed remains 1e9 after subtraction; larger margins stay unbounded.
+  All three sphere tests in both scalar and dual walks also require accumulator
+  <= `SDF_FAR_DISTANCE`. Preserve both guards: geometric containment alone or
+  ignoring the strand seed changes the field. Geometric chain reach stays separate.
+
+- **Whole-part programs are a scalar execution path, not another cull.**
+  `SdfProgram.PartPrograms.cs` compiles complete hard-union instance scopes with
+  Reset, optional dynamic pose, optional single Scale/AxialProfile/Shear, and
+  Shape chains. Internal shape blends remain ordered. Geometry keys include
+  Detail/NoSecondary flags, domain parameters and polygon vertices, while pose
+  slots and material IDs live in a separate binding run. Sweep and unsupported
+  chains retain the original program, as does the analytic dual evaluator.
+  `sdf-parts.hlsli` consumes the scalar plan at the instance merge boundary and
+  advances past the entire owned segment range. Preserve hard-union ties,
+  scope distance correction and the winning scope's internal material seam.
+  The instance-directory header `.y` points to the appended part table (zero
+  when absent); the table header carries compiled-instance, shared-program,
+  shared-leaf and binding counts. Header `.x` bits 0..30 hold the instance count;
+  bit 31 admits independent primary tracing. One uint4 per instance names its leaf run,
+  binding run, leaf count (high bit = dynamic), and float scope correction.
+  A leaf uint4 names canonical shape/domain instructions; a binding names pose
+  slot+1 and material. Non-dynamic kernels retain dynamic parts' reference walk.
+  Capacity probes use `PartCompilationWordCapacity`, not `Words.Length`: sharing
+  and admission can change within the instruction/instance ceilings.
+  `PartProgramLawTests` pins these packing and admission contracts; verify actual
+  rendering against the reference kernels on both backends before claiming parity.
+
+- **Independent primary tracing requires hard-union root composition.**
+  `CanTracePartsIndependently` allows only root Union shapes/PopField and
+  Reset/Translate/Rotate/Scale/TransformDynamic. Root field modifiers or other
+  composes keep the full-scene march; eligible parts still accelerate scalar queries.
+  `sdfCanTracePartsIndependently` decodes the admission for both beam and primary.
+  Admitted programs use `IndependentConeMarchSteps` entry samples without gap/tail
+  searches; other programs retain the full beam path. An exhausted entry search
+  publishes its conservative depth and far-distance sentinels, never TileEmpty.
+  Compare combined beam/primary work and inspect silhouettes and changed poses;
+  an earlier start can increase primary queries without changing visible geometry.
+  `sdf-primary.hlsli` shares the marcher between the remaining scene and each
+  visible complete part, then resolves attributes with the full field at the
+  nearest accepted sample. Independent selection uses `SdfPrimarySurface`, not
+  the attribute-bearing result: retaining those unused fields made the measured
+  primary pass slower despite unchanged primitive work. It never substitutes a
+  leaf for its CSG parent.
+  The beam refits per-view complete-part sublevel boxes in `sdf-part-bounds.hlsli`.
+  `SdfWorldEngine.PartBoundFloatCount` / `SdfPartBoundFloatCount` are twelve floats
+  per instance per viewport: two bands of six-float corners, appended after the
+  four tile planes in `m_tileBuffer`. The first band covers primary acceptance;
+  the second covers the raw-field 0.15 sublevel set for AO. Its parser also admits
+  supported flat chains and complete uncompiled scopes. Unknown expressions stay
+  unbounded. AO exclusions require an independent hard-union root and a per-rung
+  scale-corrected ceiling within the cached band; otherwise query the full field.
+  Root distance clipping must not initialize a child CSG scope. Each AO rung's
+  contribution is nonnegative, so distant clearance cannot cancel closer contact.
+  Allocate against construction capacities; shader offsets use live counts.
+  Beam threads stride over instances when a viewport has fewer tiles than parts.
+  Primary reads after the existing beam barrier, clips its local ray interval,
+  and keeps the full interval for unsupported formulae. Include the footprint,
+  scope/domain corrections and smooth-union slack; bare zero-set bounds are unsafe.
+  Verify changed poses, multiple/small viewports and both backends when changing this cache.
+  `sdfPrimaryOmitParts` is primary-local state and must be cleared before full-field
+  attribute resolution or any other query path. Sample positions can differ
+  within the existing footprint acceptance rule; this is not pixel-exact parity.
+  Word 11 of the 80-byte hit record packs selected-march steps in bits 0..7,
+  total primary queries (saturated) in bits 8..30, and hit in bit 31. Change producer
+  and consumer together; query count is not primitive work because query sizes differ.
 
 - **Use compiled-shader reload during iteration.** After `CompileShaders` finishes,
   `world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf` queues the primary
   node's next-frame reload; `world.shaders.status` distinguishes pending from
   applied/unchanged/failed. Do not reboot for HLSL-only edits. The engine stages
-  changed pipelines, drains the frame ring, validates beam/full/core/fold ISA,
+  changed pipelines, drains the frame ring, validates beam/primary/surface/ambient/full/core/fold ISA,
   then retires old pipelines; failure restores them. Scene buffers, textures,
   baked bricks, and world state survive; descriptor caches borrowed by the ISA
   probe, cadence, and shadow history are invalidated. The last successful set
@@ -559,9 +560,9 @@ plus the existing instanced==flat stages.
   `SDF_GROUP_SHADOW_GATHER` — the Stage 1 kernels) walks the SAME view-
   independent `SdfInstanceGrid` the beam cull walks, along the SUN ray, into ONE
   GROUPSHARED mask per 8x8 workgroup (`sdfShadowMaskWords`,
-  `SDF_SHADOW_MASK_WORDS = ceil(SDF_MAX_INSTANCES/32)` = 512 words, covering
-  all 32768 instance slots, including reserved pools) that `mapMasked`
-  reads via the `sdfShadowMaskActive` static. PER-TILE since 2026-09-03 (it was a
+  `SDF_SHADOW_MASK_WORDS = ceil(SDF_MAX_INSTANCES/32)` = 2048 words, covering
+  all 65536 instance slots, including reserved pools) that `mapMasked`
+  reads via the `sdfShadowMaskActive` static. Per-tile cooperative gather (replacing the former
   per-lit-pixel gather into 32 per-thread registers): every lane publishes its
   hit point at the ONE uniform seam in `renderView` between the march and the
   epilogue, lane 0 reduces the lit points to a centroid + enclosing radius R, and
@@ -576,7 +577,7 @@ plus the existing instanced==flat stages.
   feeding the gather (view mode, levers, reach) are uniform. Measured on the
   RTX 2060 shipped world at shadows-high + AO: DX12 views 240 → 177 ms
   (frame 265 → 200), Vulkan 210 → 188. So the culled shadow is BIT-IDENTICAL to the flat all-instances march
-  (gated by `world-shadow-cull`) yet restricted to the shadow ray's neighbourhood,
+  (historically checked by the now-quarantined `world-shadow-cull` Post stage; no live gate today) yet restricted to the shadow ray's neighbourhood,
   AND newly CORRECT for occluders outside the camera frustum (the corridor case).
   THREE settled pins: (1) the gather cone is the **penumbra cone**
   `ShadowPenumbraChord = 3/ShadowSharpness`, NOT a bare ray — the Aaltonen
@@ -601,8 +602,8 @@ plus the existing instanced==flat stages.
   slots. No camera-cone or finite-radius rejection: the ladder consumes field
   clearances, including negative deficits, so a visibility proof cannot preserve
   its result. `sdfAmbientMaskActive` selects this mask only during exact AO;
-  fast AO retains its camera-tile approximation. The two 512-word masks consume
-  4 KiB shared memory per workgroup. This favors avatar fidelity; dense scenes
+  fast AO retains its camera-tile approximation. The two 2048-word masks consume
+  16 KiB shared memory per workgroup. This favors avatar fidelity; dense scenes
   must measure the cost before selecting exact AO globally.
 
 - **SmoothUnion against WORLD geometry — now cullable (was the headline cull
@@ -618,52 +619,92 @@ plus the existing instanced==flat stages.
   clipped — hence the old unmaskable-bound workaround.)
 - **Every interpreter growth re-rolls DXC codegen per backend**: benign ±1
   LSB noise REDISTRIBUTES (spread moves, still ±1) and boundary
-  material-winner flips appear as isolated multi-LSB deltas. The calibrated
-  threshold families encode these signatures (`WorldLsbExact`,
-  `WorldHighContrast`, `WorldFuzz` — Demo+Post copies KEEP IN SYNC); the hero
-  `world` stage stays strict as the canary. Parity posture is RELAXED by
-  default (user decision 2026-07-03); `PUCK_PARITY_STRICT=1` opts into
-  pixel-perfect. Never re-tighten unasked.
+  material-winner flips appear as isolated multi-LSB deltas. The relaxed-vs-strict
+  threshold-family posture (`WorldLsbExact`/`WorldHighContrast`/`WorldFuzz`,
+  `PUCK_PARITY_STRICT`) was Demo+Post-era; it has no live equivalent — that
+  machinery lives only in quarantined `experimental/Puck.Post`. The one live
+  check is `puck parity` (`src/Puck.Cli/Parity/ParityCommand.cs`): it boots the
+  authored parity world offscreen once per backend and renders three verdicts
+  per tick-scheduled capture — a content gate, an exact `stateHash` compare,
+  and per-tile pixel deltas against per-station `tileMeanDelta`/`tileMaxDelta`/
+  `censusFloor` thresholds in `tests/Puck.Parity/parity.contract.json`.
+  Recalibrate a station's thresholds by hand in the same change that moves
+  them; never re-tighten unasked.
 - **An instance bound is an INFLUENCE sphere, and it is read per TILE CONE only.** The
   tile mask may drop an instance because the whole cone misses its sphere; a
   per-SAMPLE test on the same sphere is UNSOUND — a sample just outside the
   sphere still needs the instance's distance to bound its step, and dropping it
-  marches straight through the shape (measured 2026-09-03: the avatar's head and
-  the dragonfly vanished; reverted). The sound per-sample rule is "cannot lower
+  marches straight through the shape (empirically verified: dropping candidate samples caused avatar
+  and dragonfly geometry to vanish). The sound per-sample rule is "cannot lower
   the running minimum", and `mapCore` already applies it per SEGMENT from the
   segment directory (`clearance = acc + r`). Two consequences: (1) a scoped
   segment (`PushField`/`PopField`) is NEVER eligible for that early-out and never
   rigid-planned, so a scope is a real per-sample cost — bake a correction into
   the shape (an ellipsoid's `Data0.w` is free for its `min/max` radius factor)
   before reaching for a scope around a single primitive; (2) a bound short of
-  the true reach clips geometry at tile edges TODAY — the stamp pool's per-shape
-  dynamic bound was `0.9 × max(scale)` until 2026-09-03 and is now
-  `SdfSolidGeometry.Reach` + the shape's field ops (`WorldStampPoolBoundLawTests`).
+  the true reach clips geometry at tile edges — the stamp pool's per-shape
+  dynamic bound requires `SdfSolidGeometry.Reach` + the shape's field ops
+  (`WorldStampPoolBoundLawTests`), rather than an unpadded `0.9 × max(scale)`.
 - **Every `map*` call site is a full copy of the tape interpreter** (DXC has no
   real calls; SM 6.x inlines everything), so the views kernel's cost has a
   FOOTPRINT term beside its evaluation term. Keep call sites ROLLED: `calcAO`'s
-  three rungs went from `[unroll]` to `[loop]` on 2026-09-03 for −11 ms of a
-  38 ms AO term on the RTX 2060 shipped world with identical arithmetic, and a
+  three rungs use `[loop]` rather than `[unroll]` (saving −11 ms of a
+  38 ms AO term on the RTX 2060 shipped world with identical arithmetic), and a
   new epilogue walk should reuse an existing call site through a loop rather
   than add one. Measure with `world.debug-view depth` (march only) against the
   shaded frame: the gap is the epilogue, footprint included.
-- **The exact soft-shadow march is AUTO-RELAXED sphere tracing** (2026-09-03):
-  the primary march's Bán & Valasek scheme transplanted into
-  `areaShadowVisibility` — slope EMA, omega up to `2/(1 - SlopeCap)`,
-  disjoint-sphere validation of every relaxed step, hit and escape decisions
-  on validated samples only, and a validated reach exit; a `ShadowStepMin`-
-  floored step is never treated as relaxed (thin-occluder stepping must not
-  ping-pong with the validation). Measured HQ frame 165 → 154 ms (DX12) on top
-  of the ceiling removal below, captures inside the noise floor. It also has
-  no step ceiling (`ShadowStepMin` is the only clamp). The old
-  `max(0.6, 0.15·t)` ceiling was the closest-approach parabola's need for dense
-  samples; the estimator is BINARY now, sphere tracing never advances past the
-  clearance, and the escape exit closes open rays, so the ceiling only bought
-  samples (~15 per lit ground pixel where 4 or 5 suffice). The FAST path keeps
-  its own ceiling because its wider stride is a soundness trade. Measured: the
-  high-quality frame 200 → 165 ms (DX12) together with the AO loop; captures
-  inside the noise floor. `sdf-world-rt-debug` keeps ITS ceiling on purpose (a
-  calibrated parity probe).
+- **The soft shadow is one deterministic penumbra march per lit pixel**
+  (`softShadowVisibility`): the running minimum of `k · c / t` — the
+  clearance at each sample over the distance travelled — with
+  `k = 1 / worldShadowPenumbraSlope()` (the shadow light's authored
+  `angularRadius`, tangent taken host-side), marched by the fold-safe clearance
+  under `max(ShadowStepNear, ShadowStepFarSlope · t)` with `ShadowStepMin` as
+  the floor, then a smoothstep. No per-frame sample, no history lane, no push
+  word: a frame is a pure function of its inputs, and a moving occluder leaves
+  no trail. The estimate is self-sampling (the step never exceeds the
+  clearance, so samples crowd toward a close approach). The closest-approach
+  CHORD fold between consecutive clearance spheres is deliberately absent:
+  it reads the previous sample too, so whether a pair straddles the close
+  approach flips across neighbouring rays whenever the occluder is thinner
+  than the step, banding a thin rim's penumbra into alternating stripes, and it
+  collapses to zero on a ray leaving its own surface along the normal (the
+  clearance doubles every step). Samples within `ShadowEstimateStart` of the
+  origin read the origin surface and are skipped, never clamped. The estimate
+  divides a de-scaled clearance (`sdfDeScaleField`) by world-unit travel; the
+  step and the surface test use the raw clamped sample. The gather cone chord
+  is three penumbra half-slopes (`worldShadowPenumbraChord`), which is why the
+  validator caps the angular radius at `atan(SdfEnvironment.MaxPenumbraSlope)`.
+  The fast path shortens the reach and budget and widens the stride.
+  `sdf-world-rt-debug` keeps its own `lightShadow`. To attribute a shadow
+  artifact, A/B the levers live (`world.ao off`, `world.shadows off`,
+  `world.shadow-mask`, `world.shadow-march`) and place a `camera` at the
+  shaded point looking along `worldSunDirection()` under
+  `world.debug-view material-id`: it shows what the shadow ray sees.
+- **Curvature samples share one interpreter call site.** Keep the `[loop]` in
+  `calculateNormalCurvature`: four spelled-out calls duplicated the VM body and
+  measured slower on the RTX 4070. The four sample positions, Detail gate,
+  primary-center reuse and gradient/curvature formulas retain their semantics.
+- **The shadow/AO de-scale is GRADIENT-SCALED, on top of the program stepScale
+  clamp, not instead of it.** `sdfDeScaleField`'s divide-back corrects for the
+  program's own worst-case Lipschitz clamp (`stepScale`); it says nothing about
+  how far a given SHAPE's own formula departs from a unit SDF at the hit (an
+  approximate `Ellipsoid`'s directional gradient, `FlareY`'s y-varying shear).
+  `sdfResolveSurface` records the hit's LOCAL field gradient magnitude for AO and views —
+  `calculateNormal`/`calculateNormalCurvature` (the 4-tap tetrahedron sum's own
+  magnitude, divided back by `sdfStepScale()` to strip the taps' own
+  `mapDistanceMasked` bake) or `calculateNormalAnalytic` (`mapGradMasked`'s
+  `gradient` out-parameter is ALREADY stepScale-excluded — sdf-vm.hlsli's
+  `mapGradCore` multiplies only `result.distance` by `stepScale`, never
+  `gradient`) — and composes `shadingStepScale = stepScale *
+  max(gradientMagnitude, GradientMagnitudeFloor)` as the ONE parameter passed
+  to `softShadowVisibility`/`calcAO`/`calcFastAO` in place of the bare
+  `stepScale`, so a scaled shape's penumbra/AO term reflects its own local
+  steepness instead of only the program-wide bound. Never folds into the
+  marching `radius`/step-length logic (unaffected — soundness stays keyed on
+  `stepScale` alone); `src/Puck.World/Assets/pipelines/moth.glsl`'s `surfaceGradient`/`shadow`/
+  `ambientOcclusion` is the reference posture (the study's `distanceScale`
+  correction, computed once at the primary hit and reused for the whole
+  secondary march — a deliberate approximation this engine also makes).
 - `renderView` computes normals LAZILY (`needsNormal` = normals debug view or
   lit path). Do not add an eager `calculateNormal` — the 4-tap TETRAHEDRON probe
   is ~4 full VM interpretations per pixel in the hottest kernel (isotropic taps,
@@ -687,6 +728,13 @@ plus the existing instanced==flat stages.
   NOT applied to the gradient — a uniform positive factor `normalize` cancels.
   A rigid segment (host-collapsed `SDF_SEGMENT_RIGID_PLAN`) takes a rigid-leaf
   fast path in the dual too — the KEEP-IN-SYNC twin of `mapCore`'s rigid walk:
+  both use `sdfShapeEnabled` on the original shape header and mask off the
+  Detail/NoSecondary bits before primitive dispatch. Flagged shapes remain
+  eligible for rigid compilation; `RigidLeafModeLawTests` pins host packing,
+  while GPU comparisons must check march, detail shading, and secondary modes.
+  An identity `Scale` (all four payload lanes exactly one) is also eligible;
+  other scales still fall back. `renderView` enables `sdfSecondaryMarchActive`
+  only around shadow/AO calls and resets it before hit material/normal work.
   shape-local `evaluateShapeGradient` forward-rotated to world by the leaf
   quaternion (static) or `dynamicOrientation ∘ leafQuat` (`TransformDynamic`),
   `distanceScale` = 1, fed through the shared `sdfComposeDualCandidate` tail — so
@@ -697,9 +745,20 @@ plus the existing instanced==flat stages.
   → `worldUseTapNormals()` (rides `sdfScreenLights[SdfGridObjParams].z`; the demo
   verb is `sdf.normals taps|analytic`, default analytic); the 4-tap path stays
   compiled, selected at runtime. The `sdf-world-rt-debug` 6-tap is a DELIBERATE
-  parity probe — do NOT migrate it. Gated by `world-analytic-normal` (the op-chain
-  scene: twist+repeat+scoped-onion+smooth) plus every existing world stage, which
-  now render analytic by default.
+  parity probe — do NOT migrate it. No live gate today (the now-quarantined `world-analytic-normal`
+  Post stage — the op-chain scene: twist+repeat+scoped-onion+smooth — plus every existing world
+  stage historically checked this; they rendered analytic by default).
+  Superellipsoids use `sdfSuperellipsoidGradient`: normalize
+  `sign(p) * pow(abs(p/r)/max(abs(p/r)), e-1) / r`, returning zero at the center.
+  This replaces four leaf SDF taps; it retains the existing unit-gradient
+  transport convention and leaves geometric distances unchanged. The helper and
+  its dispatch case share `SDF_STRIP_HEAVY` with the primitive's scalar case.
+  The builder forwards `detail` at every exponent, including the e=2 Ellipsoid
+  delegation; `SdfDetailShapeLawTests` pins packing and contact exclusion.
+  Curvature shading bypasses this analytic path: `calculateNormalCurvature`
+  samples four neighbors, plus the center when Detail shapes prevent primary
+  reuse. Moth enables curvature shading, so analytic leaf
+  improvements alone do not reduce the authored Moth normal cost.
 - **A HOST-OWNED image-view handle is NOT a durable identity — never
   change-detect a descriptor write against one.** A handle value is unique only
   among LIVE objects; retire the object and the value comes back for a different
@@ -730,7 +789,7 @@ plus the existing instanced==flat stages.
   ChamferUnion `1.70711×k` vs smooth `1×k` asymmetry a copy-paste would
   re-break) and `MaxScopedFieldReach` (a scoped field op's outward growth).
   A new blend/field op must answer which channel covers it before it ships.
-- Per-pass GPU-ms: arm live via the gpu.timing switch (demo) / world.timing verb (world) or the run-doc host.timing field. Delayed captures: `PUCK_CAPTURE_FRAME=N`.
+- Per-pass GPU-ms: arm live via the gpu.timing switch (demo) / world.timing verb (world) or the run-doc host.timing field.
 
 ## Verifying
 
@@ -741,7 +800,10 @@ documents left with the `Puck.Demo` composition root, and nothing replaced
 either. The one on-demand check is `puck parity` (tests/Puck.Parity/): it boots
 the authored parity world (`parity.world.json` + its `parity.sdf.json`
 companion) offscreen once per backend — stations: sky, materials, a
-`state.lattices` height-field, `noiseDisplace`+`cellJitter` — and renders
+`state.lattices` height-field, `noiseDisplace`+`cellJitter`, and a
+`prototypes`/`placements`-authored creation exercising chamfer, a panel, a
+`symmetry` fold riding a `parent`, and an origin-bearing `repeat` at two
+placement scales — and renders
 three verdicts per tick-scheduled capture: content gate (camera-inside/
 census-floor refusals — `parity-inside.world.json` proves the refusal),
 exact `stateHash`, per-tile pixels under `parity.contract.json` (thresholds

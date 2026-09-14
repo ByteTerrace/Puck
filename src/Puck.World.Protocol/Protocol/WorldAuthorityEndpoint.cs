@@ -56,6 +56,9 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     public WorldDefinition Definition => m_mirror.Definition;
     /// <summary>The stable runtime identity of this authority endpoint. It is never inferred from its transport.</summary>
     public string Identity { get; }
+    /// <summary>The engine-tick coordinate of the endpoint's last delivered snapshot, the time its delivered
+    /// definition's advancing state is read as of.</summary>
+    public ulong EngineTick => m_mirror.EngineTick;
     /// <summary>The endpoint's next authoritative input coordinate.</summary>
     public ulong NextInputTick => m_nextInputTick();
     /// <summary>The endpoint's ordinary submission door.</summary>
@@ -84,6 +87,20 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
         catalogRig = 0;
         return false;
     }
+    /// <summary>Reads one entity's authoritative heading (<see cref="EntitySnapshot.Heading"/>) in this authority's
+    /// coordinate frame — what a heading-framed movement composition rotates against.</summary>
+    public bool TryEntityHeading(int index, out float heading) {
+        if (
+            (((uint)index) < WorldBodiesLimits.CapacityCeiling) &&
+            m_mirror.IsActive(index: index)
+        ) {
+            heading = m_mirror.Heading(index: index);
+            return true;
+        }
+
+        heading = 0f;
+        return false;
+    }
     /// <summary>Reads one entity directly in this authority's coordinate frame. Movement composition uses this
     /// instead of consulting the boot client's table, so a body-relative camera keeps the same semantics after an
     /// authority handoff.</summary>
@@ -99,20 +116,6 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
 
         position = default;
         orientation = Quaternion.Identity;
-        return false;
-    }
-    /// <summary>Reads one entity's authoritative heading (<see cref="EntitySnapshot.Heading"/>) in this authority's
-    /// coordinate frame — what a heading-framed movement composition rotates against.</summary>
-    public bool TryEntityHeading(int index, out float heading) {
-        if (
-            (((uint)index) < WorldBodiesLimits.CapacityCeiling) &&
-            m_mirror.IsActive(index: index)
-        ) {
-            heading = m_mirror.Heading(index: index);
-            return true;
-        }
-
-        heading = 0f;
         return false;
     }
     /// <summary>Reads a pose only when the complete generation-addressed identity is still the active occupant.</summary>

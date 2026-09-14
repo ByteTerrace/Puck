@@ -14,28 +14,24 @@ public abstract class OperandFact {
     /// <param name="valueKind">The raw encoding this operand's value is returned in.</param>
     protected OperandFact(CellKind valueKind) => ValueKind = valueKind;
 
+    /// <summary>Gets a value indicating whether the read needs the document host — a fact only it can answer (a body,
+    /// a region, a clock) — so a frame over the section alone cannot evaluate it.</summary>
+    public virtual bool HostOnly => false;
     /// <summary>Gets the raw encoding this operand's value is returned in.</summary>
     public CellKind ValueKind { get; }
-
-    /// <summary>Reads the operand's live fact for the evaluation in flight. Allocation-free on every case declared
-    /// here; a document project's case keeps the same contract.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
-    public abstract RuleFact Read(IRuleReader reader);
-
-    /// <summary>Returns the conservative work units one read costs — a state-candidate visit count for a read that
-    /// scans, 1 for a direct read.</summary>
-    /// <param name="context">The compile context the operand was resolved against.</param>
-    public abstract long Cost(RuleCompileContext context);
 
     /// <summary>Appends every state cell the read touches, including the cells its key indirections resolve through.</summary>
     /// <param name="into">The read set being collected.</param>
     public virtual void CollectReads(List<RuleAccess> into) { }
-
-    /// <summary>Gets a value indicating whether the read needs the document host — a fact only it can answer (a body,
-    /// a region, a clock) — so a frame over the section alone cannot evaluate it.</summary>
-    public virtual bool HostOnly => false;
+    /// <summary>Returns the conservative work units one read costs — a state-candidate visit count for a read that
+    /// scans, 1 for a direct read.</summary>
+    /// <param name="context">The compile context the operand was resolved against.</param>
+    public abstract long Cost(RuleCompileContext context);
+    /// <summary>Reads the operand's live fact for the evaluation in flight. Allocation-free on every case declared
+    /// here; a document project's case keeps the same contract.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    public abstract RuleFact Read(IRuleReader reader);
 }
-
 /// <summary>Shared shape for the case types that address a state row through a (row, key-or-indirection) pair —
 /// so a generic caller that must accept any of them (a token-domain check inside a pattern's own value expression)
 /// can read the row name and the live key indirection without a type-pattern switch enumerating every other case.</summary>
@@ -46,9 +42,11 @@ public interface IStateAddressedOperand {
     /// a literal key.</summary>
     CompiledCellRef? KeyFrom { get; }
 }
-
 /// <summary>A cell key resolved live by the engine or a document project's <see cref="KeyFamily"/>.</summary>
 public abstract class KeyFact {
+    /// <summary>Appends every state cell the resolution reads through.</summary>
+    /// <param name="into">The read set being collected.</param>
+    public virtual void CollectReads(List<RuleAccess> into) { }
     /// <summary>Resolves the key for the evaluation in flight. Allocation-free in steady state: a key minted once is
     /// cached by the family's own reader.</summary>
     /// <param name="reader">The evaluation in flight.</param>
@@ -58,14 +56,16 @@ public abstract class KeyFact {
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="index">The index, on success.</param>
     public virtual bool TryResolveIndex(IRuleReader reader, out long index) =>
-        long.TryParse(s: Resolve(reader: reader), style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out index);
-    /// <summary>Appends every state cell the resolution reads through.</summary>
-    /// <param name="into">The read set being collected.</param>
-    public virtual void CollectReads(List<RuleAccess> into) { }
+        long.TryParse(
+            s: Resolve(reader: reader),
+            style: NumberStyles.Integer,
+            provider: CultureInfo.InvariantCulture,
+            result: out index
+        );
+
     /// <summary>Gets a value indicating whether the resolution needs the document host.</summary>
     public virtual bool HostOnly => false;
 }
-
 /// <summary>The key an implicit binding computed: the cell whose ordinal is the bound integer, spelled as that
 /// integer — what <c>row[from + 1]</c> resolves through.</summary>
 public sealed class BindingKeyFact : KeyFact {
@@ -75,6 +75,7 @@ public sealed class BindingKeyFact : KeyFact {
 
     /// <summary>Gets the binding's slot.</summary>
     public int Ordinal { get; }
+
     /// <inheritdoc/>
     public override string Resolve(IRuleReader reader) => IndexKeyCache.Get(index: reader.BindingValue(ordinal: Ordinal));
     /// <inheritdoc/>
@@ -84,7 +85,6 @@ public sealed class BindingKeyFact : KeyFact {
         return true;
     }
 }
-
 /// <summary>A state cell address whose integer value is read as a cell key at evaluation time
 /// (<see cref="RuleFacts.CellKeyPrefix"/>), a bound key token, or a document project's own live key
 /// (<see cref="Custom"/>) — every dynamic key resolves through this one indirection carrier.</summary>
@@ -103,24 +103,16 @@ public sealed class BindingKeyFact : KeyFact {
 /// current binding names, never a compile-time-fixed <paramref name="Key"/> (left empty in this case).
 /// <see cref="BoundKey.None"/> for an ordinary literal-keyed <c>$cell:</c> indirection. Distinct from
 /// <paramref name="Binding"/>, which spells "the whole key is the binding, no row at all" — this spells "the row is
-/// fixed, only its key is bound".</param>
-public readonly record struct CompiledCellRef(string Row, string Key, BoundKey Binding = BoundKey.None, StateHandle Handle = default, KeyFact? Custom = null, BoundKey InnerKeyBinding = BoundKey.None);
-
+/// known, the cell is the binding".</param>
+/// <param name="CellKey">The pre-parsed literal <paramref name="Key"/> of the source cell, or default.
+/// An indirection reads that cell's value to obtain the destination key.</param>
+public readonly record struct CompiledCellRef(string Row, string Key, BoundKey Binding = BoundKey.None, StateHandle Handle = default, KeyFact? Custom = null, BoundKey InnerKeyBinding = BoundKey.None, CellName CellKey = default);
 /// <summary>One state cell a rule reads or writes — a literal <c>row.key</c>, or a whole row when the key is resolved
 /// live (a <c>$cell:</c> indirection, a bound <c>$each</c>, a push, a generate, a transform).</summary>
 /// <param name="Row">The state row.</param>
 /// <param name="Key">The literal key, or <see langword="null"/> for any key of the row.</param>
 /// <param name="IsSet">For a write, whether it replaces the cell (a set) rather than accumulating into it (an add).</param>
 public readonly record struct RuleAccess(string Row, string? Key, bool IsSet = false) {
-    /// <summary>Gets a value indicating whether two accesses can touch the same cell.</summary>
-    /// <param name="other">The other access.</param>
-    public bool Overlaps(RuleAccess other) =>
-        string.Equals(a: Row, b: other.Row, comparisonType: StringComparison.Ordinal) &&
-        ((Key is null) || (other.Key is null) || string.Equals(a: Key, b: other.Key, comparisonType: StringComparison.Ordinal));
-
-    /// <summary>Formats the access as <c>row.key</c> or <c>row.*</c>.</summary>
-    public string Describe() => $"{Row}.{Key ?? "*"}";
-
     /// <summary>Appends the cells a key indirection reads through, if any.</summary>
     /// <param name="reference">The indirection.</param>
     /// <param name="into">The read set being collected.</param>
@@ -136,6 +128,26 @@ public readonly record struct RuleAccess(string Row, string? Key, bool IsSet = f
             return;
         }
 
-        into.Add(item: new RuleAccess(Row: cell.Row, Key: ((cell.Binding == BoundKey.None) ? cell.Key : null)));
+        into.Add(item: new RuleAccess(
+            Row: cell.Row,
+            Key: ((cell.Binding == BoundKey.None)
+            ? cell.Key
+            : null)
+        ));
     }
+    /// <summary>Formats the access as <c>row.key</c> or <c>row.*</c>.</summary>
+    public string Describe() => $"{Row}.{(Key ?? "*")}";
+    /// <summary>Gets a value indicating whether two accesses can touch the same cell.</summary>
+    /// <param name="other">The other access.</param>
+    public bool Overlaps(RuleAccess other) =>
+        (string.Equals(
+            a: Row,
+            b: other.Row,
+            comparisonType: StringComparison.Ordinal
+        ) &&
+        ((Key is null) || (other.Key is null) || string.Equals(
+            a: Key,
+            b: other.Key,
+            comparisonType: StringComparison.Ordinal
+        )));
 }

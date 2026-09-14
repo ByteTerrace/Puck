@@ -10,7 +10,7 @@ using Puck.Abstractions.Documents;
 namespace Puck.World;
 
 /// <summary>
-/// Generates the JSON Schema for <c>puck.world.def.v1</c> (<see cref="WorldDefinition"/>) directly from the live
+/// Generates the JSON Schema for <c>puck.world.definition.v1</c> (<see cref="WorldDefinition"/>) directly from the live
 /// C# model and its XML documentation — never hand-maintained, so an editor's completion, enum values, <c>$type</c>
 /// union arms, and hover text always match the code that actually parses a world document. The walk runs over
 /// <see cref="WorldJsonContext"/>'s own source-generated metadata via <see cref="JsonSchemaExporter"/>, which
@@ -19,8 +19,8 @@ namespace Puck.World;
 /// policy), a <c>$type</c>-discriminated union as <c>anyOf</c> with a <c>const</c> arm per
 /// <see cref="System.Text.Json.Serialization.JsonDerivedTypeAttribute"/>, and a named-value <c>enum</c> for every
 /// <see cref="StrictEnumConverter{TEnum}"/> member. This generator adds only what the exporter cannot infer on its
-/// own: curated hover text pulled from the XML documentation of this assembly and of <c>Puck.State</c>
-/// (<c>Puck.World.Schema.xml</c> and <c>Puck.State.xml</c> beside it), a <c>type</c>/<c>enum</c> constraint for a member whose <see cref="JsonConverter{T}"/> the exporter cannot
+/// own: curated hover text pulled from the XML documentation of the model assemblies
+/// (the World.Schema, State, World.Authoring, and SignedDistance XML files beside their assemblies), a <c>type</c>/<c>enum</c> constraint for a member whose <see cref="JsonConverter{T}"/> the exporter cannot
 /// introspect and that opts in via <see cref="IJsonSchemaTypeConverter"/> or
 /// <see cref="IJsonSchemaStringConverter"/> (<see cref="ApplyConverterVocabulary"/>), a whole node — required
 /// members, kind-conditional types, exclusivity rules — for a converter that opts into
@@ -39,10 +39,13 @@ public static partial class WorldSchema {
     // Below this compact-JSON length, a repeated node is left inlined: the $ref text would cost more than the
     // duplicate content saves, and a two/three-word leaf isn't a "shape" a reader benefits from finding by name.
     private const int HoistMinimumLength = 60;
+
     // Every assembly whose types the document embeds; each one's generated XML doc file rides beside the DLL.
     private static readonly (string FileName, Type Anchor)[] XmlDocumentationFiles = [
         ("Puck.World.Schema.xml", typeof(WorldDefinition)),
         ("Puck.State.xml", typeof(ValueExpression)),
+        ("Puck.World.Authoring.xml", typeof(Puck.World.Authoring.CreationDocument)),
+        ("Puck.SignedDistance.xml", typeof(Puck.SignedDistance.SdfSolidPrimitive)),
     ];
 
     /// <summary>The file name shared shapes live under, inside the sections directory.</summary>
@@ -266,8 +269,8 @@ public static partial class WorldSchema {
         }
 
         if (TryGetNodeConverter(
-            propertyType: propertyType,
-            converter: out var nodeConverter
+            converter: out var nodeConverter,
+            propertyType: propertyType
         )) {
             // The converter describes its own node; an object arm it references is exported through the same
             // transform so its members are described and hoisted like any other shape.
@@ -584,7 +587,7 @@ public static partial class WorldSchema {
                             expandedTypes: expandedTypes,
                             originByNode: originByNode,
                             activePaths: activePaths,
-                activeTypes: activeTypes,
+                            activeTypes: activeTypes,
                             currentPath: $"{currentPath}/{EscapePointerSegment(segment: key)}"
                         )
                         : null
@@ -634,7 +637,7 @@ public static partial class WorldSchema {
                         expandedTypes: expandedTypes,
                         originByNode: originByNode,
                         activePaths: activePaths,
-                activeTypes: activeTypes,
+                        activeTypes: activeTypes,
                         currentPath: $"{currentPath}/{EscapePointerSegment(segment: key)}"
                     )
                     : null
@@ -664,7 +667,7 @@ public static partial class WorldSchema {
                             expandedTypes: expandedTypes,
                             originByNode: originByNode,
                             activePaths: activePaths,
-                activeTypes: activeTypes,
+                            activeTypes: activeTypes,
                             currentPath: $"{currentPath}/{EscapePointerSegment(segment: key)}"
                         )
                         : null
@@ -681,7 +684,7 @@ public static partial class WorldSchema {
                     newArr.Add(item: ((value is not null)
                         ? ExpandRefs(
                             activePaths: activePaths,
-                activeTypes: activeTypes,
+                            activeTypes: activeTypes,
                             currentPath: $"{currentPath}/{i}",
                             expandedTypes: expandedTypes,
                             node: value,
@@ -727,8 +730,8 @@ public static partial class WorldSchema {
         ),
         };
         var schema = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
-            type: typeof(WorldDefinition),
-            exporterOptions: exporterOptions
+            exporterOptions: exporterOptions,
+            type: typeof(WorldDefinition)
         );
         var root = schema.AsObject();
         var generated = root.ToList();
@@ -744,7 +747,7 @@ public static partial class WorldSchema {
         );
         root.Add(
             propertyName: "title",
-            value: "Puck world definition (puck.world.def.v1)"
+            value: "Puck world definition (puck.world.definition.v1)"
         );
 
         foreach (var (propertyName, value) in generated) {
@@ -1326,9 +1329,9 @@ public static partial class WorldSchema {
     // FriendlyTypeName — deterministic from the type's own identity, never from where StampTitle happened to visit
     // it first, so the same collision resolves to the same two names on every run.
     private static string NamespacePrefixedTitle(Type type) {
-        var segment = (type.Namespace ?? string.Empty)
+        var segment = ((type.Namespace ?? string.Empty)
             .Split(separator: '.')
-            .LastOrDefault(predicate: static part => (part.Length > 0)) ?? string.Empty;
+            .LastOrDefault(predicate: static part => (part.Length > 0)) ?? string.Empty);
 
         return $"{segment}{FriendlyTypeName(type: type)}";
     }
@@ -1336,6 +1339,8 @@ public static partial class WorldSchema {
     // object, ahead of its type/properties/required keywords). JsonObject preserves insertion order, and Clear()
     // detaches every child so each can be re-added to the same object without a "node already has a parent" error.
     private static void Prepend(JsonObject obj, string propertyName, JsonNode value) {
+        // A converter may already supply this annotation; the outer property site replaces it.
+        obj.Remove(propertyName: propertyName);
         var existing = obj.ToList();
 
         obj.Clear();
@@ -1447,7 +1452,10 @@ public static partial class WorldSchema {
         }
 
         foreach (var (title, nodes) in nodesByTitle) {
-            if (!nodes.Any(predicate: CarriesDiscriminator) || nodes.All(predicate: CarriesDiscriminator)) {
+            if (
+                !nodes.Any(predicate: CarriesDiscriminator) ||
+                nodes.All(predicate: CarriesDiscriminator)
+            ) {
                 continue;
             }
 
@@ -1458,10 +1466,8 @@ public static partial class WorldSchema {
             }
         }
     }
-
     private static bool CarriesDiscriminator(JsonObject obj) =>
         ((obj["properties"] is JsonObject properties) && (properties["$type"] is JsonObject discriminator) && discriminator.ContainsKey(propertyName: "const"));
-
     private static void ResolveTitleCollisions(Dictionary<JsonNode, Type> typesByNode) {
         var typesByTitle = new Dictionary<string, HashSet<Type>>(comparer: StringComparer.Ordinal);
 
@@ -1521,9 +1527,15 @@ public static partial class WorldSchema {
             obj["title"] = newTitle;
         }
 
-        foreach (var group in resolved.GroupBy(keySelector: kv => kv.Value, comparer: StringComparer.Ordinal)) {
+        foreach (var group in resolved.GroupBy(
+            keySelector: kv => kv.Value,
+            comparer: StringComparer.Ordinal
+        )) {
             if (group.Count() > 1) {
-                throw new InvalidOperationException(message: $"schema: types {string.Join(separator: ", ", values: group.Select(selector: kv => kv.Key.FullName))} all disambiguate to the same title '{group.Key}' — rename one of the CLR types.");
+                throw new InvalidOperationException(message: $"schema: types {string.Join(
+                    separator: ", ",
+                    values: group.Select(selector: kv => kv.Key.FullName)
+                )} all disambiguate to the same title '{group.Key}' — rename one of the CLR types.");
             }
         }
     }
@@ -1580,6 +1592,13 @@ public static partial class WorldSchema {
     // node with no resolvable description). Every other node in typesByNode was already fully annotated by
     // Transform itself and is left alone.
     private static void RestoreSkippedPropertyAnnotations(JsonNode node, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
+        // Creation documents own their serializer and annotation walk; WorldJsonContext's converter repairs do not apply.
+        if (
+            (node is JsonObject creation) &&
+            (creation["$id"]?.ToString() == Puck.World.Authoring.CreationDocument.CurrentSchema)
+        ) {
+            return;
+        }
         if (node is JsonObject obj) {
             if (
                 typesByNode.TryGetValue(
@@ -1735,7 +1754,7 @@ public static partial class WorldSchema {
 
         typesByNode[obj] = context.TypeInfo.Type;
 
-        // The document root carries its own hand-written title ("Puck world definition (puck.world.def.v1)" and
+        // The document root carries its own hand-written title ("Puck world definition (puck.world.definition.v1)" and
         // its projection/silo counterparts, added after Transform runs) — StampTitle would collide with it.
         if (context.Path.Length > 0) {
             StampTitle(
@@ -1831,6 +1850,7 @@ public static partial class WorldSchema {
 
         return false;
     }
+
     // A nested export's occurrences within one unsplit document: the first exports in full and every later one is
     // a placeholder ResolveNestedRefs repoints at it by JSON pointer once the tree is final — the same device the
     // exporter's own cache uses for a repeated type. The split export passes no cache: its hoist dedups by content.
@@ -1838,8 +1858,12 @@ public static partial class WorldSchema {
         public Dictionary<Type, JsonNode> First { get; } = [];
         public List<(Type Type, JsonObject Placeholder)> Later { get; } = [];
     }
+
     private static JsonNode ExportNested(Type type, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
-        if ((nested is not null) && nested.First.ContainsKey(key: type)) {
+        if (
+            (nested is not null) &&
+            nested.First.ContainsKey(key: type)
+        ) {
             var placeholder = new JsonObject();
 
             nested.Later.Add(item: (type, placeholder));
@@ -1858,8 +1882,8 @@ public static partial class WorldSchema {
             TreatNullObliviousAsNonNullable = true,
         };
         var exported = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
-            type: type,
-            exporterOptions: exporterOptions
+            exporterOptions: exporterOptions,
+            type: type
         );
 
         nested?.First.Add(
@@ -1871,10 +1895,10 @@ public static partial class WorldSchema {
     }
     private static void ResolveNestedRefs(JsonObject root, NestedExports nested) {
         foreach (var (type, placeholder) in nested.Later) {
-            var pointer = JsonPointerOf(
+            var pointer = (JsonPointerOf(
                 node: nested.First[type],
                 root: root
-            ) ?? throw new InvalidOperationException(message: $"the first export of {type.Name} is no longer in the document");
+            ) ?? throw new InvalidOperationException(message: $"the first export of {type.Name} is no longer in the document"));
 
             placeholder["$ref"] = $"#{pointer}";
         }
@@ -1884,22 +1908,33 @@ public static partial class WorldSchema {
         var segments = new List<string>();
         var cursor = node;
 
-        while (!ReferenceEquals(cursor, root)) {
+        while (!ReferenceEquals(
+            objA: cursor,
+            objB: root
+        )) {
             var parent = cursor.Parent;
 
             if (parent is null) {
                 return null;
             }
 
-            segments.Add(item: (parent is JsonArray array)
+            segments.Add(item: ((parent is JsonArray array)
                 ? array.IndexOf(item: cursor).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
-                : cursor.GetPropertyName().Replace(oldValue: "~", newValue: "~0", comparisonType: StringComparison.Ordinal).Replace(oldValue: "/", newValue: "~1", comparisonType: StringComparison.Ordinal));
+                : cursor.GetPropertyName().Replace(
+                    comparisonType: StringComparison.Ordinal,
+                    newValue: "~0",
+                    oldValue: "~"
+                ).Replace(
+                    comparisonType: StringComparison.Ordinal,
+                    newValue: "~1",
+                    oldValue: "/"
+                )));
             cursor = parent;
         }
 
         segments.Reverse();
 
-        return string.Concat(values: segments.Select(selector: static segment => "/" + segment));
+        return string.Concat(values: segments.Select(selector: static segment => ("/" + segment)));
     }
     private static bool TryGetNodeConverter(Type propertyType, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IJsonSchemaNodeConverter? converter) {
         var effectiveType = (Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType);
@@ -1958,7 +1993,10 @@ public static partial class WorldSchema {
             return false;
         }
 
-        if ((converter is not IJsonSchemaTypeConverter vocabulary) || (vocabulary.SchemaTypes.Count == 0)) {
+        if (
+            (converter is not IJsonSchemaTypeConverter vocabulary) ||
+            (vocabulary.SchemaTypes.Count == 0)
+        ) {
             types = [];
 
             return false;
@@ -2167,8 +2205,8 @@ public static partial class WorldSchema {
         ),
         };
         var schema = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
-            type: typeof(WorldProjectionDocument),
-            exporterOptions: exporterOptions
+            exporterOptions: exporterOptions,
+            type: typeof(WorldProjectionDocument)
         );
         var root = schema.AsObject();
         var generated = root.ToList();
@@ -2229,8 +2267,8 @@ public static partial class WorldSchema {
         ),
         };
         var schema = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
-            type: typeof(WorldSiloDefinition),
-            exporterOptions: exporterOptions
+            exporterOptions: exporterOptions,
+            type: typeof(WorldSiloDefinition)
         );
         var root = schema.AsObject();
         var generated = root.ToList();
@@ -2246,7 +2284,7 @@ public static partial class WorldSchema {
         );
         root.Add(
             propertyName: "title",
-            value: "Puck world silo (puck.silo.def.v1)"
+            value: "Puck world silo (puck.silo.configuration.v1)"
         );
 
         foreach (var (propertyName, value) in generated) {

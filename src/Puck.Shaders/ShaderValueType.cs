@@ -67,11 +67,18 @@ public static class ShaderValueTypes {
             ShaderScalarKind.Float => "float",
             ShaderScalarKind.Uint => "uint",
             ShaderScalarKind.Int => "int",
-            _ => throw new ArgumentOutOfRangeException(nameof(type), type, "The value type is not defined."),
+            _ => throw new ArgumentOutOfRangeException(
+            nameof(type),
+            type,
+            "The value type is not defined."
+        ),
         };
         var count = type.ComponentCount();
 
-        return ((count == 1) ? kind : $"{kind}{count}");
+        return ((count == 1)
+            ? kind
+            : $"{kind}{count}"
+        );
     }
     /// <summary>Parses an HLSL spelling back into a <see cref="ShaderValueType"/>.</summary>
     /// <param name="spelling">The spelling.</param>

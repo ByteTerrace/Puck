@@ -11,11 +11,11 @@ internal sealed partial class WorldProbes {
     // The generation every left-unbound optional socket resolves to: a single fixed instance, so an unbound socket
     // never itself triggers a restart (it can never change) yet still counts as "ready" (non-null) in the readiness
     // gate ServiceProbes applies to every other socket.
-    private static readonly object s_unboundSocketGeneration = new();
-    private static readonly ProbeKernelInput s_unboundKernelInput = new ProbeKernelInput.Unbound();
-    private static readonly ProbeKernelInput s_colorKernelInput = new ProbeKernelInput.Sensor(Kind: CameraSensor.Color);
-    private static readonly ProbeKernelInput s_infraredKernelInput = new ProbeKernelInput.Sensor(Kind: CameraSensor.Infrared);
-    private static readonly ProbeKernelInput s_infraredStrobeKernelInput = new ProbeKernelInput.StrobePair(Kind: CameraSensor.Infrared);
+    private static readonly object UnboundSocketGeneration = new();
+    private static readonly ProbeKernelInput UnboundKernelInput = new ProbeKernelInput.Unbound();
+    private static readonly ProbeKernelInput ColorKernelInput = new ProbeKernelInput.Sensor(Kind: CameraSensor.Color);
+    private static readonly ProbeKernelInput InfraredKernelInput = new ProbeKernelInput.Sensor(Kind: CameraSensor.Infrared);
+    private static readonly ProbeKernelInput InfraredStrobeKernelInput = new ProbeKernelInput.StrobePair(Kind: CameraSensor.Infrared);
 
     // Loads and deep-validates one declared probe row's static shape: its kind manifest (must exist, must be
     // kernel-class — a model-class kind has no registered host yet), its bound config, whether it is seat-relative,
@@ -30,7 +30,10 @@ internal sealed partial class WorldProbes {
         try {
             manifest = WorldProbeKinds.Shipped.Load(id: row.Kind);
         } catch (Exception exception) {
-            throw new InvalidOperationException(message: $"{path} kind '{row.Kind}' failed to load: {exception.Message}", innerException: exception);
+            throw new InvalidOperationException(
+                message: $"{path} kind '{row.Kind}' failed to load: {exception.Message}",
+                innerException: exception
+            );
         }
 
         if (manifest.Class != ProbeKindClass.Kernel) {
@@ -56,7 +59,9 @@ internal sealed partial class WorldProbes {
 
             return new ProbeRowInfo {
                 ConstantsTemplate = constants,
-                InstancesBySeat = (isSeatRelative ? [] : null),
+                InstancesBySeat = (isSeatRelative
+                ? []
+                : null),
                 IsSeatRelative = isSeatRelative,
                 Manifest = manifest,
                 Row = row,
@@ -71,11 +76,11 @@ internal sealed partial class WorldProbes {
                 Manifest = manifest,
                 Row = row,
                 TrackDocument = LoadTrackDocument(
-                    channelCount: manifest.Channels.Count,
-                    documentDirectory: documentDirectory,
-                    path: path,
-                    trackPath: trackPath
-                ),
+                channelCount: manifest.Channels.Count,
+                documentDirectory: documentDirectory,
+                path: path,
+                trackPath: trackPath
+            ),
             };
         }
 
@@ -95,7 +100,10 @@ internal sealed partial class WorldProbes {
         for (var socketIndex = 0; (socketIndex < sockets.Count); socketIndex++) {
             var socket = sockets[socketIndex];
 
-            if (!socket.Optional && !inputs.ContainsKey(key: socket.Name)) {
+            if (
+                !socket.Optional &&
+                !inputs.ContainsKey(key: socket.Name)
+            ) {
                 throw new InvalidOperationException(message: $"{path}.inputs is missing required socket '{socket.Name}'.");
             }
         }
@@ -116,11 +124,17 @@ internal sealed partial class WorldProbes {
             ) {
                 throw new InvalidOperationException(message: $"{path}.inputs['{socketName}'] is a strobePair socket; it must bind a camera source with sensor Infrared.");
             }
-            if ((source is WorldScreenSource.Camera cameraSource) && (cameraSource.Seat is null)) {
+            if (
+                (source is WorldScreenSource.Camera cameraSource) &&
+                (cameraSource.Seat is null)
+            ) {
                 isSeatRelative = true;
             }
             if (source is WorldScreenSource.Probe probeSource) {
-                if (!probesById.TryGetValue(key: probeSource.Id, value: out var targetRow)) {
+                if (!probesById.TryGetValue(
+                    key: probeSource.Id,
+                    value: out var targetRow
+                )) {
                     throw new InvalidOperationException(message: $"{path}.inputs['{socketName}'].probe.id '{probeSource.Id}' names no declared probe.");
                 }
 
@@ -129,7 +143,10 @@ internal sealed partial class WorldProbes {
                 try {
                     targetManifest = WorldProbeKinds.Shipped.Load(id: targetRow.Kind);
                 } catch (Exception exception) {
-                    throw new InvalidOperationException(message: $"{path}.inputs['{socketName}'].probe.id '{probeSource.Id}' kind '{targetRow.Kind}' failed to load: {exception.Message}", innerException: exception);
+                    throw new InvalidOperationException(
+                        message: $"{path}.inputs['{socketName}'].probe.id '{probeSource.Id}' kind '{targetRow.Kind}' failed to load: {exception.Message}",
+                        innerException: exception
+                    );
                 }
 
                 if (targetManifest.Output is null) {
@@ -147,14 +164,20 @@ internal sealed partial class WorldProbes {
         var triggerSocket = sockets[manifest.TriggerSocket];
 
         if (
-            !inputs.TryGetValue(key: triggerSocket.Name, value: out var triggerSource) ||
+            !inputs.TryGetValue(
+            key: triggerSocket.Name,
+            value: out var triggerSource
+        ) ||
             (triggerSource is not WorldScreenSource.Camera triggerCamera)
         ) {
             throw new InvalidOperationException(message: $"{path}.inputs['{triggerSocket.Name}'] is the trigger socket; it must bind a camera source (kernels are hosted by a camera graph).");
         }
 
         foreach (var (socketName, source) in inputs) {
-            if ((source is WorldScreenSource.Camera camera) && (camera.Seat != triggerCamera.Seat)) {
+            if (
+                (source is WorldScreenSource.Camera camera) &&
+                (camera.Seat != triggerCamera.Seat)
+            ) {
                 throw new InvalidOperationException(message: $"{path}.inputs['{socketName}'].camera.seat must match trigger socket '{triggerSocket.Name}' seat; one kernel run can bind only one camera graph.");
             }
         }
@@ -163,7 +186,11 @@ internal sealed partial class WorldProbes {
     }
     private static bool TryFindSocket(string name, IReadOnlyList<ProbeKindInput> sockets, out ProbeKindInput socket) {
         for (var index = 0; (index < sockets.Count); index++) {
-            if (string.Equals(a: sockets[index].Name, b: name, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(
+                a: sockets[index].Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 socket = sockets[index];
 
                 return true;
@@ -179,14 +206,23 @@ internal sealed partial class WorldProbes {
     // conditioned step rather than at boot. A track-input row is never seat-relative, so this document is played
     // back by exactly one instance's ProbeTrackPlayer, built once ReconcileInstances creates it.
     private static ProbeTrackDocument LoadTrackDocument(int channelCount, string documentDirectory, string path, string trackPath) {
-        var resolvedPath = Path.GetFullPath(path: Path.Combine(path1: documentDirectory, path2: trackPath));
+        var resolvedPath = Path.GetFullPath(path: Path.Combine(
+            path1: documentDirectory,
+            path2: trackPath
+        ));
         ProbeTrackDocument document;
 
         try {
-            document = (JsonSerializer.Deserialize(json: File.ReadAllText(path: resolvedPath), jsonTypeInfo: ProbeTrackJsonContext.Default.ProbeTrackDocument)
+            document = (JsonSerializer.Deserialize(
+                json: File.ReadAllText(path: resolvedPath),
+                jsonTypeInfo: ProbeTrackJsonContext.Default.ProbeTrackDocument
+            )
                 ?? throw new InvalidDataException(message: "the track document is empty or 'null'."));
         } catch (Exception exception) when ((exception is IOException or JsonException or InvalidDataException)) {
-            throw new InvalidOperationException(message: $"{path} track '{trackPath}' failed to load: {exception.Message}", innerException: exception);
+            throw new InvalidOperationException(
+                message: $"{path} track '{trackPath}' failed to load: {exception.Message}",
+                innerException: exception
+            );
         }
 
         if (document.Channels != channelCount) {
@@ -196,9 +232,15 @@ internal sealed partial class WorldProbes {
         // A trial construction against a throwaway ring proves the document's own sample-shape laws (ascending
         // time, matching channel counts) now, at boot, rather than at the first seat that ever instances this row.
         try {
-            _ = new ProbeTrackPlayer(document: document, ring: new ProbeReadingRing());
+            _ = new ProbeTrackPlayer(
+                document: document,
+                ring: new ProbeReadingRing()
+            );
         } catch (InvalidDataException exception) {
-            throw new InvalidOperationException(message: $"{path} track '{trackPath}' is invalid: {exception.Message}", innerException: exception);
+            throw new InvalidOperationException(
+                message: $"{path} track '{trackPath}' is invalid: {exception.Message}",
+                innerException: exception
+            );
         }
 
         return document;
@@ -218,15 +260,27 @@ internal sealed partial class WorldProbes {
 
             switch (bindings[bindingIndex]) {
                 case WorldProbeBinding.Axis axis:
-                    rowInfo.AxisTemplates.Add(item: BuildAxisTemplate(axis: axis, path: path, rowInfo: rowInfo));
+                    rowInfo.AxisTemplates.Add(item: BuildAxisTemplate(
+                        axis: axis,
+                        path: path,
+                        rowInfo: rowInfo
+                    ));
 
                     break;
                 case WorldProbeBinding.Parameter parameter:
-                    rowInfo.ParameterTemplates.Add(item: BuildParameterTemplate(parameter: parameter, path: path, rowInfo: rowInfo));
+                    rowInfo.ParameterTemplates.Add(item: BuildParameterTemplate(
+                        parameter: parameter,
+                        path: path,
+                        rowInfo: rowInfo
+                    ));
 
                     break;
                 case WorldProbeBinding.Control control:
-                    rowInfo.ControlTemplates.Add(item: BuildControlTemplate(control: control, path: path, rowInfo: rowInfo));
+                    rowInfo.ControlTemplates.Add(item: BuildControlTemplate(
+                        control: control,
+                        path: path,
+                        rowInfo: rowInfo
+                    ));
 
                     break;
             }
@@ -236,19 +290,32 @@ internal sealed partial class WorldProbes {
     // re-validating, since the templates already proved every channel/target/control name resolves.
     private void BuildInstanceBindings(ProbeInstance instance) {
         foreach (var template in instance.RowInfo.AxisTemplates) {
-            instance.AxisBindings.Add(item: BuildAxis(instance: instance, template: template));
+            instance.AxisBindings.Add(item: BuildAxis(
+                instance: instance,
+                template: template
+            ));
         }
         foreach (var template in instance.RowInfo.ParameterTemplates) {
-            instance.ParameterBindings.Add(item: BuildParameter(instance: instance, template: template));
+            instance.ParameterBindings.Add(item: BuildParameter(
+                instance: instance,
+                template: template
+            ));
         }
         foreach (var template in instance.RowInfo.ControlTemplates) {
-            instance.ControlBindings.Add(item: BuildControl(instance: instance, template: template));
+            instance.ControlBindings.Add(item: BuildControl(
+                instance: instance,
+                template: template
+            ));
         }
     }
     private static CameraSensor ToCameraSensor(WorldCameraSensor sensor) => (sensor switch {
         WorldCameraSensor.Color => CameraSensor.Color,
         WorldCameraSensor.Infrared => CameraSensor.Infrared,
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(sensor), actualValue: sensor, message: "The camera sensor is not defined."),
+        _ => throw new ArgumentOutOfRangeException(
+        paramName: nameof(sensor),
+        actualValue: sensor,
+        message: "The camera sensor is not defined."
+    ),
     });
     // Follows the roster's occupancy: a non-seat-relative row's single instance exists once and forever (created
     // the first time this runs — from the constructor — and never retired here); a seat-relative row gains an
@@ -259,7 +326,10 @@ internal sealed partial class WorldProbes {
         foreach (var rowInfo in m_rows) {
             if (!rowInfo.IsSeatRelative) {
                 if (rowInfo.SingleInstance is null) {
-                    rowInfo.SingleInstance = CreateInstance(rowInfo: rowInfo, seat: rowInfo.SingleInstanceSeat);
+                    rowInfo.SingleInstance = CreateInstance(
+                        rowInfo: rowInfo,
+                        seat: rowInfo.SingleInstanceSeat
+                    );
                 }
 
                 continue;
@@ -270,11 +340,23 @@ internal sealed partial class WorldProbes {
             for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
                 var seat = PlayerRoster.DisplayNumber(slot: slot);
                 var occupied = m_roster.IsJoined(slot: slot);
-                var hasInstance = bySeat.TryGetValue(key: seat, value: out var existing);
+                var hasInstance = bySeat.TryGetValue(
+                    key: seat,
+                    value: out var existing
+                );
 
-                if (occupied && !hasInstance) {
-                    bySeat[seat] = CreateInstance(rowInfo: rowInfo, seat: seat);
-                } else if (!occupied && hasInstance) {
+                if (
+                    occupied &&
+                    !hasInstance
+                ) {
+                    bySeat[seat] = CreateInstance(
+                        rowInfo: rowInfo,
+                        seat: seat
+                    );
+                } else if (
+                    !occupied &&
+                    hasInstance
+                ) {
                     RetireInstance(instance: existing!);
                     bySeat.Remove(key: seat);
                 }
@@ -291,14 +373,23 @@ internal sealed partial class WorldProbes {
         var isSeatRelative = rowInfo.IsSeatRelative;
         var instance = new ProbeInstance {
             Constants = [.. rowInfo.ConstantsTemplate],
-            Label = (isSeatRelative ? $"{rowInfo.Row.Id}@{seat}" : rowInfo.Row.Id),
-            OutputRingKey = ((isSeatRelative && (seat != 1)) ? $"{rowInfo.Row.Id}@{seat}" : rowInfo.Row.Id),
+            Label = (isSeatRelative
+            ? $"{rowInfo.Row.Id}@{seat}"
+            : rowInfo.Row.Id),
+            OutputRingKey = ((isSeatRelative && (seat != 1))
+            ? $"{rowInfo.Row.Id}@{seat}"
+            : rowInfo.Row.Id),
             Inputs = new ProbeKernelInput[rowInfo.Manifest.Inputs.Count],
             ResolvedGenerations = new object?[rowInfo.Manifest.Inputs.Count],
             Ring = ring,
             RowInfo = rowInfo,
             Seat = seat,
-            Track = ((rowInfo.TrackDocument is { } document) ? new ProbeTrackPlayer(document: document, ring: ring) : null),
+            Track = ((rowInfo.TrackDocument is { } document)
+            ? new ProbeTrackPlayer(
+                document: document,
+                ring: ring
+            )
+            : null),
         };
 
         if (rowInfo.Manifest.Output is not null) {
@@ -309,9 +400,15 @@ internal sealed partial class WorldProbes {
 
             foreach (var source in inputs.Values) {
                 if (source is WorldScreenSource.Camera camera) {
-                    m_screens.RetainProbeCameraDemand(camera: camera, contextSeat: seat);
+                    m_screens.RetainProbeCameraDemand(
+                        camera: camera,
+                        contextSeat: seat
+                    );
                     instance.CameraDemands.Add(item: camera);
-                } else if ((source is WorldScreenSource.View view) && retainedViews.Add(item: view.CameraName)) {
+                } else if (
+                    (source is WorldScreenSource.View view) &&
+                    retainedViews.Add(item: view.CameraName)
+                ) {
                     m_screens.RetainViewExport(cameraName: view.CameraName);
                     instance.ViewExports.Add(item: view.CameraName);
                 }
@@ -339,7 +436,10 @@ internal sealed partial class WorldProbes {
             m_screens.ReleaseViewExport(cameraName: cameraName);
         }
         foreach (var camera in instance.CameraDemands) {
-            m_screens.ReleaseProbeCameraDemand(camera: camera, contextSeat: instance.Seat);
+            m_screens.ReleaseProbeCameraDemand(
+                camera: camera,
+                contextSeat: instance.Seat
+            );
         }
 
         _ = m_liveInstances.Remove(item: instance);
@@ -368,7 +468,10 @@ internal sealed partial class WorldProbes {
             for (var socketIndex = 0; (socketIndex < sockets.Count); socketIndex++) {
                 var socket = sockets[socketIndex];
 
-                instance.RowInfo.Row.Inputs!.TryGetValue(key: socket.Name, value: out var source);
+                instance.RowInfo.Row.Inputs!.TryGetValue(
+                    key: socket.Name,
+                    value: out var source
+                );
 
                 var (input, generation, extent, socketFault) = ResolveSocket(
                     socket: socket,
@@ -382,7 +485,14 @@ internal sealed partial class WorldProbes {
                 generations[socketIndex] = generation;
                 fault ??= socketFault;
 
-                if ((manifest.Output is { } declaredOutput) && string.Equals(a: declaredOutput.Of, b: socket.Name, comparisonType: StringComparison.Ordinal)) {
+                if (
+                    (manifest.Output is { } declaredOutput) &&
+                    string.Equals(
+                    a: declaredOutput.Of,
+                    b: socket.Name,
+                    comparisonType: StringComparison.Ordinal
+                )
+                ) {
                     instance.OutputExtent = extent;
                 }
             }
@@ -391,25 +501,49 @@ internal sealed partial class WorldProbes {
 
             if (manifest.Output is not null) {
                 if (instance.OutputExtent is { Width: > 0, Height: > 0 } extent) {
-                    _ = m_screens.TryGetProbeOutput(id: instance.OutputRingKey, width: extent.Width, height: extent.Height, output: out _, generation: out outputSet, fault: out var outputFault);
-                    fault ??= ((outputSet is null) ? outputFault : null);
+                    _ = m_screens.TryGetProbeOutput(
+                        id: instance.OutputRingKey,
+                        width: extent.Width,
+                        height: extent.Height,
+                        output: out _,
+                        generation: out outputSet,
+                        fault: out var outputFault
+                    );
+                    fault ??= ((outputSet is null)
+                        ? outputFault
+                        : null
+                    );
                 } else {
                     fault ??= "probe output awaiting provisioning";
                 }
             }
 
             if (fault is not null) {
-                EndRun(fault: fault, instance: instance);
+                EndRun(
+                    fault: fault,
+                    instance: instance
+                );
                 instance.SocketGenerations = null;
                 instance.OutputSet = null;
 
                 continue;
             }
 
-            var changed = ((instance.SocketGenerations is not { } previous) || !SocketGenerationsEqual(current: generations, previous: previous) || !ReferenceEquals(objA: instance.OutputSet, objB: outputSet));
+            var changed = ((instance.SocketGenerations is not { } previous) || !SocketGenerationsEqual(
+                current: generations,
+                previous: previous
+            ) || !ReferenceEquals(
+                objA: instance.OutputSet,
+                objB: outputSet
+            ));
 
             if (changed) {
-                RestartRun(generations: generations, inputs: inputs, instance: instance, outputSet: outputSet);
+                RestartRun(
+                    generations: generations,
+                    inputs: inputs,
+                    instance: instance,
+                    outputSet: outputSet
+                );
 
                 continue;
             }
@@ -431,70 +565,112 @@ internal sealed partial class WorldProbes {
     // (or a `probe` socket naming a seat-relative target) resolves against.
     private (ProbeKernelInput Input, object? Generation, (int Width, int Height)? Extent, string? Fault) ResolveSocket(ProbeKindInput socket, WorldFrameSource? source, int contextSeat, ProbeKernelInput? previousInput, object? previousGeneration) {
         if (source is null) {
-            return (s_unboundKernelInput, s_unboundSocketGeneration, null, null);
+            return (UnboundKernelInput, UnboundSocketGeneration, null, null);
         }
 
         switch (source) {
             case WorldScreenSource.Camera camera:
                 var socketSeat = (camera.Seat ?? contextSeat);
 
-                if (!m_screens.TryGetCameraAttachment(seat: socketSeat, sensor: camera.Sensor, attachment: out var attachment)) {
+                if (!m_screens.TryGetCameraAttachment(
+                    seat: socketSeat,
+                    sensor: camera.Sensor,
+                    attachment: out var attachment
+                )) {
                     var cameraFault = ((m_screens.ResolvedCameraToken(seat: socketSeat) is null)
                         ? $"no camera assigned to seat {socketSeat}"
                         : $"no camera feed for seat {socketSeat}"
                     );
 
-                    return (s_unboundKernelInput, null, null, cameraFault);
+                    return (UnboundKernelInput, null, null, cameraFault);
                 }
-                if ((attachment.Shared is not { } shared) || (attachment.TargetSet is not { } targetSet)) {
-                    return (s_unboundKernelInput, null, null, "probe needs the camera GPU tier");
+                if (
+                    (attachment.Shared is not { } shared) ||
+                    (attachment.TargetSet is not { } targetSet)
+                ) {
+                    return (UnboundKernelInput, null, null, "probe needs the camera GPU tier");
                 }
 
                 var sensor = ToCameraSensor(sensor: camera.Sensor);
                 var sensorInput = ((socket.Class == ProbeSocketClass.StrobePair)
-                    ? s_infraredStrobeKernelInput
-                    : ((sensor == CameraSensor.Color) ? s_colorKernelInput : s_infraredKernelInput)
-                );
+                    ? InfraredStrobeKernelInput
+                    : ((sensor == CameraSensor.Color)
+                        ? ColorKernelInput
+                        : InfraredKernelInput
+                ));
 
                 return (sensorInput, targetSet, (shared.Width, shared.Height), null);
             case WorldScreenSource.Probe probeSource:
-                if (!m_rowIndexById.TryGetValue(key: probeSource.Id, value: out var targetRowIndex)) {
-                    return (s_unboundKernelInput, null, null, $"probe '{probeSource.Id}' names no declared probe");
+                if (!m_rowIndexById.TryGetValue(
+                    key: probeSource.Id,
+                    value: out var targetRowIndex
+                )) {
+                    return (UnboundKernelInput, null, null, $"probe '{probeSource.Id}' names no declared probe");
                 }
 
                 var targetRow = m_rows[targetRowIndex];
-                var targetInstance = ResolveInstance(contextSeat: contextSeat, target: targetRow);
+                var targetInstance = ResolveInstance(
+                    contextSeat: contextSeat,
+                    target: targetRow
+                );
 
                 if (targetInstance is null) {
-                    return (s_unboundKernelInput, null, null, $"probe '{probeSource.Id}' has no live instance for seat {contextSeat}");
+                    return (UnboundKernelInput, null, null, $"probe '{probeSource.Id}' has no live instance for seat {contextSeat}");
                 }
                 if (targetInstance.OutputExtent is not { Width: > 0, Height: > 0 } wanted) {
-                    return (s_unboundKernelInput, null, null, $"probe '{probeSource.Id}' output is not provisioned yet");
+                    return (UnboundKernelInput, null, null, $"probe '{probeSource.Id}' output is not provisioned yet");
                 }
-                if (!m_screens.TryGetProbeOutput(id: targetInstance.OutputRingKey, width: wanted.Width, height: wanted.Height, output: out var ringOutput, generation: out var ringGeneration, fault: out var ringFault)) {
-                    return (s_unboundKernelInput, null, null, ringFault);
+                if (!m_screens.TryGetProbeOutput(
+                    id: targetInstance.OutputRingKey,
+                    width: wanted.Width,
+                    height: wanted.Height,
+                    output: out var ringOutput,
+                    generation: out var ringGeneration,
+                    fault: out var ringFault
+                )) {
+                    return (UnboundKernelInput, null, null, ringFault);
                 }
 
-                if (ReferenceEquals(objA: ringGeneration, objB: previousGeneration) && (previousInput is ProbeKernelInput.Ring previousRing)) {
+                if (
+                    ReferenceEquals(
+                    objA: ringGeneration,
+                    objB: previousGeneration
+                ) &&
+                    (previousInput is ProbeKernelInput.Ring previousRing)
+                ) {
                     return (previousRing, ringGeneration, (ringOutput.Width, ringOutput.Height), null);
                 }
 
-                return (new ProbeKernelInput.Ring(Width: ringOutput.Width, Height: ringOutput.Height, Format: ringOutput.TargetFormat, SharedTargetHandles: ringOutput.SharedTargetHandles, Slots: ringOutput.Slots), ringGeneration, (ringOutput.Width, ringOutput.Height), null);
+                return (new ProbeKernelInput.Ring(
+                    Width: ringOutput.Width,
+                    Height: ringOutput.Height,
+                    Format: ringOutput.TargetFormat,
+                    SharedTargetHandles: ringOutput.SharedTargetHandles,
+                    Slots: ringOutput.Slots
+                ), ringGeneration, (ringOutput.Width, ringOutput.Height), null);
             case WorldScreenSource.View view:
-                if (!m_screens.TryGetViewExport(cameraName: view.CameraName, ring: out var viewRing, generation: out var viewGeneration, fault: out var viewFault)) {
-                    return (s_unboundKernelInput, null, null, viewFault);
+                if (!m_screens.TryGetViewExport(
+                    cameraName: view.CameraName,
+                    ring: out var viewRing,
+                    generation: out var viewGeneration,
+                    fault: out var viewFault
+                )) {
+                    return (UnboundKernelInput, null, null, viewFault);
                 }
 
                 return (viewRing, viewGeneration, (viewRing.Width, viewRing.Height), null);
             case WorldScreenSource.Capture:
-                return (s_unboundKernelInput, null, null, "capture probe inputs are rejected during world validation");
+                return (UnboundKernelInput, null, null, "capture probe inputs are rejected during world validation");
             default:
-                return (s_unboundKernelInput, null, null, "unrecognized frame source");
+                return (UnboundKernelInput, null, null, "unrecognized frame source");
         }
     }
     private static bool SocketGenerationsEqual(object?[] current, object?[] previous) {
         for (var index = 0; (index < previous.Length); index++) {
-            if (!ReferenceEquals(objA: previous[index], objB: current[index])) {
+            if (!ReferenceEquals(
+                objA: previous[index],
+                objB: current[index]
+            )) {
                 return false;
             }
         }
@@ -518,7 +694,10 @@ internal sealed partial class WorldProbes {
     // the declared output ring at its resolved extent when the kind writes one, resolve the trigger sensor's
     // kernel host at this instance's own seat, and attach.
     private void RestartRun(ProbeInstance instance, ProbeKernelInput[] inputs, object?[] generations, object? outputSet) {
-        EndRun(fault: null, instance: instance);
+        EndRun(
+            fault: null,
+            instance: instance
+        );
         instance.SocketGenerations = [.. generations];
         instance.OutputSet = outputSet;
 
@@ -527,7 +706,14 @@ internal sealed partial class WorldProbes {
         if (instance.RowInfo.Manifest.Output is not null) {
             var extent = instance.OutputExtent!.Value;
 
-            if (!m_screens.TryGetProbeOutput(id: instance.OutputRingKey, width: extent.Width, height: extent.Height, output: out var provisioned, generation: out _, fault: out var outputFault)) {
+            if (!m_screens.TryGetProbeOutput(
+                id: instance.OutputRingKey,
+                width: extent.Width,
+                height: extent.Height,
+                output: out var provisioned,
+                generation: out _,
+                fault: out var outputFault
+            )) {
                 instance.Fault = outputFault;
 
                 return;
@@ -535,7 +721,14 @@ internal sealed partial class WorldProbes {
 
             output = provisioned;
         }
-        if (!m_screens.TryGetCameraAttachment(seat: instance.Seat, sensor: instance.RowInfo.TriggerSensor!.Value, attachment: out var triggerAttachment) || (triggerAttachment.Kernels is not { } kernels)) {
+        if (
+            !m_screens.TryGetCameraAttachment(
+            seat: instance.Seat,
+            sensor: instance.RowInfo.TriggerSensor!.Value,
+            attachment: out var triggerAttachment
+        ) ||
+            (triggerAttachment.Kernels is not { } kernels)
+        ) {
             instance.Fault = "the open camera graph hosts no kernels";
 
             return;
@@ -547,7 +740,10 @@ internal sealed partial class WorldProbes {
         // generation resolve must never substitute new ring handles beneath an older run's already-opened SRVs.
         var attachedInputs = inputs.ToArray();
         var request = new ProbeKernelRequest(
-            KernelSource: File.ReadAllText(path: Path.Combine(path1: instance.RowInfo.Manifest.Directory, path2: kernel.Source)),
+            KernelSource: File.ReadAllText(path: Path.Combine(
+                path1: instance.RowInfo.Manifest.Directory,
+                path2: kernel.Source
+            )),
             AccumulateEntry: kernel.Accumulate,
             FinalizeEntry: kernel.Finalize,
             Constants: instance.Constants,

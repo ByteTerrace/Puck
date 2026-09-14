@@ -41,7 +41,10 @@ public static class ReleaseRolloutBucket {
     public static string MintOrLoad(string cacheRoot) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: cacheRoot);
 
-        var path = Path.Combine(path1: cacheRoot, path2: FileName);
+        var path = Path.Combine(
+            path1: cacheRoot,
+            path2: FileName
+        );
 
         if (File.Exists(path: path)) {
             var existing = File.ReadAllText(path: path).Trim();
@@ -53,11 +56,21 @@ public static class ReleaseRolloutBucket {
 
         var bytes = RandomNumberGenerator.GetBytes(count: 16);
         var hex = Convert.ToHexStringLower(bytes: bytes);
-        var tmpPath = Path.Combine(path1: cacheRoot, path2: $"{Guid.NewGuid():n}.tmp");
+        var tmpPath = Path.Combine(
+            path1: cacheRoot,
+            path2: $"{Guid.NewGuid():n}.tmp"
+        );
 
         _ = Directory.CreateDirectory(path: cacheRoot);
-        File.WriteAllText(contents: hex, path: tmpPath);
-        File.Move(destFileName: path, overwrite: true, sourceFileName: tmpPath);
+        File.WriteAllText(
+            contents: hex,
+            path: tmpPath
+        );
+        File.Move(
+            destFileName: path,
+            overwrite: true,
+            sourceFileName: tmpPath
+        );
 
         return hex;
     }

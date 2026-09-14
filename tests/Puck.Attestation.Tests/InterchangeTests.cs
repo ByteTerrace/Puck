@@ -8,31 +8,47 @@ namespace Puck.Attestation.Tests;
 /// self-consistent, and the negative cases prove a corrupted claim or incomplete manifest is refused.
 /// </summary>
 public sealed class InterchangeTests {
-    [Fact]
-    public void SelfRoundTrip_ExportedFixtureVerifiesAgainstItself() {
-        var directory = ExportToTempDirectory();
+    private static string ExportToTempDirectory() {
+        var directory = Path.Combine(
+            path1: Path.GetTempPath(),
+            path2: $"puck-attestation-interchange-{Guid.NewGuid():N}"
+        );
 
-        try {
-            Assert.Equal(expected: 0, actual: AttestationInterchangeHarness.Verify(directory: directory));
-        } finally {
-            Directory.Delete(path: directory, recursive: true);
-        }
+        Assert.Equal(
+            expected: 0,
+            actual: AttestationInterchangeHarness.Export(directory: directory)
+        );
+
+        return directory;
     }
+
     [Fact]
     public void CorruptedClaim_OneFlippedByte_IsRefused() {
         var directory = ExportToTempDirectory();
 
         try {
-            var claimPath = Path.Combine(path1: directory, path2: "claim.attestation");
+            var claimPath = Path.Combine(
+                path1: directory,
+                path2: "claim.attestation"
+            );
             var bytes = File.ReadAllBytes(path: claimPath);
 
             bytes[^1] ^= 0xFF;
 
-            File.WriteAllBytes(bytes: bytes, path: claimPath);
+            File.WriteAllBytes(
+                bytes: bytes,
+                path: claimPath
+            );
 
-            Assert.Equal(expected: 1, actual: AttestationInterchangeHarness.Verify(directory: directory));
+            Assert.Equal(
+                expected: 1,
+                actual: AttestationInterchangeHarness.Verify(directory: directory)
+            );
         } finally {
-            Directory.Delete(path: directory, recursive: true);
+            Directory.Delete(
+                path: directory,
+                recursive: true
+            );
         }
     }
     [Fact]
@@ -40,25 +56,45 @@ public sealed class InterchangeTests {
         var directory = ExportToTempDirectory();
 
         try {
-            var manifestPath = Path.Combine(path1: directory, path2: "manifest.txt");
-            var lines = File.ReadAllLines(path: manifestPath).Where(predicate: line => !line.StartsWith(comparisonType: StringComparison.Ordinal, value: "audience="));
+            var manifestPath = Path.Combine(
+                path1: directory,
+                path2: "manifest.txt"
+            );
+            var lines = File.ReadAllLines(path: manifestPath).Where(predicate: line => !line.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "audience="
+            ));
 
-            File.WriteAllLines(contents: lines, path: manifestPath);
+            File.WriteAllLines(
+                contents: lines,
+                path: manifestPath
+            );
 
-            Assert.Equal(expected: 1, actual: AttestationInterchangeHarness.Verify(directory: directory));
+            Assert.Equal(
+                expected: 1,
+                actual: AttestationInterchangeHarness.Verify(directory: directory)
+            );
         } finally {
-            Directory.Delete(path: directory, recursive: true);
+            Directory.Delete(
+                path: directory,
+                recursive: true
+            );
         }
     }
+    [Fact]
+    public void SelfRoundTrip_ExportedFixtureVerifiesAgainstItself() {
+        var directory = ExportToTempDirectory();
 
-    private static string ExportToTempDirectory() {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-attestation-interchange-{Guid.NewGuid():N}"
-        );
-
-        Assert.Equal(expected: 0, actual: AttestationInterchangeHarness.Export(directory: directory));
-
-        return directory;
+        try {
+            Assert.Equal(
+                expected: 0,
+                actual: AttestationInterchangeHarness.Verify(directory: directory)
+            );
+        } finally {
+            Directory.Delete(
+                path: directory,
+                recursive: true
+            );
+        }
     }
 }

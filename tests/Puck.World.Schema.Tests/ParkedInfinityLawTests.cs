@@ -14,20 +14,32 @@ namespace Puck.World.Schema.Tests;
 /// encoding would have read the most-parked seat of all as not parked, or as equal to one particular number.
 /// </summary>
 public sealed class ParkedInfinityLawTests {
-    private static readonly FixedQ4816 s_zero = FixedQ4816.Zero;
-    private static readonly FixedQ4816 s_large = FixedQ4816.FromInteger(value: (long.MaxValue >> 17));
+    private static readonly FixedQ4816 Zero = FixedQ4816.Zero;
+    private static readonly FixedQ4816 Large = FixedQ4816.FromInteger(value: (long.MaxValue >> 17));
 
-    [InlineData(ActionStateComparison.Equal, false)]
-    [InlineData(ActionStateComparison.NotEqual, true)]
-    [InlineData(ActionStateComparison.Less, false)]
-    [InlineData(ActionStateComparison.LessOrEqual, false)]
-    [InlineData(ActionStateComparison.Greater, true)]
-    [InlineData(ActionStateComparison.GreaterOrEqual, true)]
-    [Theory]
-    public void ForeverAgainstEveryFiniteValue_ComparesAsStrictlyGreater(ActionStateComparison comparison, bool expected) {
-        // The tent-law case: forever > 0 holds (it IS parked), and no finite magnitude changes any verdict.
-        Assert.Equal(expected: expected, actual: comparison.Holds(expected: s_zero, expectedIsForever: false, value: s_zero, valueIsForever: true));
-        Assert.Equal(expected: expected, actual: comparison.Holds(expected: s_large, expectedIsForever: false, value: s_zero, valueIsForever: true));
+    [Fact]
+    public void BothFinite_DelegatesToTheOrdinaryComparison() {
+        var three = FixedQ4816.FromInteger(value: 3);
+        var five = FixedQ4816.FromInteger(value: 5);
+
+        Assert.True(condition: ActionStateComparison.Less.Holds(
+            expected: five,
+            expectedIsForever: false,
+            value: three,
+            valueIsForever: false
+        ));
+        Assert.False(condition: ActionStateComparison.Greater.Holds(
+            expected: five,
+            expectedIsForever: false,
+            value: three,
+            valueIsForever: false
+        ));
+        Assert.True(condition: ActionStateComparison.Equal.Holds(
+            expected: five,
+            expectedIsForever: false,
+            value: five,
+            valueIsForever: false
+        ));
     }
     [InlineData(ActionStateComparison.Equal, false)]
     [InlineData(ActionStateComparison.NotEqual, true)]
@@ -37,8 +49,52 @@ public sealed class ParkedInfinityLawTests {
     [InlineData(ActionStateComparison.GreaterOrEqual, false)]
     [Theory]
     public void EveryFiniteValueAgainstForever_ComparesAsStrictlyLess(ActionStateComparison comparison, bool expected) {
-        Assert.Equal(expected: expected, actual: comparison.Holds(expected: s_zero, expectedIsForever: true, value: s_zero, valueIsForever: false));
-        Assert.Equal(expected: expected, actual: comparison.Holds(expected: s_zero, expectedIsForever: true, value: s_large, valueIsForever: false));
+        Assert.Equal(
+            expected: expected,
+            actual: comparison.Holds(
+                expected: Zero,
+                expectedIsForever: true,
+                value: Zero,
+                valueIsForever: false
+            )
+        );
+        Assert.Equal(
+            expected: expected,
+            actual: comparison.Holds(
+                expected: Zero,
+                expectedIsForever: true,
+                value: Large,
+                valueIsForever: false
+            )
+        );
+    }
+    [InlineData(ActionStateComparison.Equal, false)]
+    [InlineData(ActionStateComparison.NotEqual, true)]
+    [InlineData(ActionStateComparison.Less, false)]
+    [InlineData(ActionStateComparison.LessOrEqual, false)]
+    [InlineData(ActionStateComparison.Greater, true)]
+    [InlineData(ActionStateComparison.GreaterOrEqual, true)]
+    [Theory]
+    public void ForeverAgainstEveryFiniteValue_ComparesAsStrictlyGreater(ActionStateComparison comparison, bool expected) {
+        // The tent-law case: forever > 0 holds (it IS parked), and no finite magnitude changes any verdict.
+        Assert.Equal(
+            expected: expected,
+            actual: comparison.Holds(
+                expected: Zero,
+                expectedIsForever: false,
+                value: Zero,
+                valueIsForever: true
+            )
+        );
+        Assert.Equal(
+            expected: expected,
+            actual: comparison.Holds(
+                expected: Large,
+                expectedIsForever: false,
+                value: Zero,
+                valueIsForever: true
+            )
+        );
     }
     [InlineData(ActionStateComparison.Equal, true)]
     [InlineData(ActionStateComparison.NotEqual, false)]
@@ -48,15 +104,14 @@ public sealed class ParkedInfinityLawTests {
     [InlineData(ActionStateComparison.GreaterOrEqual, true)]
     [Theory]
     public void ForeverAgainstForever_ComparesAsEqual(ActionStateComparison comparison, bool expected) {
-        Assert.Equal(expected: expected, actual: comparison.Holds(expected: s_zero, expectedIsForever: true, value: s_zero, valueIsForever: true));
-    }
-    [Fact]
-    public void BothFinite_DelegatesToTheOrdinaryComparison() {
-        var three = FixedQ4816.FromInteger(value: 3);
-        var five = FixedQ4816.FromInteger(value: 5);
-
-        Assert.True(condition: ActionStateComparison.Less.Holds(expected: five, expectedIsForever: false, value: three, valueIsForever: false));
-        Assert.False(condition: ActionStateComparison.Greater.Holds(expected: five, expectedIsForever: false, value: three, valueIsForever: false));
-        Assert.True(condition: ActionStateComparison.Equal.Holds(expected: five, expectedIsForever: false, value: five, valueIsForever: false));
+        Assert.Equal(
+            expected: expected,
+            actual: comparison.Holds(
+                expected: Zero,
+                expectedIsForever: true,
+                value: Zero,
+                valueIsForever: true
+            )
+        );
     }
 }

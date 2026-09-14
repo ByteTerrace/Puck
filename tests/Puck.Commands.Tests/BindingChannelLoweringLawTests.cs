@@ -10,32 +10,56 @@ public sealed class BindingChannelLoweringLawTests {
         var channel = new ChannelRef.Name(Value: "late-destination-channel");
         var document = new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
-            Modifiers: [new BindingModifierDefinition(Id: "shift", Sources: ["key.shift"])],
+            Modifiers: [new BindingModifierDefinition(
+                    Id: "shift",
+                    Sources: ["key.shift"]
+                )],
             Chords: [
                 new BindingChordDefinition(
                     Group: "main",
                     Chord: [],
                     Page: new BindingPageDefinition(
                         Id: "base",
-                        Entries: [new BindingPageEntryDefinition(Sources: ["key.fire"], Channel: channel)]
+                        Entries: [new BindingPageEntryDefinition(
+                                Sources: ["key.fire"],
+                                Channel: channel
+                            )]
                     )
                 ),
                 new BindingChordDefinition(
                     Group: "main",
                     Chord: ["shift"],
-                    Command: new BindingCommandDefinition(Channel: channel, HoldRelease: true)
+                    Command: new BindingCommandDefinition(
+                        Channel: channel,
+                        HoldRelease: true
+                    )
                 ),
             ]
         );
         const string Lowered = "channel.ordinal.13";
-        var compiled = BindingProfile.Compile(channelCommandName: _ => Lowered, document: document);
+        var compiled = BindingProfile.Compile(
+            channelCommandName: _ => Lowered,
+            document: document
+        );
         var bindings = new PagedInputBindings(profile: compiled);
 
-        Assert.Equal(expected: Lowered, actual: Assert.Single(collection: bindings.Resolve(slot: 0, source: "key.fire")!).Command);
+        Assert.Equal(
+            expected: Lowered,
+            actual: Assert.Single(collection: bindings.Resolve(
+                slot: 0,
+                source: "key.fire"
+            )!).Command
+        );
 
         var view = bindings.ViewFor(slot: 0);
 
-        Assert.Equal(expected: Lowered, actual: Assert.Single(collection: view.Buttons).Command);
-        Assert.Equal(expected: Lowered, actual: Assert.Single(collection: view.CommandChords).Command);
+        Assert.Equal(
+            expected: Lowered,
+            actual: Assert.Single(collection: view.Buttons).Command
+        );
+        Assert.Equal(
+            expected: Lowered,
+            actual: Assert.Single(collection: view.CommandChords).Command
+        );
     }
 }

@@ -1,0 +1,18 @@
+description: Install the SDK pinned by global.json, optionally with the NuGet cache keyed by every lock file.
+inputs:
+  cache:
+    default: "false"
+    description: Cache NuGet packages against the lock files, the SDK pin, and the tool manifest.
+name: Install the pinned .NET SDK
+runs:
+  steps:
+    - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      with:
+        cache: ${{ inputs.cache }}
+        cache-dependency-path: |
+          src/*/packages.lock.json
+          tests/*/packages.lock.json
+          global.json
+          .config/dotnet-tools.json
+        global-json-file: global.json
+  using: composite

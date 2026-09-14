@@ -23,8 +23,10 @@ internal static partial class Oracles {
 
         if (double.IsInfinity(d: candidate)) {
             // |value| ≥ (2^54 − 1)·2^970, sign matching.
-            return ((double.IsPositiveInfinity(d: candidate) == (numerator.Sign > 0)) &&
-                (BigInteger.Abs(value: numerator) >= (OverflowMidpointNumerator * denominator)));
+            return (
+                (double.IsPositiveInfinity(d: candidate) == (numerator.Sign > 0)) &&
+                (BigInteger.Abs(value: numerator) >= (OverflowMidpointNumerator * denominator))
+            );
         }
 
         if (candidate == 0.0) {
@@ -37,7 +39,10 @@ internal static partial class Oracles {
         var lower = Math.BitDecrement(x: candidate);
         var upper = Math.BitIncrement(x: candidate);
 
-        if (double.IsInfinity(d: lower) || double.IsInfinity(d: upper)) {
+        if (
+            double.IsInfinity(d: lower) ||
+            double.IsInfinity(d: upper)
+        ) {
             // Beside the overflow midpoint the finite side must simply be closer than infinity.
             return (BigInteger.Abs(value: numerator) < (OverflowMidpointNumerator * denominator));
         }
@@ -45,17 +50,36 @@ internal static partial class Oracles {
         var (candidateMantissa, candidateExponent) = Decompose(value: candidate);
         var (lowerMantissa, lowerExponent) = Decompose(value: lower);
         var (upperMantissa, upperExponent) = Decompose(value: upper);
-        var commonExponent = Math.Min(val1: candidateExponent, val2: Math.Min(val1: lowerExponent, val2: upperExponent));
-        var shift = Math.Max(val1: 0, val2: -commonExponent);
+        var commonExponent = Math.Min(
+            val1: candidateExponent,
+            val2: Math.Min(
+                val1: lowerExponent,
+                val2: upperExponent
+            )
+        );
+        var shift = Math.Max(
+            val1: 0,
+            val2: -commonExponent
+        );
         var scaledValue = (numerator << shift);
-        var candidateDistance = BigInteger.Abs(value: (scaledValue - (Scale(mantissa: candidateMantissa, exponent: (candidateExponent + shift)) * denominator)));
-        var lowerDistance = BigInteger.Abs(value: (scaledValue - (Scale(mantissa: lowerMantissa, exponent: (lowerExponent + shift)) * denominator)));
-        var upperDistance = BigInteger.Abs(value: (scaledValue - (Scale(mantissa: upperMantissa, exponent: (upperExponent + shift)) * denominator)));
+        var candidateDistance = BigInteger.Abs(value: (scaledValue - (Scale(
+            exponent: (candidateExponent + shift),
+            mantissa: candidateMantissa
+        ) * denominator)));
+        var lowerDistance = BigInteger.Abs(value: (scaledValue - (Scale(
+            exponent: (lowerExponent + shift),
+            mantissa: lowerMantissa
+        ) * denominator)));
+        var upperDistance = BigInteger.Abs(value: (scaledValue - (Scale(
+            exponent: (upperExponent + shift),
+            mantissa: upperMantissa
+        ) * denominator)));
         var mantissaIsOdd = !((BitConverter.DoubleToInt64Bits(value: candidate) & 1L) == 0L);
 
         return (mantissaIsOdd
             ? ((candidateDistance < lowerDistance) && (candidateDistance < upperDistance))
-            : ((candidateDistance <= lowerDistance) && (candidateDistance <= upperDistance)));
+            : ((candidateDistance <= lowerDistance) && (candidateDistance <= upperDistance))
+        );
     }
 
     // Exact integer scaling of a decomposed double, already brought to a non-negative exponent.
@@ -63,11 +87,19 @@ internal static partial class Oracles {
     // value = mantissa · 2^exponent exactly, for a finite nonzero double, with the sign on the mantissa.
     private static (BigInteger Mantissa, int Exponent) Decompose(double value) {
         var bits = BitConverter.DoubleToInt64Bits(value: value);
-        var biasedExponent = (int)((bits >> 52) & 0x7FFL);
-        var fraction = (bits & 0xFFFFFFFFFFFFFL);
-        var mantissa = ((biasedExponent == 0) ? fraction : (fraction | (1L << 52)));
-        var exponent = ((biasedExponent == 0) ? -1074 : (biasedExponent - 1075));
+        var biasedExponent = ((int)((bits >> 52) & 0x7FFL));
+        var fraction = bits & 0xFFFFFFFFFFFFFL;
+        var mantissa = ((biasedExponent == 0)
+            ? fraction
+            : fraction | (1L << 52)
+        );
+        var exponent = ((biasedExponent == 0)
+            ? -1074
+            : (biasedExponent - 1075)
+        );
 
-        return (((bits < 0L) ? -new BigInteger(value: mantissa) : new BigInteger(value: mantissa)), exponent);
+        return (((bits < 0L)
+            ? -new BigInteger(value: mantissa)
+            : new BigInteger(value: mantissa)), exponent);
     }
 }

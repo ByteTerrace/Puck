@@ -45,25 +45,25 @@ public sealed record RelocatedBackground(byte TileBase, byte PaletteBase, byte[]
 /// <see cref="GameFramework.Assets"/>.
 /// </summary>
 public sealed class AssetLinker {
-    /// <summary>The tile bank's capacity (single-byte tile ids under 0x8000 unsigned addressing).</summary>
-    public const int TileCapacity = 256;
-    /// <summary>The hardware palette-slot capacity per plane (8 background, 8 object).</summary>
-    public const int PaletteSlotCapacity = 8;
-
     private const int PaletteByteCount = 8;
     private const int TileByteCount = 16;
 
-    private readonly RomDataBuilder m_data;
-    private readonly List<byte[]> m_tileSegments = [];
-    private readonly List<byte[]> m_backgroundPaletteSegments = [];
-    private readonly List<byte[]> m_objectPaletteSegments = [];
+    /// <summary>The hardware palette-slot capacity per plane (8 background, 8 object).</summary>
+    public const int PaletteSlotCapacity = 8;
+    /// <summary>The tile bank's capacity (single-byte tile ids under 0x8000 unsigned addressing).</summary>
+    public const int TileCapacity = 256;
 
-    private int m_tileCount;
+    private readonly List<byte[]> m_backgroundPaletteSegments = [];
+    private readonly RomDataBuilder m_data;
+    private readonly List<byte[]> m_objectPaletteSegments = [];
+    private readonly List<byte[]> m_tileSegments = [];
+
     private int m_backgroundPaletteCount;
-    private int m_objectPaletteCount;
-    private bool m_tileBankSealed;
     private bool m_backgroundPalettesSealed;
+    private int m_objectPaletteCount;
     private bool m_objectPalettesSealed;
+    private bool m_tileBankSealed;
+    private int m_tileCount;
 
     /// <summary>Creates the linker over the cartridge's data window.</summary>
     /// <param name="data">The data window the relocated blocks land in.</param>
@@ -73,208 +73,32 @@ public sealed class AssetLinker {
         m_data = data;
     }
 
-    /// <summary>How many tiles the bank holds so far.</summary>
-    public int TileCount => m_tileCount;
     /// <summary>How many background palette slots are allocated so far.</summary>
     public int BackgroundPaletteCount => m_backgroundPaletteCount;
     /// <summary>How many object palette slots are allocated so far.</summary>
     public int ObjectPaletteCount => m_objectPaletteCount;
-
-    /// <summary>Allocates a tile segment in the bank and returns its first tile id.</summary>
-    /// <param name="name">A diagnostic name for overrun messages.</param>
-    /// <param name="tiles2bpp">The segment's 2bpp bytes (16 per tile).</param>
-    /// <returns>The segment's first tile id.</returns>
-    public byte AddTiles(string name, byte[] tiles2bpp) {
-        ArgumentException.ThrowIfNullOrEmpty(name);
-        ArgumentNullException.ThrowIfNull(tiles2bpp);
-        ThrowIfSealed(name: name, sealedFlag: m_tileBankSealed, table: "tile bank");
-
-        if ((tiles2bpp.Length == 0) || ((tiles2bpp.Length % TileByteCount) != 0)) {
-            throw new ArgumentException(message: $"The '{name}' tile segment must be a non-empty multiple of {TileByteCount} bytes.", paramName: nameof(tiles2bpp));
-        }
-
-        var count = (tiles2bpp.Length / TileByteCount);
-
-        if ((m_tileCount + count) > TileCapacity) {
-            throw new InvalidOperationException(message: $"Adding '{name}' ({count} tiles) overruns the {TileCapacity}-tile bank ({m_tileCount} already allocated).");
-        }
-
-        var baseId = ((byte)m_tileCount);
-
-        m_tileSegments.Add(item: tiles2bpp);
-        m_tileCount += count;
-
-        return baseId;
-    }
-    /// <summary>Allocates background palette slots and returns the first slot index.</summary>
-    /// <param name="name">A diagnostic name for overrun messages.</param>
-    /// <param name="paletteData">The palettes' bytes (8 per palette, palette-RAM wire form).</param>
-    /// <returns>The first allocated slot.</returns>
-    public byte AddBackgroundPalettes(string name, byte[] paletteData) =>
-        AddPalettes(
-            count: ref m_backgroundPaletteCount,
-            name: name,
-            paletteData: paletteData,
-            plane: "background",
-            sealedFlag: m_backgroundPalettesSealed,
-            segments: m_backgroundPaletteSegments,
-            table: "background palette table");
-    /// <summary>Allocates object palette slots and returns the first slot index.</summary>
-    /// <param name="name">A diagnostic name for overrun messages.</param>
-    /// <param name="paletteData">The palettes' bytes (8 per palette, palette-RAM wire form).</param>
-    /// <returns>The first allocated slot.</returns>
-    public byte AddObjectPalettes(string name, byte[] paletteData) =>
-        AddPalettes(
-            count: ref m_objectPaletteCount,
-            name: name,
-            paletteData: paletteData,
-            plane: "object",
-            sealedFlag: m_objectPalettesSealed,
-            segments: m_objectPaletteSegments,
-            table: "object palette table");
-    /// <summary>Links a parsed background: allocates its tiles and palette slots, relocates the map and attribute
-    /// copies, and lands them as the <c>&lt;name&gt;-map</c> / <c>&lt;name&gt;-attributes</c> blocks.</summary>
-    /// <param name="name">The link name (also the landed blocks' name prefix).</param>
-    /// <param name="background">The parsed background section.</param>
-    /// <returns>The linked background.</returns>
-    public LinkedBackground LinkBackground(string name, PbakBackground background) {
-        var relocated = Relocate(background: background, name: name);
-        var map = m_data.Add(name: $"{name}-map", bytes: relocated.TileMap);
-        var attributes = ((relocated.AttributeMap is { } attributeMap) ? m_data.Add(bytes: attributeMap, name: $"{name}-attributes") : (RomTable?)null);
-
-        return new LinkedBackground(
-            AttributeMap: attributes,
-            PaletteBase: relocated.PaletteBase,
-            PaletteCount: background.PaletteCount,
-            TileBase: relocated.TileBase,
-            TileCount: background.TileCount,
-            TileMap: map
-        );
-    }
-    /// <summary>Allocates a parsed background's tiles and palette slots and returns RELOCATED map/attribute copies
-    /// WITHOUT landing them — the seam a caller composes onto (the manifest's screen text overlay) before landing the
-    /// blocks itself.</summary>
-    /// <param name="name">The allocation's diagnostic name.</param>
-    /// <param name="background">The parsed background section.</param>
-    /// <returns>The relocated background.</returns>
-    public RelocatedBackground Relocate(string name, PbakBackground background) {
-        ArgumentNullException.ThrowIfNull(background);
-
-        var tileBase = AddTiles(name: $"{name}-tiles", tiles2bpp: background.Tiles2bpp);
-        var paletteBase = AddBackgroundPalettes(name: $"{name}-palettes", paletteData: background.PaletteData);
-        var map = RelocateMap(name: name, tileMap: background.TileMap, tileBase: tileBase, tileCount: background.TileCount);
-        var attributes = ((background.AttributeMap is { } attributeMap) ? RelocateAttributes(name: name, attributes: attributeMap, paletteBase: paletteBase, paletteCount: background.PaletteCount) : null);
-
-        return new RelocatedBackground(AttributeMap: attributes, PaletteBase: paletteBase, TileBase: tileBase, TileMap: map);
-    }
-    /// <summary>Links a parsed sprite set: allocates its tiles and object palette slots, relocates every frame's rows
-    /// (tile ids rebased, OAM palette bits shifted), and lands the <c>&lt;name&gt;-frames</c> block plus the
-    /// <c>&lt;name&gt;-frame-table</c> runtime index (and <c>&lt;name&gt;-animations</c> when present).</summary>
-    /// <param name="name">The link name (also the landed blocks' name prefix).</param>
-    /// <param name="sprites">The parsed sprite section.</param>
-    /// <returns>The linked sprite set.</returns>
-    public LinkedSpriteSet LinkSpriteSet(string name, PbakSpriteSet sprites) {
-        ArgumentNullException.ThrowIfNull(sprites);
-
-        var tileBase = AddTiles(name: $"{name}-tiles", tiles2bpp: sprites.Tiles2bpp);
-        var paletteBase = AddObjectPalettes(name: $"{name}-palettes", paletteData: sprites.PaletteData);
-        var offsets = new int[sprites.Frames.Count];
-        var entryCounts = new int[sprites.Frames.Count];
-        var rowBytes = new List<byte>();
-
-        for (var frame = 0; (frame < sprites.Frames.Count); frame++) {
-            offsets[frame] = rowBytes.Count;
-            entryCounts[frame] = sprites.Frames[frame].EntryCount;
-            AppendRelocatedRows(name: name, frame: frame, rows: sprites.Frames[frame].Rows, sprites: sprites, tileBase: tileBase, paletteBase: paletteBase, destination: rowBytes);
-        }
-
-        var frames = m_data.Add(bytes: [.. rowBytes], name: $"{name}-frames");
-        var addresses = new ushort[sprites.Frames.Count];
-        var frameTable = new byte[(sprites.Frames.Count * 4)];
-
-        for (var frame = 0; (frame < sprites.Frames.Count); frame++) {
-            addresses[frame] = ((ushort)(frames.Address + offsets[frame]));
-            frameTable[((frame * 4) + 0)] = ((byte)(addresses[frame] & 0xFF));
-            frameTable[((frame * 4) + 1)] = ((byte)(addresses[frame] >> 8));
-            frameTable[((frame * 4) + 2)] = ((byte)entryCounts[frame]);
-            frameTable[((frame * 4) + 3)] = 0x00;
-        }
-
-        return new LinkedSpriteSet(
-            Animations: ((sprites.AnimationPayload is { } animation) ? m_data.Add(bytes: animation, name: $"{name}-animations") : (RomTable?)null),
-            FrameAddresses: addresses,
-            FrameEntryCounts: entryCounts,
-            Frames: frames,
-            FrameTable: m_data.Add(bytes: frameTable, name: $"{name}-frame-table"),
-            PaletteBase: paletteBase,
-            PaletteCount: sprites.PaletteCount,
-            TileBase: tileBase,
-            TileCount: sprites.TileCount
-        );
-    }
-    /// <summary>Seals the tile bank: concatenates every segment into the reserved <c>tile-bank</c> block (one boot
-    /// copy to VRAM 0x8000). No further tile allocation is possible.</summary>
-    /// <returns>The bank's table (its length is the boot's tile byte count).</returns>
-    public RomTable SealTileBank() =>
-        SealSegments(count: m_tileCount, name: "tile-bank", sealedFlag: ref m_tileBankSealed, segments: m_tileSegments, table: "tile bank");
-    /// <summary>Seals the background palette table into the reserved <c>bg-palette-table</c> block (the boot spec's
-    /// <c>BgPalettes</c>).</summary>
-    /// <returns>The table.</returns>
-    public RomTable SealBackgroundPalettes() =>
-        SealSegments(count: m_backgroundPaletteCount, name: "bg-palette-table", sealedFlag: ref m_backgroundPalettesSealed, segments: m_backgroundPaletteSegments, table: "background palette table");
-    /// <summary>Seals the object palette table into the reserved <c>obj-palette-table</c> block (the boot spec's
-    /// <c>ObjPalettes</c>).</summary>
-    /// <returns>The table.</returns>
-    public RomTable SealObjectPalettes() =>
-        SealSegments(count: m_objectPaletteCount, name: "obj-palette-table", sealedFlag: ref m_objectPalettesSealed, segments: m_objectPaletteSegments, table: "object palette table");
+    /// <summary>How many tiles the bank holds so far.</summary>
+    public int TileCount => m_tileCount;
 
     /// <summary>Owns palette-table allocation, capacity validation, and segment accounting for both hardware planes.</summary>
     private static byte AddPalettes(string name, byte[] paletteData, ref int count, List<byte[]> segments, bool sealedFlag, string table, string plane) {
-        ThrowIfSealed(name: name, sealedFlag: sealedFlag, table: table);
+        ThrowIfSealed(
+            name: name,
+            sealedFlag: sealedFlag,
+            table: table
+        );
 
-        var baseSlot = ValidatePalettes(currentCount: count, name: name, paletteData: paletteData, plane: plane);
+        var baseSlot = ValidatePalettes(
+            currentCount: count,
+            name: name,
+            paletteData: paletteData,
+            plane: plane
+        );
 
         segments.Add(item: paletteData);
         count += (paletteData.Length / PaletteByteCount);
 
         return baseSlot;
-    }
-    /// <summary>Owns the one-time concatenation and ROM landing of a segmented graphics table.</summary>
-    private RomTable SealSegments(ref bool sealedFlag, int count, string table, string name, List<byte[]> segments) {
-        SealGuard(count: count, sealedFlag: ref sealedFlag, table: table);
-
-        return m_data.Add(name: name, bytes: Concatenate(segments: segments));
-    }
-    // Map relocation: every cell rebases onto the bank (cells reference the section's tiles zero-based).
-    private static byte[] RelocateMap(string name, byte[] tileMap, byte tileBase, int tileCount) {
-        var map = new byte[tileMap.Length];
-
-        for (var cell = 0; (cell < tileMap.Length); cell++) {
-            if (tileMap[cell] >= tileCount) {
-                throw new InvalidDataException(message: $"'{name}' map cell {cell} references tile {tileMap[cell]} of {tileCount}.");
-            }
-
-            map[cell] = ((byte)(tileBase + tileMap[cell]));
-        }
-
-        return map;
-    }
-    // Attribute relocation: palette bits (0-2) shift to the granted slots; every other bit (flips, bank, priority)
-    // rides along untouched.
-    private static byte[] RelocateAttributes(string name, byte[] attributes, byte paletteBase, int paletteCount) {
-        var relocated = new byte[attributes.Length];
-
-        for (var cell = 0; (cell < attributes.Length); cell++) {
-            var palette = attributes[cell] & 0x07;
-
-            if (palette >= paletteCount) {
-                throw new InvalidDataException(message: $"'{name}' attribute cell {cell} references palette {palette} of {paletteCount}.");
-            }
-
-            relocated[cell] = ((byte)((paletteBase + palette) | (attributes[cell] & 0xF8)));
-        }
-
-        return relocated;
     }
     // OAM row relocation: tile ids rebase onto the bank, OAM palette bits (0-2) shift to the granted slots, flip and
     // priority bits ride along.
@@ -297,10 +121,56 @@ public sealed class AssetLinker {
             destination.Add(item: ((byte)((paletteBase + palette) | (rows[(offset + 3)] & 0xF8))));
         }
     }
-    private static void ThrowIfSealed(bool sealedFlag, string name, string table) {
-        if (sealedFlag) {
-            throw new InvalidOperationException(message: $"The {table} is sealed; '{name}' cannot be added.");
+    private static byte[] Concatenate(List<byte[]> segments) {
+        var length = 0;
+
+        foreach (var segment in segments) {
+            length += segment.Length;
         }
+
+        var bytes = new byte[length];
+        var offset = 0;
+
+        foreach (var segment in segments) {
+            segment.CopyTo(
+                array: bytes,
+                index: offset
+            );
+            offset += segment.Length;
+        }
+
+        return bytes;
+    }
+    // Attribute relocation: palette bits (0-2) shift to the granted slots; every other bit (flips, bank, priority)
+    // rides along untouched.
+    private static byte[] RelocateAttributes(string name, byte[] attributes, byte paletteBase, int paletteCount) {
+        var relocated = new byte[attributes.Length];
+
+        for (var cell = 0; (cell < attributes.Length); cell++) {
+            var palette = attributes[cell] & 0x07;
+
+            if (palette >= paletteCount) {
+                throw new InvalidDataException(message: $"'{name}' attribute cell {cell} references palette {palette} of {paletteCount}.");
+            }
+
+            relocated[cell] = ((byte)((paletteBase + palette) | (attributes[cell] & 0xF8)));
+        }
+
+        return relocated;
+    }
+    // Map relocation: every cell rebases onto the bank (cells reference the section's tiles zero-based).
+    private static byte[] RelocateMap(string name, byte[] tileMap, byte tileBase, int tileCount) {
+        var map = new byte[tileMap.Length];
+
+        for (var cell = 0; (cell < tileMap.Length); cell++) {
+            if (tileMap[cell] >= tileCount) {
+                throw new InvalidDataException(message: $"'{name}' map cell {cell} references tile {tileMap[cell]} of {tileCount}.");
+            }
+
+            map[cell] = ((byte)(tileBase + tileMap[cell]));
+        }
+
+        return map;
     }
     private static void SealGuard(ref bool sealedFlag, int count, string table) {
         if (sealedFlag) {
@@ -313,12 +183,36 @@ public sealed class AssetLinker {
 
         sealedFlag = true;
     }
+    /// <summary>Owns the one-time concatenation and ROM landing of a segmented graphics table.</summary>
+    private RomTable SealSegments(ref bool sealedFlag, int count, string table, string name, List<byte[]> segments) {
+        SealGuard(
+            count: count,
+            sealedFlag: ref sealedFlag,
+            table: table
+        );
+
+        return m_data.Add(
+            name: name,
+            bytes: Concatenate(segments: segments)
+        );
+    }
+    private static void ThrowIfSealed(bool sealedFlag, string name, string table) {
+        if (sealedFlag) {
+            throw new InvalidOperationException(message: $"The {table} is sealed; '{name}' cannot be added.");
+        }
+    }
     private static byte ValidatePalettes(string name, byte[] paletteData, int currentCount, string plane) {
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentNullException.ThrowIfNull(paletteData);
 
-        if ((paletteData.Length == 0) || ((paletteData.Length % PaletteByteCount) != 0)) {
-            throw new ArgumentException(message: $"The '{name}' palette segment must be a non-empty multiple of {PaletteByteCount} bytes.", paramName: nameof(paletteData));
+        if (
+            (paletteData.Length == 0) ||
+            ((paletteData.Length % PaletteByteCount) != 0)
+        ) {
+            throw new ArgumentException(
+                message: $"The '{name}' palette segment must be a non-empty multiple of {PaletteByteCount} bytes.",
+                paramName: nameof(paletteData)
+            );
         }
 
         var count = (paletteData.Length / PaletteByteCount);
@@ -329,21 +223,243 @@ public sealed class AssetLinker {
 
         return ((byte)currentCount);
     }
-    private static byte[] Concatenate(List<byte[]> segments) {
-        var length = 0;
 
-        foreach (var segment in segments) {
-            length += segment.Length;
+    /// <summary>Allocates background palette slots and returns the first slot index.</summary>
+    /// <param name="name">A diagnostic name for overrun messages.</param>
+    /// <param name="paletteData">The palettes' bytes (8 per palette, palette-RAM wire form).</param>
+    /// <returns>The first allocated slot.</returns>
+    public byte AddBackgroundPalettes(string name, byte[] paletteData) =>
+        AddPalettes(
+            count: ref m_backgroundPaletteCount,
+            name: name,
+            paletteData: paletteData,
+            plane: "background",
+            sealedFlag: m_backgroundPalettesSealed,
+            segments: m_backgroundPaletteSegments,
+            table: "background palette table"
+        );
+    /// <summary>Allocates object palette slots and returns the first slot index.</summary>
+    /// <param name="name">A diagnostic name for overrun messages.</param>
+    /// <param name="paletteData">The palettes' bytes (8 per palette, palette-RAM wire form).</param>
+    /// <returns>The first allocated slot.</returns>
+    public byte AddObjectPalettes(string name, byte[] paletteData) =>
+        AddPalettes(
+            count: ref m_objectPaletteCount,
+            name: name,
+            paletteData: paletteData,
+            plane: "object",
+            sealedFlag: m_objectPalettesSealed,
+            segments: m_objectPaletteSegments,
+            table: "object palette table"
+        );
+    /// <summary>Allocates a tile segment in the bank and returns its first tile id.</summary>
+    /// <param name="name">A diagnostic name for overrun messages.</param>
+    /// <param name="tiles2bpp">The segment's 2bpp bytes (16 per tile).</param>
+    /// <returns>The segment's first tile id.</returns>
+    public byte AddTiles(string name, byte[] tiles2bpp) {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(tiles2bpp);
+        ThrowIfSealed(
+            name: name,
+            sealedFlag: m_tileBankSealed,
+            table: "tile bank"
+        );
+
+        if (
+            (tiles2bpp.Length == 0) ||
+            ((tiles2bpp.Length % TileByteCount) != 0)
+        ) {
+            throw new ArgumentException(
+                message: $"The '{name}' tile segment must be a non-empty multiple of {TileByteCount} bytes.",
+                paramName: nameof(tiles2bpp)
+            );
         }
 
-        var bytes = new byte[length];
-        var offset = 0;
+        var count = (tiles2bpp.Length / TileByteCount);
 
-        foreach (var segment in segments) {
-            segment.CopyTo(array: bytes, index: offset);
-            offset += segment.Length;
+        if ((m_tileCount + count) > TileCapacity) {
+            throw new InvalidOperationException(message: $"Adding '{name}' ({count} tiles) overruns the {TileCapacity}-tile bank ({m_tileCount} already allocated).");
         }
 
-        return bytes;
+        var baseId = ((byte)m_tileCount);
+
+        m_tileSegments.Add(item: tiles2bpp);
+        m_tileCount += count;
+
+        return baseId;
     }
+    /// <summary>Links a parsed background: allocates its tiles and palette slots, relocates the map and attribute
+    /// copies, and lands them as the <c>&lt;name&gt;-map</c> / <c>&lt;name&gt;-attributes</c> blocks.</summary>
+    /// <param name="name">The link name (also the landed blocks' name prefix).</param>
+    /// <param name="background">The parsed background section.</param>
+    /// <returns>The linked background.</returns>
+    public LinkedBackground LinkBackground(string name, PbakBackground background) {
+        var relocated = Relocate(
+            background: background,
+            name: name
+        );
+        var map = m_data.Add(
+            name: $"{name}-map",
+            bytes: relocated.TileMap
+        );
+        var attributes = ((relocated.AttributeMap is { } attributeMap)
+            ? m_data.Add(
+                bytes: attributeMap,
+                name: $"{name}-attributes"
+            )
+            : (RomTable?)null
+        );
+
+        return new LinkedBackground(
+            AttributeMap: attributes,
+            PaletteBase: relocated.PaletteBase,
+            PaletteCount: background.PaletteCount,
+            TileBase: relocated.TileBase,
+            TileCount: background.TileCount,
+            TileMap: map
+        );
+    }
+    /// <summary>Links a parsed sprite set: allocates its tiles and object palette slots, relocates every frame's rows
+    /// (tile ids rebased, OAM palette bits shifted), and lands the <c>&lt;name&gt;-frames</c> block plus the
+    /// <c>&lt;name&gt;-frame-table</c> runtime index (and <c>&lt;name&gt;-animations</c> when present).</summary>
+    /// <param name="name">The link name (also the landed blocks' name prefix).</param>
+    /// <param name="sprites">The parsed sprite section.</param>
+    /// <returns>The linked sprite set.</returns>
+    public LinkedSpriteSet LinkSpriteSet(string name, PbakSpriteSet sprites) {
+        ArgumentNullException.ThrowIfNull(sprites);
+
+        var tileBase = AddTiles(
+            name: $"{name}-tiles",
+            tiles2bpp: sprites.Tiles2bpp
+        );
+        var paletteBase = AddObjectPalettes(
+            name: $"{name}-palettes",
+            paletteData: sprites.PaletteData
+        );
+        var offsets = new int[sprites.Frames.Count];
+        var entryCounts = new int[sprites.Frames.Count];
+        var rowBytes = new List<byte>();
+
+        for (var frame = 0; (frame < sprites.Frames.Count); frame++) {
+            offsets[frame] = rowBytes.Count;
+            entryCounts[frame] = sprites.Frames[frame].EntryCount;
+            AppendRelocatedRows(
+                name: name,
+                frame: frame,
+                rows: sprites.Frames[frame].Rows,
+                sprites: sprites,
+                tileBase: tileBase,
+                paletteBase: paletteBase,
+                destination: rowBytes
+            );
+        }
+
+        var frames = m_data.Add(
+            bytes: [.. rowBytes],
+            name: $"{name}-frames"
+        );
+        var addresses = new ushort[sprites.Frames.Count];
+        var frameTable = new byte[(sprites.Frames.Count * 4)];
+
+        for (var frame = 0; (frame < sprites.Frames.Count); frame++) {
+            addresses[frame] = ((ushort)(frames.Address + offsets[frame]));
+            frameTable[((frame * 4) + 0)] = ((byte)(addresses[frame] & 0xFF));
+            frameTable[((frame * 4) + 1)] = ((byte)(addresses[frame] >> 8));
+            frameTable[((frame * 4) + 2)] = ((byte)entryCounts[frame]);
+            frameTable[((frame * 4) + 3)] = 0x00;
+        }
+
+        return new LinkedSpriteSet(
+            Animations: ((sprites.AnimationPayload is { } animation)
+            ? m_data.Add(
+                    bytes: animation,
+                    name: $"{name}-animations"
+                )
+            : (RomTable?)null),
+            FrameAddresses: addresses,
+            FrameEntryCounts: entryCounts,
+            Frames: frames,
+            FrameTable: m_data.Add(
+                bytes: frameTable,
+                name: $"{name}-frame-table"
+            ),
+            PaletteBase: paletteBase,
+            PaletteCount: sprites.PaletteCount,
+            TileBase: tileBase,
+            TileCount: sprites.TileCount
+        );
+    }
+    /// <summary>Allocates a parsed background's tiles and palette slots and returns RELOCATED map/attribute copies
+    /// WITHOUT landing them — the seam a caller composes onto (the manifest's screen text overlay) before landing the
+    /// blocks itself.</summary>
+    /// <param name="name">The allocation's diagnostic name.</param>
+    /// <param name="background">The parsed background section.</param>
+    /// <returns>The relocated background.</returns>
+    public RelocatedBackground Relocate(string name, PbakBackground background) {
+        ArgumentNullException.ThrowIfNull(background);
+
+        var tileBase = AddTiles(
+            name: $"{name}-tiles",
+            tiles2bpp: background.Tiles2bpp
+        );
+        var paletteBase = AddBackgroundPalettes(
+            name: $"{name}-palettes",
+            paletteData: background.PaletteData
+        );
+        var map = RelocateMap(
+            name: name,
+            tileMap: background.TileMap,
+            tileBase: tileBase,
+            tileCount: background.TileCount
+        );
+        var attributes = ((background.AttributeMap is { } attributeMap)
+            ? RelocateAttributes(
+                name: name,
+                attributes: attributeMap,
+                paletteBase: paletteBase,
+                paletteCount: background.PaletteCount
+            )
+            : null
+        );
+
+        return new RelocatedBackground(
+            AttributeMap: attributes,
+            PaletteBase: paletteBase,
+            TileBase: tileBase,
+            TileMap: map
+        );
+    }
+    /// <summary>Seals the background palette table into the reserved <c>bg-palette-table</c> block (the boot spec's
+    /// <c>BgPalettes</c>).</summary>
+    /// <returns>The table.</returns>
+    public RomTable SealBackgroundPalettes() =>
+        SealSegments(
+            count: m_backgroundPaletteCount,
+            name: "bg-palette-table",
+            sealedFlag: ref m_backgroundPalettesSealed,
+            segments: m_backgroundPaletteSegments,
+            table: "background palette table"
+        );
+    /// <summary>Seals the object palette table into the reserved <c>obj-palette-table</c> block (the boot spec's
+    /// <c>ObjPalettes</c>).</summary>
+    /// <returns>The table.</returns>
+    public RomTable SealObjectPalettes() =>
+        SealSegments(
+            count: m_objectPaletteCount,
+            name: "obj-palette-table",
+            sealedFlag: ref m_objectPalettesSealed,
+            segments: m_objectPaletteSegments,
+            table: "object palette table"
+        );
+    /// <summary>Seals the tile bank: concatenates every segment into the reserved <c>tile-bank</c> block (one boot
+    /// copy to VRAM 0x8000). No further tile allocation is possible.</summary>
+    /// <returns>The bank's table (its length is the boot's tile byte count).</returns>
+    public RomTable SealTileBank() =>
+        SealSegments(
+            count: m_tileCount,
+            name: "tile-bank",
+            sealedFlag: ref m_tileBankSealed,
+            segments: m_tileSegments,
+            table: "tile bank"
+        );
 }

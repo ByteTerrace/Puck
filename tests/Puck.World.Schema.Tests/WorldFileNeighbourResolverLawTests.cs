@@ -23,16 +23,11 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
         ));
     }
 
-    public void Dispose() {
-        try {
-            Directory.Delete(
-                path: m_root,
-                recursive: true
-            );
-        } catch (IOException) {
-        }
-    }
-
+    private static string Locator(WorldDefinition definition, string name) =>
+        WorldDefinitionRows.FindReference(
+            references: definition.References,
+            name: name
+        )!.Document!;
     private void WriteDocument(string relativePath, string documentId, params (string Name, string Document)[] references) {
         var rows = string.Join(
             separator: ",",
@@ -47,12 +42,42 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
             contents: $"{{\"schema\":\"{WorldDefinition.SchemaVersion}\",\"documentId\":\"{documentId}\",\"references\":[{rows}]}}"
         );
     }
-    private static string Locator(WorldDefinition definition, string name) =>
-        WorldDefinitionRows.FindReference(
-            references: definition.References,
-            name: name
-        )!.Document!;
 
+    [Fact]
+    public void A_neighbour_above_the_base_spells_its_own_neighbours_from_the_base() {
+        WriteDocument(
+            relativePath: "hub.world.json",
+            documentId: "hub",
+            ("nw", "shards/nw.world.json"),
+            ("ne", "shards/ne.world.json")
+        );
+        WriteDocument(
+            relativePath: Path.Combine(
+                path1: "shards",
+                path2: "nw.world.json"
+            ),
+            documentId: "nw",
+            ("hub", "../hub.world.json")
+        );
+
+        var shards = Path.Combine(
+            path1: m_root,
+            path2: "shards"
+        );
+        var resolution = new WorldFileNeighbourResolver(baseDirectory: () => shards).Resolve(document: "../hub.world.json");
+
+        Assert.Equal(
+            actual: resolution.Kind,
+            expected: WorldNeighbourResolutionKind.Resolved
+        );
+        Assert.Equal(
+            actual: Locator(
+                definition: resolution.Definition!,
+                name: "ne"
+            ),
+            expected: "ne.world.json"
+        );
+    }
     [Fact]
     public void A_neighbour_below_the_base_spells_its_own_neighbours_from_the_base() {
         WriteDocument(
@@ -111,41 +136,6 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
         );
     }
     [Fact]
-    public void A_neighbour_above_the_base_spells_its_own_neighbours_from_the_base() {
-        WriteDocument(
-            relativePath: "hub.world.json",
-            documentId: "hub",
-            ("nw", "shards/nw.world.json"),
-            ("ne", "shards/ne.world.json")
-        );
-        WriteDocument(
-            relativePath: Path.Combine(
-                path1: "shards",
-                path2: "nw.world.json"
-            ),
-            documentId: "nw",
-            ("hub", "../hub.world.json")
-        );
-
-        var shards = Path.Combine(
-            path1: m_root,
-            path2: "shards"
-        );
-        var resolution = new WorldFileNeighbourResolver(baseDirectory: () => shards).Resolve(document: "../hub.world.json");
-
-        Assert.Equal(
-            actual: resolution.Kind,
-            expected: WorldNeighbourResolutionKind.Resolved
-        );
-        Assert.Equal(
-            actual: Locator(
-                definition: resolution.Definition!,
-                name: "ne"
-            ),
-            expected: "ne.world.json"
-        );
-    }
-    [Fact]
     public void A_sibling_keeps_its_bare_spelling() {
         WriteDocument(
             relativePath: "a.world.json",
@@ -171,5 +161,14 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
             ),
             expected: "a.world.json"
         );
+    }
+    public void Dispose() {
+        try {
+            Directory.Delete(
+                path: m_root,
+                recursive: true
+            );
+        } catch (IOException) {
+        }
     }
 }

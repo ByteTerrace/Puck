@@ -7,9 +7,9 @@ namespace Puck.Vulkan.Interop;
 /// created with, and destroys it when disposed.
 /// </summary>
 public sealed class VulkanSwapchain : IDisposable {
-    private bool m_disposed;
-
     private readonly IVulkanSwapchainApi m_swapchainApi;
+
+    private bool m_disposed;
 
     /// <summary>Gets the native <c>VkDevice</c> handle that owns the swapchain.</summary>
     public nint DeviceHandle { get; }

@@ -1,0 +1,211 @@
+using Puck.GamingBricks.Forge;
+using Puck.HumbleGamingBrick;
+using Puck.HumbleGamingBrick.Forge;
+using Puck.HumbleGamingBrick.Forge.Framework;
+
+namespace Puck.AdvancedGamingBrick.Forge.Tests;
+
+/// <summary>Covers the panel drawn over the background: it appears where placed and hides on request.</summary>
+public sealed class CartridgeWindowTests {
+    private static void Refuses(CartridgeDocument document, string fragment) {
+        var errors = CartridgeDocuments.Validate(document: document);
+
+        Assert.Contains(
+            collection: errors,
+            filter: error => error.Message.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: fragment
+            )
+        );
+    }
+    private static WindowProbe Run(CartridgeDocument document, int frames) {
+        ICartridgeCompiler compiler = ((document.Target == "agb")
+            ? new AgbCartridgeCompiler()
+            : new HgbCartridgeCompiler()
+        );
+        var machine = new WindowProbe(result: compiler.Compile(document: document));
+
+        machine.Run(frames: frames);
+        return machine;
+    }
+    private static int[] Shade(string target, int ink) {
+        var entries = new int[((target == "agb")
+            ? 16
+            : 4)];
+
+        entries[1] = ink;
+        entries[2] = 0x7C00;
+
+        return entries;
+    }
+
+    [InlineData("cgb")]
+    [InlineData("agb")]
+    [Theory]
+    public void ThePanelCoversTheBackgroundBelowAndRightOfItsCorner(string target) {
+        var background = new int[1024];
+        var panel = new int[1024];
+
+        for (var index = 0; (index < 1024); ++index) {
+            background[index] = 1;
+            panel[index] = 2;
+        }
+
+        var document = CartridgeDocuments.Create(
+            target: target,
+            title: "PANEL"
+        ) with {
+            Palettes = new CartridgePalettes(
+            Background: [Shade(
+                    ink: 0x001F,
+                    target: target
+                )],
+            Object: [Shade(
+                    ink: 0x001F,
+                    target: target
+                )]
+        ),
+            Tiles = [
+                new CartridgeTile(
+                Name: "blank",
+                Pixels: [.. Enumerable.Repeat(
+                        count: 8,
+                        element: "00000000"
+                    )]
+            ),
+                new CartridgeTile(
+                Name: "one",
+                Pixels: [.. Enumerable.Repeat(
+                        count: 8,
+                        element: "11111111"
+                    )]
+            ),
+                new CartridgeTile(
+                Name: "two",
+                Pixels: [.. Enumerable.Repeat(
+                        count: 8,
+                        element: "22222222"
+                    )]
+            ),
+            ],
+            Map = background,
+            Variables = [new CartridgeVariable(
+                Name: "shown",
+                Initial: 1
+            )],
+            Window = new CartridgeWindow(
+            Map: panel,
+            MapPalettes: null,
+            X: CartridgeExpressions.Of(constant: 80),
+            Y: CartridgeExpressions.Of(constant: 72),
+            Visible: CartridgeExpressions.Of(state: "shown")
+        ),
+            Rules = [new CartridgeRule(
+                Name: "hold",
+                Body: [
+                new CartridgeStatement(
+                        Kind: "set",
+                        Target: new CartridgeTarget(State: "shown"),
+                        Operation: null,
+                        Value: CartridgeExpressions.Of(state: "shown")
+                    ),
+            ]
+            )],
+        };
+        using var machine = Run(
+            document: document,
+            frames: 20
+        );
+
+        // Above and left of the corner is background; below and right is the panel's own tile.
+        var outside = machine.Pixel(
+            x: 20,
+            y: 20
+        );
+        var inside = machine.Pixel(
+            x: 120,
+            y: 100
+        );
+
+        Assert.NotEqual(
+            actual: inside,
+            expected: outside
+        );
+    }
+    [Fact]
+    public void ValidationChecksThePanelsMapAndPlacement() {
+        var document = CartridgeDocuments.Create(
+            target: "cgb",
+            title: "PANELBAD"
+        );
+        var full = new int[1024];
+
+        Refuses(
+            document: document with { Window = new CartridgeWindow(
+                Map: new int[16],
+                MapPalettes: null,
+                X: CartridgeExpressions.Of(constant: 0),
+                Y: CartridgeExpressions.Of(constant: 0),
+                Visible: CartridgeExpressions.Of(constant: 1)
+            ) },
+            fragment: "Expected an array with 1024..1024"
+        );
+        Refuses(
+            document: document with { Window = new CartridgeWindow(
+                Map: [.. Enumerable.Repeat(
+                        count: 1024,
+                        element: 9
+                    )],
+                MapPalettes: null,
+                X: CartridgeExpressions.Of(constant: 0),
+                Y: CartridgeExpressions.Of(constant: 0),
+                Visible: CartridgeExpressions.Of(constant: 1)
+            ) },
+            fragment: "outside the authored tile bank"
+        );
+        Refuses(
+            document: document with { Window = new CartridgeWindow(
+                Map: full,
+                MapPalettes: new int[8],
+                X: CartridgeExpressions.Of(constant: 0),
+                Y: CartridgeExpressions.Of(constant: 0),
+                Visible: CartridgeExpressions.Of(constant: 1)
+            ) },
+            fragment: "1024 entries"
+        );
+    }
+
+    private sealed class WindowProbe : IDisposable {
+        private readonly AgbVerifyMachineDriver? m_agb;
+        private readonly VerifyMachineDriver? m_hgb;
+
+        public WindowProbe(CartridgeCompilation result) {
+            if (result.Target == "agb") { m_agb = new AgbVerifyMachineDriver(
+                rom: result.Rom,
+                label: "panel"
+            ); } else { m_hgb = new VerifyMachineDriver(
+                rom: result.Rom,
+                label: "panel"
+            ); }
+        }
+
+        public void Dispose() { m_agb?.Dispose(); m_hgb?.Dispose(); }
+        public uint Pixel(int x, int y) => (m_agb?.ReadPixel(
+            x: x,
+            y: y
+        ) ?? m_hgb!.ReadPixel(
+            x: x,
+            y: y
+        ));
+        public void Run(int frames) {
+            m_agb?.RunFrames(
+                frames: frames,
+                keys: AgbKeys.None
+            );
+            m_hgb?.RunFrames(
+                buttons: JoypadButtons.None,
+                frames: frames
+            );
+        }
+    }
+}

@@ -31,7 +31,8 @@ internal sealed class PostContext {
         LinkGamePath = linkGamePath;
         Parallelism = ((parallelism > 0)
             ? parallelism
-            : Environment.ProcessorCount);
+            : Environment.ProcessorCount
+        );
         SolarRomPath = solarRomPath;
         TestRomRoot = testRomRoot;
     }

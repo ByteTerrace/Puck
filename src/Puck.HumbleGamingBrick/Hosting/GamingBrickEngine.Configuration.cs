@@ -1,0 +1,182 @@
+using Puck.Abstractions.Machines;
+
+namespace Puck.HumbleGamingBrick;
+
+public sealed partial class GamingBrickEngine {
+    /// <inheritdoc/>
+    public MachineEngineDescriptor Descriptor { get; } = new(
+        "gaming-brick",
+        "Deterministic SM83 machine with selectable hardware revision.",
+        new(
+            "puck.gaming-brick.configuration.v1",
+            [
+            new(
+                    "model",
+                    MachineFieldKind.String,
+                    "Hardware family or revision; defaults to dmg.",
+                    Choices: [.. ModelTokens.Keys]
+                ),
+            new(
+                    "dmgSpeed",
+                    MachineFieldKind.Boolean,
+                    "Keep a DMG-rate tick budget across CPU speed changes."
+                ),
+            new(
+                    "boot",
+                    MachineFieldKind.String,
+                    "Cold runs firmware; fast starts at cartridge handoff.",
+                    Choices: ["cold", "fast"]
+                ),
+            new(
+                    "content",
+                    MachineFieldKind.Object,
+                    "The mounted cartridge or cartridge source.",
+                    Fields: [
+                new(
+                            "path",
+                            MachineFieldKind.String,
+                            "Cartridge path relative to the declaring document.",
+                            Required: true,
+                            Role: MachineFieldRole.ContentPath
+                        )
+            ]
+                ),
+            new(
+                    "firmware",
+                    MachineFieldKind.Object,
+                    "Optional external firmware; absent uses bundled Puck firmware.",
+                    Fields: [
+                new(
+                            "path",
+                            MachineFieldKind.String,
+                            "External firmware path relative to the declaring document.",
+                            Required: true,
+                            Role: MachineFieldRole.AssetPath
+                        )
+            ]
+                )
+        ]
+        ),
+        [new(
+                Contract: "puck.machine.video.v1",
+                Description: "The native 160 by 144 display.",
+                Name: "video"
+            )],
+        [new(
+                Contract: "puck.machine.audio.v1",
+                Description: "The machine's stereo audio stream.",
+                Name: "audio"
+            )],
+        [new(
+                Contract: "puck.machine.pad.v1",
+                Description: "Buttons and supported cartridge sensors.",
+                Name: "controls"
+            )],
+        [
+            new(
+                "content.insert",
+                "Mounts prepared content through the host's replacement transaction.",
+                new(
+                    "puck.gaming-brick.content-insert.v1",
+                    [
+                new(
+                            "content",
+                            MachineFieldKind.Object,
+                            "The prepared cartridge source.",
+                            Required: true,
+                            Fields: [
+                    new(
+                                    "path",
+                                    MachineFieldKind.String,
+                                    "Content path prepared by the host.",
+                                    Required: true,
+                                    Role: MachineFieldRole.ContentPath
+                                )
+                ]
+                        )
+            ]
+                )
+            ),
+            new(
+                "content.eject",
+                "Removes mounted content through the host's replacement transaction.",
+                new(
+                    Fields: [],
+                    Id: "puck.gaming-brick.content-eject.v1"
+                )
+            ),
+            new(
+                "machine.reset",
+                "Recreates the current machine configuration through the host's replacement transaction.",
+                new(
+                    Fields: [],
+                    Id: "puck.gaming-brick.machine-reset.v1"
+                )
+            ),
+            new(
+                "device.model",
+                "Retargets the live hardware revision when the runtime supports it.",
+                new(
+                    "puck.gaming-brick.device-model-set.v1",
+                    [
+                new(
+                            "model",
+                            MachineFieldKind.String,
+                            "Hardware family or revision.",
+                            Required: true,
+                            Choices: [.. ModelTokens.Keys]
+                        )
+            ]
+                )
+            )
+        ],
+        HumbleGamingBrickCore.HardwareSpaces
+    );
+
+    /// <inheritdoc/>
+    public IMachineRuntime CreateMachine(MachineCreationRequest request) {
+        ArgumentNullException.ThrowIfNull(request);
+        MachineConfigurationValidation.Validate(
+            descriptor: Descriptor.Configuration,
+            value: request.Configuration
+        );
+        var configuration = request.Configuration;
+        var model = (configuration.TryGetProperty(
+            propertyName: "model",
+            value: out var modelValue
+        )
+            ? ModelTokens[modelValue.GetString()!]
+            : DefaultModel
+        );
+        var boot = ((configuration.TryGetProperty(
+            propertyName: "boot",
+            value: out var bootValue
+        ) && (bootValue.GetString() == "fast"))
+            ? MachineBootMode.Fast
+            : MachineBootMode.Cold
+        );
+
+        return new MachineHost(
+            model: model,
+            cartridgeRom: (configuration.TryGetProperty(
+                propertyName: "content",
+                value: out _
+            )
+            ? request.RequireAsset(fieldPath: "content.path").Image.ToArray()
+            : null),
+            savePath: request.SavePath,
+            dmgSpeed: (configuration.TryGetProperty(
+                propertyName: "dmgSpeed",
+                value: out var speed
+            ) && speed.GetBoolean()),
+            audioSampleRate: request.AudioSampleRate,
+            bootMode: boot,
+            bootRomImage: (configuration.TryGetProperty(
+                propertyName: "firmware",
+                value: out _
+            )
+            ? request.RequireAsset(fieldPath: "firmware.path").Image.ToArray()
+            : null)
+        );
+    }
+}

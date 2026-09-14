@@ -7,6 +7,17 @@ namespace Puck.World.Agents.Harness;
 
 /// <summary>Builds Microsoft's Agent Framework Harness around a constrained set of typed Puck world tools.</summary>
 public static class WorldAgentHarness {
+    private static string InstructionsFor(WorldAgentBridge bridge) => $"""
+        You are an autonomous participant embodied in Puck body {bridge.BodyIndex} as principal {bridge.Principal.Describe()}.
+        Puck is authoritative. Use only the provided puck_* tools to observe or affect the world.
+        Call puck_get_affordances before your first action and whenever a grant or world reload may have changed what you can do.
+        Observe before acting. Prefer short, bounded actions, then observe again before choosing the next action.
+        A submission receipt proves only that Puck received an envelope; it never proves the action was authorized or applied.
+        Never report an action as applied until a later observation supports that conclusion.
+        Harness approval is human consent to invoke a tool. Puck's grants are the independent authorization boundary and may still refuse it.
+        Do not invent channel names. Use the exact channel vocabulary returned by puck_get_affordances.
+        """;
+
     /// <summary>Creates a Harness agent over an injected model client and an already scoped Puck bridge.</summary>
     /// <param name="chatClient">Any Microsoft.Extensions.AI-compatible model client.</param>
     /// <param name="bridge">The principal/body-scoped Puck bridge.</param>
@@ -30,9 +41,7 @@ public static class WorldAgentHarness {
             value: options.MaximumIterationsPerRequest,
             paramName: nameof(options.MaximumIterationsPerRequest)
         );
-        var tools = new WorldAgentTools(bridge: bridge).CreateFunctions(
-            requireActionApproval: options.RequireActionApproval
-        );
+        var tools = new WorldAgentTools(bridge: bridge).CreateFunctions(requireActionApproval: options.RequireActionApproval);
 
         return new HarnessAgent(
             chatClient: chatClient,
@@ -45,7 +54,7 @@ public static class WorldAgentHarness {
                 Description = $"An autonomous participant controlling body {bridge.BodyIndex} as {bridge.Principal.Describe()} in a Puck world.",
                 AgentSkillsSource = options.SkillsSource,
                 DisableAgentModeProvider = true,
-                DisableAgentSkillsProvider = options.SkillsSource is null,
+                DisableAgentSkillsProvider = (options.SkillsSource is null),
                 DisableFileMemory = true,
                 DisableOpenTelemetry = !options.EnableOpenTelemetry,
                 DisableTodoProvider = !options.EnablePlanning,
@@ -59,80 +68,12 @@ public static class WorldAgentHarness {
         );
     }
 
-    private static string InstructionsFor(WorldAgentBridge bridge) => $"""
-        You are an autonomous participant embodied in Puck body {bridge.BodyIndex} as principal {bridge.Principal.Describe()}.
-        Puck is authoritative. Use only the provided puck_* tools to observe or affect the world.
-        Call puck_get_affordances before your first action and whenever a grant or world reload may have changed what you can do.
-        Observe before acting. Prefer short, bounded actions, then observe again before choosing the next action.
-        A submission receipt proves only that Puck received an envelope; it never proves the action was authorized or applied.
-        Never report an action as applied until a later observation supports that conclusion.
-        Harness approval is human consent to invoke a tool. Puck's grants are the independent authorization boundary and may still refuse it.
-        Do not invent channel names. Use the exact channel vocabulary returned by puck_get_affordances.
-        """;
-
     private sealed class WorldAgentTools(WorldAgentBridge bridge) {
         private readonly WorldAgentBridge m_bridge = bridge;
-
-        public IList<AITool> CreateFunctions(bool requireActionApproval) {
-            var observe = AIFunctionFactory.Create(
-                method: (Func<string, CancellationToken, ValueTask<WorldAgentObservation>>)ObserveAsync,
-                name: "puck_observe_body",
-                description: "Read one authoritative aspect of this body: pose, channels, state, targets, contacts, or properties."
-            );
-            var affordances = AIFunctionFactory.Create(
-                method: (Func<CancellationToken, ValueTask<WorldAgentAffordances>>)GetAffordancesAsync,
-                name: "puck_get_affordances",
-                description: "Read the principal's current Observe/Drive grants and the live world's exact channel vocabulary."
-            );
-            var move = AIFunctionFactory.Create(
-                method: (Func<double, double, double, double, double, double, double, CancellationToken, ValueTask<WorldAgentActionReceipt>>)MoveAsync,
-                name: "puck_move",
-                description: "Submit a short, timed six-axis motion segment to the controlled body. Values are forward, strafe, up, yaw, pitch, roll, and positive simulation seconds."
-            );
-            var press = AIFunctionFactory.Create(
-                method: (Func<string, double, double?, CancellationToken, ValueTask<WorldAgentActionReceipt>>)PressAsync,
-                name: "puck_press_channel",
-                description: "Submit a press of an exact channel name returned by puck_get_affordances, optionally for a positive simulation duration."
-            );
-            var stop = AIFunctionFactory.Create(
-                method: (Func<CancellationToken, ValueTask<WorldAgentActionReceipt>>)StopAsync,
-                name: "puck_stop",
-                description: "Submit a command that clears the body's movement tape and releases every held channel."
-            );
-
-            return [
-                observe,
-                affordances,
-                RequiringApprovalIfConfigured(function: move, required: requireActionApproval),
-                RequiringApprovalIfConfigured(function: press, required: requireActionApproval),
-                RequiringApprovalIfConfigured(function: stop, required: requireActionApproval),
-            ];
-        }
-
-        [Description("Read one authoritative aspect of the controlled Puck body.")]
-        private ValueTask<WorldAgentObservation> ObserveAsync(
-            [Description("pose, channels, state, targets, contacts, or properties")]
-            string aspect,
-            CancellationToken cancellationToken
-        ) {
-            if (!Enum.TryParse<WorldAgentObservationKind>(
-                value: aspect,
-                ignoreCase: true,
-                result: out var kind
-            )) {
-                throw new ArgumentException(
-                    message: $"Unknown observation aspect '{aspect}'. Use pose, channels, state, targets, contacts, or properties.",
-                    paramName: nameof(aspect)
-                );
-            }
-
-            return m_bridge.ObserveAsync(kind: kind, cancellationToken: cancellationToken);
-        }
 
         [Description("Read this body's live channels and the principal's Observe and Drive grants.")]
         private ValueTask<WorldAgentAffordances> GetAffordancesAsync(CancellationToken cancellationToken) =>
             m_bridge.GetAffordancesAsync(cancellationToken: cancellationToken);
-
         [Description("Submit a bounded six-axis motion segment.")]
         private ValueTask<WorldAgentActionReceipt> MoveAsync(
             [Description("Forward/backward value.")] double forward,
@@ -153,7 +94,28 @@ public static class WorldAgentHarness {
             up: up,
             yaw: yaw
         );
+        [Description("Read one authoritative aspect of the controlled Puck body.")]
+        private ValueTask<WorldAgentObservation> ObserveAsync(
+            [Description("pose, channels, state, targets, contacts, or properties")]
+            string aspect,
+            CancellationToken cancellationToken
+        ) {
+            if (!Enum.TryParse<WorldAgentObservationKind>(
+                ignoreCase: true,
+                result: out var kind,
+                value: aspect
+            )) {
+                throw new ArgumentException(
+                    message: $"Unknown observation aspect '{aspect}'. Use pose, channels, state, targets, contacts, or properties.",
+                    paramName: nameof(aspect)
+                );
+            }
 
+            return m_bridge.ObserveAsync(
+                cancellationToken: cancellationToken,
+                kind: kind
+            );
+        }
         [Description("Submit a named channel press.")]
         private ValueTask<WorldAgentActionReceipt> PressAsync(
             [Description("Exact authored channel name from puck_get_affordances.")] string channel,
@@ -166,14 +128,57 @@ public static class WorldAgentHarness {
             holdSeconds: holdSeconds,
             value: value
         );
-
+        private static AIFunction RequiringApprovalIfConfigured(AIFunction function, bool required) => (required
+            ? new ApprovalRequiredAIFunction(innerFunction: function)
+            : function
+        );
         [Description("Clear the controlled body's movement tape and held channels.")]
         private ValueTask<WorldAgentActionReceipt> StopAsync(CancellationToken cancellationToken) =>
             m_bridge.StopAsync(cancellationToken: cancellationToken);
 
-        private static AIFunction RequiringApprovalIfConfigured(AIFunction function, bool required) => (required
-            ? new ApprovalRequiredAIFunction(function)
-            : function
-        );
+        public IList<AITool> CreateFunctions(bool requireActionApproval) {
+            var observe = AIFunctionFactory.Create(
+                method: ((Func<string, CancellationToken, ValueTask<WorldAgentObservation>>)ObserveAsync),
+                name: "puck_observe_body",
+                description: "Read one authoritative aspect of this body: pose, channels, state, targets, contacts, or properties."
+            );
+            var affordances = AIFunctionFactory.Create(
+                method: ((Func<CancellationToken, ValueTask<WorldAgentAffordances>>)GetAffordancesAsync),
+                name: "puck_get_affordances",
+                description: "Read the principal's current Observe/Drive grants and the live world's exact channel vocabulary."
+            );
+            var move = AIFunctionFactory.Create(
+                method: ((Func<double, double, double, double, double, double, double, CancellationToken, ValueTask<WorldAgentActionReceipt>>)MoveAsync),
+                name: "puck_move",
+                description: "Submit a short, timed six-axis motion segment to the controlled body. Values are forward, strafe, up, yaw, pitch, roll, and positive simulation seconds."
+            );
+            var press = AIFunctionFactory.Create(
+                method: ((Func<string, double, double?, CancellationToken, ValueTask<WorldAgentActionReceipt>>)PressAsync),
+                name: "puck_press_channel",
+                description: "Submit a press of an exact channel name returned by puck_get_affordances, optionally for a positive simulation duration."
+            );
+            var stop = AIFunctionFactory.Create(
+                method: ((Func<CancellationToken, ValueTask<WorldAgentActionReceipt>>)StopAsync),
+                name: "puck_stop",
+                description: "Submit a command that clears the body's movement tape and releases every held channel."
+            );
+
+            return [
+                observe,
+                affordances,
+                RequiringApprovalIfConfigured(
+                    function: move,
+                    required: requireActionApproval
+                ),
+                RequiringApprovalIfConfigured(
+                    function: press,
+                    required: requireActionApproval
+                ),
+                RequiringApprovalIfConfigured(
+                    function: stop,
+                    required: requireActionApproval
+                ),
+            ];
+        }
     }
 }

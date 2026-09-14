@@ -21,11 +21,60 @@ public sealed class BindingDocumentWireShapeTests {
         "page",
     ];
 
-    private static string WorldPath() => Path.Combine(
-        path1: AppContext.BaseDirectory,
-        path2: "Assets",
-        path3: "puck.world.json"
+    private static BindingProfileDocument Document() => new(
+        Chords: [
+            new BindingChordDefinition(
+                Group: new DocumentIdentifier(value: "play"),
+                Page: new BindingPageDefinition(
+                    Entries: [
+                        new BindingPageEntryDefinition(
+                            Command: "player.jump",
+                            Sources: ["keyboard.space"]
+                        ),
+                    ],
+                    Id: "base"
+                )
+            ),
+            new BindingChordDefinition(
+                Chord: ["lt", "rt"],
+                Group: new DocumentIdentifier(value: "play"),
+                Held: ["look"],
+                Page: new BindingPageDefinition(
+                    Entries: [],
+                    Id: "deep"
+                )
+            ),
+        ],
+        Modifiers: [
+            new BindingModifierDefinition(
+                Id: "look",
+                Sources: ["gamepad.leftTrigger"]
+            ),
+            new BindingModifierDefinition(
+                Id: "lt",
+                Sources: ["gamepad.leftShoulder"]
+            ),
+            new BindingModifierDefinition(
+                Id: "rt",
+                Sources: ["gamepad.rightShoulder"]
+            ),
+        ],
+        Version: BindingProfileDocument.CurrentVersion
     );
+    // The `document` member of every bindingOverlays row of the shipped world world, as authored. Held as
+    // JsonElement rather than a parsed model so each caller decides which context reads it.
+    private static IEnumerable<JsonElement> WorldBindingOverlays() {
+        using var world = JsonDocument.Parse(json: File.ReadAllText(path: WorldPath()));
+
+        foreach (var overlay in world.RootElement.GetProperty(propertyName: "bindingOverlays").EnumerateArray()) {
+            if (overlay.TryGetProperty(
+                propertyName: "document",
+                value: out var document
+            )) {
+                yield return document.Clone();
+            }
+        }
+    }
     // Every CommandValue-shaped node anywhere in the shipped world, found by SHAPE rather than by path: an authored
     // constant rides a binding page entry, a wheel ring entry, and anywhere else a command takes a value, and a walk
     // that enumerated the paths it knew about would keep passing as new ones appeared.
@@ -68,56 +117,10 @@ public sealed class BindingDocumentWireShapeTests {
             }
         }
     }
-    // The `document` member of every bindingOverlays row of the shipped world world, as authored. Held as
-    // JsonElement rather than a parsed model so each caller decides which context reads it.
-    private static IEnumerable<JsonElement> WorldBindingOverlays() {
-        using var world = JsonDocument.Parse(json: File.ReadAllText(path: WorldPath()));
-
-        foreach (var overlay in world.RootElement.GetProperty(propertyName: "bindingOverlays").EnumerateArray()) {
-            if (overlay.TryGetProperty(propertyName: "document", value: out var document)) {
-                yield return document.Clone();
-            }
-        }
-    }
-    private static BindingProfileDocument Document() => new(
-        Chords: [
-            new BindingChordDefinition(
-                Group: new DocumentIdentifier(value: "play"),
-                Page: new BindingPageDefinition(
-                    Entries: [
-                        new BindingPageEntryDefinition(
-                            Command: "player.jump",
-                            Sources: ["keyboard.space"]
-                        ),
-                    ],
-                    Id: "base"
-                )
-            ),
-            new BindingChordDefinition(
-                Chord: ["lt", "rt"],
-                Group: new DocumentIdentifier(value: "play"),
-                Held: ["look"],
-                Page: new BindingPageDefinition(
-                    Entries: [],
-                    Id: "deep"
-                )
-            ),
-        ],
-        Modifiers: [
-            new BindingModifierDefinition(
-                Id: "look",
-                Sources: ["gamepad.leftTrigger"]
-            ),
-            new BindingModifierDefinition(
-                Id: "lt",
-                Sources: ["gamepad.leftShoulder"]
-            ),
-            new BindingModifierDefinition(
-                Id: "rt",
-                Sources: ["gamepad.rightShoulder"]
-            ),
-        ],
-        Version: BindingProfileDocument.CurrentVersion
+    private static string WorldPath() => Path.Combine(
+        path1: AppContext.BaseDirectory,
+        path2: "Assets",
+        path3: "puck.world.json"
     );
 
     [Fact]
@@ -141,7 +144,59 @@ public sealed class BindingDocumentWireShapeTests {
             }
         }
 
-        Assert.Equal(actual: string.Join(separator: ", ", values: offenders), expected: string.Empty);
+        Assert.Equal(
+            actual: string.Join(
+                separator: ", ",
+                values: offenders
+            ),
+            expected: string.Empty
+        );
+    }
+    [Fact]
+    public void AWrittenBindingDocumentReadsBackIdentically() {
+        // The round trip the strict reader owes the canonical writer: what the engine writes, the engine reads —
+        // no unmapped member, no lost value. A computed member on the wire fails this at the READ, by name.
+        var document = Document();
+        var written = JsonSerializer.Serialize(
+            jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument,
+            value: document
+        );
+        var reread = JsonSerializer.Deserialize(
+            json: written,
+            jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument
+        );
+
+        Assert.Equal(
+            actual: JsonSerializer.Serialize(
+                jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument,
+                value: reread!
+            ),
+            expected: written
+        );
+    }
+    [Fact]
+    public void TheShippedWorldBindingsReadBackThroughThePackageContextAlone() {
+        // The consumer's path, with no world assembly anywhere near it: read the authored section through
+        // Puck.Commands' own context, write it back, and the text is stable. This is what a Native AOT consumer
+        // does; the World's context never touches it.
+        foreach (var overlay in WorldBindingOverlays()) {
+            var document = overlay.Deserialize(jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument);
+            var written = JsonSerializer.Serialize(
+                jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument,
+                value: document
+            );
+
+            Assert.Equal(
+                actual: JsonSerializer.Serialize(
+                    jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument,
+                    value: JsonSerializer.Deserialize(
+                        json: written,
+                        jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument
+                    )
+                ),
+                expected: written
+            );
+        }
     }
     [Fact]
     public void TheShippedWorldBindingsWriteTheSameBytesThroughBothContexts() {
@@ -206,57 +261,14 @@ public sealed class BindingDocumentWireShapeTests {
                 );
             }
 
-            Assert.Equal(actual: Encoding.UTF8.GetString(bytes: stream.ToArray()), expected: text);
+            Assert.Equal(
+                actual: Encoding.UTF8.GetString(bytes: stream.ToArray()),
+                expected: text
+            );
             ++values;
         }
 
         // A walk that found nothing would pass every assertion above.
         Assert.True(condition: (values > 0));
-    }
-    [Fact]
-    public void TheShippedWorldBindingsReadBackThroughThePackageContextAlone() {
-        // The consumer's path, with no world assembly anywhere near it: read the authored section through
-        // Puck.Commands' own context, write it back, and the text is stable. This is what a Native AOT consumer
-        // does; the World's context never touches it.
-        foreach (var overlay in WorldBindingOverlays()) {
-            var document = overlay.Deserialize(jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument);
-            var written = JsonSerializer.Serialize(
-                jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument,
-                value: document
-            );
-
-            Assert.Equal(
-                actual: JsonSerializer.Serialize(
-                    jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument,
-                    value: JsonSerializer.Deserialize(
-                        json: written,
-                        jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument
-                    )
-                ),
-                expected: written
-            );
-        }
-    }
-    [Fact]
-    public void AWrittenBindingDocumentReadsBackIdentically() {
-        // The round trip the strict reader owes the canonical writer: what the engine writes, the engine reads —
-        // no unmapped member, no lost value. A computed member on the wire fails this at the READ, by name.
-        var document = Document();
-        var written = JsonSerializer.Serialize(
-            jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument,
-            value: document
-        );
-        var reread = JsonSerializer.Deserialize(
-            json: written,
-            jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument
-        );
-
-        Assert.Equal(
-            actual: JsonSerializer.Serialize(
-                jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument,
-                value: reread!
-            ),
-            expected: written
-        );
     }
 }

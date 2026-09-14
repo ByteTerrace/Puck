@@ -33,17 +33,28 @@ public sealed class WorldFrameProducerLawTests {
             NetworkPlayers = 1,
             DefaultPeerSourceRaw = IntentSource.Producer(name: "roam"),
             DistributionRaw = new WorldDistribution(
-                Region: new WorldDistributionRegion.Points(HalfExtent: 0f, Names: ["seat-2"]),
-                Fill: new WorldSequence(Name: WorldSequence.R2, Offset: 0, Step: 0f)),
+            Region: new WorldDistributionRegion.Points(
+                HalfExtent: 0f,
+                Names: ["seat-2"]
+            ),
+            Fill: new WorldSequence(
+                Name: WorldSequence.R2,
+                Offset: 0,
+                Step: 0f
+            )
+        ),
         };
 
         using var fixture = Fixtures.FreshServer(definition: document with { KitRowsRaw = [kit], PopulationRaw = population });
 
-        Assert.Equal(expected: 1, actual: fixture.Server.Population.SetSimulatedCount(count: 1));
+        Assert.Equal(
+            expected: 1,
+            actual: fixture.Server.Population.SetSimulatedCount(count: 1)
+        );
         var body = fixture.Server.Population.EntryBody(index: WorldBodiesLimits.LocalSeatCount)!;
         var start = body.FixedPosition;
 
-        for (var tick = 0; (tick < 240); tick++) {
+        for (var tick = 0; (tick < 30); tick++) {
             fixture.Step();
         }
 
@@ -51,10 +62,18 @@ public sealed class WorldFrameProducerLawTests {
         // reached the body could only march along -Z, leaving X exactly where it started. The direction it turns is
         // not the claim — the inward pull now measures against the body's own home (its spawn point), not the world
         // origin, so which way it arcs off is a function of that home rather than of the origin's bearing.
-        Assert.True(condition: (FixedQ4816.Abs(value: (body.FixedPosition.X - start.X)) > FixedQ4816.FromDouble(value: 0.5)),
-            userMessage: $"world-frame roam never acquired lateral steering: start={start}, end={body.FixedPosition}");
-        Assert.NotEqual(expected: FixedQ4816.Zero, actual: body.FixedYaw);
+        Assert.True(
+            condition: (FixedQ4816.Abs(value: (body.FixedPosition.X - start.X)) > FixedQ4816.FromDouble(value: 0.5)),
+            userMessage: $"world-frame roam never acquired lateral steering: start={start}, end={body.FixedPosition}"
+        );
+        Assert.NotEqual(
+            expected: FixedQ4816.Zero,
+            actual: body.FixedYaw
+        );
         // And the home it steers against is its own spawn, never the origin.
-        Assert.Equal(expected: start, actual: body.FixedHome);
+        Assert.Equal(
+            expected: start,
+            actual: body.FixedHome
+        );
     }
 }

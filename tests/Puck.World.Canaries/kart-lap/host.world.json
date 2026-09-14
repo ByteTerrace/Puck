@@ -46,7 +46,7 @@
       "as": "kart"
     }
   ],
-  "schema": "puck.world.def.v1",
+  "schema": "puck.world.definition.v1",
   "simulation": {
     "rateHz": 30
   },
@@ -72,9 +72,9 @@
       "operations": [
         { "$type": "orbit", "distance": 5.4626001, "pitch": 0.4145069, "yaw": 0.0 },
         { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
-        { "$type": "fov", "fieldOfViewRadians": 0.9599311 }
+        { "$type": "fieldOfView", "fieldOfViewRadians": 0.9599311 }
       ],
-      "version": "puck.camera.v1"
+      "version": "puck.camera.program.v1"
     }
   }
 }

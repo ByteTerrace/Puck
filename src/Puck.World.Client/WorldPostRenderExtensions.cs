@@ -3,7 +3,7 @@ using Puck.Shaders;
 namespace Puck.World;
 
 /// <summary>
-/// The post-render extensions this build ships: the shader sets found by their <c>puck.shader.v1</c> manifests
+/// The post-render extensions this build ships: the shader sets found by their <c>puck.shader.manifest.v1</c> manifests
 /// under the deploy's <c>Assets/Shaders</c> tree. A world document's <c>render.extensions[].id</c> is a set's id
 /// (its manifest's file stem); shipping a set is exactly shipping its manifest beside its bytecode. Read by both
 /// composition roots' pre-container <see cref="WorldExtensionVocabularyHook"/> wiring (the validator checks a
@@ -15,7 +15,11 @@ namespace Puck.World;
 /// and validated when a set is composed.</remarks>
 public static class WorldPostRenderExtensions {
     /// <summary>Gets the shipped shader sets, found under <c>Assets/Shaders</c> beside the executable.</summary>
-    public static ShaderSetCatalog Shipped { get; } = ShaderSetCatalog.Scan(rootDirectory: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders"));
+    public static ShaderSetCatalog Shipped { get; } = ShaderSetCatalog.Scan(rootDirectory: Path.Combine(
+        path1: AppContext.BaseDirectory,
+        path2: "Assets",
+        path3: "Shaders"
+    ));
 
     /// <summary>Determines whether an extension id names a shipped shader set.</summary>
     /// <param name="extensionId">The candidate id.</param>

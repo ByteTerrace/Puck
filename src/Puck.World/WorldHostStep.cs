@@ -20,23 +20,64 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     private readonly WorldConsoleWaitGate m_waitGate = waitGate;
     private readonly WorldPeerHost m_peerHost = peerHost;
     private readonly WorldInstanceHost m_instances = instances;
+    private readonly Action<ulong> m_publishStep = tick => {
+        waitGate.PublishTick(tick: tick);
+        captureScheduler.PublishTick(tick: (server.NextInputTick - 1UL));
+    };
+    private readonly SimulationTimingReporter m_timingReporter = new();
 
+    private ulong m_completedHostEngineTicks;
     // Monotonic host work coordinates keep console waits independent of an authority timeline restored by replay.
     private ulong m_completedHostSteps;
-    private ulong m_completedHostEngineTicks;
-    private readonly Action<ulong> m_publishStep = tick => {
-        waitGate.PublishTick(tick);
-        captureScheduler.PublishTick(server.NextInputTick - 1UL);
-    };
-
-    private readonly SimulationTimingReporter m_timingReporter = new();
 
     /// <summary>The exact engine time completed on the current authority timeline.</summary>
     public ulong ElapsedTicks => m_server.CompletedEngineTicks;
     /// <summary>The authored simulation rate the fixed-step pump paces this world at.</summary>
     public uint RatePerSecond => ((uint)m_server.Definition.SimulationRateHz);
     /// <summary>The number of fixed ticks completed on the current authority timeline.</summary>
-    public ulong Tick => m_server.NextInputTick - 1UL;
+    public ulong Tick => (m_server.NextInputTick - 1UL);
+
+    // The boot instance steps by the same per-instance pause/rate-0 rule as every other instance. When it is not
+    // due, the tape/wait-gate/socket bookkeeping is skipped right along with the step, but a buffered document
+    // mutation must still be able to apply, hence the administrative drain. The diegetic portal trigger's scan for
+    // boot runs immediately after its own step, reading boot's own just-settled state — never when boot did not
+    // step at all, so a paused/stopped boot's latched "inside" occupancy neither fires nor is re-evaluated until a
+    // genuine resume produces a new edge.
+    private void StepBoot(in FixedStepContext context, bool stepsBoot) {
+        if (stepsBoot) {
+            // Host work advances only when this authority steps. The server independently advances from its
+            // checkpointed clock; restoring a replay timeline rewinds that clock without rewinding console waits.
+            var bootContext = new FixedStepContext(
+                ElapsedTicks: (m_completedHostEngineTicks + context.StepTicks),
+                StepTicks: context.StepTicks,
+                Tick: m_completedHostSteps
+            );
+
+            var stepTick = WorldServerStepShell.Step(
+                context: in bootContext,
+                peerHost: m_peerHost,
+                publishTick: m_publishStep,
+                server: m_server,
+                tape: m_replayTape
+            );
+
+            m_instances.ScanBootBoundaryTriggers();
+            // Count actual host work, including fast-forward bursts, but never paused pump calls.
+            m_completedHostEngineTicks += ((stepTick - m_completedHostSteps) * context.StepTicks);
+            m_completedHostSteps = stepTick;
+        } else {
+            _ = m_server.DrainAdministrative();
+
+            // A world.wait armed before this pause landed can never see its release tick now that boot's own clock
+            // is frozen (WorldConsoleWaitGate.PublishTick only ever fires from a step that actually ran) — release
+            // it here rather than leave the held console stream, including the very world.rate resume that would
+            // lift the pause, wedged behind a hold that will never clear on its own. A no-op (returns false) on
+            // every ordinary paused/stopped tick once already released, so this costs nothing beyond one flag check.
+            if (m_waitGate.ReleaseStalled()) {
+                Console.Error.WriteLine(value: "[world.wait: released — the boot world stopped stepping (paused, rateHz 0, or a rate change the fixed-step pump has not caught up to yet) before its requested tick count was reached; resume it (world.rate resume) before arming a new wait]");
+            }
+        }
+    }
 
     /// <summary>Runs one fixed step.</summary>
     /// <param name="context">The pump's tick context; only its step width reaches the server.</param>
@@ -50,7 +91,10 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         // whether its seats' input is consumed now or held untouched. context.StepTicks is threaded in so
         // ShouldStepBoot can refuse a call whose pump-supplied width no longer matches boot's current rate.
         var stepsBoot = m_instances.ShouldStepBoot(stepTicks: context.StepTicks);
-        var phaseStart = (timingEnabled ? Stopwatch.GetTimestamp() : 0L);
+        var phaseStart = (timingEnabled
+            ? Stopwatch.GetTimestamp()
+            : 0L
+        );
 
         // Seat intents are simulation input, submitted only when boot will actually consume them this call. A
         // paused/rate-0 boot world behaves as if no ticks existed: held seat input is never buffered into the
@@ -64,8 +108,15 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
             stepTicks: context.StepTicks
         );
 
-        var rosterTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
-        phaseStart = (timingEnabled ? Stopwatch.GetTimestamp() : 0L);
+        var rosterTicks = (timingEnabled
+            ? (Stopwatch.GetTimestamp() - phaseStart)
+            : 0L
+        );
+
+        phaseStart = (timingEnabled
+            ? Stopwatch.GetTimestamp()
+            : 0L
+        );
 
         // The host-level pending-transfer FIFO's one fixed drain point — before either the boot instance or any
         // other instance steps this tick, mirroring where WorldServer.DrainPendingOps sits relative to the rest of
@@ -91,12 +142,22 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         // Machine stepping runs INSIDE WorldServerStepShell.Step (Server.WorldMachineHost.Advance, called from
         // WorldServer.Step right after WorldEngagement.FoldTick), so its cost is already folded into this phase;
         // there is no separate phase to time.
-        var populationTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
-        phaseStart = (timingEnabled ? Stopwatch.GetTimestamp() : 0L);
-        m_instances.FinishSeatIntents();
-        extensions.Pump(Tick);
+        var populationTicks = (timingEnabled
+            ? (Stopwatch.GetTimestamp() - phaseStart)
+            : 0L
+        );
 
-        var finishTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
+        phaseStart = (timingEnabled
+            ? Stopwatch.GetTimestamp()
+            : 0L
+        );
+        m_instances.FinishSeatIntents();
+        extensions.Pump(tick: Tick);
+
+        var finishTicks = (timingEnabled
+            ? (Stopwatch.GetTimestamp() - phaseStart)
+            : 0L
+        );
 
         if (timingEnabled) {
             m_timingReporter.Report(sample: new SimulationTimingReporter.Sample(
@@ -105,47 +166,6 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
                 RosterTicks: rosterTicks,
                 FinishTicks: finishTicks
             ));
-        }
-    }
-
-    // The boot instance steps by the same per-instance pause/rate-0 rule as every other instance. When it is not
-    // due, the tape/wait-gate/socket bookkeeping is skipped right along with the step, but a buffered document
-    // mutation must still be able to apply, hence the administrative drain. The diegetic portal trigger's scan for
-    // boot runs immediately after its own step, reading boot's own just-settled state — never when boot did not
-    // step at all, so a paused/stopped boot's latched "inside" occupancy neither fires nor is re-evaluated until a
-    // genuine resume produces a new edge.
-    private void StepBoot(in FixedStepContext context, bool stepsBoot) {
-        if (stepsBoot) {
-            // Host work advances only when this authority steps. The server independently advances from its
-            // checkpointed clock; restoring a replay timeline rewinds that clock without rewinding console waits.
-            var bootContext = new FixedStepContext(
-                ElapsedTicks: (m_completedHostEngineTicks + context.StepTicks),
-                StepTicks: context.StepTicks,
-                Tick: m_completedHostSteps
-            );
-
-            var stepTick = WorldServerStepShell.Step(
-                context: in bootContext,
-                publishTick: m_publishStep,
-                server: m_server,
-                tape: m_replayTape,
-                peerHost: m_peerHost
-            );
-            m_instances.ScanBootBoundaryTriggers();
-            // Count actual host work, including fast-forward bursts, but never paused pump calls.
-            m_completedHostEngineTicks += ((stepTick - m_completedHostSteps) * context.StepTicks);
-            m_completedHostSteps = stepTick;
-        } else {
-            _ = m_server.DrainAdministrative();
-
-            // A world.wait armed before this pause landed can never see its release tick now that boot's own clock
-            // is frozen (WorldConsoleWaitGate.PublishTick only ever fires from a step that actually ran) — release
-            // it here rather than leave the held console stream, including the very world.rate resume that would
-            // lift the pause, wedged behind a hold that will never clear on its own. A no-op (returns false) on
-            // every ordinary paused/stopped tick once already released, so this costs nothing beyond one flag check.
-            if (m_waitGate.ReleaseStalled()) {
-                Console.Error.WriteLine(value: "[world.wait: released — the boot world stopped stepping (paused, rateHz 0, or a rate change the fixed-step pump has not caught up to yet) before its requested tick count was reached; resume it (world.rate resume) before arming a new wait]");
-            }
         }
     }
 }

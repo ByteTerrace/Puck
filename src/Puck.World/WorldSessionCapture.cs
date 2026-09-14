@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Puck.Hosting;
 using Puck.Launcher;
 using Puck.World.Client;
@@ -8,8 +9,8 @@ namespace Puck.World;
 /// <summary>
 /// The <c>world.save</c> session-capture fold. A running world holds live session state that is
 /// not part of the loaded definition: the render levers the graphics verbs move (<see cref="WorldRenderSettings"/>), the
-/// peer-source default the population verb moves (<see cref="WorldPopulation.DefaultPeerSource"/>), the machines a
-/// runtime <c>screen.insert</c> booted onto declared screens (<see cref="WorldScreenBinder"/>), and the forced
+/// peer-source default the population verb moves (<see cref="WorldPopulation.DefaultPeerSource"/>), the host-owned
+/// named machine declarations (<see cref="WorldMachineHost.CaptureInstances"/>), and the forced
 /// binding-bar visibility the <c>world.binding-bar</c> lever writes (<see cref="WorldBindingBarVisibility"/>). The live census count
 /// (<see cref="WorldPopulation.SimulatedCount"/>) is deliberately not folded — <c>networkPlayers</c> is a durable
 /// remote-admission cap, not the transient running count, so a save persists the authored cap and the running census is
@@ -28,12 +29,12 @@ namespace Puck.World;
 /// loaded document, reported by <c>world.status</c> at verb time; it does not (and need not) cover this dimension, since
 /// an advancing row is expected to keep moving regardless of any save.
 /// <para><b>Advancing state settles at save too.</b> A row/cell's <c>StateAdvance</c>
-/// epoch is session-relative (ticks since process start), so writing it verbatim leaves a reloaded document reading
-/// frozen until the next session's tick counter climbs back past the old epoch — the fresh session's clock restarts at
-/// 0. <see cref="CaptureState"/> folds every advancing row's slot cell and every advancing keyed cell's own base into
-/// what it reads at the save tick, and resets the projected epoch to 0, so tick 0 of the next session already reads
-/// that value and keeps advancing immediately. Projection only: the live document's own base/epoch is never
-/// touched, exactly like every other dimension this class folds.</para></remarks>
+/// epoch is session-relative (engine ticks since process start), so writing it verbatim leaves a reloaded document
+/// reading frozen until the next session's engine-tick counter climbs back past the old epoch — the fresh session's
+/// clock restarts at 0. <see cref="CaptureState"/> folds every advancing row's slot cell and every advancing keyed
+/// cell's own base into what it reads at the save's completed engine tick, and resets the projected epoch to 0, so
+/// engine tick 0 of the next session already reads that value and keeps advancing immediately. Projection only: the
+/// live document's own base/epoch is never touched, exactly like every other dimension this class folds.</para></remarks>
 internal static class WorldSessionCapture {
     // Fold the world.volume session lever into the document's audio master gain (the render-levers asymmetry: the
     // lever owns "now", the document owns boot, a save reconciles them). EffectiveMasterVolume equals the document
@@ -108,25 +109,6 @@ internal static class WorldSessionCapture {
     // boot-only field is preserved as authored.
     private static WorldHostDefaults CaptureHost(WorldHostDefaults host, PresentPacingControl pacing) =>
         (host with { TargetHertz = pacing.TargetHertz, Timing = GpuTimingControl.Shared.Armed });
-    // The cable port each screen should carry after a save, from the binder's link table — the authoritative set
-    // (declared groups reconcile into it, dormant included, and screen.link/.unlink edit it): a member screen folds
-    // its (name, position) home onto its row's machine source, and a screen in no link folds null (an unlink clears
-    // the port). A link over a screen whose folded source is not a machine is unrepresentable in the document and is
-    // left out — the runtime group simply does not survive the save.
-    private static Dictionary<int, WorldMachineCable> BuildCableMap(WorldScreenBinder binder) {
-        var map = new Dictionary<int, WorldMachineCable>();
-
-        foreach (var group in binder.CaptureLinks()) {
-            for (var position = 0; (position < group.Screens.Count); position++) {
-                map[group.Screens[position]] = new WorldMachineCable(
-                    Name: group.Name,
-                    Position: position
-                );
-            }
-        }
-
-        return map;
-    }
     // Fold the live peer-source default; the local-seat count and the networkPlayers CAP are durable document config, not
     // live figures (R-C: networkPlayers is a remote admission cap, not the live census count — the running count is
     // transient session state that world.save does not persist), so they stay as authored. This keeps a fresh default
@@ -143,38 +125,13 @@ internal static class WorldSessionCapture {
         RenderScale = NearestRenderScaleTier(scale: render.RenderScale),
         UpscaleSharpness = render.UpscaleSharpness,
     });
-    // Fold a live machine insert on each declared screen back into that row's Machine source, the live cable-link
-    // table back into each machine source's cable port, and the live magazine selector back into that row's
-    // Magazine.Selected; a screen with no live insert / no link / no magazine keeps its declared row untouched.
+    // Screen capture folds only presentation state. Named machine declarations and their runtime configuration are
+    // captured from the host below, so a display consumer never becomes the persistence owner of a machine.
     private static IReadOnlyList<WorldScreen> CaptureScreens(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
         var captured = new List<WorldScreen>(capacity: screens.Count);
-        var cables = BuildCableMap(binder: binder);
 
         foreach (var screen in screens) {
-            var row = (binder.TryReadMachineInsert(
-                index: screen.Index,
-                engine: out var engine,
-                contentPath: out var contentPath,
-                options: out var options
-            )
-                ? (screen with {
-                    Source = new WorldScreenSource.Machine(
-                    ContentPath: contentPath,
-                    Engine: engine,
-                    Options: options,
-                    Cable: (screen.Source as WorldScreenSource.Machine)?.Cable
-                ),
-                })
-                : screen
-            );
-
-            if (row.Source is WorldScreenSource.Machine machine) {
-                var cable = cables.GetValueOrDefault(key: screen.Index);
-
-                if (machine.Cable != cable) {
-                    row = (row with { Source = (machine with { Cable = cable }) });
-                }
-            }
+            var row = screen;
 
             if (
                 (row.Magazine is { } magazine) &&
@@ -194,16 +151,18 @@ internal static class WorldSessionCapture {
         return captured;
     }
     // The save-time settle: a row declaring its OWN Advance (a slot-shaped row) gets its one cell rebased to the live
-    // computed value at `tick`, epoch projected to 0; a KEYED row's independently-advancing cells (StateCell.Advance)
-    // settle the same way, one at a time, leaving any non-advancing cell in the same row untouched. Both read through
-    // StateAdvance.ComputeCurrentValue — the SAME computation world.state/a rule gate/a HUD binding already read live
-    // — so the projected base is exactly what an observer would have seen this session, never a re-derived guess. A
-    // Dynamics trait settles the same way but on the TRAIT alone, never the cell's own stored truth: Y0/V0 become the
-    // live eased value/velocity WorldStateReader.TryEvaluateDynamics reports at `tick`, epoch projected to 0, so a
-    // reloaded session's follower resumes exactly where this one left it rather than snapping back to rest. A row
-    // with nothing advancing or easing returns unchanged (no allocation), matching CaptureLinks/CaptureScreens' own
-    // "nothing drifted, hand back the original list" idiom.
-    private static IReadOnlyList<WorldStateRow> CaptureState(WorldDefinition definition, ulong tick) {
+    // computed value at `engineTick`, epoch projected to 0; a KEYED row's independently-advancing cells
+    // (StateCell.Advance) settle the same way, one at a time, leaving any non-advancing cell in the same row
+    // untouched. Both read through StateAdvance.ComputeCurrentValue — the SAME computation world.state/a rule
+    // gate/a HUD binding already read live — so the projected base is exactly what an observer would have seen
+    // this session, never a re-derived guess. Cycle and Dynamics settle against the simulation tick (`tick`)
+    // instead — only Advance reads the engine clock. A Dynamics trait settles the same way but on the TRAIT
+    // alone, never the cell's own stored truth: Y0/V0 become the live eased value/velocity
+    // WorldStateReader.TryEvaluateDynamics reports at `tick`, epoch projected to 0, so a reloaded session's
+    // follower resumes exactly where this one left it rather than snapping back to rest. A row with nothing
+    // advancing or easing returns unchanged (no allocation), matching CaptureLinks/CaptureScreens' own "nothing
+    // drifted, hand back the original list" idiom.
+    private static IReadOnlyList<WorldStateRow> CaptureState(WorldDefinition definition, ulong tick, ulong engineTick) {
         var rows = definition.State;
 
         if (rows.Count == 0) {
@@ -216,6 +175,7 @@ internal static class WorldSessionCapture {
             var row = rows[index];
             var settledRow = SettleRow(
                 definition: definition,
+                engineTick: engineTick,
                 row: row,
                 tick: tick
             );
@@ -232,6 +192,48 @@ internal static class WorldSessionCapture {
         }
 
         return (((IReadOnlyList<WorldStateRow>?)captured) ?? rows);
+    }
+    private static bool MachinesDrifted(IReadOnlyList<WorldMachine> authored, WorldScreenBinder binder) {
+        var current = binder.CaptureInstances();
+
+        if (current.Count != authored.Count) {
+            return true;
+        }
+
+        for (var index = 0; (index < authored.Count); index++) {
+            var expected = authored[index];
+            var actual = current[index];
+
+            if (
+                !string.Equals(
+                a: expected.Name,
+                b: actual.Name,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                !string.Equals(
+                a: expected.Engine,
+                b: actual.Engine,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                (expected.Running != actual.Running) ||
+                !JsonElement.DeepEquals(
+                element1: expected.Configuration,
+                element2: actual.Configuration
+            ) ||
+                !Equals(
+                objA: expected.Memory,
+                objB: actual.Memory
+            ) ||
+                !Equals(
+                objA: expected.Cable,
+                objB: actual.Cable
+            )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
     // The nearest safe render-scale tier to a continuous live scale — the reverse of WorldRenderScaleTiers.Scale, matching
     // WorldCommandModule.RenderScaleName's tolerance so a tier round-trips exactly and a continuous override quantizes to
@@ -253,45 +255,7 @@ internal static class WorldSessionCapture {
         return best;
     }
     private static bool ScreensDrifted(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
-        var cables = BuildCableMap(binder: binder);
-
         foreach (var screen in screens) {
-            if (
-                binder.TryReadMachineInsert(
-                index: screen.Index,
-                engine: out var engine,
-                contentPath: out var contentPath,
-                options: out var options
-            ) &&
-                ((screen.Source is not WorldScreenSource.Machine machine) ||
-                 !string.Equals(
-                a: machine.Engine,
-                b: engine,
-                comparisonType: StringComparison.Ordinal
-            ) ||
-                 !string.Equals(
-                a: machine.ContentPath,
-                b: contentPath,
-                comparisonType: StringComparison.Ordinal
-            ) ||
-                 !string.Equals(
-                a: machine.Options,
-                b: options,
-                comparisonType: StringComparison.Ordinal
-            ))
-            ) {
-                return true;
-            }
-
-            // Cable drift: the live link table's port for this screen differs from the declared machine source's —
-            // a runtime screen.link, an unlink, or a member/order change (the same comparison the save's fold makes).
-            if (
-                (screen.Source is WorldScreenSource.Machine declaredMachine) &&
-                (declaredMachine.Cable != cables.GetValueOrDefault(key: screen.Index))
-            ) {
-                return true;
-            }
-
             // Selector drift: the live magazine pointer moved off the row's authored Selected.
             if (
                 (screen.Magazine is { } magazine) &&
@@ -308,63 +272,13 @@ internal static class WorldSessionCapture {
 
         return false;
     }
-    private static WorldStateRow SettleRow(WorldDefinition definition, WorldStateRow row, ulong tick) {
-        // A declared-but-never-set slot row holds no cell yet, so there is nothing to settle and nothing to index.
-        if (row.Cells is not { Count: > 0 }) {
-            return row;
-        }
-
-        // A slot-shaped row's OWN trait governs its one cell — the row-level counterpart of a keyed cell's own trait
-        // below, and never both on the SAME cell (the validator refuses a slot-shaped row from declaring Advance or
-        // Dynamics beside a keyed cells array, or the two together, in the first place).
-        if (row.Advance is { } rowAdvance) {
-            var slot = row.Cells![0];
-            var settledValue = rowAdvance.ComputeCurrentValue(
-                row: row,
-                baseValue: slot.Value,
-                currentTick: tick
-            );
-
-            return (row with {
-                Advance = (rowAdvance with { EpochTick = 0 }),
-                Cells = [(slot with { Value = settledValue })],
-            });
-        }
-
-        if (row.Dynamics is { } rowDynamics) {
-            var slot = row.Cells![0];
-
-            if (!WorldStateReader.TryEvaluateDynamics(
-                cell: slot,
-                definition: definition,
-                row: row,
-                sample: out var sample,
-                tick: tick,
-                trait: out _
-            )) {
-                return row;
-            }
-
-            return (row with {
-                Dynamics = (rowDynamics with {
-                    EpochTick = 0,
-                    V0 = StateReader.DynamicsFixedToTraitRaw(value: sample.Velocity),
-                    Y0 = StateReader.DynamicsFixedToTraitRaw(value: sample.Value),
-                }),
-            });
-        }
-
-        // A cycling slot settles to its current rotation index (or node) at epoch zero and carries its current
-        // substep remainder, so reload preserves both the value now and the tick of the next transition.
-        if (row.Cycle is { } rowCycle) {
-            var slot = row.Cells![0];
-
-            return (row with {
-                Cycle = (rowCycle with { EpochTick = 0, SubstepTicks = rowCycle.SettledSubstep(currentTick: tick) }),
-                Cells = [(slot with { Value = rowCycle.SettledPhase(baseValue: slot.Value, currentTick: tick, row: row) })],
-            });
-        }
-
+    // Settles every cell the row carries at `tick`/`engineTick`, whatever its effective behavior (its own, or its
+    // row's default) resolves to: an advancing cell's live accumulated value (read against `engineTick`) becomes
+    // its new stored base; a cycling cell's live rotation (or node) becomes its new stored phase, carrying its
+    // substep remainder; a dynamics cell's sampled position/velocity replace its clock — every clock settles to
+    // epoch zero (both EpochTick and EpochEngineTick), so a save/reload continues from exactly where the live
+    // world stood. A cell whose effective behavior is none is untouched.
+    private static WorldStateRow SettleRow(WorldDefinition definition, WorldStateRow row, ulong tick, ulong engineTick) {
         if (row.Cells is not { Count: > 0 } cells) {
             return row;
         }
@@ -373,49 +287,68 @@ internal static class WorldSessionCapture {
 
         for (var index = 0; (index < cells.Count); index++) {
             var cell = cells[index];
+            var behavior = EffectiveBehavior.Resolve(
+                cell: cell,
+                row: row
+            );
+            var clock = cell.Clock;
 
-            if (cell.Advance is { } cellAdvance) {
+            if (behavior.Advance is { } advance) {
                 settledCells ??= new List<StateCell>(collection: cells);
                 settledCells[index] = (cell with {
-                    Value = cellAdvance.ComputeCurrentValue(
-                    row: row,
+                    Value = advance.ComputeCurrentValue(
                     baseValue: cell.Value,
-                    currentTick: tick
+                    currentEngineTick: engineTick,
+                    epochEngineTick: (clock?.EpochEngineTick ?? 0L),
+                    row: row
                 ),
-                    Advance = (cellAdvance with { EpochTick = 0 }),
+                    Clock = new StateCellClock(EpochEngineTick: 0, EpochTick: 0),
                 });
 
                 continue;
             }
 
-            if (cell.Cycle is { } cellCycle) {
+            if (behavior.Cycle is { } cycle) {
+                var epochTick = (clock?.EpochTick ?? 0L);
+                var substepTicks = (clock?.SubstepTicks ?? 0L);
+
                 settledCells ??= new List<StateCell>(collection: cells);
                 settledCells[index] = (cell with {
-                    Value = cellCycle.SettledPhase(baseValue: cell.Value, currentTick: tick, row: row),
-                    Cycle = (cellCycle with { EpochTick = 0, SubstepTicks = cellCycle.SettledSubstep(currentTick: tick) }),
+                    Value = cycle.SettledPhase(
+                    baseValue: cell.Value,
+                    currentTick: tick,
+                    epochTick: epochTick,
+                    row: row,
+                    substepTicks: substepTicks
+                ),
+                    Clock = new StateCellClock(EpochTick: 0, SubstepTicks: cycle.SettledSubstep(
+                    currentTick: tick,
+                    epochTick: epochTick,
+                    substepTicks: substepTicks
+                )),
                 });
 
                 continue;
             }
 
             if (
-                (cell.Dynamics is { } cellDynamics) &&
+                (behavior.Dynamics is not null) &&
                 WorldStateReader.TryEvaluateDynamics(
                 cell: cell,
                 definition: definition,
                 row: row,
-                sample: out var cellSample,
+                sample: out var sample,
                 tick: tick,
                 trait: out _
             )
             ) {
                 settledCells ??= new List<StateCell>(collection: cells);
                 settledCells[index] = (cell with {
-                    Dynamics = (cellDynamics with {
-                        EpochTick = 0,
-                        V0 = StateReader.DynamicsFixedToTraitRaw(value: cellSample.Velocity),
-                        Y0 = StateReader.DynamicsFixedToTraitRaw(value: cellSample.Value),
-                    }),
+                    Clock = new StateCellClock(
+                    EpochTick: 0,
+                    V0: StateReader.DynamicsFixedToTraitRaw(value: sample.Velocity),
+                    Y0: StateReader.DynamicsFixedToTraitRaw(value: sample.Value)
+                ),
                 });
             }
         }
@@ -427,7 +360,7 @@ internal static class WorldSessionCapture {
     }
 
     /// <summary>Composes the save snapshot: the live definition with the session dimensions (render levers, the
-    /// peer-source default, screen inserts, the master-volume lever, the primary seat's forced binding-bar
+    /// peer-source default, named machine declarations, the master-volume lever, the primary seat's forced binding-bar
     /// visibility) folded into <see cref="WorldDefinition.Render"/>,
     /// <see cref="WorldDefinition.Population"/>, the <see cref="WorldDefinition.Screens"/> rows' machine sources,
     /// <see cref="WorldDefinition.Audio"/>'s master gain, <see cref="WorldDefinition.BindingOverlays"/>'s first row,
@@ -440,9 +373,12 @@ internal static class WorldSessionCapture {
     /// <param name="audio">The audio director (the <c>world.volume</c> session lever).</param>
     /// <param name="pacing">The live present-pacing control (the <c>world.target</c> session lever).</param>
     /// <param name="bindingBar">The live per-seat binding-bar visibility (the <c>world.binding-bar</c> session lever).</param>
-    /// <param name="tick">The server's completed tick — the instant <c>state</c>'s advancing rows/cells settle at.</param>
+    /// <param name="tick">The server's completed tick — the instant <c>state</c>'s cycling/dynamics rows/cells
+    /// settle at.</param>
+    /// <param name="engineTick">The server's completed engine tick — the instant <c>state</c>'s advancing
+    /// rows/cells settle at.</param>
     /// <returns>The snapshot definition to serialize.</returns>
-    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing, WorldBindingBarVisibility bindingBar, ulong tick) {
+    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing, WorldBindingBarVisibility bindingBar, ulong tick, ulong engineTick) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: render);
         ArgumentNullException.ThrowIfNull(argument: population);
@@ -464,6 +400,7 @@ internal static class WorldSessionCapture {
             population: population,
             defaults: definition.Population
         ),
+            MachinesRaw = binder.CaptureInstances(),
             ScreensRaw = CaptureScreens(
             screens: definition.Screens,
             binder: binder
@@ -480,6 +417,7 @@ internal static class WorldSessionCapture {
             StateRaw = ((definition.StateRaw ?? new WorldStateSection()) with {
                 World = CaptureState(
             definition: definition,
+            engineTick: engineTick,
             tick: tick
         ),
             }),
@@ -513,6 +451,13 @@ internal static class WorldSessionCapture {
             drifted.Add(item: "population");
         }
 
+        if (MachinesDrifted(
+            authored: definition.Machines,
+            binder: binder
+        )) {
+            drifted.Add(item: "machines");
+        }
+
         if (ScreensDrifted(
             screens: definition.Screens,
             binder: binder
@@ -540,9 +485,9 @@ internal static class WorldSessionCapture {
         // folded, so an unforced (or already-agreeing) bar never reports drift.
         if (!ReferenceEquals(
             objA: CaptureBindingOverlays(
-            definition: definition,
-            visibility: bindingBar
-        ),
+                definition: definition,
+                visibility: bindingBar
+            ),
             objB: definition.BindingOverlaysRaw
         )) {
             drifted.Add(item: "bindings");

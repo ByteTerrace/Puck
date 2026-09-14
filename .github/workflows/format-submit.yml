@@ -5,40 +5,48 @@ run-name: Apply verified formatting — ${{ github.event.workflow_run.head_branc
 # Only this workflow and the submitter from the default branch are executed.
 on:
   workflow_run:
-    workflows: [Check source formatting]
     types: [completed]
+    workflows: [Check source formatting]
 
 permissions:
   contents: read
 
 concurrency:
-  group: format-submit-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
+  group: format-submit-${{ github.event.workflow_run.head_branch }}
+
+env:
+  CI: true
+  DOTNET_NOLOGO: true
 
 jobs:
   submit:
-    name: Apply the verified formatting patch
     if: >-
       github.event.workflow_run.conclusion == 'success' ||
       github.event.workflow_run.conclusion == 'failure'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    name: Apply the verified formatting patch
     permissions:
       actions: write
       contents: write
       pull-requests: read
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
       - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: ./.github/actions/setup-dotnet
         with:
-          global-json-file: global.json
-      - name: Validate and apply the formatting artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
+          cache: "true"
+      - name: Install pinned DXC
+        uses: ./.github/actions/setup-dxc
+      - name: Install Puck CLI from the default branch
+        uses: ./.github/actions/setup-puck
+      - env:
           FORMAT_RUN_ID: ${{ github.event.workflow_run.id }}
-        run: dotnet run -c Release --file build/FormatSubmit.cs
+          GH_TOKEN: ${{ github.token }}
+        name: Validate and apply the formatting artifact
+        run: puck format submit
+    timeout-minutes: 40

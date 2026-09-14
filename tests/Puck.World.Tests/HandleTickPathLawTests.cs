@@ -15,10 +15,17 @@ namespace Puck.World.Tests;
 public sealed class HandleTickPathLawTests(ITestOutputHelper output) {
     [Fact]
     public void ShippedWorldIdleTicksStaySteadyStateAllocation() {
-        var definition = AuthoredGameFixtures.Nexus;
-        using var fixture = Fixtures.FreshServer(definition: definition);
+        const string WorldPath = "src/Puck.World/Assets/worlds/puck.world.json";
+        var catalog = TestHookInstaller.CreateMachineCatalog();
+        var definition = AuthoredGameFixtures.Load(relativePath: WorldPath, catalog: catalog);
+        using var fixture = Fixtures.FreshServer(
+            definition: definition,
+            machineCatalog: catalog,
+            documentPath: Path.Combine(path1: AuthoredGameFixtures.Root, path2: WorldPath)
+        );
         var width = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
 
+        // Match puck bench world's warmup: the shipped world's startup rules are still writing after eight ticks.
         for (var tick = 0; (tick < 60); tick++) {
             fixture.Step(stepTicks: width);
         }
@@ -37,8 +44,11 @@ public sealed class HandleTickPathLawTests(ITestOutputHelper output) {
         var median = samples[(samples.Length / 2)];
         var widest = samples[^1];
 
-        output.WriteLine($"shipped world idle: median {median:N0} bytes/tick, widest {widest:N0} bytes/tick");
+        output.WriteLine(message: $"shipped world idle: median {median:N0} bytes/tick, widest {widest:N0} bytes/tick");
 
-        Assert.True(median < (8L * 1024L), $"expected a quiet idle tick under 8 KiB, measured a median of {median:N0} bytes");
+        Assert.True(
+            condition: (median < (8L * 1024L)),
+            userMessage: $"expected a quiet idle tick under 8 KiB, measured a median of {median:N0} bytes"
+        );
     }
 }

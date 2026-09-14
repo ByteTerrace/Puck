@@ -29,7 +29,10 @@ public static class VerifyMachineSettle {
         for (var guard = 0; (guard < 4096); guard++) {
             var pc = cpu.ProgramCounter;
 
-            if ((pc < DmaTrampolineFirst) || (pc > DmaTrampolineLast)) {
+            if (
+                (pc < DmaTrampolineFirst) ||
+                (pc > DmaTrampolineLast)
+            ) {
                 return;
             }
 

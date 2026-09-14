@@ -76,16 +76,18 @@ outside this contract and takes the references as written.
 ## Review discipline
 
 - Start with a profile, benchmark, allocation trace, or demonstrated hot path.
-- **`Puck.Maths` has a measurement harness; the rest of the tree does not.**
-  `puck bench` is the microscope — disassembly, allocation columns, percentiles
-  — documented in [`src/Puck.Cli/README.md`](../../../src/Puck.Cli/README.md),
+- **Two measurement harnesses exist: `Puck.Maths` kernels and the World server
+  tick path.** `puck bench` is the BenchmarkDotNet microscope for Maths —
+  disassembly, allocation columns, percentiles — and `puck bench world` is a
+  stopwatch lane over server construction, the idle tick, and a scripted
+  Klondike deal. Both are documented in
+  [`src/Puck.Cli/README.md`](../../../src/Puck.Cli/README.md),
   which also carries the measurement hygiene: numbers taken on a busy machine
   are garbage rather than merely pessimistic, and two runs disagreeing by more
   than ~10% mean the machine was not quiet. The pass/fail counterpart is the law
   suite's Bench tier in
   [`tests/Puck.Maths.Tests/README.md`](../../../tests/Puck.Maths.Tests/README.md).
-  Outside `Puck.Maths`, say which harness you built and why it measures the
-  claim.
+  Outside those two, say which harness you built and why it measures the claim.
 - Prefer idiomatic code the .NET 10 JIT and libraries recognize.
 - Check the folklore section before preserving an old hand-optimization.
 - Keep semantic behavior, exception behavior, and readability explicit;

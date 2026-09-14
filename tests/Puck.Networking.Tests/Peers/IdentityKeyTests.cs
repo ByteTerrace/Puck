@@ -17,56 +17,49 @@ public sealed class IdentityKeyTests {
         new Oid(oid: "1.3.6.1.5.5.7.3.2"),
     ];
 
-    /// <summary>Mints a self-signed certificate over <paramref name="request"/>'s key the way
-    /// <see cref="PeerIdentity.CreateTransportCertificate"/> does, so the only difference between it and an honest
-    /// transport certificate is the key's algorithm.</summary>
-    private static X509Certificate2 SelfSigned(CertificateRequest request) {
-        request.CertificateExtensions.Add(item: new X509KeyUsageExtension(
-            critical: false,
-            keyUsages: X509KeyUsageFlags.DigitalSignature
-        ));
-        request.CertificateExtensions.Add(item: new X509EnhancedKeyUsageExtension(
-            critical: false,
-            enhancedKeyUsages: [.. TransportCertificateUsages]
-        ));
+    private static async Task AssertRefusedAsIdentityKeyInvalidAsync(X509Certificate2 certificate) {
+        using var deadline = Laws.SocketDeadline();
 
-        var now = DateTimeOffset.UtcNow;
+        await using var acceptor = PeerTestSupport.NewPeer();
 
-        using var ephemeral = request.CreateSelfSigned(
-            notAfter: now.AddDays(days: 1),
-            notBefore: now.AddDays(days: -1)
+        var endpoint = await PeerTestSupport.ListenLoopbackAsync(peer: acceptor);
+        var toldToDialer = await DialOfferingOwnKeyAsync(
+            certificate: certificate,
+            ct: deadline.Token,
+            endpoint: endpoint
         );
 
-        return X509CertificateLoader.LoadPkcs12(
-            data: ephemeral.ExportPkcs12(
-                exportParameters: Pkcs12ExportPbeParameters.Default,
-                password: null
-            ),
-            keyStorageFlags: X509KeyStorageFlags.DefaultKeySet,
-            password: null
+        Assert.Equal(
+            actual: toldToDialer,
+            expected: PeerRefusal.IdentityKeyInvalid
         );
-    }
-    private static X509Certificate2 P384Certificate() {
-        using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP384);
 
-        return SelfSigned(request: new CertificateRequest(
-            hashAlgorithm: HashAlgorithmName.SHA384,
-            key: key,
-            subjectName: "CN=not-p256"
-        ));
-    }
-    /// <summary>Mints an RSA certificate of <paramref name="keySizeInBits"/>: 2048 bits gives a 294-byte SPKI, under
-    /// the attestation profile's 512-byte SPKI cap; 4096 bits gives a 550-byte one, over it — and both must be refused
-    /// by the same name, since an oversized key is still an honestly offered wrong key, not a grammar violation.</summary>
-    private static X509Certificate2 RsaCertificate(int keySizeInBits) {
-        using var key = RSA.Create(keySizeInBits: keySizeInBits);
+        var recorded = await PeerTestSupport.NextHandshakeRefusalAsync(peer: acceptor);
 
-        return SelfSigned(request: new CertificateRequest(
-            hashAlgorithm: HashAlgorithmName.SHA256,
-            key: key,
-            padding: RSASignaturePadding.Pkcs1,
-            subjectName: "CN=not-p256"
-        ));
+        Assert.Equal(
+            expected: PeerRefusal.IdentityKeyInvalid,
+            actual: recorded.Failure.Refusal
+        );
+        Assert.Empty(collection: acceptor.Links);
+
+        // The refusal spent nothing the acceptor needs for the next dialer: an honest peer still gets a link.
+        await using var honest = PeerTestSupport.NewPeer();
+
+        var linkHonestToAcceptor = await honest.DialAsync(
+            ct: deadline.Token,
+            endpoint: endpoint
+        );
+        var linkAcceptorToHonest = await acceptor.IncomingLinks.ReadAsync(cancellationToken: deadline.Token);
+
+        Assert.Equal(
+            expected: honest.Id.Domain,
+            actual: linkAcceptorToHonest.RemoteId.Domain
+        );
+        Assert.Equal(
+            expected: acceptor.Id.Domain,
+            actual: linkHonestToAcceptor.RemoteId.Domain
+        );
+        Assert.Single(collection: acceptor.Links);
     }
     /// <summary>Dials <paramref name="endpoint"/> over the real QUIC transport presenting <paramref name="certificate"/>,
     /// writes a well-formed Hello offer naming that certificate's own key, and returns the refusal the acceptor
@@ -134,55 +127,62 @@ public sealed class IdentityKeyTests {
 
         return ((PeerRefusal)Assert.Single(collection: refused.Body.ToArray()));
     }
-    private static async Task AssertRefusedAsIdentityKeyInvalidAsync(X509Certificate2 certificate) {
-        using var deadline = Laws.SocketDeadline();
+    private static X509Certificate2 P384Certificate() {
+        using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP384);
 
-        await using var acceptor = PeerTestSupport.NewPeer();
+        return SelfSigned(request: new CertificateRequest(
+            hashAlgorithm: HashAlgorithmName.SHA384,
+            key: key,
+            subjectName: "CN=not-p256"
+        ));
+    }
+    /// <summary>Mints an RSA certificate of <paramref name="keySizeInBits"/>: 2048 bits gives a 294-byte SPKI, under
+    /// the attestation profile's 512-byte SPKI cap; 4096 bits gives a 550-byte one, over it — and both must be refused
+    /// by the same name, since an oversized key is still an honestly offered wrong key, not a grammar violation.</summary>
+    private static X509Certificate2 RsaCertificate(int keySizeInBits) {
+        using var key = RSA.Create(keySizeInBits: keySizeInBits);
 
-        var endpoint = await PeerTestSupport.ListenLoopbackAsync(peer: acceptor);
-        var toldToDialer = await DialOfferingOwnKeyAsync(
-            certificate: certificate,
-            ct: deadline.Token,
-            endpoint: endpoint
+        return SelfSigned(request: new CertificateRequest(
+            hashAlgorithm: HashAlgorithmName.SHA256,
+            key: key,
+            padding: RSASignaturePadding.Pkcs1,
+            subjectName: "CN=not-p256"
+        ));
+    }
+    /// <summary>Mints a self-signed certificate over <paramref name="request"/>'s key the way
+    /// <see cref="PeerIdentity.CreateTransportCertificate"/> does, so the only difference between it and an honest
+    /// transport certificate is the key's algorithm.</summary>
+    private static X509Certificate2 SelfSigned(CertificateRequest request) {
+        request.CertificateExtensions.Add(item: new X509KeyUsageExtension(
+            critical: false,
+            keyUsages: X509KeyUsageFlags.DigitalSignature
+        ));
+        request.CertificateExtensions.Add(item: new X509EnhancedKeyUsageExtension(
+            critical: false,
+            enhancedKeyUsages: [.. TransportCertificateUsages]
+        ));
+
+        var now = DateTimeOffset.UtcNow;
+
+        using var ephemeral = request.CreateSelfSigned(
+            notAfter: now.AddDays(days: 1),
+            notBefore: now.AddDays(days: -1)
         );
 
-        Assert.Equal(
-            actual: toldToDialer,
-            expected: PeerRefusal.IdentityKeyInvalid
+        return X509CertificateLoader.LoadPkcs12(
+            data: ephemeral.ExportPkcs12(
+                exportParameters: Pkcs12ExportPbeParameters.Default,
+                password: null
+            ),
+            keyStorageFlags: X509KeyStorageFlags.DefaultKeySet,
+            password: null
         );
-
-        var recorded = await PeerTestSupport.NextHandshakeRefusalAsync(peer: acceptor);
-
-        Assert.Equal(
-            expected: PeerRefusal.IdentityKeyInvalid,
-            actual: recorded.Failure.Refusal
-        );
-        Assert.Empty(collection: acceptor.Links);
-
-        // The refusal spent nothing the acceptor needs for the next dialer: an honest peer still gets a link.
-        await using var honest = PeerTestSupport.NewPeer();
-
-        var linkHonestToAcceptor = await honest.DialAsync(
-            ct: deadline.Token,
-            endpoint: endpoint
-        );
-        var linkAcceptorToHonest = await acceptor.IncomingLinks.ReadAsync(cancellationToken: deadline.Token);
-
-        Assert.Equal(
-            expected: honest.Id.Domain,
-            actual: linkAcceptorToHonest.RemoteId.Domain
-        );
-        Assert.Equal(
-            expected: acceptor.Id.Domain,
-            actual: linkHonestToAcceptor.RemoteId.Domain
-        );
-        Assert.Single(collection: acceptor.Links);
     }
 
+    [Fact]
+    public Task DialerPresentingAP384Certificate_IsRefusedAsIdentityKeyInvalid_AndAnHonestPeerStillConnects() => AssertRefusedAsIdentityKeyInvalidAsync(certificate: P384Certificate());
     [Fact]
     public Task DialerPresentingAnRsa2048Certificate_IsRefusedAsIdentityKeyInvalid_AndAnHonestPeerStillConnects() => AssertRefusedAsIdentityKeyInvalidAsync(certificate: RsaCertificate(keySizeInBits: 2048));
     [Fact]
     public Task DialerPresentingAnRsa4096Certificate_WhoseSpkiIsOverTheAttestationCap_IsRefusedAsIdentityKeyInvalid_AndAnHonestPeerStillConnects() => AssertRefusedAsIdentityKeyInvalidAsync(certificate: RsaCertificate(keySizeInBits: 4096));
-    [Fact]
-    public Task DialerPresentingAP384Certificate_IsRefusedAsIdentityKeyInvalid_AndAnHonestPeerStillConnects() => AssertRefusedAsIdentityKeyInvalidAsync(certificate: P384Certificate());
 }

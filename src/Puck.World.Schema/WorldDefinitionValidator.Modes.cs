@@ -25,7 +25,10 @@ public static partial class WorldDefinitionValidator {
             if (string.IsNullOrWhiteSpace(value: family.Name)) {
                 errors.Add(item: $"{path}.name is required.");
             } else if (reserved.Contains(value: family.Name)) {
-                errors.Add(item: $"{path}.name '{family.Name}' collides with a built-in context family — {string.Join(separator: ", ", values: reserved)}.");
+                errors.Add(item: $"{path}.name '{family.Name}' collides with a built-in context family — {string.Join(
+                    separator: ", ",
+                    values: reserved
+                )}.");
             } else if (family.Name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: WorldStateBindingContext.FamilyPrefix
@@ -106,9 +109,9 @@ public static partial class WorldDefinitionValidator {
                     (placement?.Inhabit is not null) &&
                     (placement.Id is { } id) &&
                     id.StartsWith(
-                        comparisonType: StringComparison.Ordinal,
-                        value: WorldSeatModeState.CameraPlacementIdPrefix
-                    )
+                    comparisonType: StringComparison.Ordinal,
+                    value: WorldSeatModeState.CameraPlacementIdPrefix
+                )
                 ) {
                     hasCameraBody = true;
 

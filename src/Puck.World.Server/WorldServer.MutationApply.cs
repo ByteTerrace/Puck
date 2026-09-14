@@ -4,6 +4,9 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
+    // Set only while the single-threaded mutation apply call is running. It lets the deferred typed completion carry
+    // the exact refusal detail already emitted by the legacy echo path without changing the composition/staging code.
+    private string? m_lastMutationFailureDetail;
     private bool ApplyDesignationCore(WorldDesignation designation, WorldPrincipal principal, bool knownSubject, int connectionId, long correlationId) {
         var sourceIndex = designation.EntityIndex;
 
@@ -210,7 +213,7 @@ public sealed partial class WorldServer {
     // correlation identity onto the WorldEditEcho those methods emit. Grant/Revoke's actor and Session/Mutation/
     // Definition/Undo/Composition/Lever's acting principal are ALWAYS the envelope's own Principal — the one field
     // every submission kind funnels its acting identity through now, never a second copy.
-    private WorldSubmissionResult ApplyEnvelope(SubmissionEnvelope envelope) {
+    private WorldSubmissionResult? ApplyEnvelope(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) {
         switch (envelope.Payload) {
             case WorldSubmissionPayload.Command command:
                 ApplyCommand(
@@ -250,6 +253,12 @@ public sealed partial class WorldServer {
 
                 return WorldSubmissionResult.Ack.Instance;
             case WorldSubmissionPayload.Mutation mutation:
+                if (!WorldMutationBindingFactory.TryCreate(in envelope, out var binding, out var bindingDetail)) {
+                    return new WorldSubmissionResult.Refusal(
+                        Code: "world.mutation.ingress_refused",
+                        Detail: bindingDetail
+                    );
+                }
                 // The tape's one mutation ingress: fires here rather than at the loopback so a forwarded traveller's
                 // submission and an admitted peer's are captured on the same terms as a local one, each with the
                 // actor its own envelope stamped. See WorldServer.MutationTap.
@@ -261,6 +270,8 @@ public sealed partial class WorldServer {
                     mutation: mutation.Value,
                     connectionId: envelope.ConnectionId,
                     correlationId: envelope.CorrelationId,
+                    binding: binding,
+                    completion: completion,
                     // Threaded through the buffered op itself, never a generic drain-wide firing: only THIS dispatch
                     // point — the one MutationTap above also covers — ever supplies a completion, so a guest's
                     // decoded act and a rule's generate effect (both call EnqueueMutation directly) never produce one.
@@ -272,7 +283,9 @@ public sealed partial class WorldServer {
                     : null)
                 );
 
-                return WorldSubmissionResult.Ack.Instance;
+                // The typed mutation result is delivered from DrainPendingOps after actual apply. Returning null
+                // transfers the ordered entry's completion ownership to that pending operation.
+                return null;
             case WorldSubmissionPayload.Undo undo:
                 EnqueueUndo(
                     count: undo.Count,
@@ -327,6 +340,13 @@ public sealed partial class WorldServer {
                 );
 
                 return WorldSubmissionResult.Ack.Instance;
+            case WorldSubmissionPayload.Operation operation:
+                return new WorldSubmissionResult.MachineOperation(Result: ApplyMachineOperation(
+                    operation: operation.Value,
+                    principal: envelope.Principal,
+                    connectionId: envelope.ConnectionId,
+                    correlationId: envelope.CorrelationId
+                ));
             default:
                 // No silent fallback: a new payload kind added without its own arm here would otherwise vanish
                 // silently — a build-time authoring gap, surfaced loudly rather than dropped.
@@ -383,7 +403,8 @@ public sealed partial class WorldServer {
             contentHash: out var rereadHash,
             definition: out var reread,
             path: path,
-            reason: out var rereadReason
+            reason: out var rereadReason,
+            documents: RebuildDocuments
         )) {
             throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: cannot re-read '{path}' for replay — {rereadReason}");
         } else {
@@ -568,6 +589,9 @@ public sealed partial class WorldServer {
         bool[]? newRebuildTickCollided = null;
         var rebuildAddonPlanCommitted = false;
 
+        IWorldMachinePreparedPlan? rebuildMachinePlan = null;
+        var rebuildMachinePlanCommitted = false;
+
         // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
         // shape for why: rebuildAddonPlan starts null, so a return before TryPrepare ever succeeds leaves the
         // finally a no-op, and a downstream throw from contention-array staging, Install, or Commit alike still
@@ -612,6 +636,22 @@ public sealed partial class WorldServer {
                 return false;
             }
 
+            if (!m_machines.TryPrepare(
+                candidate: candidate,
+                current: m_definition,
+                plan: out rebuildMachinePlan,
+                reason: out var rebuildMachineReason
+            )) {
+                RejectRebuild(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    reason: $"screen machine {rebuildMachineReason}",
+                    verb: verb
+                );
+
+                return false;
+            }
+
             SwapSolids(solids: rebuildSolids);
             if (request.Kind != WorldRebuildKind.Reset) {
                 m_machines.SetDocumentPath(documentPath: request.PathHint);
@@ -640,9 +680,18 @@ public sealed partial class WorldServer {
                     m_tickCollided = newRebuildTickCollided!;
                 }
             }
+
+            if (rebuildMachinePlan is not null) {
+                m_machines.Commit(plan: rebuildMachinePlan);
+                rebuildMachinePlanCommitted = true;
+            }
         } finally {
             if (!rebuildAddonPlanCommitted) {
                 rebuildAddonPlan?.Dispose();
+            }
+
+            if (!rebuildMachinePlanCommitted) {
+                rebuildMachinePlan?.Dispose();
             }
         }
 
@@ -714,6 +763,10 @@ public sealed partial class WorldServer {
             m_addons!.Finish(plan: rebuildAddonPlan!);
         }
 
+        if (rebuildMachinePlanCommitted) {
+            m_machines.Finish(plan: rebuildMachinePlan!);
+        }
+
         // Reset targets the base WITHOUT moving it (the whole point: repeated resets always land on the same base
         // until the next save/load). Load/Reload REPLACE the base — the newly installed document becomes what the
         // NEXT reset targets, exactly like a swap always has.
@@ -747,7 +800,7 @@ public sealed partial class WorldServer {
     }
     // The non-consuming primer path for AttachSink: PEEKS every body's continuity hint instead of consuming it, so a
     // newly attached sink's boot-state primer can never steal the flag an already-attached sink is still due to
-    // observe via the next ordinary EmitSnapshot broadcast (the bug this repairs — see docs/vision.md's
+    // observe via the next ordinary EmitSnapshot broadcast (the bug this repairs — see docs/architecture/worlds.md's
     // "Observation and display" section). Stamped with the server's actual current tick/step width
     // (m_lastCompletedTick/m_lastStepTicks), which are still their default 0/0 before the very first Step has ever
     // run — the one case where 0/0 is the honest answer, preserved exactly.
@@ -824,7 +877,8 @@ public sealed partial class WorldServer {
             ),
             Authority: AuthorityIdentity,
             FieldCells: fieldCells,
-            FieldsFull: fieldsFull
+            FieldsFull: fieldsFull,
+            EngineTick: CompletedEngineTicks
         );
     }
     // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo (Rejected,
@@ -993,8 +1047,8 @@ public sealed partial class WorldServer {
         foreach (var name in m_touchedRows) {
             if (
                 catalog.TryResolve(lane: StateLane.Document, name: name, handle: out var handle) &&
-                catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) &&
-                definition.State[descriptor.LaneOrdinal].GatesDrive
+                StateReader.TryResolveRowHandle(rows: definition.State, catalog: catalog, handle: handle, rowOrdinal: out var ordinal, row: out _) &&
+                definition.State[ordinal].GatesDrive
             ) {
                 return true;
             }
@@ -1077,6 +1131,7 @@ public sealed partial class WorldServer {
         }
     }
     private void Reject(WorldMutation mutation, string reason, int connectionId, long correlationId) {
+        m_lastMutationFailureDetail = reason;
         if (m_output.HasNarrationSink) {
             m_output.Narrate(channel: "world.mutation rejected", text: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
         }
@@ -1160,7 +1215,8 @@ public sealed partial class WorldServer {
     // (with-expression) → revalidate the WHOLE document → capacity-check scene/screen edits against the probed render
     // envelope → on any failure reject loudly (definition unchanged) → on success swap the live definition, rebuild the
     // changed section's derived state, and journal it.
-    private bool TryApplyMutation(WorldMutation mutation, ulong tick, int connectionId, long correlationId, bool preMetered) {
+    private bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered) {
+        m_lastMutationFailureDetail = null;
         // THE ONE ADMISSION PREDICATE decides the whole authority question — section hold, the Mutate/section kind
         // mask, the row-scoped Edit hold and ITS mask, and the untrusted per-tick dispatch budget. Every ordered-domain
         // ingress converges here (loopback, console, and the QUIC peer door alike), so this call is what gives the peer
@@ -1169,6 +1225,7 @@ public sealed partial class WorldServer {
         // meters at its own pre-flight, before decode, deliberately); it never changes which rules run.
         if (!TryAdmitCompleteMutation(mutation, preMetered, out var admission)) {
             var denial = admission.Describe();
+            m_lastMutationFailureDetail = denial;
 
             if (m_output.HasNarrationSink) {
                 m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {mutation.Principal.Describe()} {denial} — {Describe(mutation: mutation)} dropped]");
@@ -1190,6 +1247,7 @@ public sealed partial class WorldServer {
             current: m_definition,
             mutation: mutation,
             tick: tick,
+            engineTick: engineTick,
             instanceIdentity: InstanceIdentity,
             candidate: out var candidate,
             reason: out var composeReason,
@@ -1210,7 +1268,8 @@ public sealed partial class WorldServer {
             candidate: candidate,
             mutation: mutation,
             original: m_definition,
-            tick: tick
+            tick: tick,
+            engineTick: engineTick
         );
 
         if (
@@ -1342,25 +1401,10 @@ public sealed partial class WorldServer {
             }
         }
 
-        // Assign the field BEFORE the rebuild so a recompiled body's first step already solves against it. A field change
-        // forces a population rebuild (bodies must receive the new field reference) even when the mutation kind is not
-        // otherwise population-affecting; the analytic path is untouched (solidAffecting is inert without the field provider).
-        if (
-            solidAffecting &&
-            !ReferenceEquals(
-            objA: solids,
-            objB: m_solids
-        )
-        ) {
-            m_solids = solids;
-            m_solidRevision++;
-        }
-
-        // THE LAST FALLIBLE GATE — expensive compilation after every cheap refusal above. Only an Addons-affecting
-        // mutation ever reaches here (AffectsAddons); every other mutation leaves the addon runtime untouched, both
-        // this call and TryPrepare's own diff. A server with no addon host attached refuses an addon-affecting
-        // mutation BY NAME rather than silently accepting configuration with no effect. Prepare-refusal rejects the
-        // WHOLE mutation with the candidate discarded and m_definition byte-identical — the tick still survives.
+        // Final fallible preparation gates run here after the cheap field checks. Addon and machine hosts both stage
+        // their resources against the same candidate; a refusal rejects the WHOLE mutation with the candidate and
+        // solid field discarded, leaving m_definition, field identity, and revisions byte-identical. A server with
+        // no addon host attached still refuses an addon-affecting mutation BY NAME rather than accepting a no-op.
         // The whole sequence from here through Commit runs under ONE try/finally: addonPlan starts null and TryPrepare
         // only ever sets it on success, so the finally is a no-op for every path that never obtains a plan, and a
         // downstream throw — from contention-array staging, Install, or Commit alike — still disposes an uncommitted
@@ -1370,6 +1414,9 @@ public sealed partial class WorldServer {
         WorldPrincipal[]? newTickWrittenPrincipal = null;
         bool[]? newTickCollided = null;
         var addonPlanCommitted = false;
+
+        IWorldMachinePreparedPlan? machinePlan = null;
+        var machinePlanCommitted = false;
 
         try {
             if (AffectsAddons(mutation: mutation)) {
@@ -1410,6 +1457,24 @@ public sealed partial class WorldServer {
                 }
             }
 
+            if (AffectsScreens(mutation: mutation) || AffectsMachines(mutation)) {
+                if (!m_machines.TryPrepare(
+                    candidate: candidate,
+                    current: m_definition,
+                    plan: out machinePlan,
+                    reason: out var machineReason
+                )) {
+                    Reject(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        mutation: mutation,
+                        reason: (machineReason ?? "screen machine preparation refused")
+                    );
+
+                    return false;
+                }
+            }
+
             // Commit runs only after Install below succeeds, so nothing observable (registration, disclosure
             // narration, disposal of a superseded guest) moves until then. Narration and superseded-guest disposal
             // (Finish) run only AFTER the journal write below, so neither can still be unwound by what Finish
@@ -1419,6 +1484,20 @@ public sealed partial class WorldServer {
             // or a slot-to-keyed reshape mints a new one, and a look-assignment rebind needs the population rebuild —
             // so those cases take the full install like every other mutation.
             var previous = m_definition;
+
+            // Publish the candidate field immediately before Install, after every addon/machine preparation gate has
+            // accepted the same candidate. This keeps a refused batch from leaking field identity or revision while
+            // still making the field visible before Install rebuilds bodies against it.
+            if (
+                solidAffecting &&
+                !ReferenceEquals(
+                objA: solids,
+                objB: m_solids
+            )
+            ) {
+                m_solids = solids;
+                m_solidRevision++;
+            }
 
             if (
                 IsStateMutation(mutation: mutation) &&
@@ -1454,20 +1533,34 @@ public sealed partial class WorldServer {
                     m_tickCollided = newTickCollided!;
                 }
             }
+
+            if (machinePlan is not null) {
+                m_machines.Commit(plan: machinePlan);
+                machinePlanCommitted = true;
+            }
         } finally {
             if (!addonPlanCommitted) {
                 addonPlan?.Dispose();
+            }
+
+            if (!machinePlanCommitted) {
+                machinePlan?.Dispose();
             }
         }
 
         m_journal.Add(item: new JournalEntry(
             Mutation: mutation,
-            Tick: tick
+            Tick: tick,
+            EngineTick: engineTick
         ));
-        MutationJournalTap?.Invoke(tick, mutation);
+        MutationJournalTap?.Invoke(tick, engineTick, mutation);
 
         if (addonPlanCommitted) {
             m_addons!.Finish(plan: addonPlan!);
+        }
+
+        if (machinePlanCommitted) {
+            m_machines.Finish(plan: machinePlan!);
         }
 
         // A defaults-class mutation edits what the NEXT boot wakes on while the live
@@ -2220,8 +2313,11 @@ public sealed partial class WorldServer {
     /// <param name="outcomeObserved">Invoked once, with whether this exact mutation applied, the moment
     /// <see cref="Step"/> drains and applies it — <see langword="null"/> for every caller but
     /// <see cref="ApplyEnvelope"/>'s own dispatch (see <see cref="MutationOutcomeTap"/>).</param>
+    /// <param name="binding">The canonical operation binding for a wire mutation, or <see langword="null"/> for
+    /// internal mutation producers.</param>
+    /// <param name="completion">The deferred typed completion for a wire mutation, or <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
-    public void EnqueueMutation(WorldMutation mutation, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, long sourceAddonInstanceId = -1L, ushort actOrdinal = 0, Action<bool>? outcomeObserved = null) {
+    public void EnqueueMutation(WorldMutation mutation, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, long sourceAddonInstanceId = -1L, ushort actOrdinal = 0, Action<bool>? outcomeObserved = null, WorldMutationBinding? binding = null, Action<WorldSubmissionResult>? completion = null) {
         ArgumentNullException.ThrowIfNull(argument: mutation);
 
         m_pending.Enqueue(item: new PendingOp.Mutate(
@@ -2229,6 +2325,8 @@ public sealed partial class WorldServer {
             ConnectionId: connectionId,
             CorrelationId: correlationId,
             Mutation: mutation,
+            Binding: binding,
+            Completion: completion,
             OutcomeObserved: outcomeObserved,
             SourceAddonInstanceId: sourceAddonInstanceId
         ));

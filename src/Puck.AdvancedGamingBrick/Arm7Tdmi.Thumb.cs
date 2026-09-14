@@ -27,7 +27,8 @@ public sealed partial class Arm7Tdmi {
             case 0b000u:
                 return (((op & 0x1800u) == 0x1800u)
                     ? &ThumbAddSubtract
-                    : &ThumbMoveShifted);
+                    : &ThumbMoveShifted
+                );
 
             case 0b001u:
                 return &ThumbMoveCompareAddSubImmediate;
@@ -37,7 +38,8 @@ public sealed partial class Arm7Tdmi {
                     if ((op & 0x0800u) == 0u) {
                         return (((op & 0x0400u) == 0u)
                             ? &ThumbAluOperations
-                            : &ThumbHiRegisterOperations);
+                            : &ThumbHiRegisterOperations
+                        );
                     }
 
                     return &ThumbPcRelativeLoad;
@@ -45,7 +47,8 @@ public sealed partial class Arm7Tdmi {
 
                 return (((op & 0x0200u) == 0u)
                     ? &ThumbLoadStoreRegisterOffset
-                    : &ThumbLoadStoreSignExtended);
+                    : &ThumbLoadStoreSignExtended
+                );
 
             case 0b011u:
                 return &ThumbLoadStoreImmediateOffset;
@@ -53,7 +56,8 @@ public sealed partial class Arm7Tdmi {
             case 0b100u:
                 return (((op & 0x1000u) == 0u)
                     ? &ThumbLoadStoreHalfword
-                    : &ThumbStackPointerRelativeLoadStore);
+                    : &ThumbStackPointerRelativeLoadStore
+                );
 
             case 0b101u:
                 if ((op & 0x1000u) == 0u) {
@@ -66,7 +70,8 @@ public sealed partial class Arm7Tdmi {
 
                 return (((op & 0x0600u) == 0x0400u)
                     ? &ThumbPushPop
-                    : &ThumbUndefined);
+                    : &ThumbUndefined
+                );
 
             case 0b110u:
                 if ((op & 0x1000u) == 0u) {
@@ -82,7 +87,8 @@ public sealed partial class Arm7Tdmi {
             default: // 0b111
                 return (((op & 0x1000u) == 0u)
                     ? &ThumbUnconditionalBranch
-                    : &ThumbLongBranchWithLink);
+                    : &ThumbLongBranchWithLink
+                );
         }
     }
     // --- Thumb instruction implementations (static, cpu passed explicitly) ---
@@ -119,23 +125,25 @@ public sealed partial class Arm7Tdmi {
         var subtract = ((opcode & (1u << 9)) != 0u);
         var operand = (immediate
             ? (((uint)opcode) >> 6) & 0x7u
-            : cpu.m_gpr[((int)((opcode >> 6) & 0x7u))]);
+            : cpu.m_gpr[((int)((opcode >> 6) & 0x7u))]
+        );
         var rs = ((int)((opcode >> 3) & 0x7u));
         var rd = ((int)(opcode & 0x7u));
 
         cpu.m_gpr[rd] = (subtract
             ? Subtract(
-            cpu: cpu,
-            a: cpu.m_gpr[rs],
-            b: operand,
-            setFlags: true
-        )
+                cpu: cpu,
+                a: cpu.m_gpr[rs],
+                b: operand,
+                setFlags: true
+            )
             : Add(
-            cpu: cpu,
-            a: cpu.m_gpr[rs],
-            b: operand,
-            setFlags: true
-        ));
+                cpu: cpu,
+                a: cpu.m_gpr[rs],
+                b: operand,
+                setFlags: true
+            )
+        );
     }
     private static void ThumbMoveCompareAddSubImmediate(Arm7Tdmi cpu, ushort opcode) {
         var operation = (opcode >> 11) & 0x3u;
@@ -413,13 +421,14 @@ public sealed partial class Arm7Tdmi {
         if (load) {
             cpu.m_gpr[rd] = (byteAccess
                 ? cpu.m_bus.Read8(
-                access: BusAccessType.NonSequential,
-                address: address
-            )
+                    access: BusAccessType.NonSequential,
+                    address: address
+                )
                 : ReadWordRotated(
-                address: address,
-                cpu: cpu
-            ));
+                    address: address,
+                    cpu: cpu
+                )
+            );
 
             cpu.m_bus.Idle(cycles: 1);
         } else if (byteAccess) {
@@ -504,18 +513,20 @@ public sealed partial class Arm7Tdmi {
         var rd = ((int)(opcode & 0x7u));
         var address = (byteAccess
             ? (cpu.m_gpr[baseRegister] + offset)
-            : (cpu.m_gpr[baseRegister] + (offset * 4u)));
+            : (cpu.m_gpr[baseRegister] + (offset * 4u))
+        );
 
         if (load) {
             cpu.m_gpr[rd] = (byteAccess
                 ? cpu.m_bus.Read8(
-                access: BusAccessType.NonSequential,
-                address: address
-            )
+                    access: BusAccessType.NonSequential,
+                    address: address
+                )
                 : ReadWordRotated(
-                address: address,
-                cpu: cpu
-            ));
+                    address: address,
+                    cpu: cpu
+                )
+            );
 
             cpu.m_bus.Idle(cycles: 1);
         } else if (byteAccess) {
@@ -592,14 +603,16 @@ public sealed partial class Arm7Tdmi {
 
         cpu.m_gpr[rd] = (useStackPointer
             ? (cpu.m_gpr[13] + offset)
-            : ((cpu.m_gpr[15] & ~2u) + offset));
+            : ((cpu.m_gpr[15] & ~2u) + offset)
+        );
     }
     private static void ThumbAddOffsetToStackPointer(Arm7Tdmi cpu, ushort opcode) {
         var offset = (((uint)(opcode & 0x7Fu)) * 4u);
 
         cpu.m_gpr[13] = (((opcode & (1u << 7)) != 0u)
             ? (cpu.m_gpr[13] - offset)
-            : (cpu.m_gpr[13] + offset));
+            : (cpu.m_gpr[13] + offset)
+        );
     }
     private static void ThumbPushPop(Arm7Tdmi cpu, ushort opcode) {
         var load = ((opcode & (1u << 11)) != 0u);
@@ -722,7 +735,8 @@ public sealed partial class Arm7Tdmi {
             } else {
                 var data = (((register == baseRegister) && (register != firstRegister))
                     ? finalBase
-                    : cpu.m_gpr[register]);
+                    : cpu.m_gpr[register]
+                );
 
                 cpu.m_bus.Write32(
                     access: access,

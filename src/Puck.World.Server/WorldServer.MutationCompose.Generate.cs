@@ -34,7 +34,10 @@ public sealed partial class WorldServer {
 
             if (!GeneratorEngine.TryResolveSource(
                 generators: current.Generators,
-                draw: new Draw(Source: fill.Source, Generator: fill.Generator),
+                draw: new Draw(
+                    Source: fill.Source,
+                    Generator: fill.Generator
+                ),
                 generator: out var fillSource,
                 reason: out var fillResolveReason
             )) {
@@ -69,7 +72,11 @@ public sealed partial class WorldServer {
 
             candidate = current.WithWorldState(rows: Upsert(
                 list: current.State,
-                item: (siteRow with { DrawCursor = (siteRow.DrawCursor + cellCount), DrawnMasks = GeneratorEngine.MasksAfter(generator: fillSource, fired: masksAfter, previous: siteRow.DrawnMasks) }),
+                item: (siteRow with { DrawCursor = (siteRow.DrawCursor + cellCount), DrawnMasks = GeneratorEngine.MasksAfter(
+                    generator: fillSource,
+                    fired: masksAfter,
+                    previous: siteRow.DrawnMasks
+                ) }),
                 keyOf: static (WorldStateRow row) => row.Name
             ));
             reason = string.Empty;
@@ -104,7 +111,11 @@ public sealed partial class WorldServer {
                 return false;
             }
 
-            candidate = current.WithWorldState(rows: Upsert(list: current.State, item: filled, keyOf: static (WorldStateRow row) => row.Name));
+            candidate = current.WithWorldState(rows: Upsert(
+                list: current.State,
+                item: filled,
+                keyOf: static (WorldStateRow row) => row.Name
+            ));
             reason = string.Empty;
 
             return true;
@@ -174,7 +185,11 @@ public sealed partial class WorldServer {
         );
         var state = Upsert(
             list: current.State,
-            item: (siteRow with { Cells = [cell], DrawCursor = (siteRow.DrawCursor + fired.Samples), DrawnMasks = GeneratorEngine.MasksAfter(generator: generator, fired: fired.Masks, previous: siteRow.DrawnMasks) }),
+            item: (siteRow with { Cells = [cell], DrawCursor = (siteRow.DrawCursor + fired.Samples), DrawnMasks = GeneratorEngine.MasksAfter(
+                generator: generator,
+                fired: fired.Masks,
+                previous: siteRow.DrawnMasks
+            ) }),
             keyOf: static (WorldStateRow row) => row.Name
         );
 

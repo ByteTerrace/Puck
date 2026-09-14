@@ -39,15 +39,15 @@ public sealed record MusicSegment(string Id, IReadOnlyList<MusicTransition> Tran
     private readonly IReadOnlyList<MusicLayer> m_layers = (Layers ?? []);
     private readonly IReadOnlyList<MusicEmbellishment> m_embellishments = (Embellishments ?? []);
 
-    /// <summary>Gets the segment's conditional audio layers — never null, regardless of what the compiler passed.</summary>
-    public IReadOnlyList<MusicLayer> Layers {
-        get => m_layers;
-        init => m_layers = (value ?? []);
-    }
     /// <summary>Gets the segment's director embellishments. See <see cref="Layers"/>'s remarks.</summary>
     public IReadOnlyList<MusicEmbellishment> Embellishments {
         get => m_embellishments;
         init => m_embellishments = (value ?? []);
+    }
+    /// <summary>Gets the segment's conditional audio layers — never null, regardless of what the compiler passed.</summary>
+    public IReadOnlyList<MusicLayer> Layers {
+        get => m_layers;
+        init => m_layers = (value ?? []);
     }
 }
 /// <summary>A compiled segment graph: every declared segment plus which one a director starts on (the first entry).
@@ -62,7 +62,11 @@ public sealed record MusicSegmentGraph(IReadOnlyList<MusicSegment> Segments) {
     /// <returns>The segment, or <see langword="null"/> when no segment carries that id.</returns>
     public MusicSegment? Find(string id) {
         foreach (var segment in Segments) {
-            if (string.Equals(a: segment.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(
+                a: segment.Id,
+                b: id,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 return segment;
             }
         }
@@ -81,8 +85,8 @@ public sealed record MusicSegmentGraph(IReadOnlyList<MusicSegment> Segments) {
 /// embellishment never queues either, but unlike a layer it is edge-triggered, not level-triggered — it fires once
 /// per matching edge, recorded in <see cref="LastEmbellishmentPatchId"/>/<see cref="LastEmbellishmentTick"/>.</summary>
 public sealed class MusicDirector {
-    private readonly MusicSegmentGraph m_graph;
     private readonly List<string> m_activeLayerTuneIds = [];
+    private readonly MusicSegmentGraph m_graph;
 
     private MusicTransition? m_armed;
     private string m_currentSegmentId;
@@ -93,41 +97,127 @@ public sealed class MusicDirector {
         ArgumentNullException.ThrowIfNull(argument: graph);
 
         if (graph.Segments.Count == 0) {
-            throw new ArgumentException(message: "a music segment graph must declare at least one segment.", paramName: nameof(graph));
+            throw new ArgumentException(
+                message: "a music segment graph must declare at least one segment.",
+                paramName: nameof(graph)
+            );
         }
 
         m_currentSegmentId = graph.InitialSegmentId;
         m_graph = graph;
     }
 
-    /// <summary>Gets the currently active segment's id.</summary>
-    public string CurrentSegmentId => m_currentSegmentId;
-    /// <summary>Gets the segment id a currently armed transition will switch to, or <see langword="null"/> when
-    /// nothing is armed.</summary>
-    public string? PendingSegmentId => m_armed?.ToSegmentId;
-    /// <summary>Gets the tick the most recent transition committed on, or <see langword="null"/> before the first
-    /// one.</summary>
-    public ulong? LastTransitionTick { get; private set; }
-    /// <summary>Gets the segment the most recent transition switched away from, or <see langword="null"/> before the
-    /// first one.</summary>
-    public string? LastTransitionFromSegmentId { get; private set; }
-    /// <summary>Gets the segment the most recent transition switched to, or <see langword="null"/> before the first
-    /// one.</summary>
-    public string? LastTransitionToSegmentId { get; private set; }
-    /// <summary>Gets how many transitions have committed since construction.</summary>
-    public ulong TransitionCount { get; private set; }
     /// <summary>Gets the tune ids of every conditional audio layer active THIS tick — the current segment's
     /// unconditional layers plus every conditional layer whose <see cref="MusicLayer.When"/> matched this tick's
     /// edges. Recomputed whole by every <see cref="Step"/> call (level-triggered, never queued — unlike
     /// <see cref="PendingSegmentId"/>, nothing here survives to a tick that does not re-satisfy it), in the owning
     /// segment's declared order. Empty before the first <see cref="Step"/>.</summary>
     public IReadOnlyList<string> ActiveLayerTuneIds => m_activeLayerTuneIds;
+    /// <summary>Gets the currently active segment's id.</summary>
+    public string CurrentSegmentId => m_currentSegmentId;
     /// <summary>Gets the patch id the most recently fired embellishment voiced, or <see langword="null"/> before the
     /// first one.</summary>
     public string? LastEmbellishmentPatchId { get; private set; }
     /// <summary>Gets the tick the most recent embellishment fired on, or <see langword="null"/> before the first
     /// one.</summary>
     public ulong? LastEmbellishmentTick { get; private set; }
+    /// <summary>Gets the segment the most recent transition switched away from, or <see langword="null"/> before the
+    /// first one.</summary>
+    public string? LastTransitionFromSegmentId { get; private set; }
+    /// <summary>Gets the tick the most recent transition committed on, or <see langword="null"/> before the first
+    /// one.</summary>
+    public ulong? LastTransitionTick { get; private set; }
+    /// <summary>Gets the segment the most recent transition switched to, or <see langword="null"/> before the first
+    /// one.</summary>
+    public string? LastTransitionToSegmentId { get; private set; }
+    /// <summary>Gets the segment id a currently armed transition will switch to, or <see langword="null"/> when
+    /// nothing is armed.</summary>
+    public string? PendingSegmentId => m_armed?.ToSegmentId;
+    /// <summary>Gets how many transitions have committed since construction.</summary>
+    public ulong TransitionCount { get; private set; }
+
+    private void Arm(IReadOnlyList<MusicSenseEdge> edges) {
+        if (m_graph.Find(id: m_currentSegmentId) is not { } segment) {
+            return;
+        }
+
+        foreach (var transition in segment.Transitions) {
+            if (Matches(
+                family: transition.When,
+                edges: edges
+            )) {
+                m_armed = transition;
+
+                return;
+            }
+        }
+    }
+    private void Commit(ulong tick, MusicTransition transition) {
+        LastTransitionFromSegmentId = m_currentSegmentId;
+        LastTransitionToSegmentId = transition.ToSegmentId;
+        LastTransitionTick = tick;
+        TransitionCount++;
+        m_armed = null;
+        m_currentSegmentId = transition.ToSegmentId;
+    }
+    // Evaluated against the segment current BEFORE this tick's possible Commit — an embellishment belongs to the
+    // segment that was playing when its edge arrived, the same pre-commit reading Arm takes. The first matching
+    // embellishment in declared order fires; a later match this same tick is not evaluated, mirroring Arm's own
+    // first-match rule.
+    private void FireEmbellishments(IReadOnlyList<MusicSenseEdge> edges, ulong tick) {
+        if (m_graph.Find(id: m_currentSegmentId) is not { } segment) {
+            return;
+        }
+
+        foreach (var embellishment in segment.Embellishments) {
+            if (Matches(
+                family: embellishment.When,
+                edges: edges
+            )) {
+                LastEmbellishmentPatchId = embellishment.PatchId;
+                LastEmbellishmentTick = tick;
+
+                return;
+            }
+        }
+    }
+    private static bool Matches(MusicSenseFamily family, IReadOnlyList<MusicSenseEdge> edges) {
+        foreach (var edge in edges) {
+            if (edge.Family == family) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Evaluated against the FINAL current segment for this tick (after any Commit above) — the active set always
+    // describes the segment now playing. Rebuilt in place (clear + refill) so a director that never changes its
+    // active set allocates nothing steady-state.
+    private void RecomputeActiveLayers(IReadOnlyList<MusicSenseEdge> edges) {
+        m_activeLayerTuneIds.Clear();
+
+        if (m_graph.Find(id: m_currentSegmentId) is not { } segment) {
+            return;
+        }
+
+        foreach (var layer in segment.Layers) {
+            if (
+                (layer.When is not { } when) ||
+                Matches(
+                edges: edges,
+                family: when
+            )
+            ) {
+                m_activeLayerTuneIds.Add(item: layer.TuneId);
+            }
+        }
+    }
+    private static bool Satisfied(MusicTransitionBoundary at, MusicClockBoundary boundary) => (at switch {
+        MusicTransitionBoundary.Immediate => true,
+        MusicTransitionBoundary.BeatEnd => boundary.HasFlag(flag: MusicClockBoundary.Beat),
+        MusicTransitionBoundary.BarEnd => boundary.HasFlag(flag: MusicClockBoundary.Bar),
+        _ => false,
+    });
 
     /// <summary>Overwrites this director's whole live state — a checkpoint restore's one write door. Never called
     /// from ordinary simulation, which only ever advances through <see cref="Step"/>.</summary>
@@ -174,85 +264,17 @@ public sealed class MusicDirector {
 
         if (
             (m_armed is { } armed) &&
-            Satisfied(at: armed.At, boundary: boundary)
+            Satisfied(
+            at: armed.At,
+            boundary: boundary
+        )
         ) {
-            Commit(tick: tick, transition: armed);
+            Commit(
+                tick: tick,
+                transition: armed
+            );
         }
 
         RecomputeActiveLayers(edges: edges);
     }
-
-    private void Arm(IReadOnlyList<MusicSenseEdge> edges) {
-        if (m_graph.Find(id: m_currentSegmentId) is not { } segment) {
-            return;
-        }
-
-        foreach (var transition in segment.Transitions) {
-            if (Matches(family: transition.When, edges: edges)) {
-                m_armed = transition;
-
-                return;
-            }
-        }
-    }
-    private void Commit(ulong tick, MusicTransition transition) {
-        LastTransitionFromSegmentId = m_currentSegmentId;
-        LastTransitionToSegmentId = transition.ToSegmentId;
-        LastTransitionTick = tick;
-        TransitionCount++;
-        m_armed = null;
-        m_currentSegmentId = transition.ToSegmentId;
-    }
-    // Evaluated against the segment current BEFORE this tick's possible Commit — an embellishment belongs to the
-    // segment that was playing when its edge arrived, the same pre-commit reading Arm takes. The first matching
-    // embellishment in declared order fires; a later match this same tick is not evaluated, mirroring Arm's own
-    // first-match rule.
-    private void FireEmbellishments(IReadOnlyList<MusicSenseEdge> edges, ulong tick) {
-        if (m_graph.Find(id: m_currentSegmentId) is not { } segment) {
-            return;
-        }
-
-        foreach (var embellishment in segment.Embellishments) {
-            if (Matches(family: embellishment.When, edges: edges)) {
-                LastEmbellishmentPatchId = embellishment.PatchId;
-                LastEmbellishmentTick = tick;
-
-                return;
-            }
-        }
-    }
-    // Evaluated against the FINAL current segment for this tick (after any Commit above) — the active set always
-    // describes the segment now playing. Rebuilt in place (clear + refill) so a director that never changes its
-    // active set allocates nothing steady-state.
-    private void RecomputeActiveLayers(IReadOnlyList<MusicSenseEdge> edges) {
-        m_activeLayerTuneIds.Clear();
-
-        if (m_graph.Find(id: m_currentSegmentId) is not { } segment) {
-            return;
-        }
-
-        foreach (var layer in segment.Layers) {
-            if (
-                (layer.When is not { } when) ||
-                Matches(edges: edges, family: when)
-            ) {
-                m_activeLayerTuneIds.Add(item: layer.TuneId);
-            }
-        }
-    }
-    private static bool Matches(MusicSenseFamily family, IReadOnlyList<MusicSenseEdge> edges) {
-        foreach (var edge in edges) {
-            if (edge.Family == family) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    private static bool Satisfied(MusicTransitionBoundary at, MusicClockBoundary boundary) => (at switch {
-        MusicTransitionBoundary.Immediate => true,
-        MusicTransitionBoundary.BeatEnd => boundary.HasFlag(flag: MusicClockBoundary.Beat),
-        MusicTransitionBoundary.BarEnd => boundary.HasFlag(flag: MusicClockBoundary.Bar),
-        _ => false,
-    });
 }

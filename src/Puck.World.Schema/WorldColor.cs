@@ -94,7 +94,8 @@ public static class WorldColor {
             row: out var stateRow,
             rowName: row,
             text: out var text,
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ) &&
             (stateRow.Kind == CellKind.Text) &&
             HexColor.TryParse(
@@ -130,7 +131,8 @@ public static class WorldColor {
             row: out var stateRow,
             rowName: row,
             text: out var text,
-            tick: 0UL
+            tick: 0UL,
+            engineTick: 0UL
         ) && (stateRow.Kind == CellKind.Text))
             ? HexColor.Parse(
                 fallback: fallback,

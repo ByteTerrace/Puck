@@ -53,10 +53,6 @@ public static class GamepadButtonCatalog {
         return [.. map];
     }
 
-    /// <summary>Gets every declared single-flag button paired with its provider-neutral source id, in enum
-    /// declaration order.</summary>
-    public static IReadOnlyList<(GamepadButtons Flag, string Source)> Sources { get; } = BuildSources();
-
     /// <summary>Returns the provider-neutral source id naming the same physical control as a button flag.</summary>
     /// <param name="button">The physical button (one flag).</param>
     /// <returns>The source id, or <see langword="null"/> for an undeclared or composite flag.</returns>
@@ -69,4 +65,8 @@ public static class GamepadButtonCatalog {
 
         return null;
     }
+
+    /// <summary>Gets every declared single-flag button paired with its provider-neutral source id, in enum
+    /// declaration order.</summary>
+    public static IReadOnlyList<(GamepadButtons Flag, string Source)> Sources { get; } = BuildSources();
 }

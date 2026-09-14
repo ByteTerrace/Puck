@@ -4,7 +4,7 @@
     "null"
   ],
   "items": {
-    "description": "One synth-patch asset reference row \u2014 the puck.synth.v1 twin of WorldTune, same name/source/hash shape and load-then-pin discipline.",
+    "description": "One synth-patch asset reference row \u2014 the puck.synthesizer-patch.v1 twin of WorldTune, same name/source/hash shape and load-then-pin discipline.",
     "type": [
       "object",
       "null"

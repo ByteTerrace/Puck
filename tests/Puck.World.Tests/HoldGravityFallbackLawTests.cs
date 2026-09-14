@@ -16,16 +16,104 @@ namespace Puck.World.Tests;
 /// a change to the row's own `fall` rate.
 /// </summary>
 public sealed class HoldGravityFallbackLawTests {
-    private static string Hex(FixedQ4816 value) => value.Value.ToString(format: "x16", provider: CultureInfo.InvariantCulture);
+    private static string Hex(FixedQ4816 value) => value.Value.ToString(
+        format: "x16",
+        provider: CultureInfo.InvariantCulture
+    );
     private static string TraceLine(WorldBody body) {
         var state = body.CaptureTransferState();
         var position = body.FixedPosition;
 
-        return string.Join(separator: ' ', value: [
+        return string.Join(
+            separator: ' ',
+            value: [
             Hex(value: position.X), Hex(value: position.Y), Hex(value: position.Z),
             Hex(value: state.PlanarVelocity.X), Hex(value: state.PlanarVelocity.Y), Hex(value: state.PlanarVelocity.Z),
             Hex(value: state.VerticalVelocity), Hex(value: body.FixedYaw),
-        ]);
+        ]
+        );
+    }
+
+    [Fact]
+    public void NoHoldsGravityFallback_ReproducesTheRecordedTrace_WhereFallChangedDiverges() {
+        static string[] Trace(float fall) {
+            var lines = new string[240];
+            var gravity = new WorldHoldGravity(
+                Fall: fall,
+                Rise: 28f
+            );
+            var envelope = new WorldHoldEnvelope(SinkSpeed: 40f);
+            var document = Fixtures.BuildDocument();
+            var kits = document.Kits.ToList();
+            var motion = kits[0].Motion! with {
+                Holds = [
+                    new WorldHold(
+                    Bond: BodyHoldBond.Surface,
+                    Cone: new System.Numerics.Vector2(
+                        x: 0f,
+                        y: 60f
+                    ),
+                    Envelope: envelope,
+                    Gravity: gravity,
+                    Hold: BodyHoldKind.Gravity,
+                    Name: "ground",
+                    Reach: 1.2f
+                ),
+                    new WorldHold(
+                    Bond: BodyHoldBond.Free,
+                    Envelope: envelope,
+                    Gravity: gravity,
+                    Hold: BodyHoldKind.Gravity,
+                    Name: "air"
+                ),
+                ],
+            };
+
+            kits[0] = (kits[0] with { Motion = motion });
+
+            using var fixture = Fixtures.FreshServer(definition: (document with { KitRowsRaw = kits }));
+            var actor = WorldPrincipal.Seat(slot: 0);
+
+            Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+                Principal: actor,
+                Slot: actor.Index,
+                IdentityName: null,
+                WireProtocolKey: WorldProtocol.WireProtocolKey
+            )).Accepted);
+
+            var body = fixture.Server.Body(index: actor.Index)!;
+
+            for (var tick = 0; (tick < 30); tick++) {
+                body.SubmitIntent(intent: default);
+                fixture.Step();
+                lines[tick] = TraceLine(body: body);
+            }
+
+            return lines;
+        }
+
+        Assert.Equal(
+            expected: NoHoldsGravityFallbackTrace240,
+            actual: Trace(fall: 46f)
+        );
+
+        var perturbed = Trace(fall: 30f);
+        var moved = 0;
+
+        for (var tick = 0; (tick < NoHoldsGravityFallbackTrace240.Length); tick++) {
+            if (!string.Equals(
+                a: NoHoldsGravityFallbackTrace240[tick],
+                b: perturbed[tick],
+                comparisonType: StringComparison.Ordinal
+            )) {
+                moved++;
+            }
+        }
+
+        Assert.True(
+            condition: (moved > 0),
+            userMessage: "a row's own fall must move the trace, or the trace pins nothing about it"
+        );
     }
 
     // The frozen world's own defaultKit/critterKit rise/terminal, over a ground/air Gravity pair — the mandatory
@@ -272,51 +360,4 @@ public sealed class HoldGravityFallbackLawTests {
         "0000000000000000 ffffffffffe97988 0000000000000000 0000000000000000 0000000000000000 0000000000000000 ffffffffffd80000 0000000000000000",
         "0000000000000000 ffffffffffe94ede 0000000000000000 0000000000000000 0000000000000000 0000000000000000 ffffffffffd80000 0000000000000000",
     ];
-
-    [Fact]
-    public void NoHoldsGravityFallback_ReproducesTheRecordedTrace_WhereFallChangedDiverges() {
-        static string[] Trace(float fall) {
-            var lines = new string[240];
-            var gravity = new WorldHoldGravity(Fall: fall, Rise: 28f);
-            var envelope = new WorldHoldEnvelope(SinkSpeed: 40f);
-            var document = Fixtures.BuildDocument();
-            var kits = document.Kits.ToList();
-            var motion = kits[0].Motion! with {
-                Holds = [
-                    new WorldHold(Bond: BodyHoldBond.Surface, Cone: new System.Numerics.Vector2(x: 0f, y: 60f), Envelope: envelope, Gravity: gravity, Hold: BodyHoldKind.Gravity, Name: "ground", Reach: 1.2f),
-                    new WorldHold(Bond: BodyHoldBond.Free, Envelope: envelope, Gravity: gravity, Hold: BodyHoldKind.Gravity, Name: "air"),
-                ],
-            };
-
-            kits[0] = (kits[0] with { Motion = motion });
-
-            using var fixture = Fixtures.FreshServer(definition: (document with { KitRowsRaw = kits }));
-            var actor = WorldPrincipal.Seat(slot: 0);
-
-            Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
-
-            var body = fixture.Server.Body(index: actor.Index)!;
-
-            for (var tick = 0; (tick < 240); tick++) {
-                body.SubmitIntent(intent: default);
-                fixture.Step();
-                lines[tick] = TraceLine(body: body);
-            }
-
-            return lines;
-        }
-
-        Assert.Equal(expected: NoHoldsGravityFallbackTrace240, actual: Trace(fall: 46f));
-
-        var perturbed = Trace(fall: 30f);
-        var moved = 0;
-
-        for (var tick = 0; (tick < NoHoldsGravityFallbackTrace240.Length); tick++) {
-            if (!string.Equals(a: NoHoldsGravityFallbackTrace240[tick], b: perturbed[tick], comparisonType: StringComparison.Ordinal)) {
-                moved++;
-            }
-        }
-
-        Assert.True(condition: (moved > 0), userMessage: "a row's own fall must move the trace, or the trace pins nothing about it");
-    }
 }

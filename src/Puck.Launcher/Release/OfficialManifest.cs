@@ -20,7 +20,7 @@ public sealed record OfficialObjectRef(string Path, string Hash, long Size, stri
 /// <param name="Commit">The commit the generator was built at, or <c>unknown</c> outside a SourceLink build.</param>
 /// <param name="Dirty">Whether the working tree carried uncommitted changes at build time.</param>
 /// <param name="Generator">The generator string <c>puck schema</c> stamps into <c>x-puck.generator</c>.</param>
-/// <param name="WorldSchema">The world document schema (<c>puck.world.def.v1</c>).</param>
+/// <param name="WorldSchema">The world document schema (<c>puck.world.definition.v1</c>).</param>
 public sealed record OfficialBuildInfo(string Commit, bool Dirty, string Generator, string WorldSchema);
 /// <summary>One file of the shipped engine's AppBundle (a browser-wasm publish output), by name relative to the
 /// AppBundle root (forward-slash separated, e.g. <c>_framework/dotnet.js</c>).</summary>
@@ -131,7 +131,7 @@ public sealed record OfficialAssetEntry(
     string? Pin
 );
 /// <summary>
-/// The <c>puck.official.v1</c> document: a local official tree's mutable channel pointer — the shipped browser-wasm
+/// The <c>puck.official.manifest.v1</c> document: a local official tree's mutable channel pointer — the shipped browser-wasm
 /// engine, the world schema bundle, every world document under the worlds directory, the one fully-composed root
 /// world, and every off-disk asset those documents reference — all content-addressed and hash-checked, so a client
 /// verifies what it fetches without trusting the transport. Unsigned in this package: publishing (signing, upload,
@@ -160,7 +160,7 @@ public sealed record OfficialManifest(
     JsonNode? Signature
 ) {
     /// <summary>The version tag every saved document carries.</summary>
-    public const string CurrentSchema = "puck.official.v1";
+    public const string CurrentSchema = "puck.official.manifest.v1";
 
     /// <summary>Gets or sets the unknown members preserved across a round-trip. Null when the document carries none.
     /// A settable (not <c>init</c>) accessor is required: System.Text.Json appends to it during deserialization.</summary>
@@ -175,14 +175,14 @@ public sealed record OfficialManifest(
 /// unexported fragments merge wholesale and still fall here, since they are neither a standalone world nor named nor
 /// shard-placed).</summary>
 public static class OfficialDocumentRoles {
-    /// <summary>A document under <c>shards/</c>.</summary>
-    public const string Shard = "shard";
     /// <summary>The one document named <c>standard.basis.json</c>.</summary>
     public const string Basis = "basis";
-    /// <summary>A document declaring a non-empty <c>documentId</c> (and not already classified <see cref="Shard"/>).</summary>
-    public const string World = "world";
     /// <summary>Everything else — imported into a host, whether or not it declares <c>exports</c>.</summary>
     public const string Fragment = "fragment";
+    /// <summary>A document under <c>shards/</c>.</summary>
+    public const string Shard = "shard";
+    /// <summary>A document declaring a non-empty <c>documentId</c> (and not already classified <see cref="Shard"/>).</summary>
+    public const string World = "world";
 
     /// <summary>Every recognized role.</summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(comparer: StringComparer.Ordinal) { Shard, Basis, World, Fragment };
@@ -194,19 +194,19 @@ public static class OfficialDocumentRoles {
 /// reserved for a row type this codebase does not yet declare — a build never emits an entry under one of those
 /// three today, and none is an error.</summary>
 public static class OfficialAssetFamilies {
-    /// <summary>A <c>WorldMusicRow</c> (<c>puck.music.v1</c>).</summary>
-    public const string Music = "music";
-    /// <summary>A <c>TableRow</c> (<c>puck.table.v1</c>).</summary>
-    public const string Table = "table";
     /// <summary>Reserved — no row type declares this family today.</summary>
     public const string Audio = "audio";
     /// <summary>Reserved — no row type declares this family today.</summary>
-    public const string Synth = "synth";
-    /// <summary>Reserved — no row type declares this family today.</summary>
     public const string Font = "font";
-    /// <summary>A <c>WorldPatch</c> row (<c>puck.synth.v1</c>).</summary>
+    /// <summary>A <c>WorldMusicRow</c> (<c>puck.music.v1</c>).</summary>
+    public const string Music = "music";
+    /// <summary>A <c>WorldPatch</c> row (<c>puck.synthesizer-patch.v1</c>).</summary>
     public const string Patch = "patch";
-    /// <summary>A <c>WorldTune</c> row (<c>puck.audio.v1</c>).</summary>
+    /// <summary>Reserved — no row type declares this family today.</summary>
+    public const string Synth = "synth";
+    /// <summary>A <c>TableRow</c> (<c>puck.table.v1</c>).</summary>
+    public const string Table = "table";
+    /// <summary>A <c>WorldTune</c> row (<c>puck.tune.v1</c>).</summary>
     public const string Tune = "tune";
 
     /// <summary>Every recognized family.</summary>

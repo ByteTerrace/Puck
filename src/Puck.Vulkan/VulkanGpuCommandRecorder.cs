@@ -15,25 +15,11 @@ public sealed class VulkanGpuCommandRecorder(IVulkanCommandBufferRecordingApi co
         ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
     }
     /// <inheritdoc/>
-    public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
-        commandBufferRecordingApi.EndCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
-        ).ThrowIfFailed(operation: "vkEndCommandBuffer");
-    }
-    /// <inheritdoc/>
     public void BeginDebugGroup(nint deviceHandle, nint commandBufferHandle, string label) {
         commandBufferRecordingApi.BeginDebugLabel(
             commandBufferHandle: commandBufferHandle,
             deviceHandle: deviceHandle,
             label: label
-        );
-    }
-    /// <inheritdoc/>
-    public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) {
-        commandBufferRecordingApi.EndDebugLabel(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
         );
     }
     /// <inheritdoc/>
@@ -48,10 +34,12 @@ public sealed class VulkanGpuCommandRecorder(IVulkanCommandBufferRecordingApi co
         ));
     }
     /// <inheritdoc/>
-    public void EndRenderPass(nint deviceHandle, nint commandBufferHandle) {
-        commandBufferRecordingApi.EndRenderPass(
+    public void BindDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) {
+        commandBufferRecordingApi.BindDescriptorSet(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle
+            descriptorSetHandle: descriptorSetHandle,
+            deviceHandle: deviceHandle,
+            pipelineLayoutHandle: pipelineLayoutHandle
         );
     }
     /// <inheritdoc/>
@@ -71,17 +59,44 @@ public sealed class VulkanGpuCommandRecorder(IVulkanCommandBufferRecordingApi co
         );
     }
     /// <inheritdoc/>
-    public void BindDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) {
-        commandBufferRecordingApi.BindDescriptorSet(
+    public void Draw(nint deviceHandle, nint commandBufferHandle, in GpuDrawParameters parameters) {
+        commandBufferRecordingApi.Draw(
             commandBufferHandle: commandBufferHandle,
-            descriptorSetHandle: descriptorSetHandle,
             deviceHandle: deviceHandle,
-            pipelineLayoutHandle: pipelineLayoutHandle
+            firstInstance: parameters.FirstInstance,
+            firstVertex: parameters.FirstVertex,
+            instanceCount: parameters.InstanceCount,
+            vertexCount: parameters.VertexCount
+        );
+    }
+    /// <inheritdoc/>
+    public void EndCommandBuffer(nint deviceHandle, nint commandBufferHandle) {
+        commandBufferRecordingApi.EndCommandBuffer(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle
+        ).ThrowIfFailed(operation: "vkEndCommandBuffer");
+    }
+    /// <inheritdoc/>
+    public void EndDebugGroup(nint deviceHandle, nint commandBufferHandle) {
+        commandBufferRecordingApi.EndDebugLabel(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle
+        );
+    }
+    /// <inheritdoc/>
+    public void EndRenderPass(nint deviceHandle, nint commandBufferHandle) {
+        commandBufferRecordingApi.EndRenderPass(
+            commandBufferHandle: commandBufferHandle,
+            deviceHandle: deviceHandle
         );
     }
     /// <inheritdoc/>
     public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
-        GpuPushConstantBinding.ValidateRange(stageFlags: stageFlags, offset: offset, dataLength: data.Length);
+        GpuPushConstantBinding.ValidateRange(
+            stageFlags: stageFlags,
+            offset: offset,
+            dataLength: data.Length
+        );
         commandBufferRecordingApi.PushConstants(
             commandBufferHandle: commandBufferHandle,
             data: data,
@@ -100,17 +115,6 @@ public sealed class VulkanGpuCommandRecorder(IVulkanCommandBufferRecordingApi co
             width: width,
             x: x,
             y: y
-        );
-    }
-    /// <inheritdoc/>
-    public void Draw(nint deviceHandle, nint commandBufferHandle, in GpuDrawParameters parameters) {
-        commandBufferRecordingApi.Draw(
-            commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
-            firstInstance: parameters.FirstInstance,
-            firstVertex: parameters.FirstVertex,
-            instanceCount: parameters.InstanceCount,
-            vertexCount: parameters.VertexCount
         );
     }
 }

@@ -8,9 +8,9 @@ namespace Puck.Vulkan.Interop;
 /// and destroys it when disposed.
 /// </summary>
 public sealed class VulkanShaderModule : IGpuShaderModule {
-    private bool m_disposed;
-
     private readonly IVulkanShaderModuleApi m_shaderModuleApi;
+
+    private bool m_disposed;
 
     /// <summary>Gets the native <c>VkDevice</c> handle that owns the shader module.</summary>
     public nint DeviceHandle { get; }

@@ -183,13 +183,13 @@ public sealed partial class SdfWorldEngine {
         return (
             combined.Value,
             new CadenceSpanHashes(
-                Revisions: revisionsSpan.Value,
-                Push: pushSpan.Value,
-                Viewports: viewportsSpan.Value,
-                Dynamics: dynamicsSpan.Value,
-                ScreenSurfaces: screenSurfacesSpan.Value,
-                ScreenLights: screenLightsSpan.Value
-            )
+            Revisions: revisionsSpan.Value,
+            Push: pushSpan.Value,
+            Viewports: viewportsSpan.Value,
+            Dynamics: dynamicsSpan.Value,
+            ScreenSurfaces: screenSurfacesSpan.Value,
+            ScreenLights: screenLightsSpan.Value
+        )
         );
     }
     // Cadence gate: latches whether Record may skip the sky/mask/beam/cull-args/views passes and re-composite from

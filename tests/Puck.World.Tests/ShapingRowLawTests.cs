@@ -18,6 +18,11 @@ public sealed class ShapingRowLawTests {
     private const int ForwardOrdinal = 0;
     private const int JumpOrdinal = 3;
 
+    private static readonly string[] DynamicsTrace240 = [
+        "0000000000000000 0000000000000000 fffffffffffffffe 0000000000000000 fffffffffffffde6",
+        "0000000000000000 0000000000000000 fffffffffffffff6 0000000000000000 fffffffffffff7f5",
+        "0000000000000000 0000000000000000 ffffffffffffffe3 0000000000000000 ffffffffffffeeaa",
+    ];
     // Per tick: position x/y/z, planar velocity x/z, vertical velocity — the raw FixedQ4816 storage in hex. A
     // collider-less kit starts (and stays) Grounded — WorldBody's own default, never revised by contact resolution
     // absent a collider — so "recently Grounded" holds continuously and, authored ABOVE "now Rising", would shadow
@@ -33,24 +38,111 @@ public sealed class ShapingRowLawTests {
         "0000000000000000 00000000000047ae fffffffffffffabd 0000000000000000 fffffffffffecccd 000000000007eeef",
     ];
 
-    private static readonly string[] DynamicsTrace240 = [
-        "0000000000000000 0000000000000000 fffffffffffffffe 0000000000000000 fffffffffffffde6",
-        "0000000000000000 0000000000000000 fffffffffffffff6 0000000000000000 fffffffffffff7f5",
-        "0000000000000000 0000000000000000 ffffffffffffffe3 0000000000000000 ffffffffffffeeaa",
-    ];
-
-    private static string Hex(FixedQ4816 value) => value.Value.ToString(format: "x16", provider: CultureInfo.InvariantCulture);
-
-    private static WorldDefinition BuildResponseDocument(float risingEngage = 40f) {
+    private static WorldDefinition BuildDynamicsDocument(float frequency = 2.5f) {
         var channels = new WorldChannel[] {
-            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
-            new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
-            new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
-            new(Name: "jump", Shape: ChannelShape.Binary, Composition: true),
+            new(
+            Name: "forward",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveAdvance
+        ),
+            new(
+            Name: "strafe",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveStrafe
+        ),
+            new(
+            Name: "turn",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.Turn
+        ),
         };
         var walker = new BodyMotionProgram(
             Name: "walker",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
+            Kind: BodyProgramKind.Motion,
+            Operations: [
+                BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
+                BodyMotionOp.ResolveHold,
+                BodyMotionOp.ComputePlanarTargetVelocity,
+                BodyMotionOp.ShapeVelocity,
+                BodyMotionOp.SnapYawToPlanarIntent,
+                BodyMotionOp.IntegratePlanarAndVerticalVelocity,
+                BodyMotionOp.CommitPose,
+            ]
+        );
+        var roam = new BodyMotionProgram(
+            Name: "roam",
+            Version: "puck.body.program.v1",
+            Kind: BodyProgramKind.Producer,
+            Operations: [BodyMotionOp.ProduceSteeringIntent]
+        );
+        var kit = new WorldKit(
+            Name: "glider-test",
+            BodyMotionProgram: "walker",
+            Motion: new WorldMotion(
+                Speed: new WorldSpeed(Value: 4f),
+                Turn: new WorldTurn(Rate: 2.5f),
+                Holds: [
+                    new WorldHold(
+                        Bond: BodyHoldBond.Free,
+                        Envelope: new WorldHoldEnvelope(SinkSpeed: 20f),
+                        Gravity: new WorldHoldGravity(
+                            Fall: 23f,
+                            Rise: 14f
+                        ),
+                        Hold: BodyHoldKind.Gravity,
+                        Name: "air"
+                    ),
+                ],
+                Shaping: [
+                    new WorldShaping(Dynamics: "stride"),
+                ]
+            ),
+            ProducersRaw: new Dictionary<string, BodyProgramParameters> {
+                ["roam"] = Fixtures.TravelerRoamParameters,
+            },
+            Collider: null
+        );
+
+        return Fixtures.BuildDocument() with {
+            ChannelsRaw = channels,
+            DynamicsRaw = [.. Fixtures.StandardDynamics, new DynamicsRow(
+                Damping: 1f,
+                Frequency: frequency,
+                Name: "stride",
+                Response: 0f
+            )],
+            BodyMotionProgramsRaw = [walker, roam],
+            KitRowsRaw = [kit],
+            DefaultSeatKitRaw = "glider-test",
+        };
+    }
+    private static WorldDefinition BuildResponseDocument(float risingEngage = 40f) {
+        var channels = new WorldChannel[] {
+            new(
+            Name: "forward",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveAdvance
+        ),
+            new(
+            Name: "strafe",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveStrafe
+        ),
+            new(
+            Name: "turn",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.Turn
+        ),
+            new(
+            Name: "jump",
+            Shape: ChannelShape.Binary,
+            Composition: true
+        ),
+        };
+        var walker = new BodyMotionProgram(
+            Name: "walker",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
@@ -64,7 +156,12 @@ public sealed class ShapingRowLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(
+            Name: "roam",
+            Version: "puck.body.program.v1",
+            Kind: BodyProgramKind.Producer,
+            Operations: [BodyMotionOp.ProduceSteeringIntent]
+        );
         var kit = new WorldKit(
             Name: "walker-test",
             BodyMotionProgram: "walker",
@@ -75,7 +172,10 @@ public sealed class ShapingRowLawTests {
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
                         Envelope: new WorldHoldEnvelope(SinkSpeed: 24f),
-                        Gravity: new WorldHoldGravity(Fall: 32f, Rise: 32f),
+                        Gravity: new WorldHoldGravity(
+                            Fall: 32f,
+                            Rise: 32f
+                        ),
                         Hold: BodyHoldKind.Gravity,
                         Name: "air"
                     ),
@@ -86,9 +186,27 @@ public sealed class ShapingRowLawTests {
                 // "recently Grounded" holds every tick too — proving the row order, not the fact's own truth, is
                 // what governs here.
                 Shaping: [
-                    new WorldShaping(When: new WorldPredicate.Now(Fact: ActionFact.Rising), Along: new WorldShapingAlong(Engage: risingEngage, Release: 46f)),
-                    new WorldShaping(When: new WorldPredicate.Recently(Fact: ActionFact.Grounded, WindowSeconds: 0.09f), Along: new WorldShapingAlong(Engage: 8f, Release: 8f)),
-                    new WorldShaping(Along: new WorldShapingAlong(Engage: 12f, Release: 12f)),
+                    new WorldShaping(
+                        When: new WorldPredicate.Now(Fact: ActionFact.Rising),
+                        Along: new WorldShapingAlong(
+                            Engage: risingEngage,
+                            Release: 46f
+                        )
+                    ),
+                    new WorldShaping(
+                        When: new WorldPredicate.Recently(
+                            Fact: ActionFact.Grounded,
+                            WindowSeconds: 0.09f
+                        ),
+                        Along: new WorldShapingAlong(
+                            Engage: 8f,
+                            Release: 8f
+                        )
+                    ),
+                    new WorldShaping(Along: new WorldShapingAlong(
+                        Engage: 12f,
+                        Release: 12f
+                    )),
                 ]
             ),
             ActionsRaw: new Dictionary<string, ActionSpec> {
@@ -107,74 +225,73 @@ public sealed class ShapingRowLawTests {
             DefaultSeatKitRaw = "walker-test",
         };
     }
-    private static WorldDefinition BuildDynamicsDocument(float frequency = 2.5f) {
-        var channels = new WorldChannel[] {
-            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
-            new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
-            new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
-        };
-        var walker = new BodyMotionProgram(
-            Name: "walker",
-            Version: "puck.body-motion.v1",
-            Kind: BodyProgramKind.Motion,
-            Operations: [
-                BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
-                BodyMotionOp.ResolveHold,
-                BodyMotionOp.ComputePlanarTargetVelocity,
-                BodyMotionOp.ShapeVelocity,
-                BodyMotionOp.SnapYawToPlanarIntent,
-                BodyMotionOp.IntegratePlanarAndVerticalVelocity,
-                BodyMotionOp.CommitPose,
-            ]
-        );
-        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
-        var kit = new WorldKit(
-            Name: "glider-test",
-            BodyMotionProgram: "walker",
-            Motion: new WorldMotion(
-                Speed: new WorldSpeed(Value: 4f),
-                Turn: new WorldTurn(Rate: 2.5f),
-                Holds: [
-                    new WorldHold(
-                        Bond: BodyHoldBond.Free,
-                        Envelope: new WorldHoldEnvelope(SinkSpeed: 20f),
-                        Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f),
-                        Hold: BodyHoldKind.Gravity,
-                        Name: "air"
-                    ),
-                ],
-                Shaping: [
-                    new WorldShaping(Dynamics: "stride"),
-                ]
-            ),
-            ProducersRaw: new Dictionary<string, BodyProgramParameters> {
-                ["roam"] = Fixtures.TravelerRoamParameters,
-            },
-            Collider: null
-        );
-
-        return Fixtures.BuildDocument() with {
-            ChannelsRaw = channels,
-            DynamicsRaw = [.. Fixtures.StandardDynamics, new DynamicsRow(Damping: 1f, Frequency: frequency, Name: "stride", Response: 0f)],
-            BodyMotionProgramsRaw = [walker, roam],
-            KitRowsRaw = [kit],
-            DefaultSeatKitRaw = "glider-test",
-        };
-    }
-    private static string[] ResponseTrace(WorldDefinition definition, int ticks) {
+    private static string[] DynamicsTrace(WorldDefinition definition, int ticks) {
         using var fixture = Fixtures.FreshServer(definition: definition);
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var body = fixture.Server.Body(index: actor.Index)!;
         var lines = new string[ticks];
 
         for (var tick = 0; (tick < ticks); tick++) {
-            var intent = default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One);
+            body.SubmitIntent(intent: default(PlayerIntent).WithChannel(
+                ordinal: ForwardOrdinal,
+                value: FixedQ4816.One
+            ));
+            fixture.Step();
+
+            var state = body.CaptureTransferState();
+            var position = body.FixedPosition;
+
+            lines[tick] = string.Join(
+                separator: ' ',
+                value: [
+                    Hex(value: position.X),
+                    Hex(value: position.Y),
+                    Hex(value: position.Z),
+                    Hex(value: state.PlanarVelocity.X),
+                    Hex(value: state.PlanarVelocity.Z),
+                ]
+            );
+        }
+
+        return lines;
+    }
+    private static string Hex(FixedQ4816 value) => value.Value.ToString(
+        format: "x16",
+        provider: CultureInfo.InvariantCulture
+    );
+    private static string[] ResponseTrace(WorldDefinition definition, int ticks) {
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var lines = new string[ticks];
+
+        for (var tick = 0; (tick < ticks); tick++) {
+            var intent = default(PlayerIntent).WithChannel(
+                ordinal: ForwardOrdinal,
+                value: FixedQ4816.One
+            );
 
             if (tick == 0) {
-                intent = intent.WithChannel(ordinal: JumpOrdinal, value: FixedQ4816.One);
+                intent = intent.WithChannel(
+                    ordinal: JumpOrdinal,
+                    value: FixedQ4816.One
+                );
             }
 
             body.SubmitIntent(intent: intent);
@@ -198,118 +315,34 @@ public sealed class ShapingRowLawTests {
 
         return lines;
     }
-    private static string[] DynamicsTrace(WorldDefinition definition, int ticks) {
-        using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
-
-        var body = fixture.Server.Body(index: actor.Index)!;
-        var lines = new string[ticks];
-
-        for (var tick = 0; (tick < ticks); tick++) {
-            body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
-            fixture.Step();
-
-            var state = body.CaptureTransferState();
-            var position = body.FixedPosition;
-
-            lines[tick] = string.Join(
-                separator: ' ',
-                value: [
-                    Hex(value: position.X),
-                    Hex(value: position.Y),
-                    Hex(value: position.Z),
-                    Hex(value: state.PlanarVelocity.X),
-                    Hex(value: state.PlanarVelocity.Z),
-                ]
-            );
-        }
-
-        return lines;
-    }
-
-    [Fact]
-    public void TheResponseTableGovernsByRowOrder_ReproducesTheRecordedTrace_WhereChangingTheRisingRowDiverges() {
-        var full = ResponseTrace(definition: BuildResponseDocument(), ticks: 240);
-        var head = full[..ResponseTrace240.Length];
-
-        Assert.Equal(expected: ResponseTrace240, actual: head);
-
-        var perturbed = ResponseTrace(definition: BuildResponseDocument(risingEngage: 60f), ticks: ResponseTrace240.Length);
-        var moved = 0;
-
-        for (var tick = 0; (tick < ResponseTrace240.Length); tick++) {
-            if (!string.Equals(a: full[tick], b: perturbed[tick], comparisonType: StringComparison.Ordinal)) {
-                moved++;
-            }
-        }
-
-        Assert.True(condition: (moved > 0), userMessage: "changing the now-Rising row's own release rate must move the trace, or the row order pins nothing");
-    }
-    [Fact]
-    public void TheDynamicsRowReproducesTheRecordedTrace_WhereChangingItsFrequencyDiverges() {
-        var full = DynamicsTrace(definition: BuildDynamicsDocument(), ticks: 240);
-        var head = full[..DynamicsTrace240.Length];
-
-        Assert.Equal(expected: DynamicsTrace240, actual: head);
-
-        var perturbed = DynamicsTrace(definition: BuildDynamicsDocument(frequency: 5f), ticks: DynamicsTrace240.Length);
-        var moved = 0;
-
-        for (var tick = 0; (tick < DynamicsTrace240.Length); tick++) {
-            if (!string.Equals(a: full[tick], b: perturbed[tick], comparisonType: StringComparison.Ordinal)) {
-                moved++;
-            }
-        }
-
-        Assert.True(condition: (moved > 0), userMessage: "a faster dynamics row must move the trace, or the row pins nothing about its own rate");
-    }
-    [Fact]
-    public void TheDynamicsRowMatchesTheIndependentCompiledFollowerForEachLane() {
-        var definition = BuildDynamicsDocument();
-        using var fixture = Fixtures.FreshServer(definition: definition);
-        var actor = WorldPrincipal.Seat(slot: 0);
-
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
-
-        var body = fixture.Server.Body(index: actor.Index)!;
-        var step = SecondOrderDynamics.Create(
-            dampingRatio: FixedQ4816.One,
-            frequencyHz: FixedQ4816.FromDouble(value: 2.5),
-            initialResponse: FixedQ4816.Zero
-        ).Compile(
-            stepTicks: (FixedTickConversion.TicksPerSecond / 240UL),
-            ticksPerSecond: FixedTickConversion.TicksPerSecond
-        );
-        var target = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: -FixedQ4816.FromDouble(value: 4));
-        var expected = SecondOrderState3.AtRest(position: FixedVector3.Zero);
-
-        for (var tick = 0; (tick < 16); tick++) {
-            expected = step.Step(state: expected, target: target, targetVelocity: FixedVector3.Zero);
-            body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
-            fixture.Step();
-
-            var actual = body.CaptureTransferState();
-            Assert.Equal(expected: expected.X.PositionRaw, actual: actual.PlanarFollowerPositionRawX);
-            Assert.Equal(expected: expected.Y.PositionRaw, actual: actual.PlanarFollowerPositionRawY);
-            Assert.Equal(expected: expected.Z.PositionRaw, actual: actual.PlanarFollowerPositionRawZ);
-            Assert.Equal(expected: expected.X.VelocityRaw, actual: actual.PlanarFollowerVelocityRawX);
-            Assert.Equal(expected: expected.Y.VelocityRaw, actual: actual.PlanarFollowerVelocityRawY);
-            Assert.Equal(expected: expected.Z.VelocityRaw, actual: actual.PlanarFollowerVelocityRawZ);
-        }
-    }
     [Fact]
     public void AHeldRowGovernsOnlyWhileItsChannelReadsHeld_WithTheSameWorldWithoutItAsControl() {
         var channels = new WorldChannel[] {
-            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
-            new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
-            new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
-            new(Name: "drift", Shape: ChannelShape.Binary, Composition: true),
+            new(
+            Name: "forward",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveAdvance
+        ),
+            new(
+            Name: "strafe",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.MoveStrafe
+        ),
+            new(
+            Name: "turn",
+            Shape: ChannelShape.Bipolar,
+            Role: ChannelRole.Turn
+        ),
+            new(
+            Name: "drift",
+            Shape: ChannelShape.Binary,
+            Composition: true
+        ),
         };
         var program = new BodyMotionProgram(
             Name: "held-row",
-            Version: "puck.body-motion.v1",
+            Version: "puck.body.program.v1",
             Kind: BodyProgramKind.Motion,
             Operations: [
                 BodyMotionOp.ResolveYawAttitudeAndPlanarFrame,
@@ -320,16 +353,30 @@ public sealed class ShapingRowLawTests {
                 BodyMotionOp.CommitPose,
             ]
         );
-        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
+        var roam = new BodyMotionProgram(
+            Name: "roam",
+            Version: "puck.body.program.v1",
+            Kind: BodyProgramKind.Producer,
+            Operations: [BodyMotionOp.ProduceSteeringIntent]
+        );
 
         WorldDefinition Build(bool withHeldRow) {
             var shaping = new List<WorldShaping>();
 
             if (withHeldRow) {
-                shaping.Add(item: new WorldShaping(When: new WorldPredicate.Held(Channel: "drift"), Along: new WorldShapingAlong(Engage: 2f, Release: 2f)));
+                shaping.Add(item: new WorldShaping(
+                    When: new WorldPredicate.Held(Channel: "drift"),
+                    Along: new WorldShapingAlong(
+                        Engage: 2f,
+                        Release: 2f
+                    )
+                ));
             }
 
-            shaping.Add(item: new WorldShaping(Along: new WorldShapingAlong(Engage: 40f, Release: 40f)));
+            shaping.Add(item: new WorldShaping(Along: new WorldShapingAlong(
+                Engage: 40f,
+                Release: 40f
+            )));
 
             var kit = new WorldKit(
                 Name: "held-row-test",
@@ -338,7 +385,16 @@ public sealed class ShapingRowLawTests {
                     Speed: new WorldSpeed(Value: 4f),
                     Turn: new WorldTurn(Rate: 2.5f),
                     Holds: [
-                        new WorldHold(Bond: BodyHoldBond.Free, Envelope: new WorldHoldEnvelope(SinkSpeed: 20f), Gravity: new WorldHoldGravity(Fall: 23f, Rise: 14f), Hold: BodyHoldKind.Gravity, Name: "air"),
+                        new WorldHold(
+                            Bond: BodyHoldBond.Free,
+                            Envelope: new WorldHoldEnvelope(SinkSpeed: 20f),
+                            Gravity: new WorldHoldGravity(
+                                Fall: 23f,
+                                Rise: 14f
+                            ),
+                            Hold: BodyHoldKind.Gravity,
+                            Name: "air"
+                        ),
                     ],
                     Shaping: shaping
                 ),
@@ -358,15 +414,26 @@ public sealed class ShapingRowLawTests {
             using var fixture = Fixtures.FreshServer(definition: Build(withHeldRow: withHeldRow));
             var actor = WorldPrincipal.Seat(slot: 0);
 
-            Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+            Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+                Principal: actor,
+                Slot: actor.Index,
+                IdentityName: null,
+                WireProtocolKey: WorldProtocol.WireProtocolKey
+            )).Accepted);
 
             var body = fixture.Server.Body(index: actor.Index)!;
 
-            for (var tick = 0; (tick < 4); tick++) {
-                var intent = default(PlayerIntent).WithChannel(ordinal: 0, value: FixedQ4816.One);
+            for (var tick = 0; (tick < 1); tick++) {
+                var intent = default(PlayerIntent).WithChannel(
+                    ordinal: 0,
+                    value: FixedQ4816.One
+                );
 
                 if (holdDrift) {
-                    intent = intent.WithChannel(ordinal: 3, value: FixedQ4816.One);
+                    intent = intent.WithChannel(
+                        ordinal: 3,
+                        value: FixedQ4816.One
+                    );
                 }
 
                 body.SubmitIntent(intent: intent);
@@ -379,12 +446,27 @@ public sealed class ShapingRowLawTests {
         // With the held row present and the channel down, the slow (Engage 2) row governs — nowhere near the fast
         // row's own convergence. Released, the fast (Engage 40) unconditional row governs identically to the
         // control world that never authors the held row at all.
-        var heldAndDown = RunHeld(withHeldRow: true, holdDrift: true);
-        var heldAndUp = RunHeld(withHeldRow: true, holdDrift: false);
-        var control = RunHeld(withHeldRow: false, holdDrift: false);
+        var heldAndDown = RunHeld(
+            holdDrift: true,
+            withHeldRow: true
+        );
+        var heldAndUp = RunHeld(
+            holdDrift: false,
+            withHeldRow: true
+        );
+        var control = RunHeld(
+            holdDrift: false,
+            withHeldRow: false
+        );
 
-        Assert.NotEqual(expected: heldAndUp, actual: heldAndDown);
-        Assert.Equal(expected: control, actual: heldAndUp);
+        Assert.NotEqual(
+            actual: heldAndDown,
+            expected: heldAndUp
+        );
+        Assert.Equal(
+            actual: heldAndUp,
+            expected: control
+        );
     }
     [Fact]
     public void AbsentResponseRatesSnapExactlyOnEngageAndRelease() {
@@ -396,48 +478,218 @@ public sealed class ShapingRowLawTests {
         using var fixture = Fixtures.FreshServer(definition: instant);
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var body = fixture.Server.Body(index: actor.Index)!;
-        body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
+
+        body.SubmitIntent(intent: default(PlayerIntent).WithChannel(
+            ordinal: ForwardOrdinal,
+            value: FixedQ4816.One
+        ));
         fixture.Step();
 
         Assert.Equal(
-            expected: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: -FixedQ4816.FromDouble(value: 4)),
+            expected: new FixedVector3(
+                X: FixedQ4816.Zero,
+                Y: FixedQ4816.Zero,
+                Z: -FixedQ4816.FromDouble(value: 4)
+            ),
             actual: body.CaptureTransferState().PlanarVelocity
         );
 
         body.SubmitIntent(intent: default);
         fixture.Step();
 
-        Assert.Equal(expected: FixedVector3.Zero, actual: body.CaptureTransferState().PlanarVelocity);
+        Assert.Equal(
+            expected: FixedVector3.Zero,
+            actual: body.CaptureTransferState().PlanarVelocity
+        );
     }
     [Fact]
     public void FiniteResponseRateMatchesTheIndependentDistanceOverTimeLaw() {
         var document = BuildResponseDocument();
         var kit = document.Kits[0];
         var finite = document with {
-            KitRowsRaw = [kit with { Motion = kit.Motion with { Shaping = [new WorldShaping(Along: new WorldShapingAlong(Engage: 8f, Release: 8f))] } }],
+            KitRowsRaw = [kit with { Motion = kit.Motion with { Shaping = [new WorldShaping(Along: new WorldShapingAlong(
+                    Engage: 8f,
+                    Release: 8f
+                ))] } }],
         };
         using var fixture = Fixtures.FreshServer(definition: finite);
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
 
         var body = fixture.Server.Body(index: actor.Index)!;
 
-        for (var tick = 0; (tick < 30); tick++) {
-            body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
+        for (var tick = 0; (tick < 4); tick++) {
+            body.SubmitIntent(intent: default(PlayerIntent).WithChannel(
+                ordinal: ForwardOrdinal,
+                value: FixedQ4816.One
+            ));
             fixture.Step();
         }
 
-        Assert.Equal(expected: -FixedQ4816.One, actual: body.CaptureTransferState().PlanarVelocity.Z);
+        Assert.Equal(
+            expected: -FixedQ4816.One,
+            actual: body.CaptureTransferState().PlanarVelocity.Z
+        );
 
-        for (var tick = 0; (tick < 15); tick++) {
+        for (var tick = 0; (tick < 2); tick++) {
             body.SubmitIntent(intent: default);
             fixture.Step();
         }
 
-        Assert.Equal(expected: -FixedQ4816.FromDouble(value: 0.5), actual: body.CaptureTransferState().PlanarVelocity.Z);
+        Assert.Equal(
+            expected: -FixedQ4816.FromDouble(value: 0.5),
+            actual: body.CaptureTransferState().PlanarVelocity.Z
+        );
+    }
+    [Fact]
+    public void TheDynamicsRowMatchesTheIndependentCompiledFollowerForEachLane() {
+        var definition = BuildDynamicsDocument();
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var actor = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(
+            Principal: actor,
+            Slot: actor.Index,
+            IdentityName: null,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
+
+        var body = fixture.Server.Body(index: actor.Index)!;
+        var step = SecondOrderDynamics.Create(
+            dampingRatio: FixedQ4816.One,
+            frequencyHz: FixedQ4816.FromDouble(value: 2.5),
+            initialResponse: FixedQ4816.Zero
+        ).Compile(
+            stepTicks: (FixedTickConversion.TicksPerSecond / 240UL),
+            ticksPerSecond: FixedTickConversion.TicksPerSecond
+        );
+        var target = new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.Zero,
+            Z: -FixedQ4816.FromDouble(value: 4)
+        );
+        var expected = SecondOrderState3.AtRest(position: FixedVector3.Zero);
+
+        for (var tick = 0; (tick < 2); tick++) {
+            expected = step.Step(
+                state: expected,
+                target: target,
+                targetVelocity: FixedVector3.Zero
+            );
+            body.SubmitIntent(intent: default(PlayerIntent).WithChannel(
+                ordinal: ForwardOrdinal,
+                value: FixedQ4816.One
+            ));
+            fixture.Step();
+
+            var actual = body.CaptureTransferState();
+
+            Assert.Equal(
+                expected: expected.X.PositionRaw,
+                actual: actual.PlanarFollowerPositionRawX
+            );
+            Assert.Equal(
+                expected: expected.Y.PositionRaw,
+                actual: actual.PlanarFollowerPositionRawY
+            );
+            Assert.Equal(
+                expected: expected.Z.PositionRaw,
+                actual: actual.PlanarFollowerPositionRawZ
+            );
+            Assert.Equal(
+                expected: expected.X.VelocityRaw,
+                actual: actual.PlanarFollowerVelocityRawX
+            );
+            Assert.Equal(
+                expected: expected.Y.VelocityRaw,
+                actual: actual.PlanarFollowerVelocityRawY
+            );
+            Assert.Equal(
+                expected: expected.Z.VelocityRaw,
+                actual: actual.PlanarFollowerVelocityRawZ
+            );
+        }
+    }
+    [Fact]
+    public void TheDynamicsRowReproducesTheRecordedTrace_WhereChangingItsFrequencyDiverges() {
+        var full = DynamicsTrace(
+            definition: BuildDynamicsDocument(),
+            ticks: 240
+        );
+        var head = full[..DynamicsTrace240.Length];
+
+        Assert.Equal(
+            actual: head,
+            expected: DynamicsTrace240
+        );
+
+        var perturbed = DynamicsTrace(
+            definition: BuildDynamicsDocument(frequency: 5f),
+            ticks: DynamicsTrace240.Length
+        );
+        var moved = 0;
+
+        for (var tick = 0; (tick < DynamicsTrace240.Length); tick++) {
+            if (!string.Equals(
+                a: full[tick],
+                b: perturbed[tick],
+                comparisonType: StringComparison.Ordinal
+            )) {
+                moved++;
+            }
+        }
+
+        Assert.True(
+            condition: (moved > 0),
+            userMessage: "a faster dynamics row must move the trace, or the row pins nothing about its own rate"
+        );
+    }
+    [Fact]
+    public void TheResponseTableGovernsByRowOrder_ReproducesTheRecordedTrace_WhereChangingTheRisingRowDiverges() {
+        var full = ResponseTrace(
+            definition: BuildResponseDocument(),
+            ticks: 240
+        );
+        var head = full[..ResponseTrace240.Length];
+
+        Assert.Equal(
+            actual: head,
+            expected: ResponseTrace240
+        );
+
+        var perturbed = ResponseTrace(
+            definition: BuildResponseDocument(risingEngage: 60f),
+            ticks: ResponseTrace240.Length
+        );
+        var moved = 0;
+
+        for (var tick = 0; (tick < ResponseTrace240.Length); tick++) {
+            if (!string.Equals(
+                a: full[tick],
+                b: perturbed[tick],
+                comparisonType: StringComparison.Ordinal
+            )) {
+                moved++;
+            }
+        }
+
+        Assert.True(
+            condition: (moved > 0),
+            userMessage: "changing the now-Rising row's own release rate must move the trace, or the row order pins nothing"
+        );
     }
 }

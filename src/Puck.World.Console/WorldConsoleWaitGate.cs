@@ -13,8 +13,8 @@ namespace Puck.World;
 /// </remarks>
 public sealed class WorldConsoleWaitGate {
     private bool m_armed;
-    private ulong m_releaseTick;
     private uint m_epoch;
+    private ulong m_releaseTick;
 
     /// <summary>Gets the last completed host-work tick published to this gate.</summary>
     public ulong Tick { get; private set; }
@@ -28,11 +28,15 @@ public sealed class WorldConsoleWaitGate {
     public ulong Arm(TextCommandSession session, ulong ticks) {
         ArgumentNullException.ThrowIfNull(argument: session);
         ArgumentOutOfRangeException.ThrowIfZero(ticks);
-        var release = checked(Tick + ticks);
+        var release = checked((Tick + ticks));
         var epoch = m_epoch;
-        session.HoldWhile(() => m_epoch == epoch && Tick < release);
+
+        session.HoldWhile(hold: () => ((m_epoch == epoch) && (Tick < release)));
         m_armed = true;
-        m_releaseTick = Math.Max(m_releaseTick, release);
+        m_releaseTick = Math.Max(
+            val1: m_releaseTick,
+            val2: release
+        );
 
         return release;
     }

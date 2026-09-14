@@ -26,12 +26,31 @@ public sealed class ReplayAddonHostAttachLawTests {
         fixture.Server.AttachAddons(runtime: new NullAddonHost());
 
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(
+            liveServer: fixture.Server,
+            profiles: fixture.Server.Profiles,
+            transport: transport,
+            engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
+            addonHostFactory: static (_, _) => new NullAddonHost()
+        );
 
-        Assert.True(condition: tape.TryBeginRecording(name: $"g-addon-attach-{Guid.NewGuid():N}", refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
+        Assert.True(
+            condition: tape.TryBeginRecording(
+                name: $"g-addon-attach-{Guid.NewGuid():N}",
+                refusal: out var refusal
+            ),
+            userMessage: $"refused to arm: {refusal}"
+        );
 
         transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertAddon(
-            Addon: new WorldAddonRow(Name: "probe", ModulePath: "nonexistent.wasm", Hash: "sha256-64/deadbeefdeadbeef", Fuel: 1000UL, Enabled: true),
+            Addon: new WorldAddonRow(
+                Name: "probe",
+                ModulePath: "nonexistent.wasm",
+                Hash: "sha256-64/deadbeefdeadbeef",
+                Fuel: 1000UL,
+                Enabled: true
+            ),
             Principal: WorldPrincipal.Console
         ));
 
@@ -61,6 +80,9 @@ public sealed class ReplayAddonHostAttachLawTests {
         // factory that does not self-attach, so a replayed addon-affecting mutation's prepare gate found
         // m_addons null and applied vacuously without ever touching this object. After the fix, Drive attaches the
         // factory's host itself, so the replayed mutation's prepare gate reaches THIS instance.
-        Assert.True(condition: (capturedHost.PrepareCallCount > 0), userMessage: "the replayed UpsertAddon mutation never reached the factory's own addon host — Drive is not structurally attaching it");
+        Assert.True(
+            condition: (capturedHost.PrepareCallCount > 0),
+            userMessage: "the replayed UpsertAddon mutation never reached the factory's own addon host — Drive is not structurally attaching it"
+        );
     }
 }

@@ -25,7 +25,7 @@ public sealed record TextFontDefinition(
 ) {
     /// <summary>Builds the normalized generation options consumed by the in-process generator.</summary>
     public FontAtlasGenerationOptions ToGenerationOptions() {
-        var distanceRange = (DistanceRange ?? SdfCoverageAtlas.DefaultDistanceRange);
+        var distanceRange = (DistanceRange ?? FontAtlasGenerationOptions.DefaultDistanceRange);
         var defaultPadding = ((float.IsFinite(f: distanceRange) && (distanceRange >= int.MinValue) && (distanceRange <= int.MaxValue))
             ? (int)MathF.Ceiling(x: distanceRange)
             : 0

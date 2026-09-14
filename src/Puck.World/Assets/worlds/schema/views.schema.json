@@ -92,9 +92,13 @@
           "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpClampPitchNullable",
           "description": "Gets the program\u0027s ClampPitch op, or null."
         },
+        "dynamicsOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpDynamicsNullable",
+          "description": "Gets the program\u0027s Dynamics op, or null."
+        },
         "fovOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpFovNullable",
-          "description": "Gets the program\u0027s Fov op, or null."
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpFieldOfViewNullable",
+          "description": "Gets the program\u0027s FieldOfView op, or null."
         },
         "lookAtOp": {
           "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpLookAtNullable",
@@ -112,13 +116,9 @@
           "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpPathNullable",
           "description": "Gets the program\u0027s Path op, or null."
         },
-        "dynamicsOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpDynamicsNullable",
-          "description": "Gets the program\u0027s Dynamics op, or null."
-        },
         "selectOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpSelectNullable",
-          "description": "Gets the program\u0027s Select op, or null."
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpSelectProgramNullable",
+          "description": "Gets the program\u0027s SelectProgram op, or null."
         }
       },
       "required": [
@@ -129,6 +129,14 @@
       "additionalProperties": false,
       "default": null,
       "title": "WorldCameraProgram"
+    },
+    "shaderToolchain": {
+      "description": "The directory holding the pipeline compiler\u0027s glslang/spirv-cross/dxc tools, or null to resolve each by bare name through the ordinary executable search path \u2014 never an environment variable.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
     },
     "layouts": {
       "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
@@ -160,7 +168,7 @@
             "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
             "type": "array",
             "items": {
-              "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera is null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect.",
+              "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Pipeline are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named pipeline (a WorldViewPipeline row) renders its selected image output into the rect \u2014 a slot names at most one of the two (the validator refuses both authored together).",
               "type": "object",
               "properties": {
                 "x": {
@@ -180,7 +188,14 @@
                   "type": "number"
                 },
                 "camera": {
-                  "description": "The authored camera name filling this slot, or null for the seat that owns it.",
+                  "description": "The authored camera name filling this slot, or null for the seat that owns it (or the pipeline named by Pipeline).",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "pipeline": {
+                  "description": "The authored views.pipelines row name filling this slot with a compiled shader pipeline, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.",
                   "type": [
                     "string",
                     "null"
@@ -202,6 +217,50 @@
         "additionalProperties": false,
         "title": "WorldViewLayout"
       }
+    },
+    "pipelines": {
+      "description": "Gets the authored views.pipelines rows. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One named shader-pipeline instance displayed by a Pipeline slot. Its source declares connected GPU passes, or is a single shader adapted into a one-pass pipeline. The row carries authored intent; compilation, resource ownership, history, and presentation inputs belong to the shader runtime and its host.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The pipeline\u0027s stable name (a SafeName, unique within the section) \u2014 what a Pipeline names and a pipeline.* console verb addresses.",
+            "type": "string"
+          },
+          "source": {
+            "description": "The pipeline document or shader source file, resolved relative to the document\u0027s own directory (an author\u0027s document may point this at any path relative to itself \u2014 never the Content-copied BaseDirectory convention WorldAssetRowLoader\u0027s asset rows use).",
+            "type": "string"
+          },
+          "camera": {
+            "description": "The authored camera feeding the paired iCameraPos/iCameraTarget/iCameraUp/ iCameraFov push constants under PUCK_SHADERTOY, or null for the pipeline\u0027s own iMouse orbit (the Shadertoy-dialect default).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "timeScale": {
+            "description": "The pipeline clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
+            "type": "number",
+            "default": 1
+          }
+        },
+        "required": [
+          "name",
+          "source"
+        ],
+        "additionalProperties": false,
+        "title": "WorldViewPipeline"
+      },
+      "default": null
     }
   },
   "required": [

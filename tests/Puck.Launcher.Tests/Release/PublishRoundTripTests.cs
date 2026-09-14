@@ -24,7 +24,14 @@ public sealed class PublishRoundTripTests : IDisposable {
             Channel: "stable",
             MinimumSupported: null,
             Notes: null,
-            Payloads: [new ReleasePayload(Files: [new ReleasePayloadFile(Hash: hash, Path: "Puck.World.exe", Size: fileBytes.Length)], Rid: "win-x64")],
+            Payloads: [new ReleasePayload(
+                    Files: [new ReleasePayloadFile(
+                            Hash: hash,
+                            Path: "Puck.World.exe",
+                            Size: fileBytes.Length
+                        )],
+                    Rid: "win-x64"
+                )],
             Revoked: null,
             Rollout: new ReleaseRollout(Percent: 100),
             Schema: ReleaseManifest.CurrentSchema,
@@ -33,27 +40,69 @@ public sealed class PublishRoundTripTests : IDisposable {
             Version: "1.0.1"
         );
         var fixture = new ReleaseChainFixture();
-        var signed = fixture.Sign(document: unsigned, notAfter: (ReleaseChainFixture.Epoch + 3600), notBefore: ReleaseChainFixture.Epoch, sequence: 1);
-        var channelDirectory = Path.Combine(path1: m_root.RootPath, path2: "stable");
+        var signed = fixture.Sign(
+            document: unsigned,
+            notAfter: (ReleaseChainFixture.Epoch + 3600),
+            notBefore: ReleaseChainFixture.Epoch,
+            sequence: 1
+        );
+        var channelDirectory = Path.Combine(
+            path1: m_root.RootPath,
+            path2: "stable"
+        );
 
         Directory.CreateDirectory(path: channelDirectory);
-        File.WriteAllBytes(path: Path.Combine(path1: channelDirectory, path2: "manifest.json"), bytes: ReleaseChainFixture.ToWireBytes(manifest: signed));
+        File.WriteAllBytes(
+            path: Path.Combine(
+                path1: channelDirectory,
+                path2: "manifest.json"
+            ),
+            bytes: ReleaseChainFixture.ToWireBytes(manifest: signed)
+        );
 
         var source = new DirectoryReleaseSource(root: m_root.RootPath);
-        var fetch = await source.TryGetLatestManifestAsync(cancellationToken: TestContext.Current.CancellationToken, channel: "stable");
+        var fetch = await source.TryGetLatestManifestAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            channel: "stable"
+        );
 
-        Assert.True(condition: fetch.Found, userMessage: fetch.RefusalReason);
+        Assert.True(
+            condition: fetch.Found,
+            userMessage: fetch.RefusalReason
+        );
 
-        var parsed = System.Text.Json.JsonSerializer.Deserialize<ReleaseManifest>(utf8Json: fetch.ManifestBytes, options: Puck.Assets.Documents.DocumentJsonOptions.Shared)!;
-        var verifier = new AttestationReleaseVerifier(codec: fixture.Codec, sequenceStore: new InMemoryReleaseSequenceStore(), trustList: fixture.BuildTrustList(replayHorizon: TimeSpan.FromDays(days: 30)));
-        var verified = verifier.Verify(advanceSequence: true, installedVersion: "1.0.0", manifest: parsed, now: DateTimeOffset.FromUnixTimeSeconds(seconds: ReleaseChainFixture.Epoch));
+        var parsed = System.Text.Json.JsonSerializer.Deserialize<ReleaseManifest>(
+            utf8Json: fetch.ManifestBytes,
+            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
+        )!;
+        var verifier = new AttestationReleaseVerifier(
+            codec: fixture.Codec,
+            sequenceStore: new InMemoryReleaseSequenceStore(),
+            trustList: fixture.BuildTrustList(replayHorizon: TimeSpan.FromDays(days: 30))
+        );
+        var verified = verifier.Verify(
+            advanceSequence: true,
+            installedVersion: "1.0.0",
+            manifest: parsed,
+            now: DateTimeOffset.FromUnixTimeSeconds(seconds: ReleaseChainFixture.Epoch)
+        );
 
-        Assert.True(condition: verified.Accepted, userMessage: verified.RefusalReason);
+        Assert.True(
+            condition: verified.Accepted,
+            userMessage: verified.RefusalReason
+        );
 
         using var destination = new MemoryStream();
-        var found = await source.TryGetFileAsync(cancellationToken: TestContext.Current.CancellationToken, destination: destination, hash: hash);
+        var found = await source.TryGetFileAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            destination: destination,
+            hash: hash
+        );
 
         Assert.True(condition: found);
-        Assert.Equal(expected: fileBytes, actual: destination.ToArray());
+        Assert.Equal(
+            expected: fileBytes,
+            actual: destination.ToArray()
+        );
     }
 }

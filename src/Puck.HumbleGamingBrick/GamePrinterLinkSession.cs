@@ -43,6 +43,17 @@ public sealed class GamePrinterLinkSession : IDisposable {
         m_printer = printer;
     }
 
+    /// <summary>Severs the cable: the serial port loses its peer and the machine steps independently again. The machine
+    /// and printer themselves are untouched (they are owned by the caller, not the session).</summary>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        m_disposed = true;
+
+        SerialComponent.DetachPeer(port: m_port);
+    }
     /// <summary>Advances the machine by a budget of T-cycles (dots) and carries the same budget into the printer's print
     /// countdown — the seam a host drives in place of the machine's own <see cref="Machine.Run"/> while a printer is cabled.</summary>
     /// <param name="tCycles">The number of T-cycles to advance this call.</param>
@@ -55,16 +66,5 @@ public sealed class GamePrinterLinkSession : IDisposable {
 
         m_machine.Run(tCycles: tCycles);
         m_printer.AdvanceBusy(tCycles: tCycles);
-    }
-    /// <summary>Severs the cable: the serial port loses its peer and the machine steps independently again. The machine
-    /// and printer themselves are untouched (they are owned by the caller, not the session).</summary>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-
-        SerialComponent.DetachPeer(port: m_port);
     }
 }

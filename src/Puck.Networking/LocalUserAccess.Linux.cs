@@ -14,18 +14,51 @@ public static partial class LocalUserAccess {
     /// <exception cref="IOException">The file cannot be opened or inspected.</exception>
     [SupportedOSPlatform("linux")]
     public static FileStream OpenLinuxFile(string path, bool create) {
-        if (!OperatingSystem.IsLinux() || RuntimeInformation.ProcessArchitecture != Architecture.X64) { throw new PlatformNotSupportedException("Linux capability files require x64."); }
+        if (
+            !OperatingSystem.IsLinux() ||
+            (RuntimeInformation.ProcessArchitecture != Architecture.X64)
+        ) { throw new PlatformNotSupportedException(message: "Linux capability files require x64."); }
         // Same openat/fstat discipline as confined storage: inspect the actual inode, never a pre-open path.
-        const int noFollow = 0x20000, closeOnExec = 0x80000, nonBlock = 0x800;
-        var fd = OpenAt(-100, path, noFollow | closeOnExec | nonBlock | (create ? 2 | 0x40 | 0x80 : 0), 0x180);
-        if (fd < 0) { throw new IOException("Cannot open private capability file.", new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError())); }
-        var handle = new SafeFileHandle(fd, ownsHandle: true);
+        const int NoFollow = 0x20000, CloseOnExec = 0x80000, NonBlock = 0x800;
+        var fd = OpenAt(
+            directory: -100,
+            flags: NoFollow | CloseOnExec | NonBlock | (create
+            ? 2 | 0x40 | 0x80
+            : 0),
+            mode: 0x180,
+            path: path
+        );
+
+        if (fd < 0) {
+            throw new IOException(
+            "Cannot open private capability file.",
+            new System.ComponentModel.Win32Exception(error: Marshal.GetLastPInvokeError())
+        );
+        }
+        var handle = new SafeFileHandle(
+            fd,
+            ownsHandle: true
+        );
+
         try {
-            if (Fstat(handle, out var info) != 0) { throw new IOException("Cannot inspect private capability inode."); }
-            if (info.Owner != GetEuid() || info.Links != 1 || (info.Mode & 0xF000) != 0x8000 || (info.Mode & 0x3F) != 0) {
-                throw new UnauthorizedAccessException("Capability file must be a private, singly linked regular file owned by the current user.");
+            if (Fstat(
+                file: handle,
+                info: out var info
+            ) != 0) { throw new IOException(message: "Cannot inspect private capability inode."); }
+            if (
+                (info.Owner != GetEuid()) ||
+                (info.Links != 1) ||
+                ((info.Mode & 0xF000) != 0x8000) ||
+                ((info.Mode & 0x3F) != 0)
+            ) {
+                throw new UnauthorizedAccessException(message: "Capability file must be a private, singly linked regular file owned by the current user.");
             }
-            return new FileStream(handle, create ? FileAccess.ReadWrite : FileAccess.Read);
+            return new FileStream(
+                access: (create
+                ? FileAccess.ReadWrite
+                : FileAccess.Read),
+                handle: handle
+            );
         } catch { handle.Dispose(); throw; }
     }
 
@@ -36,6 +69,7 @@ public static partial class LocalUserAccess {
         [FieldOffset(24)] public uint Mode;
         [FieldOffset(28)] public uint Owner;
     }
+
     [LibraryImport("libc", EntryPoint = "openat", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
     private static partial int OpenAt(int directory, string path, int flags, uint mode);
     [LibraryImport("libc", EntryPoint = "fstat", SetLastError = true)]

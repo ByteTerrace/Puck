@@ -7,7 +7,7 @@ internal static partial class Oracles {
     public static BigInteger RepeatPatternBits(BigInteger pattern, int blockWidth, int bitWidth) {
         var result = BigInteger.Zero;
 
-        for (var bit = 0; bit < bitWidth; ++bit) {
+        for (var bit = 0; (bit < bitWidth); ++bit) {
             if (!((pattern >> (bit % blockWidth)) & BigInteger.One).IsZero) {
                 result |= (BigInteger.One << bit);
             }

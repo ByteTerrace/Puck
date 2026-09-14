@@ -21,14 +21,23 @@ public static class ArmWords {
     /// <returns>The encoded instruction word.</returns>
     public static uint Branch(uint fromAddress, uint toAddress) {
         if ((((fromAddress | toAddress) & 3u) != 0u)) {
-            throw new ArgumentException(message: "ARM branch source and target must be word-aligned.", paramName: nameof(toAddress));
+            throw new ArgumentException(
+                message: "ARM branch source and target must be word-aligned.",
+                paramName: nameof(toAddress)
+            );
         }
 
         // The 24-bit field is the signed word delta from PC (the branch address + 8).
         var delta = ((int)((toAddress - (fromAddress + 8u)) >> 2));
 
-        if ((delta < -0x800000) || (delta > 0x7FFFFF)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(toAddress), message: "An ARM branch reaches ±32 MiB.");
+        if (
+            (delta < -0x800000) ||
+            (delta > 0x7FFFFF)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(toAddress),
+                message: "An ARM branch reaches ±32 MiB."
+            );
         }
 
         return 0xEA000000u | (((uint)delta) & 0x00FFFFFFu);

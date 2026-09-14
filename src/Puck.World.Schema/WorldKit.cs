@@ -46,6 +46,10 @@ public sealed record WorldKit(
     /// resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyDictionary<string, ActionSpec> Actions => (ActionsRaw ?? EmptyActions);
+    /// <summary>Gets the cadence policy for locally simulated, non-human bodies wearing this kit. ABSENT preserves
+    /// full-rate motion and producer steering.</summary>
+    [JsonIgnore]
+    public WorldAutonomyCadence Autonomy => (AutonomyRaw ?? WorldAutonomyCadence.FullRate);
     /// <summary>Gets the kit's machine-pad bindings, keyed by the same declared channel names <see cref="Actions"/>
     /// keys off — what a channel MEANS when this kit is worn by a control application whose target is a screen's
     /// booted machine, rather than by a body. One vocabulary, two destinations: a kit binding <c>jump</c> to a body
@@ -57,10 +61,6 @@ public sealed record WorldKit(
     /// none.</summary>
     [JsonIgnore]
     public IReadOnlyDictionary<string, BodyProgramParameters> Producers => (ProducersRaw ?? EmptyProducers);
-    /// <summary>Gets the cadence policy for locally simulated, non-human bodies wearing this kit. ABSENT preserves
-    /// full-rate motion and producer steering.</summary>
-    [JsonIgnore]
-    public WorldAutonomyCadence Autonomy => (AutonomyRaw ?? WorldAutonomyCadence.FullRate);
 
     private static readonly IReadOnlyDictionary<string, BodyProgramParameters> EmptyProducers = new Dictionary<string, BodyProgramParameters>(comparer: StringComparer.Ordinal);
     private static readonly IReadOnlyDictionary<string, ActionSpec> EmptyActions = new Dictionary<string, ActionSpec>(comparer: StringComparer.Ordinal);
@@ -78,6 +78,7 @@ public sealed record WorldKit(
 public sealed record WorldAutonomyCadence(float MotionSeconds = 0f, float SteeringSeconds = 0f) {
     /// <summary>The greatest supported autonomous update interval.</summary>
     public const float MaximumSeconds = 1f;
+
     /// <summary>Full authority-rate motion and steering.</summary>
     public static WorldAutonomyCadence FullRate { get; } = new();
 }
@@ -344,11 +345,11 @@ public readonly record struct FixedWorldKit(
             ),
             Tuning: tuning,
             AutonomousMotionTicks: ((kit.Autonomy.MotionSeconds > 0f)
-                ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.MotionSeconds))
-                : 0UL),
+            ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.MotionSeconds))
+            : 0UL),
             AutonomousSteeringTicks: ((kit.Autonomy.SteeringSeconds > 0f)
-                ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.SteeringSeconds))
-                : 0UL),
+            ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.SteeringSeconds))
+            : 0UL),
             Rigid: rigid,
             Carry: carry,
             Tether: tether

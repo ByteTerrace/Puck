@@ -51,7 +51,8 @@ internal sealed partial class Diagnostics {
         }
 
         instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
-            bios: BiosImage, options: MachineOptions,
+            bios: BiosImage,
+            options: MachineOptions,
             rom: File.ReadAllBytes(path: romPath)
         ));
 

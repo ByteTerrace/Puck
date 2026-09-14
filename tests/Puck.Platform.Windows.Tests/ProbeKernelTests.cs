@@ -28,7 +28,10 @@ public sealed class ProbeKernelTests {
             Assert.Skip(reason: "no DXGI hardware adapter is available on this machine.");
         }
 
-        var lit = bench.CreateFrame(pixels: BuildSquare(inside: [255, 255, 255, 255], outside: [0, 0, 0, 255]));
+        var lit = bench.CreateFrame(pixels: BuildSquare(
+            inside: [255, 255, 255, 255],
+            outside: [0, 0, 0, 255]
+        ));
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
             KernelSource: File.ReadAllText(path: KernelPath(name: "ir-blob")),
@@ -41,12 +44,25 @@ public sealed class ProbeKernelTests {
             Trigger: CameraSensor.Infrared
         );
 
-        using var kernel = bench.CreateKernel(request: in request, ring: ring);
+        using var kernel = bench.CreateKernel(
+            request: in request,
+            ring: ring
+        );
 
-        Assert.True(condition: kernel.TryRun(views: [lit.View], boundMask: 1u, captureTimestamp: Stopwatch.GetTimestamp()));
-        Assert.Equal(expected: 1L, actual: kernel.Cycles);
+        Assert.True(condition: kernel.TryRun(
+            views: [lit.View],
+            boundMask: 1u,
+            captureTimestamp: Stopwatch.GetTimestamp()
+        ));
+        Assert.Equal(
+            expected: 1L,
+            actual: kernel.Cycles
+        );
         Assert.True(condition: ring.TryReadLatest(reading: out var reading));
-        Assert.Equal(expected: -1, actual: reading.OutputSlot);
+        Assert.Equal(
+            expected: -1,
+            actual: reading.OutputSlot
+        );
         Assert.True(condition: (reading.CompletionTimestamp >= reading.CaptureTimestamp));
 
         AssertBlobCentroid(reading: reading);
@@ -59,7 +75,10 @@ public sealed class ProbeKernelTests {
             Assert.Skip(reason: "no DXGI hardware adapter is available on this machine.");
         }
 
-        var lit = bench.CreateFrame(pixels: BuildSquare(inside: [255, 255, 255, 255], outside: [0, 0, 0, 255]));
+        var lit = bench.CreateFrame(pixels: BuildSquare(
+            inside: [255, 255, 255, 255],
+            outside: [0, 0, 0, 255]
+        ));
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
             KernelSource: File.ReadAllText(path: KernelPath(name: "ir-blob")),
@@ -72,11 +91,25 @@ public sealed class ProbeKernelTests {
             Trigger: CameraSensor.Infrared
         );
 
-        using var kernel = bench.CreateKernel(request: in request, ring: ring);
+        using var kernel = bench.CreateKernel(
+            request: in request,
+            ring: ring
+        );
 
-        Assert.True(condition: kernel.TryRun(views: [lit.View], boundMask: 1u, captureTimestamp: Stopwatch.GetTimestamp()));
-        Assert.False(condition: kernel.TryRun(views: [lit.View], boundMask: 1u, captureTimestamp: Stopwatch.GetTimestamp()));
-        Assert.Equal(expected: 1L, actual: kernel.Cycles);
+        Assert.True(condition: kernel.TryRun(
+            views: [lit.View],
+            boundMask: 1u,
+            captureTimestamp: Stopwatch.GetTimestamp()
+        ));
+        Assert.False(condition: kernel.TryRun(
+            views: [lit.View],
+            boundMask: 1u,
+            captureTimestamp: Stopwatch.GetTimestamp()
+        ));
+        Assert.Equal(
+            expected: 1L,
+            actual: kernel.Cycles
+        );
     }
     [Fact]
     public void A_ring_input_reads_the_slot_the_publication_names() {
@@ -89,7 +122,13 @@ public sealed class ProbeKernelTests {
         var sharedRing = bench.CreateSharedRing(slots: 2);
 
         Assert.True(condition: sharedRing.Slots.TryReserveWriteSlot(slot: out var writeSlot));
-        bench.UploadPixels(target: sharedRing.Targets[writeSlot], pixels: BuildSquare(inside: [255, 255, 255, 255], outside: [0, 0, 0, 255]));
+        bench.UploadPixels(
+            target: sharedRing.Targets[writeSlot],
+            pixels: BuildSquare(
+                inside: [255, 255, 255, 255],
+                outside: [0, 0, 0, 255]
+            )
+        );
         sharedRing.Slots.Publish(slot: writeSlot);
 
         var ring = new ProbeReadingRing();
@@ -100,18 +139,31 @@ public sealed class ProbeKernelTests {
             Constants: IrBlobConstants(),
             ChannelCount: 4,
             RateHz: 240U,
-            Inputs: [new ProbeKernelInput.Ring(Width: FrameWidth, Height: FrameHeight, Format: SurfaceFormat.R8G8B8A8Unorm, SharedTargetHandles: sharedRing.Handles, Slots: sharedRing.Slots)],
+            Inputs: [new ProbeKernelInput.Ring(
+                    Width: FrameWidth,
+                    Height: FrameHeight,
+                    Format: SurfaceFormat.R8G8B8A8Unorm,
+                    SharedTargetHandles: sharedRing.Handles,
+                    Slots: sharedRing.Slots
+                )],
             Trigger: CameraSensor.Infrared
         );
 
-        using var kernel = bench.CreateKernel(request: in request, ring: ring);
+        using var kernel = bench.CreateKernel(
+            request: in request,
+            ring: ring
+        );
 
         Assert.True(condition: sharedRing.Slots.TryAcquireLatest(slot: out var readSlot));
 
         try {
             var view = bench.OpenSharedView(sharedHandle: sharedRing.Handles[readSlot]);
 
-            Assert.True(condition: kernel.TryRun(views: [view], boundMask: 1u, captureTimestamp: Stopwatch.GetTimestamp()));
+            Assert.True(condition: kernel.TryRun(
+                views: [view],
+                boundMask: 1u,
+                captureTimestamp: Stopwatch.GetTimestamp()
+            ));
         } finally {
             sharedRing.Slots.Release(slot: readSlot);
         }
@@ -139,11 +191,21 @@ public sealed class ProbeKernelTests {
             Trigger: CameraSensor.Infrared
         );
 
-        using var kernel = bench.CreateKernel(request: in request, ring: ring);
+        using var kernel = bench.CreateKernel(
+            request: in request,
+            ring: ring
+        );
 
-        Assert.True(condition: kernel.TryRun(views: [0], boundMask: 0u, captureTimestamp: Stopwatch.GetTimestamp()));
+        Assert.True(condition: kernel.TryRun(
+            views: [0],
+            boundMask: 0u,
+            captureTimestamp: Stopwatch.GetTimestamp()
+        ));
         Assert.True(condition: ring.TryReadLatest(reading: out var reading));
-        Assert.Equal(expected: 0.0, actual: ((double)reading[0]));
+        Assert.Equal(
+            expected: 0.0,
+            actual: ((double)reading[0])
+        );
     }
     [Fact]
     public void Shipped_faerie_kernel_relights_into_its_output_ring() {
@@ -153,9 +215,18 @@ public sealed class ProbeKernelTests {
             Assert.Skip(reason: "no DXGI hardware adapter is available on this machine.");
         }
 
-        var color = bench.CreateFrame(pixels: BuildSquare(inside: [128, 128, 128, 255], outside: [128, 128, 128, 255]));
-        var lit = bench.CreateFrame(pixels: BuildSquare(inside: [255, 255, 255, 255], outside: [0, 0, 0, 255]));
-        var unlit = bench.CreateFrame(pixels: BuildSquare(inside: [0, 0, 0, 255], outside: [0, 0, 0, 255]));
+        var color = bench.CreateFrame(pixels: BuildSquare(
+            inside: [128, 128, 128, 255],
+            outside: [128, 128, 128, 255]
+        ));
+        var lit = bench.CreateFrame(pixels: BuildSquare(
+            inside: [255, 255, 255, 255],
+            outside: [0, 0, 0, 255]
+        ));
+        var unlit = bench.CreateFrame(pixels: BuildSquare(
+            inside: [0, 0, 0, 255],
+            outside: [0, 0, 0, 255]
+        ));
         var targets = new[] { bench.CreateSharedTarget(), bench.CreateSharedTarget() };
         var slots = new LatestSlotPublication();
 
@@ -180,28 +251,72 @@ public sealed class ProbeKernelTests {
             )
         );
 
-        using var kernel = bench.CreateKernel(request: in request, ring: ring);
+        using var kernel = bench.CreateKernel(
+            request: in request,
+            ring: ring
+        );
 
-        Assert.True(condition: kernel.TryRun(views: [color.View, lit.View, unlit.View], boundMask: 0b11u, captureTimestamp: Stopwatch.GetTimestamp()));
+        Assert.True(condition: kernel.TryRun(
+            views: [color.View, lit.View, unlit.View],
+            boundMask: 0b11u,
+            captureTimestamp: Stopwatch.GetTimestamp()
+        ));
         Assert.True(condition: ring.TryReadLatest(reading: out var reading));
-        Assert.Equal(expected: 4, actual: reading.ChannelCount);
-        Assert.InRange(actual: reading.OutputSlot, low: 0, high: (targets.Length - 1));
-        Assert.Equal(expected: reading.OutputSlot, actual: slots.LatestSlot);
+        Assert.Equal(
+            expected: 4,
+            actual: reading.ChannelCount
+        );
+        Assert.InRange(
+            actual: reading.OutputSlot,
+            low: 0,
+            high: (targets.Length - 1)
+        );
+        Assert.Equal(
+            expected: reading.OutputSlot,
+            actual: slots.LatestSlot
+        );
 
         const double ExpectedCoverage = (((double)(SquareSize * SquareSize)) / (FrameWidth * FrameHeight));
 
-        Assert.InRange(actual: ((double)reading[0]), low: -1.0, high: 1.0);
-        Assert.InRange(actual: ((double)reading[1]), low: -1.0, high: 1.0);
-        Assert.InRange(actual: ((double)reading[2]), low: 0.99, high: 1.0);
-        Assert.InRange(actual: ((double)reading[3]), low: (ExpectedCoverage - 0.002), high: (ExpectedCoverage + 0.002));
+        Assert.InRange(
+            actual: ((double)reading[0]),
+            low: -1.0,
+            high: 1.0
+        );
+        Assert.InRange(
+            actual: ((double)reading[1]),
+            low: -1.0,
+            high: 1.0
+        );
+        Assert.InRange(
+            actual: ((double)reading[2]),
+            low: 0.99,
+            high: 1.0
+        );
+        Assert.InRange(
+            actual: ((double)reading[3]),
+            low: (ExpectedCoverage - 0.002),
+            high: (ExpectedCoverage + 0.002)
+        );
 
         // The relit frame: the strobe-lit square is brighter than the unresponsive wall around it, which keeps only
         // ambient plus the light's spill.
         var pixels = bench.ReadBack(target: targets[reading.OutputSlot]);
-        var inside = Luminance(pixels: pixels, x: (SquareLeft + (SquareSize / 2)), y: (SquareTop + (SquareSize / 2)));
-        var outside = Luminance(pixels: pixels, x: 8, y: (FrameHeight - 8));
+        var inside = Luminance(
+            pixels: pixels,
+            x: (SquareLeft + (SquareSize / 2)),
+            y: (SquareTop + (SquareSize / 2))
+        );
+        var outside = Luminance(
+            pixels: pixels,
+            x: 8,
+            y: (FrameHeight - 8)
+        );
 
-        Assert.True(condition: (inside > outside), userMessage: $"inside {inside} should outshine outside {outside}");
+        Assert.True(
+            condition: (inside > outside),
+            userMessage: $"inside {inside} should outshine outside {outside}"
+        );
     }
     [Fact]
     public void Shipped_faerie_kernel_relights_with_the_painting_socket_unbound() {
@@ -211,9 +326,18 @@ public sealed class ProbeKernelTests {
             Assert.Skip(reason: "no DXGI hardware adapter is available on this machine.");
         }
 
-        var color = bench.CreateFrame(pixels: BuildSquare(inside: [128, 128, 128, 255], outside: [128, 128, 128, 255]));
-        var lit = bench.CreateFrame(pixels: BuildSquare(inside: [255, 255, 255, 255], outside: [0, 0, 0, 255]));
-        var unlit = bench.CreateFrame(pixels: BuildSquare(inside: [0, 0, 0, 255], outside: [0, 0, 0, 255]));
+        var color = bench.CreateFrame(pixels: BuildSquare(
+            inside: [128, 128, 128, 255],
+            outside: [128, 128, 128, 255]
+        ));
+        var lit = bench.CreateFrame(pixels: BuildSquare(
+            inside: [255, 255, 255, 255],
+            outside: [0, 0, 0, 255]
+        ));
+        var unlit = bench.CreateFrame(pixels: BuildSquare(
+            inside: [0, 0, 0, 255],
+            outside: [0, 0, 0, 255]
+        ));
         var targets = new[] { bench.CreateSharedTarget(), bench.CreateSharedTarget() };
         var slots = new LatestSlotPublication();
 
@@ -238,31 +362,82 @@ public sealed class ProbeKernelTests {
             )
         );
 
-        using var kernel = bench.CreateKernel(request: in request, ring: ring);
+        using var kernel = bench.CreateKernel(
+            request: in request,
+            ring: ring
+        );
 
-        Assert.True(condition: kernel.TryRun(views: [color.View, lit.View, unlit.View, 0], boundMask: 0b011u, captureTimestamp: Stopwatch.GetTimestamp()));
+        Assert.True(condition: kernel.TryRun(
+            views: [color.View, lit.View, unlit.View, 0],
+            boundMask: 0b011u,
+            captureTimestamp: Stopwatch.GetTimestamp()
+        ));
         Assert.True(condition: ring.TryReadLatest(reading: out var reading));
-        Assert.Equal(expected: FaerieChannelCount, actual: reading.ChannelCount);
-        Assert.InRange(actual: reading.OutputSlot, low: 0, high: (targets.Length - 1));
+        Assert.Equal(
+            expected: FaerieChannelCount,
+            actual: reading.ChannelCount
+        );
+        Assert.InRange(
+            actual: reading.OutputSlot,
+            low: 0,
+            high: (targets.Length - 1)
+        );
 
         const double ExpectedCoverage = (((double)(SquareSize * SquareSize)) / (FrameWidth * FrameHeight));
 
-        Assert.InRange(actual: ((double)reading[0]), low: -1.0, high: 1.0);
-        Assert.InRange(actual: ((double)reading[1]), low: -1.0, high: 1.0);
-        Assert.InRange(actual: ((double)reading[2]), low: 0.99, high: 1.0);
-        Assert.InRange(actual: ((double)reading[3]), low: (ExpectedCoverage - 0.002), high: (ExpectedCoverage + 0.002));
+        Assert.InRange(
+            actual: ((double)reading[0]),
+            low: -1.0,
+            high: 1.0
+        );
+        Assert.InRange(
+            actual: ((double)reading[1]),
+            low: -1.0,
+            high: 1.0
+        );
+        Assert.InRange(
+            actual: ((double)reading[2]),
+            low: 0.99,
+            high: 1.0
+        );
+        Assert.InRange(
+            actual: ((double)reading[3]),
+            low: (ExpectedCoverage - 0.002),
+            high: (ExpectedCoverage + 0.002)
+        );
         // journey defaults to 0, so the light never enters the (unbound) painting.
-        Assert.Equal(expected: 0.0, actual: ((double)reading[4]));
+        Assert.Equal(
+            expected: 0.0,
+            actual: ((double)reading[4])
+        );
 
-        var expectedConfidence = Math.Min(val1: 1.0, val2: (ExpectedCoverage / 0.02));
+        var expectedConfidence = Math.Min(
+            val1: 1.0,
+            val2: (ExpectedCoverage / 0.02)
+        );
 
-        Assert.InRange(actual: ((double)reading.Confidence), low: (expectedConfidence - 0.01), high: (expectedConfidence + 0.01));
+        Assert.InRange(
+            actual: ((double)reading.Confidence),
+            low: (expectedConfidence - 0.01),
+            high: (expectedConfidence + 0.01)
+        );
 
         var pixels = bench.ReadBack(target: targets[reading.OutputSlot]);
-        var inside = Luminance(pixels: pixels, x: (SquareLeft + (SquareSize / 2)), y: (SquareTop + (SquareSize / 2)));
-        var outside = Luminance(pixels: pixels, x: 8, y: (FrameHeight - 8));
+        var inside = Luminance(
+            pixels: pixels,
+            x: (SquareLeft + (SquareSize / 2)),
+            y: (SquareTop + (SquareSize / 2))
+        );
+        var outside = Luminance(
+            pixels: pixels,
+            x: 8,
+            y: (FrameHeight - 8)
+        );
 
-        Assert.True(condition: (inside > outside), userMessage: $"inside {inside} should outshine outside {outside}");
+        Assert.True(
+            condition: (inside > outside),
+            userMessage: $"inside {inside} should outshine outside {outside}"
+        );
     }
     [Fact]
     public void Shipped_faerie_kernel_shows_the_painting_when_bound() {
@@ -272,9 +447,18 @@ public sealed class ProbeKernelTests {
             Assert.Skip(reason: "no DXGI hardware adapter is available on this machine.");
         }
 
-        var color = bench.CreateFrame(pixels: BuildSquare(inside: [128, 128, 128, 255], outside: [128, 128, 128, 255]));
-        var lit = bench.CreateFrame(pixels: BuildSquare(inside: [255, 255, 255, 255], outside: [0, 0, 0, 255]));
-        var unlit = bench.CreateFrame(pixels: BuildSquare(inside: [0, 0, 0, 255], outside: [0, 0, 0, 255]));
+        var color = bench.CreateFrame(pixels: BuildSquare(
+            inside: [128, 128, 128, 255],
+            outside: [128, 128, 128, 255]
+        ));
+        var lit = bench.CreateFrame(pixels: BuildSquare(
+            inside: [255, 255, 255, 255],
+            outside: [0, 0, 0, 255]
+        ));
+        var unlit = bench.CreateFrame(pixels: BuildSquare(
+            inside: [0, 0, 0, 255],
+            outside: [0, 0, 0, 255]
+        ));
         var paintingRing = bench.CreateSharedRing(slots: 2);
 
         Assert.True(condition: paintingRing.Slots.TryReserveWriteSlot(slot: out var paintingWriteSlot));
@@ -288,7 +472,10 @@ public sealed class ProbeKernelTests {
             greenPixels[(index + 3)] = 255;
         }
 
-        bench.UploadPixels(target: paintingRing.Targets[paintingWriteSlot], pixels: greenPixels);
+        bench.UploadPixels(
+            target: paintingRing.Targets[paintingWriteSlot],
+            pixels: greenPixels
+        );
         paintingRing.Slots.Publish(slot: paintingWriteSlot);
 
         Assert.True(condition: paintingRing.Slots.TryAcquireLatest(slot: out var paintingReadSlot));
@@ -323,7 +510,13 @@ public sealed class ProbeKernelTests {
             Inputs: [
                 new ProbeKernelInput.Sensor(Kind: CameraSensor.Color),
                 new ProbeKernelInput.StrobePair(Kind: CameraSensor.Infrared),
-                new ProbeKernelInput.Ring(Width: FrameWidth, Height: FrameHeight, Format: SurfaceFormat.R8G8B8A8Unorm, SharedTargetHandles: paintingRing.Handles, Slots: paintingRing.Slots),
+                new ProbeKernelInput.Ring(
+                    Width: FrameWidth,
+                    Height: FrameHeight,
+                    Format: SurfaceFormat.R8G8B8A8Unorm,
+                    SharedTargetHandles: paintingRing.Handles,
+                    Slots: paintingRing.Slots
+                ),
             ],
             Trigger: CameraSensor.Color,
             Output: new ProbeKernelOutput(
@@ -335,29 +528,53 @@ public sealed class ProbeKernelTests {
             )
         );
 
-        using var kernel = bench.CreateKernel(request: in request, ring: ring);
+        using var kernel = bench.CreateKernel(
+            request: in request,
+            ring: ring
+        );
         nint paintingView;
 
         try {
             paintingView = bench.OpenSharedView(sharedHandle: paintingRing.Handles[paintingReadSlot]);
 
-            Assert.True(condition: kernel.TryRun(views: [color.View, lit.View, unlit.View, paintingView], boundMask: 0b111u, captureTimestamp: Stopwatch.GetTimestamp()));
+            Assert.True(condition: kernel.TryRun(
+                views: [color.View, lit.View, unlit.View, paintingView],
+                boundMask: 0b111u,
+                captureTimestamp: Stopwatch.GetTimestamp()
+            ));
         } finally {
             paintingRing.Slots.Release(slot: paintingReadSlot);
         }
 
         Assert.True(condition: ring.TryReadLatest(reading: out var reading));
-        Assert.InRange(actual: reading.OutputSlot, low: 0, high: (targets.Length - 1));
+        Assert.InRange(
+            actual: reading.OutputSlot,
+            low: 0,
+            high: (targets.Length - 1)
+        );
 
         var pixels = bench.ReadBack(target: targets[reading.OutputSlot]);
 
         // Inside the quad, on the wall (away from the bright square): the painting's solid green replaces the
         // wall's own albedo, so green dominates the pixel.
-        AssertGreenDominant(pixels: pixels, x: 16, y: 16);
+        AssertGreenDominant(
+            pixels: pixels,
+            x: 16,
+            y: 16
+        );
         // Inside the bright square (the subject occludes the painting): ordinary subject shading, not green.
-        AssertNotGreenDominant(pixels: pixels, x: (SquareLeft + (SquareSize / 2)), y: (SquareTop + (SquareSize / 2)));
+        AssertNotGreenDominant(
+            pixels: pixels,
+            x: (SquareLeft + (SquareSize / 2)),
+            y: (SquareTop + (SquareSize / 2))
+        );
         // A wall pixel outside the quad: no painting, no subject — ambient dominates, so it reads roughly neutral.
-        AssertRoughlyNeutral(pixels: pixels, tolerance: 40, x: 8, y: (FrameHeight - 8));
+        AssertRoughlyNeutral(
+            pixels: pixels,
+            tolerance: 40,
+            x: 8,
+            y: (FrameHeight - 8)
+        );
     }
     [InlineData(1.0f, 1.0)]
     [InlineData(0.5f, 0.0)]
@@ -369,9 +586,18 @@ public sealed class ProbeKernelTests {
             Assert.Skip(reason: "no DXGI hardware adapter is available on this machine.");
         }
 
-        var color = bench.CreateFrame(pixels: BuildSquare(inside: [128, 128, 128, 255], outside: [128, 128, 128, 255]));
-        var lit = bench.CreateFrame(pixels: BuildSquare(inside: [255, 255, 255, 255], outside: [0, 0, 0, 255]));
-        var unlit = bench.CreateFrame(pixels: BuildSquare(inside: [0, 0, 0, 255], outside: [0, 0, 0, 255]));
+        var color = bench.CreateFrame(pixels: BuildSquare(
+            inside: [128, 128, 128, 255],
+            outside: [128, 128, 128, 255]
+        ));
+        var lit = bench.CreateFrame(pixels: BuildSquare(
+            inside: [255, 255, 255, 255],
+            outside: [0, 0, 0, 255]
+        ));
+        var unlit = bench.CreateFrame(pixels: BuildSquare(
+            inside: [0, 0, 0, 255],
+            outside: [0, 0, 0, 255]
+        ));
         var targets = new[] { bench.CreateSharedTarget(), bench.CreateSharedTarget() };
         var slots = new LatestSlotPublication();
 
@@ -382,7 +608,10 @@ public sealed class ProbeKernelTests {
             KernelSource: File.ReadAllText(path: KernelPath(name: "faerie")),
             AccumulateEntry: "accumulate",
             FinalizeEntry: "finalize",
-            Constants: FaerieConstants(journey: journey, portalThreshold: 0.85f),
+            Constants: FaerieConstants(
+                journey: journey,
+                portalThreshold: 0.85f
+            ),
             ChannelCount: FaerieChannelCount,
             RateHz: 240U,
             Inputs: [new ProbeKernelInput.Sensor(Kind: CameraSensor.Color), new ProbeKernelInput.StrobePair(Kind: CameraSensor.Infrared), new ProbeKernelInput.Unbound()],
@@ -396,11 +625,21 @@ public sealed class ProbeKernelTests {
             )
         );
 
-        using var kernel = bench.CreateKernel(request: in request, ring: ring);
+        using var kernel = bench.CreateKernel(
+            request: in request,
+            ring: ring
+        );
 
-        Assert.True(condition: kernel.TryRun(views: [color.View, lit.View, unlit.View, 0], boundMask: 0b011u, captureTimestamp: Stopwatch.GetTimestamp()));
+        Assert.True(condition: kernel.TryRun(
+            views: [color.View, lit.View, unlit.View, 0],
+            boundMask: 0b011u,
+            captureTimestamp: Stopwatch.GetTimestamp()
+        ));
         Assert.True(condition: ring.TryReadLatest(reading: out var reading));
-        Assert.Equal(expected: expectedPortal, actual: ((double)reading[4]));
+        Assert.Equal(
+            expected: expectedPortal,
+            actual: ((double)reading[4])
+        );
     }
     [Fact]
     public void Shipped_ir_marker_kernel_measures_an_axis_aligned_rectangle() {
@@ -415,8 +654,22 @@ public sealed class ProbeKernelTests {
         const int RectangleWidth = 16;
         const int RectangleHeight = 16;
 
-        var lit = bench.CreateFrame(pixels: BuildRectangle(height: RectangleHeight, inside: [255, 255, 255, 255], left: RectangleLeft, outside: [0, 0, 0, 255], top: RectangleTop, width: RectangleWidth));
-        var unlit = bench.CreateFrame(pixels: BuildRectangle(height: RectangleHeight, inside: [0, 0, 0, 255], left: RectangleLeft, outside: [0, 0, 0, 255], top: RectangleTop, width: RectangleWidth));
+        var lit = bench.CreateFrame(pixels: BuildRectangle(
+            height: RectangleHeight,
+            inside: [255, 255, 255, 255],
+            left: RectangleLeft,
+            outside: [0, 0, 0, 255],
+            top: RectangleTop,
+            width: RectangleWidth
+        ));
+        var unlit = bench.CreateFrame(pixels: BuildRectangle(
+            height: RectangleHeight,
+            inside: [0, 0, 0, 255],
+            left: RectangleLeft,
+            outside: [0, 0, 0, 255],
+            top: RectangleTop,
+            width: RectangleWidth
+        ));
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
             KernelSource: File.ReadAllText(path: KernelPath(name: "ir-marker")),
@@ -429,20 +682,42 @@ public sealed class ProbeKernelTests {
             Trigger: CameraSensor.Infrared
         );
 
-        using var kernel = bench.CreateKernel(request: in request, ring: ring);
+        using var kernel = bench.CreateKernel(
+            request: in request,
+            ring: ring
+        );
 
-        Assert.True(condition: kernel.TryRun(views: [lit.View, unlit.View], boundMask: 1u, captureTimestamp: Stopwatch.GetTimestamp()));
+        Assert.True(condition: kernel.TryRun(
+            views: [lit.View, unlit.View],
+            boundMask: 1u,
+            captureTimestamp: Stopwatch.GetTimestamp()
+        ));
         Assert.True(condition: ring.TryReadLatest(reading: out var reading));
 
         var centreU = ((RectangleLeft + (RectangleWidth / 2.0)) / FrameWidth);
         var centreV = ((RectangleTop + (RectangleHeight / 2.0)) / FrameHeight);
         var halfU = ((RectangleWidth / 2.0) / FrameWidth);
         var halfV = ((RectangleHeight / 2.0) / FrameHeight);
-        var expected = ExpectedMarkerCorners(centreU: centreU, centreV: centreV, halfMajor: halfU, halfMinor: halfV, majorAxisU: 1.0, majorAxisV: 0.0);
+        var expected = ExpectedMarkerCorners(
+            centreU: centreU,
+            centreV: centreV,
+            halfMajor: halfU,
+            halfMinor: halfV,
+            majorAxisU: 1.0,
+            majorAxisV: 0.0
+        );
 
-        AssertMarkerCorners(expected: expected, reading: reading, tolerance: 0.06);
+        AssertMarkerCorners(
+            expected: expected,
+            reading: reading,
+            tolerance: 0.06
+        );
 
-        Assert.InRange(actual: ((double)reading.Confidence), low: 0.99, high: 1.0);
+        Assert.InRange(
+            actual: ((double)reading.Confidence),
+            low: 0.99,
+            high: 1.0
+        );
     }
     [Fact]
     public void Shipped_ir_marker_kernel_measures_a_rotated_rectangle() {
@@ -458,8 +733,24 @@ public sealed class ProbeKernelTests {
         const double HalfMinor = 0.1;
         var angle = (Math.PI / 6.0);
 
-        var lit = bench.CreateFrame(pixels: BuildRotatedRectangle(angleRadians: angle, centreU: CentreU, centreV: CentreV, halfExtentMajor: HalfMajor, halfExtentMinor: HalfMinor, inside: [255, 255, 255, 255], outside: [0, 0, 0, 255]));
-        var unlit = bench.CreateFrame(pixels: BuildRotatedRectangle(angleRadians: angle, centreU: CentreU, centreV: CentreV, halfExtentMajor: HalfMajor, halfExtentMinor: HalfMinor, inside: [0, 0, 0, 255], outside: [0, 0, 0, 255]));
+        var lit = bench.CreateFrame(pixels: BuildRotatedRectangle(
+            angleRadians: angle,
+            centreU: CentreU,
+            centreV: CentreV,
+            halfExtentMajor: HalfMajor,
+            halfExtentMinor: HalfMinor,
+            inside: [255, 255, 255, 255],
+            outside: [0, 0, 0, 255]
+        ));
+        var unlit = bench.CreateFrame(pixels: BuildRotatedRectangle(
+            angleRadians: angle,
+            centreU: CentreU,
+            centreV: CentreV,
+            halfExtentMajor: HalfMajor,
+            halfExtentMinor: HalfMinor,
+            inside: [0, 0, 0, 255],
+            outside: [0, 0, 0, 255]
+        ));
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
             KernelSource: File.ReadAllText(path: KernelPath(name: "ir-marker")),
@@ -472,9 +763,16 @@ public sealed class ProbeKernelTests {
             Trigger: CameraSensor.Infrared
         );
 
-        using var kernel = bench.CreateKernel(request: in request, ring: ring);
+        using var kernel = bench.CreateKernel(
+            request: in request,
+            ring: ring
+        );
 
-        Assert.True(condition: kernel.TryRun(views: [lit.View, unlit.View], boundMask: 1u, captureTimestamp: Stopwatch.GetTimestamp()));
+        Assert.True(condition: kernel.TryRun(
+            views: [lit.View, unlit.View],
+            boundMask: 1u,
+            captureTimestamp: Stopwatch.GetTimestamp()
+        ));
         Assert.True(condition: ring.TryReadLatest(reading: out var reading));
 
         // The rectangle's own local axes are known by construction; feeding the major axis's uv-space direction
@@ -482,14 +780,29 @@ public sealed class ProbeKernelTests {
         // without assuming which physical corner ends up "top-left".
         var majorAxisU = Math.Cos(d: angle);
         var majorAxisV = Math.Sin(a: angle);
-        var expected = ExpectedMarkerCorners(centreU: CentreU, centreV: CentreV, halfMajor: HalfMajor, halfMinor: HalfMinor, majorAxisU: majorAxisU, majorAxisV: majorAxisV);
+        var expected = ExpectedMarkerCorners(
+            centreU: CentreU,
+            centreV: CentreV,
+            halfMajor: HalfMajor,
+            halfMinor: HalfMinor,
+            majorAxisU: majorAxisU,
+            majorAxisV: majorAxisV
+        );
 
-        AssertMarkerCorners(expected: expected, reading: reading, tolerance: 0.08);
+        AssertMarkerCorners(
+            expected: expected,
+            reading: reading,
+            tolerance: 0.08
+        );
 
-        Assert.InRange(actual: ((double)reading.Confidence), low: 0.99, high: 1.0);
+        Assert.InRange(
+            actual: ((double)reading.Confidence),
+            low: 0.99,
+            high: 1.0
+        );
     }
 
-    // A minimal puck.probe.v1 kernel that ignores its unbound socket and writes the frame constants' boundMask
+    // A minimal puck.probe.manifest.v1 kernel that ignores its unbound socket and writes the frame constants' boundMask
     // straight into Channels[0], so a test can assert the bit a run was given without a real texture.
     private const string BoundMaskProbeSource = """
         cbuffer ProbeFrame : register(b1) {
@@ -519,12 +832,35 @@ public sealed class ProbeKernelTests {
         const double ExpectedY = (1.0 - (((SquareTop + (SquareSize / 2.0)) / FrameHeight) * 2.0));
         const double ExpectedCoverage = (((double)(SquareSize * SquareSize)) / (FrameWidth * FrameHeight));
 
-        Assert.Equal(expected: 4, actual: reading.ChannelCount);
-        Assert.InRange(actual: ((double)reading[0]), low: (ExpectedX - 0.01), high: (ExpectedX + 0.01));
-        Assert.InRange(actual: ((double)reading[1]), low: (ExpectedY - 0.01), high: (ExpectedY + 0.01));
-        Assert.InRange(actual: ((double)reading[2]), low: (ExpectedCoverage - 0.001), high: (ExpectedCoverage + 0.001));
-        Assert.InRange(actual: ((double)reading[3]), low: 0.99, high: 1.0);
-        Assert.InRange(actual: ((double)reading.Confidence), low: 0.99, high: 1.0);
+        Assert.Equal(
+            expected: 4,
+            actual: reading.ChannelCount
+        );
+        Assert.InRange(
+            actual: ((double)reading[0]),
+            low: (ExpectedX - 0.01),
+            high: (ExpectedX + 0.01)
+        );
+        Assert.InRange(
+            actual: ((double)reading[1]),
+            low: (ExpectedY - 0.01),
+            high: (ExpectedY + 0.01)
+        );
+        Assert.InRange(
+            actual: ((double)reading[2]),
+            low: (ExpectedCoverage - 0.001),
+            high: (ExpectedCoverage + 0.001)
+        );
+        Assert.InRange(
+            actual: ((double)reading[3]),
+            low: 0.99,
+            high: 1.0
+        );
+        Assert.InRange(
+            actual: ((double)reading.Confidence),
+            low: 0.99,
+            high: 1.0
+        );
     }
     private static byte[] BuildSquare(byte[] inside, byte[] outside) {
         var pixels = new byte[((FrameWidth * FrameHeight) * 4)];
@@ -532,9 +868,15 @@ public sealed class ProbeKernelTests {
         for (var y = 0; (y < FrameHeight); y++) {
             for (var x = 0; (x < FrameWidth); x++) {
                 var offset = (((y * FrameWidth) + x) * 4);
-                var source = (((x >= SquareLeft) && (x < (SquareLeft + SquareSize)) && (y >= SquareTop) && (y < (SquareTop + SquareSize))) ? inside : outside);
+                var source = (((x >= SquareLeft) && (x < (SquareLeft + SquareSize)) && (y >= SquareTop) && (y < (SquareTop + SquareSize)))
+                    ? inside
+                    : outside
+                );
 
-                source.CopyTo(array: pixels, index: offset);
+                source.CopyTo(
+                    array: pixels,
+                    index: offset
+                );
             }
         }
 
@@ -588,8 +930,14 @@ public sealed class ProbeKernelTests {
     private static byte[] IrBlobConstants() {
         var constants = new byte[16];
 
-        BitConverter.TryWriteBytes(destination: constants.AsSpan(start: 0), value: 0.5f);
-        BitConverter.TryWriteBytes(destination: constants.AsSpan(start: 4), value: 0.01f);
+        BitConverter.TryWriteBytes(
+            destination: constants.AsSpan(start: 0),
+            value: 0.5f
+        );
+        BitConverter.TryWriteBytes(
+            destination: constants.AsSpan(start: 4),
+            value: 0.01f
+        );
 
         return constants;
     }
@@ -603,7 +951,10 @@ public sealed class ProbeKernelTests {
         var block = new byte[byteCount];
 
         for (var index = 0; (index < values.Length); index++) {
-            BitConverter.TryWriteBytes(destination: block.AsSpan(start: (index * 4)), value: values[index]);
+            BitConverter.TryWriteBytes(
+                destination: block.AsSpan(start: (index * 4)),
+                value: values[index]
+            );
         }
 
         return block;
@@ -621,22 +972,58 @@ public sealed class ProbeKernelTests {
         return (pixels[offset], pixels[(offset + 1)], pixels[(offset + 2)]);
     }
     private static void AssertGreenDominant(byte[] pixels, int x, int y) {
-        var (r, g, b) = Pixel(pixels: pixels, x: x, y: y);
+        var (r, g, b) = Pixel(
+            pixels: pixels,
+            x: x,
+            y: y
+        );
 
-        Assert.True(condition: (g > (r + 40)), userMessage: $"expected green-dominant at ({x},{y}): r={r} g={g} b={b}");
-        Assert.True(condition: (g > (b + 40)), userMessage: $"expected green-dominant at ({x},{y}): r={r} g={g} b={b}");
+        Assert.True(
+            condition: (g > (r + 40)),
+            userMessage: $"expected green-dominant at ({x},{y}): r={r} g={g} b={b}"
+        );
+        Assert.True(
+            condition: (g > (b + 40)),
+            userMessage: $"expected green-dominant at ({x},{y}): r={r} g={g} b={b}"
+        );
     }
     private static void AssertNotGreenDominant(byte[] pixels, int x, int y) {
-        var (r, g, b) = Pixel(pixels: pixels, x: x, y: y);
+        var (r, g, b) = Pixel(
+            pixels: pixels,
+            x: x,
+            y: y
+        );
 
-        Assert.False(condition: ((g > r) && (g > b)), userMessage: $"expected NOT green-dominant at ({x},{y}): r={r} g={g} b={b}");
+        Assert.False(
+            condition: ((g > r) && (g > b)),
+            userMessage: $"expected NOT green-dominant at ({x},{y}): r={r} g={g} b={b}"
+        );
     }
     private static void AssertRoughlyNeutral(byte[] pixels, int x, int y, int tolerance) {
-        var (r, g, b) = Pixel(pixels: pixels, x: x, y: y);
-        var max = Math.Max(val1: r, val2: Math.Max(val1: g, val2: b));
-        var min = Math.Min(val1: r, val2: Math.Min(val1: g, val2: b));
+        var (r, g, b) = Pixel(
+            pixels: pixels,
+            x: x,
+            y: y
+        );
+        var max = Math.Max(
+            val1: r,
+            val2: Math.Max(
+                val1: g,
+                val2: b
+            )
+        );
+        var min = Math.Min(
+            val1: r,
+            val2: Math.Min(
+                val1: g,
+                val2: b
+            )
+        );
 
-        Assert.True(condition: ((max - min) <= tolerance), userMessage: $"expected roughly neutral at ({x},{y}): r={r} g={g} b={b}");
+        Assert.True(
+            condition: ((max - min) <= tolerance),
+            userMessage: $"expected roughly neutral at ({x},{y}): r={r} g={g} b={b}"
+        );
     }
     private static byte[] BuildRectangle(int left, int top, int width, int height, byte[] inside, byte[] outside) {
         var pixels = new byte[((FrameWidth * FrameHeight) * 4)];
@@ -644,9 +1031,15 @@ public sealed class ProbeKernelTests {
         for (var y = 0; (y < FrameHeight); y++) {
             for (var x = 0; (x < FrameWidth); x++) {
                 var offset = (((y * FrameWidth) + x) * 4);
-                var source = (((x >= left) && (x < (left + width)) && (y >= top) && (y < (top + height))) ? inside : outside);
+                var source = (((x >= left) && (x < (left + width)) && (y >= top) && (y < (top + height)))
+                    ? inside
+                    : outside
+                );
 
-                source.CopyTo(array: pixels, index: offset);
+                source.CopyTo(
+                    array: pixels,
+                    index: offset
+                );
             }
         }
 
@@ -671,9 +1064,15 @@ public sealed class ProbeKernelTests {
                 var localMajor = ((dx * cos) + (dy * sin));
                 var localMinor = ((-dx * sin) + (dy * cos));
                 var offset = (((y * FrameWidth) + x) * 4);
-                var source = (((Math.Abs(value: localMajor) <= halfMajorPx) && (Math.Abs(value: localMinor) <= halfMinorPx)) ? inside : outside);
+                var source = (((Math.Abs(value: localMajor) <= halfMajorPx) && (Math.Abs(value: localMinor) <= halfMinorPx))
+                    ? inside
+                    : outside
+                );
 
-                source.CopyTo(array: pixels, index: offset);
+                source.CopyTo(
+                    array: pixels,
+                    index: offset
+                );
             }
         }
 
@@ -698,27 +1097,83 @@ public sealed class ProbeKernelTests {
         var axV = (axisMajorV * halfMajor);
         var ayU = (axisMinorU * halfMinor);
         var ayV = (axisMinorV * halfMinor);
-        var topLeft = ToFrameCoordinates(u: ((centreU - axU) - ayU), v: ((centreV - axV) - ayV));
-        var topRight = ToFrameCoordinates(u: ((centreU + axU) - ayU), v: ((centreV + axV) - ayV));
-        var bottomRight = ToFrameCoordinates(u: ((centreU + axU) + ayU), v: ((centreV + axV) + ayV));
-        var bottomLeft = ToFrameCoordinates(u: ((centreU - axU) + ayU), v: ((centreV - axV) + ayV));
+        var topLeft = ToFrameCoordinates(
+            u: ((centreU - axU) - ayU),
+            v: ((centreV - axV) - ayV)
+        );
+        var topRight = ToFrameCoordinates(
+            u: ((centreU + axU) - ayU),
+            v: ((centreV + axV) - ayV)
+        );
+        var bottomRight = ToFrameCoordinates(
+            u: ((centreU + axU) + ayU),
+            v: ((centreV + axV) + ayV)
+        );
+        var bottomLeft = ToFrameCoordinates(
+            u: ((centreU - axU) + ayU),
+            v: ((centreV - axV) + ayV)
+        );
 
-        return new MarkerCorners(BottomLeft: bottomLeft, BottomRight: bottomRight, TopLeft: topLeft, TopRight: topRight);
+        return new MarkerCorners(
+            BottomLeft: bottomLeft,
+            BottomRight: bottomRight,
+            TopLeft: topLeft,
+            TopRight: topRight
+        );
     }
     private static (double X, double Y) ToFrameCoordinates(double u, double v) => (((u * 2.0) - 1.0), (1.0 - (v * 2.0)));
     private static void AssertMarkerCorners(in ProbeReading reading, MarkerCorners expected, double tolerance) {
-        Assert.Equal(expected: IrMarkerChannelCount, actual: reading.ChannelCount);
-        AssertClose(expected: expected.TopLeft.X, actual: ((double)reading[0]), tolerance: tolerance);
-        AssertClose(expected: expected.TopLeft.Y, actual: ((double)reading[1]), tolerance: tolerance);
-        AssertClose(expected: expected.TopRight.X, actual: ((double)reading[2]), tolerance: tolerance);
-        AssertClose(expected: expected.TopRight.Y, actual: ((double)reading[3]), tolerance: tolerance);
-        AssertClose(expected: expected.BottomRight.X, actual: ((double)reading[4]), tolerance: tolerance);
-        AssertClose(expected: expected.BottomRight.Y, actual: ((double)reading[5]), tolerance: tolerance);
-        AssertClose(expected: expected.BottomLeft.X, actual: ((double)reading[6]), tolerance: tolerance);
-        AssertClose(expected: expected.BottomLeft.Y, actual: ((double)reading[7]), tolerance: tolerance);
+        Assert.Equal(
+            expected: IrMarkerChannelCount,
+            actual: reading.ChannelCount
+        );
+        AssertClose(
+            expected: expected.TopLeft.X,
+            actual: ((double)reading[0]),
+            tolerance: tolerance
+        );
+        AssertClose(
+            expected: expected.TopLeft.Y,
+            actual: ((double)reading[1]),
+            tolerance: tolerance
+        );
+        AssertClose(
+            expected: expected.TopRight.X,
+            actual: ((double)reading[2]),
+            tolerance: tolerance
+        );
+        AssertClose(
+            expected: expected.TopRight.Y,
+            actual: ((double)reading[3]),
+            tolerance: tolerance
+        );
+        AssertClose(
+            expected: expected.BottomRight.X,
+            actual: ((double)reading[4]),
+            tolerance: tolerance
+        );
+        AssertClose(
+            expected: expected.BottomRight.Y,
+            actual: ((double)reading[5]),
+            tolerance: tolerance
+        );
+        AssertClose(
+            expected: expected.BottomLeft.X,
+            actual: ((double)reading[6]),
+            tolerance: tolerance
+        );
+        AssertClose(
+            expected: expected.BottomLeft.Y,
+            actual: ((double)reading[7]),
+            tolerance: tolerance
+        );
     }
     private static void AssertClose(double expected, double actual, double tolerance) {
-        Assert.InRange(actual: actual, high: (expected + tolerance), low: (expected - tolerance));
+        Assert.InRange(
+            actual: actual,
+            high: (expected + tolerance),
+            low: (expected - tolerance)
+        );
     }
 
     // Frame-coordinate corners in image order (top-left, top-right, bottom-right, bottom-left) — mirrors the

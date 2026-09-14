@@ -8,9 +8,9 @@ namespace Puck.Vulkan.Interop;
 /// the device when disposed.
 /// </summary>
 public sealed class VulkanLogicalDevice : IDisposable {
-    private bool m_disposed;
-
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
+
+    private bool m_disposed;
 
     /// <summary>Gets the graphics queue of the device.</summary>
     public VkQueue GraphicsQueue { get; }
@@ -63,19 +63,6 @@ public sealed class VulkanLogicalDevice : IDisposable {
         m_logicalDeviceApi.DestroyDevice(deviceHandle: Handle);
         m_disposed = true;
     }
-    /// <summary>Blocks until all queues on the device have completed their outstanding work.</summary>
-    /// <exception cref="ObjectDisposedException">The device has been disposed.</exception>
-    /// <exception cref="VulkanException">The underlying <c>vkDeviceWaitIdle</c> call failed.</exception>
-    public void WaitIdle() {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        var result = m_logicalDeviceApi.WaitIdle(deviceHandle: Handle);
-
-        result.ThrowIfFailed(operation: "vkDeviceWaitIdle");
-    }
     /// <summary>Drains the device, tolerating an already-LOST device: <c>vkDeviceWaitIdle</c> returns
     /// <c>VK_ERROR_DEVICE_LOST</c> on a lost device (surfaced as <see cref="DeviceLostException"/>), which during
     /// TEARDOWN just means "there is nothing left to drain". For use in Dispose / device-loss paths only — the frame loop
@@ -90,5 +77,18 @@ public sealed class VulkanLogicalDevice : IDisposable {
         } catch (DeviceLostException) {
             // The device is already lost; nothing in flight will ever complete, so there is nothing to drain.
         }
+    }
+    /// <summary>Blocks until all queues on the device have completed their outstanding work.</summary>
+    /// <exception cref="ObjectDisposedException">The device has been disposed.</exception>
+    /// <exception cref="VulkanException">The underlying <c>vkDeviceWaitIdle</c> call failed.</exception>
+    public void WaitIdle() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        var result = m_logicalDeviceApi.WaitIdle(deviceHandle: Handle);
+
+        result.ThrowIfFailed(operation: "vkDeviceWaitIdle");
     }
 }

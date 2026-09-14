@@ -17,6 +17,17 @@ namespace Puck.World.Protocol;
 /// <see cref="WorldMutationKindCatalog"/> (see that type's remarks).</remarks>
 /// <param name="Principal">The acting identity the mutation is checked against.</param>
 public abstract record WorldMutation(WorldPrincipal Principal) {
+    /// <summary>Upserts a named machine. Configuration changes prepare a replacement before admission;
+    /// changing only its running state preserves hardware state and generation.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Machine">The complete instance declaration.</param>
+    [MutationKind(ordinal: 84, section: WorldSection.Machines)]
+    public sealed record UpsertMachine(WorldPrincipal Principal, WorldMachine Machine) : WorldMutation(Principal);
+    /// <summary>Removes an instance after full-document validation proves that its references remain sound.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The instance to remove.</param>
+    [MutationKind(ordinal: 85, section: WorldSection.Machines)]
+    public sealed record RemoveMachine(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Upserts a locomotion kit row addressed by <see cref="WorldKit.Name"/> — replaces the matching row or
     /// appends a new one.</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -158,7 +169,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     [MutationKind(ordinal: 22, section: WorldSection.Speakers)]
     public sealed record RemoveSpeaker(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Upserts a tune asset row addressed by <see cref="WorldTune.Name"/>. The compose boundary loads the
-    /// referenced <c>puck.audio.v1</c> document, canonicalizes it, and rejects a hash the pipeline did not itself
+    /// referenced <c>puck.tune.v1</c> document, canonicalizes it, and rejects a hash the pipeline did not itself
     /// compute — the referenced twin of <see cref="UpsertCreation"/>'s embedded-document rule.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Tune">The whole tune row.</param>
@@ -170,7 +181,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Name">The tune name to remove.</param>
     [MutationKind(ordinal: 24, section: WorldSection.Tunes)]
     public sealed record RemoveTune(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
-    /// <summary>Upserts a synth-patch asset row addressed by <see cref="WorldPatch.Name"/> — the <c>puck.synth.v1</c>
+    /// <summary>Upserts a synth-patch asset row addressed by <see cref="WorldPatch.Name"/> — the <c>puck.synthesizer-patch.v1</c>
     /// twin of <see cref="UpsertTune"/>, same load + canonicalize + hash-pin boundary.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Patch">The whole patch row.</param>
@@ -474,7 +485,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <summary>Upserts a group kind addressed by <see cref="WorldGroupKind.Name"/> — replaces the matching row or
     /// appends a new one. Rejected loudly if the resulting kind set contains two kinds identical in every
     /// behavior-bearing field except <see cref="WorldGroupKind.Capacity"/> (a capacity-only difference is a value, not
-    /// a kind), or if <see cref="WorldGroupKind.SharedStateScope"/> names no declared <c>state</c> row.</summary>
+    /// a kind).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Kind">The whole kind row.</param>
     [MutationKind(ordinal: 56, section: WorldSection.Groups)]
@@ -659,31 +670,61 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
         public bool TryValidateShape(out string reason) {
             reason = "a batch requires members carrying its own principal and well-formed guards";
             if (Mutations is not { Count: > 0 }) { return false; }
-            for (var index = 0; index < Mutations.Count; index++) {
-                if (Mutations[index] is not { } member || member.Principal != Principal) { return false; }
+            for (var index = 0; (index < Mutations.Count); index++) {
+                if (
+                    (Mutations[index] is not { } member) ||
+                    (member.Principal != Principal)
+                ) { return false; }
             }
-            if (ExpectedDefinition is { } hash && (hash.Length != 64 || hash.Any(c => !char.IsAsciiHexDigit(c)))) { return false; }
-            if (ExpectedInputs is { } inputs && !inputs.TryValidate()) { return false; }
+            if (
+                (ExpectedDefinition is { } hash) &&
+                ((hash.Length != 64) || hash.Any(predicate: c => !char.IsAsciiHexDigit(c: c)))
+            ) { return false; }
+            if (
+                (ExpectedInputs is { } inputs) &&
+                !inputs.TryValidate()
+            ) { return false; }
             if (ExpectedStateRows is { } rows) {
                 if (ExpectedDefinition is null) { return false; }
-                for (var index = 0; index < rows.Count; index++) {
-                    if (string.IsNullOrWhiteSpace(rows[index])) { return false; }
+                for (var index = 0; (index < rows.Count); index++) {
+                    if (string.IsNullOrWhiteSpace(value: rows[index])) { return false; }
                 }
             }
             if (ExpectedCells is { } cells) {
-                for (var index = 0; index < cells.Count; index++) {
-                    if (cells[index] is not { } cell || string.IsNullOrWhiteSpace(cell.Row) || cell.Key is { Length: 0 } ||
-                        !Enum.IsDefined(cell.Comparison) || (cell.Kind is { } kind && !Enum.IsDefined(kind))) { return false; }
+                for (var index = 0; (index < cells.Count); index++) {
+                    if (
+                        (cells[index] is not { } cell) ||
+                        string.IsNullOrWhiteSpace(value: cell.Row) ||
+                        (cell.Key is { Length: 0 }) ||
+                        !Enum.IsDefined(value: cell.Comparison) ||
+                        ((cell.Kind is { } kind) && !Enum.IsDefined(value: kind))
+                    ) { return false; }
                 }
             }
             if (ExpectedSpatialReads is { } spatial) {
                 if (spatial.Count == 0) { return false; }
-                for (var index = 0; index < spatial.Count; index++) {
-                    if (spatial[index] is not { } read || !read.TryValidate(out _)) { return false; }
+                for (var index = 0; (index < spatial.Count); index++) {
+                    if (
+                        (spatial[index] is not { } read) ||
+                        !read.TryValidate(reason: out _)
+                    ) { return false; }
                 }
             }
             reason = string.Empty;
             return true;
         }
     }
+    /// <summary>Upserts a <c>views.pipelines</c> row (whole-row, keyed by name) — the authored intent for a compiled
+    /// shader pipeline; compiling and swapping the live pipeline are console/composition-root concerns, not this
+    /// mutation's.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Pipeline">The whole pipeline row.</param>
+    [MutationKind(ordinal: 82, section: WorldSection.Views)]
+    public sealed record UpsertViewPipeline(WorldPrincipal Principal, WorldViewPipeline Pipeline) : WorldMutation(Principal);
+    /// <summary>Removes a <c>views.pipelines</c> row by name. Rejected loudly by full-document revalidation while any
+    /// <c>views.layouts</c> slot (<c>WorldViewSlot.Pipeline</c>) still names it.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The pipeline name to remove.</param>
+    [MutationKind(ordinal: 83, section: WorldSection.Views)]
+    public sealed record RemoveViewPipeline(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
 }

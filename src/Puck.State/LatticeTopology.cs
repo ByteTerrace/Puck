@@ -26,7 +26,6 @@ public enum TopologyKind : byte {
     /// plus z) times width plus x.</summary>
     Box,
 }
-
 /// <summary>The axes that wrap on a discrete grid.</summary>
 [JsonConverter(typeof(StrictEnumConverter<TopologyWrap>))]
 public enum TopologyWrap : byte {
@@ -57,7 +56,6 @@ public interface IDiscreteLatticeTopology {
     /// spelling.</summary>
     IReadOnlyList<TopologyElementAlias>? ElementAliases { get; }
 }
-
 /// <summary>One <c>state.lattices</c> topology — the footprint every lattice-shaped state row referencing it
 /// shares. The discrete cases are declared here, one per kind, each carrying only its own parameters —
 /// <see cref="Hex.Radius"/>, <see cref="Grid.Band"/>, and <see cref="Box.LayerHeight"/> exist nowhere else. A host
@@ -97,12 +95,15 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
         int Width, int Depth, TopologyWrap Wrap = TopologyWrap.None, float Band = 0f,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyDirection>? Directions = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyElementAlias>? ElementAliases = null
-    ) : LatticeTopology(Name, Origin, CellSize), IDiscreteLatticeTopology {
+    ) : LatticeTopology(
+        Name,
+        Origin,
+        CellSize
+    ), IDiscreteLatticeTopology {
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Grid;
     }
-
     /// <summary>A cyclic sequence, indexed from zero — always wraps.</summary>
     /// <param name="Name">The topology's name.</param>
     /// <param name="Origin">The minimum corner, world units.</param>
@@ -114,12 +115,15 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
         string Name, DocumentVector3 Origin, float CellSize, int Width,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyDirection>? Directions = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyElementAlias>? ElementAliases = null
-    ) : LatticeTopology(Name, Origin, CellSize), IDiscreteLatticeTopology {
+    ) : LatticeTopology(
+        Name,
+        Origin,
+        CellSize
+    ), IDiscreteLatticeTopology {
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Ring;
     }
-
     /// <summary>A hexagonal disk of the given radius, indexed in <c>HexagonalIndex</c> order: rings outward from the origin, consecutive indices adjacent.</summary>
     /// <param name="Name">The topology's name.</param>
     /// <param name="Origin">The minimum corner, world units.</param>
@@ -131,12 +135,15 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
         string Name, DocumentVector3 Origin, float CellSize, int Radius,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyDirection>? Directions = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyElementAlias>? ElementAliases = null
-    ) : LatticeTopology(Name, Origin, CellSize), IDiscreteLatticeTopology {
+    ) : LatticeTopology(
+        Name,
+        Origin,
+        CellSize
+    ), IDiscreteLatticeTopology {
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Hex;
     }
-
     /// <summary>A box of width by layers by depth cells with the 26 space directions, indexed by (layer times depth
     /// plus z) times width plus x.</summary>
     /// <param name="Name">The topology's name.</param>
@@ -154,7 +161,11 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
         int Width, int Depth, int Layers, float LayerHeight,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyDirection>? Directions = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyElementAlias>? ElementAliases = null
-    ) : LatticeTopology(Name, Origin, CellSize), IDiscreteLatticeTopology {
+    ) : LatticeTopology(
+        Name,
+        Origin,
+        CellSize
+    ), IDiscreteLatticeTopology {
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Box;
@@ -169,7 +180,11 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     /// <param name="CellSize">The edge length, in world units.</param>
     /// <param name="Family">The tiling.</param>
     /// <param name="Radius">The patch radius in edge lengths, at least 1.</param>
-    public sealed record Tiling(string Name, DocumentVector3 Origin, float CellSize, TilingFamily Family, int Radius) : LatticeTopology(Name, Origin, CellSize) {
+    public sealed record Tiling(string Name, DocumentVector3 Origin, float CellSize, TilingFamily Family, int Radius) : LatticeTopology(
+        Name,
+        Origin,
+        CellSize
+    ) {
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Tiling;
@@ -188,7 +203,11 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     public sealed record Graph(
         string Name, DocumentVector3 Origin, float CellSize,
         IReadOnlyList<GraphCell> Cells, IReadOnlyList<GraphDirection> Directions, IReadOnlyList<GraphEdge> Edges
-    ) : LatticeTopology(Name, Origin, CellSize) {
+    ) : LatticeTopology(
+        Name,
+        Origin,
+        CellSize
+    ) {
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Graph;
@@ -212,7 +231,6 @@ public sealed record TopologyDirection(string Name, int X, int Y, int Z = 0);
 /// alias resolves to.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TopologyElementAlias(string Name, string Element);
-
 /// <summary>One cell of a <see cref="LatticeTopology.Graph"/>.</summary>
 /// <param name="Id">The id edges name it by; distinct within the graph.</param>
 /// <param name="Centre">The centre, relative to the topology's origin, in world units.</param>

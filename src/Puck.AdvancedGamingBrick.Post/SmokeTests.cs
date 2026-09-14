@@ -6,58 +6,387 @@ namespace Puck.AdvancedGamingBrick.Post;
 // works and to guard the highest-risk behaviours (flag derivation, the barrel shifter, the MSR field mask fix,
 // mode switching into Thumb). Each vector runs against a fresh FlatTestBus and asserts the resulting state.
 internal static class SmokeTests {
+    // ARM "branch to self" — a safe landing pad so over-stepping a vector just re-executes the loop.
+    private const uint ArmSelfLoop = 0xEAFFFFFEu;
     private const uint FlagC = (1u << 29);
     private const uint FlagN = (1u << 31);
     private const uint FlagT = (1u << 5);
     private const uint FlagV = (1u << 28);
     private const uint FlagZ = (1u << 30);
-    // ARM "branch to self" — a safe landing pad so over-stepping a vector just re-executes the loop.
-    private const uint ArmSelfLoop = 0xEAFFFFFEu;
     // Thumb "branch to self".
     private const ushort ThumbSelfLoop = 0xE7FE;
-
-    private static int Passed;
-    private static int Failed;
-    private static int Skipped;
-    private static ReadOnlyMemory<byte> Bios;
+    private const int TotalLinesForTest = 228;
 
     private static readonly List<string> Failures = [];
 
-    /// <summary>Runs every smoke vector once and returns the aggregate result. Vectors that need a real replacement BIOS
-    /// (only <see cref="BiosIrqDispatch"/> today) skip cleanly when handed the zeroed stub.</summary>
-    /// <param name="bios">The BIOS image the BIOS-dependent vectors boot with.</param>
-    /// <returns>The pass / fail / skip tally and the list of failed check names.</returns>
-    public static SmokeResult Run(ReadOnlyMemory<byte> bios) {
-        Passed = 0;
-        Failed = 0;
-        Skipped = 0;
-        Bios = bios;
-        Failures.Clear();
+    private static ReadOnlyMemory<byte> Bios;
+    private static int Failed;
+    private static int Passed;
+    private static int Skipped;
 
-        DataProcessingAndFlags();
-        BarrelShifterCarry();
-        MsrFieldMaskFix();
-        ThumbModeAndExecution();
-        InterruptsTimersAndDma();
-        DmaCountLatching();
-        PpuTiming();
-        SpriteRendering();
-        SpriteCycleBudget();
-        GreenSwap();
-        AffineBackgroundRendering();
-        BrightnessBlend();
-        ApuPulseOutput();
-        BiosIrqDispatch();
-        DependencyInjectionScope();
+    private static void AffineBackgroundRendering() {
+        var scheduler = new AgbScheduler();
+        var ppu = new AgbPpu(
+            scheduler: scheduler,
+            interrupts: new AgbInterruptController()
+        );
 
-        return new SmokeResult(
-            Passed: Passed,
-            Failed: Failed,
-            Skipped: Skipped,
-            Failures: Failures.ToArray()
+        // Mode 2 with BG2 (affine) enabled.
+        ppu.WriteRegister(
+            offset: 0x00u,
+            value: 0x0402
+        );
+        // BG2CNT: char base 0, screen base block 8 (map at 0x4000), size 0 (128×128).
+        ppu.WriteRegister(
+            offset: 0x0Cu,
+            value: 0x0800
+        );
+        // Identity affine matrix (PA = PD = 1.0 in 8.8), reference point 0.
+        ppu.WriteRegister(
+            offset: 0x20u,
+            value: 0x0100
+        );
+        ppu.WriteRegister(
+            offset: 0x22u,
+            value: 0x0000
+        );
+        ppu.WriteRegister(
+            offset: 0x24u,
+            value: 0x0000
+        );
+        ppu.WriteRegister(
+            offset: 0x26u,
+            value: 0x0100
+        );
+
+        // Tile 0 (char base 0) is an 8bpp tile of colour index 1; map entry (0,0) = tile 0 (default).
+        for (uint i = 0; (i < 64u); i += 2u) {
+            ppu.WriteVideo(
+                address: (0x06000000u + i),
+                value: 0x0101,
+                width: 2
+            );
+        }
+
+        // BG palette colour index 1 = red.
+        ppu.WriteVideo(
+            address: 0x05000002u,
+            value: 0x001F,
+            width: 2
+        );
+
+        scheduler.Advance(cycles: 1232); // render scanline 0
+
+        var pixel = ppu.Framebuffer[0];
+
+        Check(
+            detail: $"got 0x{pixel:X8}",
+            name: "affine BG renders (identity transform)",
+            ok: (pixel == 0xFF0000FFu)
         );
     }
+    private static void ApuPulseOutput() {
+        var apu = new AgbApu();
 
+        apu.ConfigureOutput(sampleRate: 32768);
+        apu.WriteRegister(
+            offset: 0x84u,
+            value: 0x0080
+        );   // SOUNDCNT_X: master enable (must precede channel writes)
+        apu.WriteRegister(
+            offset: 0x80u,
+            value: 0xFF77
+        );   // SOUNDCNT_L: route all PSG channels L+R, master volume max
+        apu.WriteRegister(
+            offset: 0x82u,
+            value: 0x0002
+        );   // SOUNDCNT_H: PSG ratio 100%
+        apu.WriteRegister(
+            offset: 0x62u,
+            value: 0xF080
+        );   // NR11 duty 50%, NR12 volume 15
+        apu.WriteRegister(
+            offset: 0x64u,
+            value: 0x8700
+        );   // NR13/NR14: frequency + trigger
+
+        var buffer = new short[2048];
+        var first = 0;
+        var gotFirst = false;
+        var varied = false;
+
+        for (var chunk = 0; (chunk < 256); ++chunk) {
+            apu.Step(cycles: 8192);
+
+            var count = apu.DrainSamples(destination: buffer);
+
+            for (var i = 0; (i < count); ++i) {
+                if (!gotFirst) {
+                    first = buffer[i];
+                    gotFirst = true;
+                } else if (buffer[i] != first) {
+                    varied = true;
+                }
+            }
+        }
+
+        Check(
+            name: "APU pulse channel is active",
+            ok: ((apu.ReadRegister(offset: 0x84u) & 0x1) != 0)
+        );
+        Check(
+            name: "APU pulse produces a varying waveform",
+            ok: varied
+        );
+
+        // Noise channel: trigger it and confirm the LFSR drives a varying output.
+        var noiseApu = new AgbApu();
+
+        noiseApu.ConfigureOutput(sampleRate: 32768);
+        noiseApu.WriteRegister(
+            offset: 0x84u,
+            value: 0x0080
+        );   // master enable
+        noiseApu.WriteRegister(
+            offset: 0x80u,
+            value: 0xFF77
+        );   // SOUNDCNT_L: route all PSG channels L+R, master volume max
+        noiseApu.WriteRegister(
+            offset: 0x82u,
+            value: 0x0002
+        );   // PSG ratio 100%
+        noiseApu.WriteRegister(
+            offset: 0x78u,
+            value: 0xF000
+        );   // NR42 volume 15
+        noiseApu.WriteRegister(
+            offset: 0x7Cu,
+            value: 0x8000
+        );   // NR44 trigger
+
+        var noiseVaried = false;
+        var noiseFirst = 0;
+        var gotNoiseFirst = false;
+
+        for (var chunk = 0; (chunk < 256); ++chunk) {
+            noiseApu.Step(cycles: 8192);
+
+            var count = noiseApu.DrainSamples(destination: buffer);
+
+            for (var i = 0; (i < count); ++i) {
+                if (!gotNoiseFirst) {
+                    noiseFirst = buffer[i];
+                    gotNoiseFirst = true;
+                } else if (buffer[i] != noiseFirst) {
+                    noiseVaried = true;
+                }
+            }
+        }
+
+        Check(
+            name: "APU noise channel is active",
+            ok: ((noiseApu.ReadRegister(offset: 0x84u) & 0x8) != 0)
+        );
+        Check(
+            name: "APU noise produces a varying waveform",
+            ok: noiseVaried
+        );
+
+        // Direct Sound FIFO: enqueue samples, pop one on a timer overflow, and confirm the low FIFO asks for a refill.
+        var fifoApu = new AgbApu();
+
+        fifoApu.WriteRegister(
+            offset: 0x84u,
+            value: 0x0080
+        ); // master enable
+        fifoApu.WriteRegister(
+            offset: 0x82u,
+            value: 0x0000
+        ); // SOUNDCNT_H: FIFO A clocked by timer 0
+        fifoApu.WriteRegister(
+            offset: 0xA0u,
+            value: 0x2010
+        ); // enqueue two samples (0x10, 0x20)
+        fifoApu.OnTimerOverflow(timer: 0);                   // pop one
+
+        Check(
+            name: "Direct Sound FIFO requests refill when low",
+            ok: fifoApu.ConsumeFifoARefill()
+        );
+        Check(
+            name: "Direct Sound FIFO refill flag clears",
+            ok: !fifoApu.ConsumeFifoARefill()
+        );
+    }
+    private static void BarrelShifterCarry() {
+        // MOV r0,#1 ; MOV r1,r0,LSL#31 (0x80000000) ; MOVS r2,r1,LSL#1 -> r2=0, carry from bit31 ; B .
+        var cpu = RunArm(
+            steps: 8,
+            0xE3A00001u,
+            0xE1A01F80u,
+            0xE1B02081u,
+            ArmSelfLoop
+        );
+
+        Check(
+            name: "LSL#31 produces 0x80000000",
+            ok: (cpu.GetRegister(index: 1) == 0x80000000u),
+            detail: $"got 0x{cpu.GetRegister(index: 1):X8}"
+        );
+        Check(
+            name: "MOVS LSL#1 result 0",
+            ok: (cpu.GetRegister(index: 2) == 0u),
+            detail: $"got 0x{cpu.GetRegister(index: 2):X8}"
+        );
+        Check(
+            name: "MOVS LSL#1 carry from bit31",
+            ok: ((cpu.Cpsr & FlagC) != 0u)
+        );
+        Check(
+            name: "MOVS LSL#1 zero set",
+            ok: ((cpu.Cpsr & FlagZ) != 0u)
+        );
+    }
+    private static void BiosIrqDispatch() {
+        // Needs the real replacement BIOS; skip cleanly when only the zero stub is present.
+        if (Bios.Span.IndexOfAnyExcept(value: ((byte)0)) < 0) {
+            ++Skipped;
+
+            return;
+        }
+
+        // A cartridge that just spins, so the CPU has something to be interrupted out of.
+        var rom = new byte[4];
+
+        BitConverter.TryWriteBytes(
+            destination: rom,
+            value: 0xEAFFFFFEu
+        ); // b .
+
+        var services = new ServiceCollection();
+
+        _ = services.AddAdvancedGamingBrick();
+        _ = services.AddReplacementBios(image: Bios);
+        services.AddScoped<AgbCartridge>(implementationFactory: _ => new AgbCartridge(rom: rom));
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var machine = scope.ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
+
+        machine.DirectBoot();
+
+        // A user IRQ handler in IWRAM: write 0xAA to 0x03001000, then return. (r2 = 0x03000000 + 0x1000.)
+        uint[] handler = { 0xE3A010AAu, 0xE3A02403u, 0xE2822A01u, 0xE5821000u, 0xE12FFF1Eu };
+
+        for (var i = 0; (i < handler.Length); ++i) {
+            machine.Bus.Write32(
+                address: (0x03000000u + (((uint)i) * 4u)),
+                value: handler[i],
+                access: BusAccessType.NonSequential
+            );
+        }
+
+        machine.Bus.Write32(
+            access: BusAccessType.NonSequential,
+            address: 0x03007FFCu,
+            value: 0x03000000u
+        ); // BIOS user-IRQ-handler pointer
+        machine.Bus.Write16(
+            access: BusAccessType.NonSequential,
+            address: 0x04000004u,
+            value: 0x0008
+        );       // DISPSTAT: V-blank IRQ enable
+        machine.Bus.Write16(
+            access: BusAccessType.NonSequential,
+            address: 0x04000200u,
+            value: 0x0001
+        );       // IE: V-blank
+        machine.Bus.Write16(
+            access: BusAccessType.NonSequential,
+            address: 0x04000208u,
+            value: 0x0001
+        );       // IME
+
+        for (long i = 0; (i < 1_000_000); ++i) {
+            machine.Step();
+        }
+
+        var marker = machine.Bus.Read32(
+            access: BusAccessType.NonSequential,
+            address: 0x03001000u
+        );
+
+        Check(
+            detail: $"got 0x{marker:X8}",
+            name: "BIOS dispatches V-blank IRQ to user handler",
+            ok: (marker == 0xAAu)
+        );
+    }
+    private static void BrightnessBlend() {
+        var scheduler = new AgbScheduler();
+        var ppu = new AgbPpu(
+            scheduler: scheduler,
+            interrupts: new AgbInterruptController()
+        );
+
+        // Mode 0, BG0 enabled.
+        ppu.WriteRegister(
+            offset: 0x00u,
+            value: 0x0100
+        );
+        // BG0CNT: char base 0, screen base block 8 (map at 0x4000), 4bpp.
+        ppu.WriteRegister(
+            offset: 0x08u,
+            value: 0x0800
+        );
+        // BLDCNT: brightness-increase effect (bits 6-7 = 10), BG0 as 1st target.
+        ppu.WriteRegister(
+            offset: 0x50u,
+            value: 0x0081
+        );
+        // BLDY: EVY = 16 (maximum) — brightens any colour to full white.
+        ppu.WriteRegister(
+            offset: 0x54u,
+            value: 0x0010
+        );
+
+        // Tile 0 (char base 0): a 4bpp tile of colour index 1.
+        for (uint i = 0; (i < 32u); i += 2u) {
+            ppu.WriteVideo(
+                address: (0x06000000u + i),
+                value: 0x1111,
+                width: 2
+            );
+        }
+
+        // BG palette index 1 = red.
+        ppu.WriteVideo(
+            address: 0x05000002u,
+            value: 0x001F,
+            width: 2
+        );
+
+        scheduler.Advance(cycles: 1232);
+
+        var pixel = ppu.Framebuffer[0];
+
+        Check(
+            detail: $"got 0x{pixel:X8}",
+            name: "brightness blend → white at EVY=16",
+            ok: (pixel == 0xFFFFFFFFu)
+        );
+    }
+    private static void Check(string name, bool ok, string detail = "") {
+        if (ok) {
+            ++Passed;
+        } else {
+            ++Failed;
+            Failures.Add(item: (string.IsNullOrEmpty(value: detail)
+                ? name
+                : $"{name} ({detail})"));
+        }
+    }
     private static void DataProcessingAndFlags() {
         // MOV r0,#10 ; MOV r1,#3 ; SUB r2,r0,r1 ; ADD r3,r0,r1 ; B .
         var cpu = RunArm(
@@ -110,87 +439,224 @@ internal static class SmokeTests {
             ok: ((cpu.Cpsr & FlagV) == 0u)
         );
     }
-    private static void BarrelShifterCarry() {
-        // MOV r0,#1 ; MOV r1,r0,LSL#31 (0x80000000) ; MOVS r2,r1,LSL#1 -> r2=0, carry from bit31 ; B .
-        var cpu = RunArm(
-            steps: 8,
-            0xE3A00001u,
-            0xE1A01F80u,
-            0xE1B02081u,
-            ArmSelfLoop
-        );
-
-        Check(
-            name: "LSL#31 produces 0x80000000",
-            ok: (cpu.GetRegister(index: 1) == 0x80000000u),
-            detail: $"got 0x{cpu.GetRegister(index: 1):X8}"
-        );
-        Check(
-            name: "MOVS LSL#1 result 0",
-            ok: (cpu.GetRegister(index: 2) == 0u),
-            detail: $"got 0x{cpu.GetRegister(index: 2):X8}"
-        );
-        Check(
-            name: "MOVS LSL#1 carry from bit31",
-            ok: ((cpu.Cpsr & FlagC) != 0u)
-        );
-        Check(
-            name: "MOVS LSL#1 zero set",
-            ok: ((cpu.Cpsr & FlagZ) != 0u)
-        );
-    }
-    private static void MsrFieldMaskFix() {
-        // MSR CPSR_f,#0xFF000000 ; MRS r0,CPSR ; B .  — the flag byte must only land NZCV (0xF0000000);
-        // reserved bits 24–27 must NOT stick (the field-mask fix).
-        var cpu = RunArm(
-            steps: 6,
-            0xE328F4FFu,
-            0xE10F0000u,
-            ArmSelfLoop
-        );
-
-        Check(
-            name: "MSR sets NZCV",
-            ok: ((cpu.GetRegister(index: 0) & 0xF0000000u) == 0xF0000000u),
-            detail: $"got 0x{cpu.GetRegister(index: 0):X8}"
-        );
-        Check(
-            name: "MSR drops reserved bits 24-27",
-            ok: ((cpu.GetRegister(index: 0) & 0x0F000000u) == 0u),
-            detail: $"got 0x{cpu.GetRegister(index: 0):X8}"
-        );
-    }
-    private static void ThumbModeAndExecution() {
-        // ARM: MOV r0,#0x81 ; BX r0  (enter Thumb at 0x80)
-        // Thumb @0x80: MOV r1,#5 ; ADD r1,#3 ; B .
+    private static void DependencyInjectionScope() {
+        // Prove the composition root + scope-per-machine: register a preloaded bus, resolve IArmCpu from a scope.
         var bus = new FlatTestBus();
 
         bus.LoadArm(
             byteOffset: 0u,
-            0xE3A00081u,
-            0xE12FFF10u
-        );
-        bus.LoadThumb(
-            byteOffset: 0x80u,
-            0x2105,
-            0x3103,
-            ThumbSelfLoop
-        );
+            0xE3A0002Au,
+            ArmSelfLoop
+        ); // MOV r0,#42 ; B .
 
-        var cpu = new Arm7Tdmi(bus: bus);
+        var services = new ServiceCollection();
 
-        for (var i = 0; (i < 8); ++i) {
+        _ = services.AddAdvancedGamingBrick();
+        services.AddScoped<IAgbBus>(implementationFactory: _ => bus);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var cpu = scope.ServiceProvider.GetRequiredService<IArmCpu>();
+
+        for (var i = 0; (i < 4); ++i) {
             cpu.Step();
         }
 
         Check(
-            name: "BX entered Thumb state",
-            ok: ((cpu.Cpsr & FlagT) != 0u)
+            name: "DI-resolved IArmCpu executes (r0 = 42)",
+            ok: (cpu.GetRegister(index: 0) == 42u),
+            detail: $"got {cpu.GetRegister(index: 0)}"
+        );
+    }
+    private static void DmaCountLatching() {
+        // DMA count latching: the internal word counter is captured on the enable rising edge, so rewriting
+        // CNT_L after enable but before the first (timed) trigger is ignored for that run — yet honoured on the
+        // repeat reload. A VBlank-timed, repeating DMA3 copies an incrementing source into one fixed halfword; the
+        // last unit each run reveals the count that was in force.
+        var interrupts = new AgbInterruptController();
+        var dma = new AgbDmaController(interrupts: interrupts);
+        var latchScheduler = new AgbScheduler();
+        var bus = new AgbBus(
+            scheduler: latchScheduler,
+            bios: new ReplacementBios(image: new byte[ReplacementBios.ImageSize]),
+            cartridge: new AgbCartridge(rom: new byte[256]),
+            interrupts: interrupts,
+            timers: new AgbTimerController(
+                scheduler: latchScheduler,
+                interrupts: interrupts,
+                apu: new AgbApu()
+            ),
+            dma: dma,
+            serial: new AgbSerialController(
+                scheduler: new AgbScheduler(),
+                interrupts: interrupts
+            ),
+            ppu: new AgbPpu(
+                scheduler: new AgbScheduler(),
+                interrupts: interrupts
+            ),
+            apu: new AgbApu()
+        );
+
+        // src[i] = i as halfwords in IWRAM; the destination is a single fixed halfword.
+        for (uint i = 0; (i < 8u); ++i) {
+            bus.Write16(
+                access: BusAccessType.NonSequential,
+                address: (0x03000000u + (i * 2u)),
+                value: ((ushort)i)
+            );
+        }
+
+        // DMA3: src 0x03000000 (increment), dst 0x03000100 (fixed), 16-bit, VBlank timing, repeat, count = 2.
+        bus.Write16(
+            access: BusAccessType.NonSequential,
+            address: 0x040000D4u,
+            value: 0x0000
+        ); // SAD lo
+        bus.Write16(
+            access: BusAccessType.NonSequential,
+            address: 0x040000D6u,
+            value: 0x0300
+        ); // SAD hi → 0x03000000
+        bus.Write16(
+            access: BusAccessType.NonSequential,
+            address: 0x040000D8u,
+            value: 0x0100
+        ); // DAD lo
+        bus.Write16(
+            access: BusAccessType.NonSequential,
+            address: 0x040000DAu,
+            value: 0x0300
+        ); // DAD hi → 0x03000100
+        bus.Write16(
+            access: BusAccessType.NonSequential,
+            address: 0x040000DCu,
+            value: 0x0002
+        ); // count = 2 (latched here)
+        bus.Write16(
+            access: BusAccessType.NonSequential,
+            address: 0x040000DEu,
+            value: 0x9240
+        ); // enable+VBlank+repeat+dst-fixed
+
+        // Rewrite the count to 4 AFTER enable — the first run must still transfer the latched 2, not 4.
+        bus.Write16(
+            access: BusAccessType.NonSequential,
+            address: 0x040000DCu,
+            value: 0x0004
+        );
+
+        dma.OnVBlank(bus: bus);
+        dma.RunPending(bus: bus);
+        var first = bus.Read16(
+            access: BusAccessType.NonSequential,
+            address: 0x03000100u
+        );
+
+        Check(
+            detail: $"got {first}",
+            name: "DMA count latched at enable (first run transfers 2)",
+            ok: (first == 1u)
+        );
+
+        dma.OnVBlank(bus: bus);
+        dma.RunPending(bus: bus);
+        var reload = bus.Read16(
+            access: BusAccessType.NonSequential,
+            address: 0x03000100u
+        );
+
+        Check(
+            detail: $"got {reload}",
+            name: "DMA count reloads from register on repeat (transfers 4)",
+            ok: (reload == 5u)
+        );
+    }
+    // Proves GRSWP (0x4000002) bit 0: with it clear the two BGR555 bitmap pixels come through untouched; with it
+    // set, only their green components trade places (red/blue stay put): "BGRbgr → BgRbGr".
+    private static void GreenSwap() {
+        const int ColorA = 0x0C41; // r=1, g=2, b=3
+        const int ColorB = 0x18A4; // r=4, g=5, b=6
+        const uint ColorAUnswapped = 0xFF181008u;
+        const uint ColorBUnswapped = 0xFF312921u;
+        const uint ColorASwapped = 0xFF182908u;   // colour A's r/b, colour B's g
+        const uint ColorBSwapped = 0xFF311021u;   // colour B's r/b, colour A's g
+
+        var offScheduler = new AgbScheduler();
+        var offPpu = new AgbPpu(
+            scheduler: offScheduler,
+            interrupts: new AgbInterruptController()
+        );
+
+        offPpu.WriteRegister(
+            offset: 0x00u,
+            value: 0x0403
+        ); // Mode 3, BG2 enabled (bit 10)
+        offPpu.WriteVideo(
+            address: 0x06000000u,
+            value: ((uint)ColorA),
+            width: 2
+        );
+        offPpu.WriteVideo(
+            address: 0x06000002u,
+            value: ((uint)ColorB),
+            width: 2
+        );
+        offScheduler.Advance(cycles: 1232);
+
+        var offPixel0 = offPpu.Framebuffer[0];
+        var offPixel1 = offPpu.Framebuffer[1];
+
+        Check(
+            detail: $"got 0x{offPixel0:X8}",
+            name: "green swap off leaves pixel 0 untouched",
+            ok: (offPixel0 == ColorAUnswapped)
         );
         Check(
-            name: "Thumb MOV/ADD r1 = 8",
-            ok: (cpu.GetRegister(index: 1) == 8u),
-            detail: $"got {cpu.GetRegister(index: 1)}"
+            detail: $"got 0x{offPixel1:X8}",
+            name: "green swap off leaves pixel 1 untouched",
+            ok: (offPixel1 == ColorBUnswapped)
+        );
+
+        var onScheduler = new AgbScheduler();
+        var onPpu = new AgbPpu(
+            scheduler: onScheduler,
+            interrupts: new AgbInterruptController()
+        );
+
+        onPpu.WriteRegister(
+            offset: 0x00u,
+            value: 0x0403
+        ); // Mode 3, BG2 enabled (bit 10)
+        onPpu.WriteRegister(
+            offset: 0x02u,
+            value: 0x0001
+        ); // GRSWP bit 0
+        onPpu.WriteVideo(
+            address: 0x06000000u,
+            value: ((uint)ColorA),
+            width: 2
+        );
+        onPpu.WriteVideo(
+            address: 0x06000002u,
+            value: ((uint)ColorB),
+            width: 2
+        );
+        onScheduler.Advance(cycles: 1232);
+
+        var onPixel0 = onPpu.Framebuffer[0];
+        var onPixel1 = onPpu.Framebuffer[1];
+
+        Check(
+            detail: $"got 0x{onPixel0:X8}",
+            name: "green swap exchanges pixel 0's green",
+            ok: (onPixel0 == ColorASwapped)
+        );
+        Check(
+            detail: $"got 0x{onPixel1:X8}",
+            name: "green swap exchanges pixel 1's green",
+            ok: (onPixel1 == ColorBSwapped)
         );
     }
     private static void InterruptsTimersAndDma() {
@@ -370,108 +836,25 @@ internal static class SmokeTests {
             ok: (copied == 0xCAFEBABEu)
         );
     }
-    private static void DmaCountLatching() {
-        // DMA count latching: the internal word counter is captured on the enable rising edge, so rewriting
-        // CNT_L after enable but before the first (timed) trigger is ignored for that run — yet honoured on the
-        // repeat reload. A VBlank-timed, repeating DMA3 copies an incrementing source into one fixed halfword; the
-        // last unit each run reveals the count that was in force.
-        var interrupts = new AgbInterruptController();
-        var dma = new AgbDmaController(interrupts: interrupts);
-        var latchScheduler = new AgbScheduler();
-        var bus = new AgbBus(
-            scheduler: latchScheduler,
-            bios: new ReplacementBios(image: new byte[ReplacementBios.ImageSize]),
-            cartridge: new AgbCartridge(rom: new byte[256]),
-            interrupts: interrupts,
-            timers: new AgbTimerController(
-                scheduler: latchScheduler,
-                interrupts: interrupts,
-                apu: new AgbApu()
-            ),
-            dma: dma,
-            serial: new AgbSerialController(
-                scheduler: new AgbScheduler(),
-                interrupts: interrupts
-            ),
-            ppu: new AgbPpu(
-                scheduler: new AgbScheduler(),
-                interrupts: interrupts
-            ),
-            apu: new AgbApu()
-        );
-
-        // src[i] = i as halfwords in IWRAM; the destination is a single fixed halfword.
-        for (uint i = 0; (i < 8u); ++i) {
-            bus.Write16(
-                access: BusAccessType.NonSequential,
-                address: (0x03000000u + (i * 2u)),
-                value: ((ushort)i)
-            );
-        }
-
-        // DMA3: src 0x03000000 (increment), dst 0x03000100 (fixed), 16-bit, VBlank timing, repeat, count = 2.
-        bus.Write16(
-            access: BusAccessType.NonSequential,
-            address: 0x040000D4u,
-            value: 0x0000
-        ); // SAD lo
-        bus.Write16(
-            access: BusAccessType.NonSequential,
-            address: 0x040000D6u,
-            value: 0x0300
-        ); // SAD hi → 0x03000000
-        bus.Write16(
-            access: BusAccessType.NonSequential,
-            address: 0x040000D8u,
-            value: 0x0100
-        ); // DAD lo
-        bus.Write16(
-            access: BusAccessType.NonSequential,
-            address: 0x040000DAu,
-            value: 0x0300
-        ); // DAD hi → 0x03000100
-        bus.Write16(
-            access: BusAccessType.NonSequential,
-            address: 0x040000DCu,
-            value: 0x0002
-        ); // count = 2 (latched here)
-        bus.Write16(
-            access: BusAccessType.NonSequential,
-            address: 0x040000DEu,
-            value: 0x9240
-        ); // enable+VBlank+repeat+dst-fixed
-
-        // Rewrite the count to 4 AFTER enable — the first run must still transfer the latched 2, not 4.
-        bus.Write16(
-            access: BusAccessType.NonSequential,
-            address: 0x040000DCu,
-            value: 0x0004
-        );
-
-        dma.OnVBlank(bus: bus);
-        dma.RunPending(bus: bus);
-        var first = bus.Read16(
-            access: BusAccessType.NonSequential,
-            address: 0x03000100u
+    private static void MsrFieldMaskFix() {
+        // MSR CPSR_f,#0xFF000000 ; MRS r0,CPSR ; B .  — the flag byte must only land NZCV (0xF0000000);
+        // reserved bits 24–27 must NOT stick (the field-mask fix).
+        var cpu = RunArm(
+            steps: 6,
+            0xE328F4FFu,
+            0xE10F0000u,
+            ArmSelfLoop
         );
 
         Check(
-            detail: $"got {first}",
-            name: "DMA count latched at enable (first run transfers 2)",
-            ok: (first == 1u)
+            name: "MSR sets NZCV",
+            ok: ((cpu.GetRegister(index: 0) & 0xF0000000u) == 0xF0000000u),
+            detail: $"got 0x{cpu.GetRegister(index: 0):X8}"
         );
-
-        dma.OnVBlank(bus: bus);
-        dma.RunPending(bus: bus);
-        var reload = bus.Read16(
-            access: BusAccessType.NonSequential,
-            address: 0x03000100u
-        );
-
         Check(
-            detail: $"got {reload}",
-            name: "DMA count reloads from register on repeat (transfers 4)",
-            ok: (reload == 5u)
+            name: "MSR drops reserved bits 24-27",
+            ok: ((cpu.GetRegister(index: 0) & 0x0F000000u) == 0u),
+            detail: $"got 0x{cpu.GetRegister(index: 0):X8}"
         );
     }
     private static void PpuTiming() {
@@ -542,71 +925,21 @@ internal static class SmokeTests {
             ok: (ppu.ReadRegister(offset: 0x06u) == 0)
         );
     }
+    private static Arm7Tdmi RunArm(int steps, params uint[] program) {
+        var bus = new FlatTestBus();
 
-    private const int TotalLinesForTest = 228;
-
-    private static void SpriteRendering() {
-        var scheduler = new AgbScheduler();
-        var ppu = new AgbPpu(
-            scheduler: scheduler,
-            interrupts: new AgbInterruptController()
+        bus.LoadArm(
+            byteOffset: 0u,
+            program
         );
 
-        // Mode 0, OBJ enabled (bit 12), 1-D tile mapping (bit 6).
-        ppu.WriteRegister(
-            offset: 0x00u,
-            value: 0x1040
-        );
+        var cpu = new Arm7Tdmi(bus: bus);
 
-        // Object tile 0 in OBJ VRAM (0x06010000): an 8×8 4bpp tile of colour index 1. Written as halfwords
-        // because 8-bit writes to the object region are dropped by hardware (the quirk above).
-        for (uint i = 0; (i < 32u); i += 2u) {
-            ppu.WriteVideo(
-                address: (0x06010000u + i),
-                value: 0x1111,
-                width: 2
-            );
+        for (var i = 0; (i < steps); ++i) {
+            cpu.Step();
         }
 
-        // OBJ palette colour index 1 = red (BGR555 0x001F); OBJ palette starts at palette index 256.
-        ppu.WriteVideo(
-            address: (0x05000000u + ((256u + 1u) * 2u)),
-            value: 0x001F,
-            width: 2
-        );
-
-        // OAM sprite 0 at (0,0), 8×8 square, tile 0, priority 0.
-        ppu.WriteVideo(
-            address: 0x07000000u,
-            value: 0x0000,
-            width: 2
-        ); // attr0: y=0, normal
-        ppu.WriteVideo(
-            address: 0x07000002u,
-            value: 0x0000,
-            width: 2
-        ); // attr1: x=0, 8×8
-        ppu.WriteVideo(
-            address: 0x07000004u,
-            value: 0x0000,
-            width: 2
-        ); // attr2: tile 0
-
-        scheduler.Advance(cycles: 1232); // render scanline 0
-
-        var pixel = ppu.Framebuffer[0];
-        var backdrop = ppu.Framebuffer[100]; // x=100 is beyond the 8-pixel sprite → backdrop
-
-        Check(
-            detail: $"got 0x{pixel:X8}",
-            name: "sprite pixel is red",
-            ok: (pixel == 0xFF0000FFu)
-        );
-        Check(
-            detail: $"got 0x{backdrop:X8}",
-            name: "non-sprite pixel is backdrop",
-            ok: ((backdrop & 0x00FFFFFFu) == 0u)
-        );
+        return cpu;
     }
     // Proves the OBJ per-line rendering cycle budget: with H-Blank
     // Interval Free set the budget is 954 cycles, 8 per 8×8 regular sprite. 119 "burner" sprites overlapping at
@@ -702,6 +1035,102 @@ internal static class SmokeTests {
             ok: (droppedSprite == BackdropBlue)
         );
     }
+    private static void SpriteRendering() {
+        var scheduler = new AgbScheduler();
+        var ppu = new AgbPpu(
+            scheduler: scheduler,
+            interrupts: new AgbInterruptController()
+        );
+
+        // Mode 0, OBJ enabled (bit 12), 1-D tile mapping (bit 6).
+        ppu.WriteRegister(
+            offset: 0x00u,
+            value: 0x1040
+        );
+
+        // Object tile 0 in OBJ VRAM (0x06010000): an 8×8 4bpp tile of colour index 1. Written as halfwords
+        // because 8-bit writes to the object region are dropped by hardware (the quirk above).
+        for (uint i = 0; (i < 32u); i += 2u) {
+            ppu.WriteVideo(
+                address: (0x06010000u + i),
+                value: 0x1111,
+                width: 2
+            );
+        }
+
+        // OBJ palette colour index 1 = red (BGR555 0x001F); OBJ palette starts at palette index 256.
+        ppu.WriteVideo(
+            address: (0x05000000u + ((256u + 1u) * 2u)),
+            value: 0x001F,
+            width: 2
+        );
+
+        // OAM sprite 0 at (0,0), 8×8 square, tile 0, priority 0.
+        ppu.WriteVideo(
+            address: 0x07000000u,
+            value: 0x0000,
+            width: 2
+        ); // attr0: y=0, normal
+        ppu.WriteVideo(
+            address: 0x07000002u,
+            value: 0x0000,
+            width: 2
+        ); // attr1: x=0, 8×8
+        ppu.WriteVideo(
+            address: 0x07000004u,
+            value: 0x0000,
+            width: 2
+        ); // attr2: tile 0
+
+        scheduler.Advance(cycles: 1232); // render scanline 0
+
+        var pixel = ppu.Framebuffer[0];
+        var backdrop = ppu.Framebuffer[100]; // x=100 is beyond the 8-pixel sprite → backdrop
+
+        Check(
+            detail: $"got 0x{pixel:X8}",
+            name: "sprite pixel is red",
+            ok: (pixel == 0xFF0000FFu)
+        );
+        Check(
+            detail: $"got 0x{backdrop:X8}",
+            name: "non-sprite pixel is backdrop",
+            ok: ((backdrop & 0x00FFFFFFu) == 0u)
+        );
+    }
+    private static void ThumbModeAndExecution() {
+        // ARM: MOV r0,#0x81 ; BX r0  (enter Thumb at 0x80)
+        // Thumb @0x80: MOV r1,#5 ; ADD r1,#3 ; B .
+        var bus = new FlatTestBus();
+
+        bus.LoadArm(
+            byteOffset: 0u,
+            0xE3A00081u,
+            0xE12FFF10u
+        );
+        bus.LoadThumb(
+            byteOffset: 0x80u,
+            0x2105,
+            0x3103,
+            ThumbSelfLoop
+        );
+
+        var cpu = new Arm7Tdmi(bus: bus);
+
+        for (var i = 0; (i < 8); ++i) {
+            cpu.Step();
+        }
+
+        Check(
+            name: "BX entered Thumb state",
+            ok: ((cpu.Cpsr & FlagT) != 0u)
+        );
+        Check(
+            name: "Thumb MOV/ADD r1 = 8",
+            ok: (cpu.GetRegister(index: 1) == 8u),
+            detail: $"got {cpu.GetRegister(index: 1)}"
+        );
+    }
     // Writes an 8×8, normal (non-affine), priority-0 OAM entry at (x, 0) referencing tile 0 / OBJ palette bank 0.
     private static void WriteBudgetSprite(AgbPpu ppu, int index, int x) {
         var attributeBase = (0x07000000u + ((uint)(index * 8)));
@@ -722,471 +1151,40 @@ internal static class SmokeTests {
             width: 2
         );          // attr2: tile 0, priority 0
     }
-    // Proves GRSWP (0x4000002) bit 0: with it clear the two BGR555 bitmap pixels come through untouched; with it
-    // set, only their green components trade places (red/blue stay put): "BGRbgr → BgRbGr".
-    private static void GreenSwap() {
-        const int ColorA = 0x0C41; // r=1, g=2, b=3
-        const int ColorB = 0x18A4; // r=4, g=5, b=6
-        const uint ColorAUnswapped = 0xFF181008u;
-        const uint ColorBUnswapped = 0xFF312921u;
-        const uint ColorASwapped = 0xFF182908u;   // colour A's r/b, colour B's g
-        const uint ColorBSwapped = 0xFF311021u;   // colour B's r/b, colour A's g
 
-        var offScheduler = new AgbScheduler();
-        var offPpu = new AgbPpu(
-            scheduler: offScheduler,
-            interrupts: new AgbInterruptController()
+    /// <summary>Runs every smoke vector once and returns the aggregate result. Vectors that need a real replacement BIOS
+    /// (only <see cref="BiosIrqDispatch"/> today) skip cleanly when handed the zeroed stub.</summary>
+    /// <param name="bios">The BIOS image the BIOS-dependent vectors boot with.</param>
+    /// <returns>The pass / fail / skip tally and the list of failed check names.</returns>
+    public static SmokeResult Run(ReadOnlyMemory<byte> bios) {
+        Passed = 0;
+        Failed = 0;
+        Skipped = 0;
+        Bios = bios;
+        Failures.Clear();
+
+        DataProcessingAndFlags();
+        BarrelShifterCarry();
+        MsrFieldMaskFix();
+        ThumbModeAndExecution();
+        InterruptsTimersAndDma();
+        DmaCountLatching();
+        PpuTiming();
+        SpriteRendering();
+        SpriteCycleBudget();
+        GreenSwap();
+        AffineBackgroundRendering();
+        BrightnessBlend();
+        ApuPulseOutput();
+        BiosIrqDispatch();
+        DependencyInjectionScope();
+
+        return new SmokeResult(
+            Passed: Passed,
+            Failed: Failed,
+            Skipped: Skipped,
+            Failures: Failures.ToArray()
         );
-
-        offPpu.WriteRegister(
-            offset: 0x00u,
-            value: 0x0403
-        ); // Mode 3, BG2 enabled (bit 10)
-        offPpu.WriteVideo(
-            address: 0x06000000u,
-            value: ((uint)ColorA),
-            width: 2
-        );
-        offPpu.WriteVideo(
-            address: 0x06000002u,
-            value: ((uint)ColorB),
-            width: 2
-        );
-        offScheduler.Advance(cycles: 1232);
-
-        var offPixel0 = offPpu.Framebuffer[0];
-        var offPixel1 = offPpu.Framebuffer[1];
-
-        Check(
-            detail: $"got 0x{offPixel0:X8}",
-            name: "green swap off leaves pixel 0 untouched",
-            ok: (offPixel0 == ColorAUnswapped)
-        );
-        Check(
-            detail: $"got 0x{offPixel1:X8}",
-            name: "green swap off leaves pixel 1 untouched",
-            ok: (offPixel1 == ColorBUnswapped)
-        );
-
-        var onScheduler = new AgbScheduler();
-        var onPpu = new AgbPpu(
-            scheduler: onScheduler,
-            interrupts: new AgbInterruptController()
-        );
-
-        onPpu.WriteRegister(
-            offset: 0x00u,
-            value: 0x0403
-        ); // Mode 3, BG2 enabled (bit 10)
-        onPpu.WriteRegister(
-            offset: 0x02u,
-            value: 0x0001
-        ); // GRSWP bit 0
-        onPpu.WriteVideo(
-            address: 0x06000000u,
-            value: ((uint)ColorA),
-            width: 2
-        );
-        onPpu.WriteVideo(
-            address: 0x06000002u,
-            value: ((uint)ColorB),
-            width: 2
-        );
-        onScheduler.Advance(cycles: 1232);
-
-        var onPixel0 = onPpu.Framebuffer[0];
-        var onPixel1 = onPpu.Framebuffer[1];
-
-        Check(
-            detail: $"got 0x{onPixel0:X8}",
-            name: "green swap exchanges pixel 0's green",
-            ok: (onPixel0 == ColorASwapped)
-        );
-        Check(
-            detail: $"got 0x{onPixel1:X8}",
-            name: "green swap exchanges pixel 1's green",
-            ok: (onPixel1 == ColorBSwapped)
-        );
-    }
-    private static void AffineBackgroundRendering() {
-        var scheduler = new AgbScheduler();
-        var ppu = new AgbPpu(
-            scheduler: scheduler,
-            interrupts: new AgbInterruptController()
-        );
-
-        // Mode 2 with BG2 (affine) enabled.
-        ppu.WriteRegister(
-            offset: 0x00u,
-            value: 0x0402
-        );
-        // BG2CNT: char base 0, screen base block 8 (map at 0x4000), size 0 (128×128).
-        ppu.WriteRegister(
-            offset: 0x0Cu,
-            value: 0x0800
-        );
-        // Identity affine matrix (PA = PD = 1.0 in 8.8), reference point 0.
-        ppu.WriteRegister(
-            offset: 0x20u,
-            value: 0x0100
-        );
-        ppu.WriteRegister(
-            offset: 0x22u,
-            value: 0x0000
-        );
-        ppu.WriteRegister(
-            offset: 0x24u,
-            value: 0x0000
-        );
-        ppu.WriteRegister(
-            offset: 0x26u,
-            value: 0x0100
-        );
-
-        // Tile 0 (char base 0) is an 8bpp tile of colour index 1; map entry (0,0) = tile 0 (default).
-        for (uint i = 0; (i < 64u); i += 2u) {
-            ppu.WriteVideo(
-                address: (0x06000000u + i),
-                value: 0x0101,
-                width: 2
-            );
-        }
-
-        // BG palette colour index 1 = red.
-        ppu.WriteVideo(
-            address: 0x05000002u,
-            value: 0x001F,
-            width: 2
-        );
-
-        scheduler.Advance(cycles: 1232); // render scanline 0
-
-        var pixel = ppu.Framebuffer[0];
-
-        Check(
-            detail: $"got 0x{pixel:X8}",
-            name: "affine BG renders (identity transform)",
-            ok: (pixel == 0xFF0000FFu)
-        );
-    }
-    private static void BrightnessBlend() {
-        var scheduler = new AgbScheduler();
-        var ppu = new AgbPpu(
-            scheduler: scheduler,
-            interrupts: new AgbInterruptController()
-        );
-
-        // Mode 0, BG0 enabled.
-        ppu.WriteRegister(
-            offset: 0x00u,
-            value: 0x0100
-        );
-        // BG0CNT: char base 0, screen base block 8 (map at 0x4000), 4bpp.
-        ppu.WriteRegister(
-            offset: 0x08u,
-            value: 0x0800
-        );
-        // BLDCNT: brightness-increase effect (bits 6-7 = 10), BG0 as 1st target.
-        ppu.WriteRegister(
-            offset: 0x50u,
-            value: 0x0081
-        );
-        // BLDY: EVY = 16 (maximum) — brightens any colour to full white.
-        ppu.WriteRegister(
-            offset: 0x54u,
-            value: 0x0010
-        );
-
-        // Tile 0 (char base 0): a 4bpp tile of colour index 1.
-        for (uint i = 0; (i < 32u); i += 2u) {
-            ppu.WriteVideo(
-                address: (0x06000000u + i),
-                value: 0x1111,
-                width: 2
-            );
-        }
-
-        // BG palette index 1 = red.
-        ppu.WriteVideo(
-            address: 0x05000002u,
-            value: 0x001F,
-            width: 2
-        );
-
-        scheduler.Advance(cycles: 1232);
-
-        var pixel = ppu.Framebuffer[0];
-
-        Check(
-            detail: $"got 0x{pixel:X8}",
-            name: "brightness blend → white at EVY=16",
-            ok: (pixel == 0xFFFFFFFFu)
-        );
-    }
-    private static void ApuPulseOutput() {
-        var apu = new AgbApu();
-
-        apu.ConfigureOutput(sampleRate: 32768);
-        apu.WriteRegister(
-            offset: 0x84u,
-            value: 0x0080
-        );   // SOUNDCNT_X: master enable (must precede channel writes)
-        apu.WriteRegister(
-            offset: 0x80u,
-            value: 0xFF77
-        );   // SOUNDCNT_L: route all PSG channels L+R, master volume max
-        apu.WriteRegister(
-            offset: 0x82u,
-            value: 0x0002
-        );   // SOUNDCNT_H: PSG ratio 100%
-        apu.WriteRegister(
-            offset: 0x62u,
-            value: 0xF080
-        );   // NR11 duty 50%, NR12 volume 15
-        apu.WriteRegister(
-            offset: 0x64u,
-            value: 0x8700
-        );   // NR13/NR14: frequency + trigger
-
-        var buffer = new short[2048];
-        var first = 0;
-        var gotFirst = false;
-        var varied = false;
-
-        for (var chunk = 0; (chunk < 256); ++chunk) {
-            apu.Step(cycles: 8192);
-
-            var count = apu.DrainSamples(destination: buffer);
-
-            for (var i = 0; (i < count); ++i) {
-                if (!gotFirst) {
-                    first = buffer[i];
-                    gotFirst = true;
-                } else if (buffer[i] != first) {
-                    varied = true;
-                }
-            }
-        }
-
-        Check(
-            name: "APU pulse channel is active",
-            ok: ((apu.ReadRegister(offset: 0x84u) & 0x1) != 0)
-        );
-        Check(
-            name: "APU pulse produces a varying waveform",
-            ok: varied
-        );
-
-        // Noise channel: trigger it and confirm the LFSR drives a varying output.
-        var noiseApu = new AgbApu();
-
-        noiseApu.ConfigureOutput(sampleRate: 32768);
-        noiseApu.WriteRegister(
-            offset: 0x84u,
-            value: 0x0080
-        );   // master enable
-        noiseApu.WriteRegister(
-            offset: 0x80u,
-            value: 0xFF77
-        );   // SOUNDCNT_L: route all PSG channels L+R, master volume max
-        noiseApu.WriteRegister(
-            offset: 0x82u,
-            value: 0x0002
-        );   // PSG ratio 100%
-        noiseApu.WriteRegister(
-            offset: 0x78u,
-            value: 0xF000
-        );   // NR42 volume 15
-        noiseApu.WriteRegister(
-            offset: 0x7Cu,
-            value: 0x8000
-        );   // NR44 trigger
-
-        var noiseVaried = false;
-        var noiseFirst = 0;
-        var gotNoiseFirst = false;
-
-        for (var chunk = 0; (chunk < 256); ++chunk) {
-            noiseApu.Step(cycles: 8192);
-
-            var count = noiseApu.DrainSamples(destination: buffer);
-
-            for (var i = 0; (i < count); ++i) {
-                if (!gotNoiseFirst) {
-                    noiseFirst = buffer[i];
-                    gotNoiseFirst = true;
-                } else if (buffer[i] != noiseFirst) {
-                    noiseVaried = true;
-                }
-            }
-        }
-
-        Check(
-            name: "APU noise channel is active",
-            ok: ((noiseApu.ReadRegister(offset: 0x84u) & 0x8) != 0)
-        );
-        Check(
-            name: "APU noise produces a varying waveform",
-            ok: noiseVaried
-        );
-
-        // Direct Sound FIFO: enqueue samples, pop one on a timer overflow, and confirm the low FIFO asks for a refill.
-        var fifoApu = new AgbApu();
-
-        fifoApu.WriteRegister(
-            offset: 0x84u,
-            value: 0x0080
-        ); // master enable
-        fifoApu.WriteRegister(
-            offset: 0x82u,
-            value: 0x0000
-        ); // SOUNDCNT_H: FIFO A clocked by timer 0
-        fifoApu.WriteRegister(
-            offset: 0xA0u,
-            value: 0x2010
-        ); // enqueue two samples (0x10, 0x20)
-        fifoApu.OnTimerOverflow(timer: 0);                   // pop one
-
-        Check(
-            name: "Direct Sound FIFO requests refill when low",
-            ok: fifoApu.ConsumeFifoARefill()
-        );
-        Check(
-            name: "Direct Sound FIFO refill flag clears",
-            ok: !fifoApu.ConsumeFifoARefill()
-        );
-    }
-    private static void BiosIrqDispatch() {
-        // Needs the real replacement BIOS; skip cleanly when only the zero stub is present.
-        if (Bios.Span.IndexOfAnyExcept(value: ((byte)0)) < 0) {
-            ++Skipped;
-
-            return;
-        }
-
-        // A cartridge that just spins, so the CPU has something to be interrupted out of.
-        var rom = new byte[4];
-
-        BitConverter.TryWriteBytes(
-            destination: rom,
-            value: 0xEAFFFFFEu
-        ); // b .
-
-        var services = new ServiceCollection();
-
-        _ = services.AddAdvancedGamingBrick();
-        _ = services.AddReplacementBios(image: Bios);
-        services.AddScoped<AgbCartridge>(implementationFactory: _ => new AgbCartridge(rom: rom));
-
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
-
-        var machine = scope.ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
-
-        machine.DirectBoot();
-
-        // A user IRQ handler in IWRAM: write 0xAA to 0x03001000, then return. (r2 = 0x03000000 + 0x1000.)
-        uint[] handler = { 0xE3A010AAu, 0xE3A02403u, 0xE2822A01u, 0xE5821000u, 0xE12FFF1Eu };
-
-        for (var i = 0; (i < handler.Length); ++i) {
-            machine.Bus.Write32(
-                address: (0x03000000u + (((uint)i) * 4u)),
-                value: handler[i],
-                access: BusAccessType.NonSequential
-            );
-        }
-
-        machine.Bus.Write32(
-            access: BusAccessType.NonSequential,
-            address: 0x03007FFCu,
-            value: 0x03000000u
-        ); // BIOS user-IRQ-handler pointer
-        machine.Bus.Write16(
-            access: BusAccessType.NonSequential,
-            address: 0x04000004u,
-            value: 0x0008
-        );       // DISPSTAT: V-blank IRQ enable
-        machine.Bus.Write16(
-            access: BusAccessType.NonSequential,
-            address: 0x04000200u,
-            value: 0x0001
-        );       // IE: V-blank
-        machine.Bus.Write16(
-            access: BusAccessType.NonSequential,
-            address: 0x04000208u,
-            value: 0x0001
-        );       // IME
-
-        for (long i = 0; (i < 1_000_000); ++i) {
-            machine.Step();
-        }
-
-        var marker = machine.Bus.Read32(
-            access: BusAccessType.NonSequential,
-            address: 0x03001000u
-        );
-
-        Check(
-            detail: $"got 0x{marker:X8}",
-            name: "BIOS dispatches V-blank IRQ to user handler",
-            ok: (marker == 0xAAu)
-        );
-    }
-    private static void DependencyInjectionScope() {
-        // Prove the composition root + scope-per-machine: register a preloaded bus, resolve IArmCpu from a scope.
-        var bus = new FlatTestBus();
-
-        bus.LoadArm(
-            byteOffset: 0u,
-            0xE3A0002Au,
-            ArmSelfLoop
-        ); // MOV r0,#42 ; B .
-
-        var services = new ServiceCollection();
-
-        _ = services.AddAdvancedGamingBrick();
-        services.AddScoped<IAgbBus>(implementationFactory: _ => bus);
-
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
-
-        var cpu = scope.ServiceProvider.GetRequiredService<IArmCpu>();
-
-        for (var i = 0; (i < 4); ++i) {
-            cpu.Step();
-        }
-
-        Check(
-            name: "DI-resolved IArmCpu executes (r0 = 42)",
-            ok: (cpu.GetRegister(index: 0) == 42u),
-            detail: $"got {cpu.GetRegister(index: 0)}"
-        );
-    }
-    private static Arm7Tdmi RunArm(int steps, params uint[] program) {
-        var bus = new FlatTestBus();
-
-        bus.LoadArm(
-            byteOffset: 0u,
-            program
-        );
-
-        var cpu = new Arm7Tdmi(bus: bus);
-
-        for (var i = 0; (i < steps); ++i) {
-            cpu.Step();
-        }
-
-        return cpu;
-    }
-    private static void Check(string name, bool ok, string detail = "") {
-        if (ok) {
-            ++Passed;
-        } else {
-            ++Failed;
-            Failures.Add(item: (string.IsNullOrEmpty(value: detail)
-                ? name
-                : $"{name} ({detail})"));
-        }
     }
 }
 /// <summary>The aggregate result of a <see cref="SmokeTests.Run"/> pass: how many individual checks passed, failed, or

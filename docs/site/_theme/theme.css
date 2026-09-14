@@ -1,9 +1,11 @@
 /*
-  ByteTerrace docs theme. Palette, typography and the light/dark toggle are
-  lifted from blob.byteterrace.com/public/bds-theorem.html so the docs read as
-  one surface with the essays. Served same-origin under $web/_theme so the
-  Report-Only CSP (font-src 'self') stays quiet.
+  ByteTerrace docs theme. Shared brand tokens, typography, and the light/dark
+  toggle are imported from the maintained branding source. Served same-origin
+  under $web/_theme so the Report-Only CSP (font-src 'self') stays quiet; layout
+  rules remain local to this adapter.
 */
+
+@import url("/_theme/tokens.css");
 
 /* Fonts — self-hosted OFL woff2 (Lora, JetBrains Mono). Same-origin absolute
    paths resolve for both the home page (at /) and the reference (at /reference/). */
@@ -16,51 +18,7 @@
 
 /* Light is the bare :root default; system-dark applies unless the toggle has
    pinned an explicit choice via [data-theme] on <html>. */
-:root {
-  --paper:        #e7e4ed;
-  --paper-2:      #dbd7e4;
-  --ink:          #2b2736;
-  --ink-soft:     #5a5470;
-  --ink-faint:    #877f99;
-  --accent:       #ad3a53;
-  --accent-bright:#d15d78;
-  --accent-ink:   #fdf0f3;
-  --accent-2:     #0e7d6b;
-  --rule:         #d0cbdc;
-  --code-bg:      #221f2c;
-  --code-fg:      #e9e5f1;
-  --quote-bg:     #e0dce9;
-  --measure:      39rem;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper:        #1b1924;
-    --paper-2:      #262231;
-    --ink:          #ebe7f2;
-    --ink-soft:     #b5aec3;
-    --ink-faint:    #847d93;
-    --accent:       #f2879a;
-    --accent-bright:#ffa3b3;
-    --accent-ink:   #2a0d14;
-    --accent-2:     #4fd0b4;
-    --rule:         #363145;
-    --code-bg:      #15131c;
-    --code-fg:      #e8e3f0;
-    --quote-bg:     #262231;
-  }
-}
-:root[data-theme="light"] {
-  --paper:#e7e4ed; --paper-2:#dbd7e4; --ink:#2b2736; --ink-soft:#5a5470;
-  --ink-faint:#877f99; --accent:#ad3a53; --accent-bright:#d15d78;
-  --accent-ink:#fdf0f3; --accent-2:#0e7d6b; --rule:#d0cbdc;
-  --code-bg:#221f2c; --code-fg:#e9e5f1; --quote-bg:#e0dce9;
-}
-:root[data-theme="dark"] {
-  --paper:#1b1924; --paper-2:#262231; --ink:#ebe7f2; --ink-soft:#b5aec3;
-  --ink-faint:#847d93; --accent:#f2879a; --accent-bright:#ffa3b3;
-  --accent-ink:#2a0d14; --accent-2:#4fd0b4; --rule:#363145;
-  --code-bg:#15131c; --code-fg:#e8e3f0; --quote-bg:#262231;
-}
+:root { --measure: 39rem; }
 
 * { box-sizing: border-box; }
 
@@ -70,7 +28,7 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: "Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  font-family: var(--font-body);
   font-size: clamp(1.08rem, 0.98rem + 0.5vw, 1.28rem);
   line-height: 1.66;
   text-rendering: optimizeLegibility;
@@ -80,7 +38,7 @@ body {
 a { color: var(--accent); text-decoration-color: var(--rule); text-underline-offset: 0.15em; }
 a:hover { color: var(--accent-bright); text-decoration-color: var(--accent-bright); }
 
-code, pre, kbd { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+code, pre, kbd { font-family: var(--font-code); }
 code { background: var(--code-bg); color: var(--code-fg); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.88em; }
 
 /* ── Header: docs + repo links and the theme toggle ─────────────────────── */

@@ -8,8 +8,8 @@ namespace Puck.Vulkan;
 public sealed class VulkanViewTarget : IGpuRenderTarget, IVulkanRenderTarget {
     private readonly VulkanCommandResources m_commandResources;
     private readonly nint m_deviceHandle;
-    private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly nint m_framebufferHandle;
+    private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly nint m_imageHandle;
     private readonly nint m_imageViewHandle;
     private readonly nint m_memoryHandle;
@@ -58,7 +58,7 @@ public sealed class VulkanViewTarget : IGpuRenderTarget, IVulkanRenderTarget {
             Height: height,
             InstanceHandle: instance.Handle,
             PhysicalDeviceHandle: logicalDevice.PhysicalDevice.Handle,
-            UsageFlags: VulkanImageUsageFlags.ColorAttachment | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.TransferSource,
+            UsageFlags: VulkanImageUsageFlags.ColorAttachment | VulkanImageUsageFlags.Sampled | VulkanImageUsageFlags.Storage | VulkanImageUsageFlags.TransferSource | VulkanImageUsageFlags.TransferDestination,
             Width: width
         ));
 

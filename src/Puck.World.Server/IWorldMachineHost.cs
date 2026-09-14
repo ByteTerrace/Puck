@@ -23,7 +23,6 @@ namespace Puck.World.Server;
 /// <see langword="null"/> when the content booted as read (a ROM image) or no machine is assigned.</param>
 public readonly record struct WorldMachineState(bool Assigned, string? Engine, long FramesStepped,
     long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, WorldMachineCartridge? Cartridge = null);
-
 /// <summary>A compiled cartridge document behind a booted machine — the source the host compiled at bind and the
 /// two hashes that pin it, echoed by <c>screen.state</c> as <c>cartridge &lt;path&gt; hash &lt;source&gt; rom
 /// &lt;rom&gt;</c>. The file's own content pin (the replay CAS signature) is separate: it covers the bytes read
@@ -33,7 +32,6 @@ public readonly record struct WorldMachineState(bool Assigned, string? Engine, l
 /// <param name="SourceHash">The canonical source hash the forge computed.</param>
 /// <param name="RomHash">The compiled image's content hash, in the same <c>sha256-64/</c> form as the file pin.</param>
 public readonly record struct WorldMachineCartridge(string Path, string SourceHash, string RomHash);
-
 /// <summary>
 /// The seam <see cref="WorldServer"/> — and every replay/instance-host caller that boots a shadow world of its own —
 /// pumps every declared screen's machine through, mirroring <see cref="IWorldAddonHost"/>'s own shape for the WASM
@@ -45,10 +43,56 @@ public readonly record struct WorldMachineCartridge(string Path, string SourceHa
 /// Callers should not need to reach past this interface into the concrete host.
 /// </summary>
 public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemoryPeek {
+    /// <summary>Gets the same host-local catalog used for machine construction and document admission.</summary>
+    IMachineValidationCatalog ValidationCatalog { get; }
+    /// <summary>Gets the declared machine names, including instances without display consumers.</summary>
+    IEnumerable<string> InstanceNames { get; }
+
+    /// <summary>Reads execution and generation state by instance identity.</summary>
+    /// <param name="name">The authored instance name.</param>
+    WorldMachineInstanceState? InstanceState(string name);
+    /// <summary>Resolves one named instance's video output without creating or advancing it.</summary>
+    /// <param name="instance">The authored instance name.</param>
+    /// <param name="output">The provider's output name.</param>
+    IMachineVideoOutput? VideoOutput(string instance, string output);
+    /// <summary>Resolves one named audio stream; consumers of that stream share a single drain.</summary>
+    /// <param name="instance">The authored instance name.</param>
+    /// <param name="output">The provider's output name.</param>
+    IAudioMachine? AudioOutput(string instance, string output);
+    /// <summary>Captures the host-owned current named declarations in stable instance order.</summary>
+    IReadOnlyList<WorldMachine> CaptureInstances();
+    /// <summary>Stages one provider operation without changing the live runtime or declaration.</summary>
+    bool TryPrepareOperation(string instance, ulong expectedGeneration, MachineOperationRequest request,
+        out IWorldMachineOperationPreparedPlan? plan, out MachineOperationResult refusal);
+    /// <summary>Applies a prepared operation at the host barrier and adopts its canonical declaration on success.</summary>
+    MachineOperationResult TryCommitOperation(IWorldMachineOperationPreparedPlan plan);
+    /// <summary>Observes coherent hardware state with explicit availability and no side effects.</summary>
+    /// <param name="instance">The authored instance name.</param>
+    /// <param name="address">The provider space, unsigned address, and access width.</param>
+    MachineAccessResult Inspect(string instance, MachineMemoryAddress address);
+    /// <summary>Resolves a validated binding's raw or exported-symbol address.</summary>
+    /// <param name="instance">The authored instance.</param>
+    /// <param name="binding">The named binding within the instance.</param>
+    /// <param name="address">The resolved scalar address, on success.</param>
+    bool TryBindingAddress(string instance, string binding, out MachineMemoryAddress address);
+    /// <summary>Resolves a prepared content symbol on a named machine to its bus address.</summary>
+    /// <param name="instance">The named machine instance.</param>
+    /// <param name="symbol">The exported content symbol.</param>
+    /// <param name="address">The resolved bus address.</param>
+    /// <returns><see langword="true"/> when the symbol is available on the live instance.</returns>
+    bool TryResolveSymbol(string instance, string symbol, out int address);
+    /// <summary>Applies an already authorized write, refusing stale instance generations. External callers must
+    /// use the ordered authority door; the server's deterministic bindings use this execution seam directly.</summary>
+    /// <param name="instance">The target instance.</param>
+    /// <param name="generation">The expected incarnation.</param>
+    /// <param name="address">The resolved scalar address.</param>
+    /// <param name="value">The converted scalar bit pattern.</param>
+    /// <param name="mode">Patch or bus semantics.</param>
+    MachineAccessResult WriteHardware(string instance, ulong generation, MachineMemoryAddress address, ulong value, MachineAccessMode mode);
+
     /// <summary>A machine's core is re-executed at the same tick boundaries off the same pinned content and pad
     /// inputs, exactly like a WASM guest — see <see cref="IWorldExtensionRuntime.ReplayPolicy"/>.</summary>
     WorldExtensionReplayPolicy IWorldExtensionRuntime.ReplayPolicy => WorldExtensionReplayPolicy.Recomputed;
-
     /// <summary>Gets a value indicating whether any booted machine has ever had a step/segment actually submitted to it — set the
     /// instant <see cref="Advance"/> steps a machine (individually or through a live cable link), never cleared. The
     /// boot-anchored replay arm predicate <see cref="WorldServer.AnyMachineEverPumped"/> reads (mirroring
@@ -73,8 +117,8 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="stepTicks">The exact engine-tick budget of one fixed simulation step.</param>
     /// <param name="pads">This tick's per-screen merged engagement pad lane.</param>
     void Advance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads);
-    /// <summary>Returns the live machine on a screen slot as its audio drain seam, or <see langword="null"/> when the slot
-    /// carries no machine (or one without the capability).</summary>
+    /// <summary>Returns the live machine resolved from a screen's named producer or legacy slot as its audio drain seam,
+    /// or <see langword="null"/> when no machine (or no capability) is available.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     IAudioMachine? AudioMachine(int index);
     /// <summary>Returns the live cable-link set as derived groups (cable order preserved) — the <c>world.save</c>
@@ -89,7 +133,7 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <summary>Determines whether a screen-machine engine is registered under <paramref name="engineId"/>.</summary>
     /// <param name="engineId">The candidate engine id.</param>
     bool HasEngine(string engineId);
-    /// <summary>Determines whether a machine is currently booted on the screen index.</summary>
+    /// <summary>Determines whether the screen index resolves to a live named producer or legacy screen-owned machine.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     bool HasMachine(int index);
     /// <summary>Returns the live machine's authored tempo, in engine ticks per beat, when the screen slot carries a
@@ -97,6 +141,10 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// slot, a machine without the capability, or a capability reporting zero (no content loaded).</summary>
     /// <param name="index">The engine screen-surface index.</param>
     long? InstrumentTicksPerBeat(int index);
+    /// <summary>Returns the live named machine's authored tempo, in engine ticks per beat, when it exposes the
+    /// <see cref="IInstrumentClockSource"/> capability. The lookup is independent of display consumers.</summary>
+    /// <param name="instance">The authored machine instance name.</param>
+    long? InstrumentTicksPerBeat(string instance);
     /// <summary>Returns the room light a booted machine emits (its framebuffer average), or zero for no machine — the
     /// presentation read.</summary>
     /// <param name="index">The engine screen-surface index.</param>
@@ -104,20 +152,41 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <summary>Returns the cable link a screen currently belongs to (by name), or <see langword="null"/>.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     string? LinkOf(int index);
-    /// <summary>Returns the live machine on a screen index, for presentation's own frame-publish loop
-    /// (<c>IScreenMachine.PublishFrame</c> is a GPU call this project never makes itself), or <see langword="null"/>.</summary>
+    /// <summary>Returns the runtime currently bound to a screen index, or null.</summary>
     /// <param name="index">The engine screen-surface index.</param>
-    IScreenMachine? MachineAt(int index);
+    IMachineRuntime? MachineAt(int index);
+    /// <summary>Returns the optional video output selected by a screen, or null when no signal is available.</summary>
+    /// <param name="index">The screen's derived render slot.</param>
+    IMachineVideoOutput? VideoOutput(int index);
     /// <summary>Reconciles the declared cable links to a mutated <c>links</c> section.</summary>
     /// <param name="links">The declared cable groups, derived from the live definition's machine sources
     /// (<c>WorldDefinition.MachineCableGroups()</c>).</param>
     void ReconcileLinks(IReadOnlyList<WorldMachineCableGroup> links);
+    /// <summary>Prepares the machine-runtime delta between <paramref name="current"/> and <paramref name="candidate"/>.</summary>
+    /// <param name="current">The current live definition, or <see langword="null"/> at boot.</param>
+    /// <param name="candidate">The candidate definition to prepare against.</param>
+    /// <param name="plan">The prepared plan on success; must be disposed if not committed.</param>
+    /// <param name="reason">A refusal reason on failure.</param>
+    /// <returns><see langword="true"/> when preparation succeeded.</returns>
+    bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldMachinePreparedPlan? plan, out string? reason);
+    /// <summary>Commits a previously prepared plan.</summary>
+    /// <param name="plan">The prepared plan.</param>
+    void Commit(IWorldMachinePreparedPlan plan);
+    /// <summary>Finishes and publishes a committed plan.</summary>
+    /// <param name="plan">The committed plan.</param>
+    void Finish(IWorldMachinePreparedPlan plan);
     /// <summary>Reconciles the host's machine slots to a mutated screen list — the live-application half of an
     /// <c>UpsertScreen</c>/<c>RemoveScreen</c> world mutation, called from <see cref="WorldServer"/>'s own Install
     /// path when the definition changes.</summary>
     /// <param name="screens">The mutated screen list (the live definition's screens).</param>
     /// <returns>The screen indices removed this call — feed each to <see cref="WorldEngagement.DissolveScreen"/>.</returns>
     IReadOnlyList<int> ReconcileScreens(IReadOnlyList<WorldScreen> screens);
+    /// <summary>Resolves a state-symbol name on the machine at <paramref name="index"/> to its bus address.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    /// <param name="symbol">The symbol name.</param>
+    /// <param name="address">The resolved bus address.</param>
+    /// <returns><see langword="true"/> when the symbol was found on the booted machine's cartridge.</returns>
+    bool TryResolveSymbol(int index, string symbol, out int address);
     /// <summary>Moves declared relative machine content resolution to a new world document.</summary>
     /// <param name="documentPath">The installed world document path.</param>
     void SetDocumentPath(string? documentPath);

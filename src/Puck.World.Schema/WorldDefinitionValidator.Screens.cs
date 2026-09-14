@@ -49,66 +49,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{name} '{channel}' must be non-empty kebab-case.");
         }
     }
-    // The machine cable groups, derived from the declared screens rows' machine-source cable ports: each port's name
-    // kebab-case, each cable plugged by two or more ports, positions unique and contiguous from 0 (cable order is the
-    // linking engine's player order, so a gap or duplicate is a lie about who runs when). A screen carries at most one
-    // port by construction (one Cable member per source). NOT validated: engine identity of the members — that is a
-    // RUNTIME fact (a screen.insert changes it), so the binder reports a dormant group with a reason rather than the
-    // validator rejecting the port.
-    private static void ValidateMachineCables(IReadOnlyList<WorldScreen> screens, List<string> errors) {
-        var cables = new Dictionary<string, List<(int Position, int Screen, string Path)>>(comparer: StringComparer.Ordinal);
-
-        foreach (var screen in screens) {
-            if (screen?.Source is not WorldScreenSource.Machine { Cable: { } cable }) {
-                continue;
-            }
-
-            var path = $"screens[{screen.Index}].source.machine.cable";
-
-            if (
-                string.IsNullOrWhiteSpace(value: cable.Name) ||
-                !IsKebabCase(value: cable.Name)
-            ) {
-                errors.Add(item: $"{path}.name '{cable.Name}' must be non-empty kebab-case.");
-
-                continue;
-            }
-
-            if (cable.Position < 0) {
-                errors.Add(item: $"{path}.position {cable.Position} must be non-negative.");
-
-                continue;
-            }
-
-            if (!cables.TryGetValue(
-                key: cable.Name,
-                value: out var members
-            )) {
-                members = [];
-                cables[cable.Name] = members;
-            }
-
-            members.Add(item: (cable.Position, screen.Index, path));
-        }
-
-        foreach (var (name, members) in cables) {
-            if (members.Count < 2) {
-                errors.Add(item: $"cable '{name}' has one plugged port (screen {members[0].Screen}) — a cable links two or more machines; plug another declared machine source into it or drop the port.");
-
-                continue;
-            }
-
-            var positions = new HashSet<int>();
-
-            foreach (var member in members) {
-                if (!positions.Add(item: member.Position)) {
-                    errors.Add(item: $"{member.Path}.position {member.Position} is already taken on cable '{name}' — cable order needs one machine per position.");
-                } else if (member.Position >= members.Count) {
-                    errors.Add(item: $"{member.Path}.position {member.Position} leaves a gap on cable '{name}' — positions are contiguous 0..{(members.Count - 1)}.");
-                }
-            }
-        }
-    }
     // The per-screen magazine: at least one entry, a selected index in range, and each entry crossing the SAME source
     // gate as a declared source.
     private static void ValidateMagazine(WorldDefinition definition, WorldScreenMagazine? magazine, string path, ValidationScope scope, List<string> errors, ICollection<string>? deferred) {
@@ -362,7 +302,10 @@ public static partial class WorldDefinitionValidator {
                         scalar: orbit.Pitch
                     );
 
-                    if ((orbit.PivotOffset is { } pivotOffset) && !IsFinite(value: pivotOffset)) {
+                    if (
+                        (orbit.PivotOffset is { } pivotOffset) &&
+                        !IsFinite(value: pivotOffset)
+                    ) {
                         errors.Add(item: $"{opPath} needs a finite pivotOffset.");
                     }
 
@@ -438,7 +381,7 @@ public static partial class WorldDefinitionValidator {
                     }
 
                     break;
-                case WorldCameraProgramOp.Fov fov:
+                case WorldCameraProgramOp.FieldOfView fov:
                     if (seenFov) {
                         errors.Add(item: $"{opPath} is a second 'fov' op — at most one is admitted.");
                     }
@@ -475,7 +418,7 @@ public static partial class WorldDefinitionValidator {
                     );
 
                     break;
-                case WorldCameraProgramOp.Select select:
+                case WorldCameraProgramOp.SelectProgram select:
                     if (seenSelect) {
                         errors.Add(item: $"{opPath} is a second 'select' op — at most one is admitted.");
                     }
@@ -536,7 +479,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.operations must include a 'fov' op (or a 'blend'/'select' op resolving to programs that do) — every rig needs a rendered field of view.");
         }
 
-        if (seenAnchor && seenPath) {
+        if (
+            seenAnchor &&
+            seenPath
+        ) {
             errors.Add(item: $"{path}.operations authors both 'anchor' and 'path' — each establishes its own subject; author only one.");
         }
     }
@@ -551,9 +497,9 @@ public static partial class WorldDefinitionValidator {
             if (
                 settled.Contains(item: name) ||
                 !programs.TryGetValue(
-                    key: name,
-                    value: out var program
-                )
+                key: name,
+                value: out var program
+            )
             ) {
                 return;
             }
@@ -707,20 +653,32 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if ((binding.Width != 1) && (binding.Width != 2)) {
+            if (
+                (binding.Width != 1) &&
+                (binding.Width != 2)
+            ) {
                 errors.Add(item: $"{entryPath}.width must be 1 or 2, not {binding.Width}.");
             }
 
-            var span = Math.Max(val1: binding.Width, val2: 1);
+            var span = Math.Max(
+                val1: binding.Width,
+                val2: 1
+            );
 
             if (
                 (binding.Address < 0) ||
-                ((binding.Address + span - 1) > WorldScreenMemory.MaxAddress)
+                (((binding.Address + span) - 1) > WorldScreenMemory.MaxAddress)
             ) {
                 errors.Add(item: $"{entryPath}.address {binding.Address} (width {binding.Width}) is outside the engine's memory 0..{WorldScreenMemory.MaxAddress}.");
             }
 
-            ValidateMemoryRow(row: binding.Row, key: binding.Key, entryPath: entryPath, definition: definition, errors: errors);
+            ValidateMemoryRow(
+                row: binding.Row,
+                key: binding.Key,
+                entryPath: entryPath,
+                definition: definition,
+                errors: errors
+            );
 
             if (!Enum.IsDefined(value: binding.Direction)) {
                 errors.Add(item: $"{entryPath}.direction '{binding.Direction}' is unknown.");
@@ -731,7 +689,13 @@ public static partial class WorldDefinitionValidator {
     // text (kept separate from WorldDefinitionValidator.Response.cs's ValidateStateCell, which speaks of a response's
     // comparand rather than a binding's mirrored cell).
     private static void ValidateMemoryRow(string? row, string? key, string entryPath, WorldDefinition definition, List<string> errors) {
-        if ((row is null) || (WorldDefinitionRows.FindStateRow(rows: definition.State, name: row) is not { } declared)) {
+        if (
+            (row is null) ||
+            (WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: row
+        ) is not { } declared)
+        ) {
             errors.Add(item: $"{entryPath}.row '{row}' does not name a declared state.world row.");
 
             return;
@@ -741,11 +705,24 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{entryPath}.row '{row}' is kind={declared.Kind} — a machine-memory binding mirrors an Int cell only.");
         }
 
-        if (declared.IsKeyed && (key is null)) {
+        if (
+            declared.IsKeyed &&
+            (key is null)
+        ) {
             errors.Add(item: $"{entryPath} names keyed row '{row}' without a 'key' — a keyed row has no single cell, so name the one you mean.");
-        } else if (!declared.IsKeyed && (key is not null)) {
+        } else if (
+            !declared.IsKeyed &&
+            (key is not null)
+        ) {
             errors.Add(item: $"{entryPath} names row '{row}' with a 'key', but the row is not keyed — omit 'key' to read its slot cell.");
-        } else if ((key is not null) && !CellName.TryParse(candidate: key, name: out _, reason: out var reason)) {
+        } else if (
+            (key is not null) &&
+            !CellName.TryParse(
+            candidate: key,
+            name: out _,
+            reason: out var reason
+        )
+        ) {
             errors.Add(item: $"{entryPath} key '{key}' {reason}");
         }
     }
@@ -800,11 +777,17 @@ public static partial class WorldDefinitionValidator {
                             continue;
                         }
 
-                        if ((control.Id < byte.MinValue) || (control.Id > byte.MaxValue)) {
+                        if (
+                            (control.Id < byte.MinValue) ||
+                            (control.Id > byte.MaxValue)
+                        ) {
                             errors.Add(item: $"{path}.camera.controls.vendor[{index}].id {control.Id} is outside 0..255.");
                         }
 
-                        if ((control.Value < byte.MinValue) || (control.Value > byte.MaxValue)) {
+                        if (
+                            (control.Value < byte.MinValue) ||
+                            (control.Value > byte.MaxValue)
+                        ) {
                             errors.Add(item: $"{path}.camera.controls.vendor[{index}].value {control.Value} is outside 0..255.");
                         }
                     }
@@ -818,7 +801,10 @@ public static partial class WorldDefinitionValidator {
 
                 break;
             case WorldScreenSource.Probe probe:
-                if (!DeclaresProbe(definition: definition, id: probe.Id)) {
+                if (!DeclaresProbe(
+                    definition: definition,
+                    id: probe.Id
+                )) {
                     errors.Add(item: $"{path}.probe.id '{probe.Id}' names no declared probe.");
                 }
 
@@ -862,48 +848,40 @@ public static partial class WorldDefinitionValidator {
 
                 return false;
             case WorldScreenSource.Machine machine:
-                // A cable port is a standing physical connection of the machine that owns the slot — a declared
-                // screens row's own source. A magazine entry rotates content through the slot and a placement face's
-                // source has no stable screen identity to fold a group back onto, so a port there is refused.
-                if (
-                    !cablePermitted &&
-                    (machine.Cable is not null)
+                if (string.IsNullOrWhiteSpace(value: machine.Instance)) {
+                    errors.Add(item: $"{path}.machine.instance is required.");
+                } else if (!definition.Machines.Any(predicate: candidate => ((candidate is not null) && string.Equals(
+                    a: candidate.Name,
+                    b: machine.Instance,
+                    comparisonType: StringComparison.Ordinal
+                )))) {
+                    errors.Add(item: $"{path}.machine.instance '{machine.Instance}' names no declared machine.");
+                }
+
+                if (string.IsNullOrWhiteSpace(value: machine.Output)) {
+                    errors.Add(item: $"{path}.machine.output is required.");
+                } else if (
+                    (scope.Machines is { } machines) &&
+                    (definition.Machines.FirstOrDefault(predicate: candidate => ((candidate is not null) && string.Equals(
+                    a: candidate.Name,
+                    b: machine.Instance,
+                    comparisonType: StringComparison.Ordinal
+                ))) is { } declaration) &&
+                    machines.TryDescriptor(
+                    declaration.Engine,
+                    out var descriptor
+                ) &&
+                    !descriptor.VideoOutputs.Any(predicate: port => string.Equals(
+                    a: port.Name,
+                    b: machine.Output,
+                    comparisonType: StringComparison.Ordinal
+                ))
                 ) {
-                    errors.Add(item: $"{path}.machine.cable is only legal on a declared screens row's own source — a magazine entry or face source cannot plug a cable.");
+                    errors.Add(item: $"{path}.machine.output '{machine.Output}' is not declared by machine '{machine.Instance}'.");
+                } else if (scope.Machines is null) {
+                    deferred?.Add(item: $"{path}.machine.output: validation of output '{machine.Output}' is deferred because no machine catalog was supplied.");
                 }
 
-                if (string.IsNullOrWhiteSpace(value: machine.Engine)) {
-                    errors.Add(item: $"{path}.machine.engine is required.");
-                } else {
-                    // Deny-by-default: an engine key a host WITH A CATALOG never registered refuses HERE, at load,
-                    // by name — not a per-slot boot fault discovered only once WorldMachineHost tries to resolve it
-                    // (screen.state reported the fault, but boot itself succeeded regardless). A host with NO
-                    // catalog at all (Puck.World.Browser) defers the answer instead — never a refusal, never a
-                    // silent pass. The hook is REQUIRED, never skipped when absent: an unchecked key is the one
-                    // outcome this refusal exists to prevent.
-                    var engineRegistered = WorldExtensionVocabularyHook.IsRegisteredScreenMachineEngine(engineId: machine.Engine);
-
-                    if (engineRegistered == false) {
-                        errors.Add(item: $"{path}.machine.engine '{machine.Engine}' names no registered screen-machine engine.");
-                    } else if (engineRegistered is null) {
-                        deferred?.Add(item: $"{path}.machine.engine: screen-machine engine '{machine.Engine}' registration deferred — this host carries no screen-machine engine catalog.");
-                    } else if (machine.NamesCartridgeDocument) {
-                        // A cartridge document is compiled at bind through the engine's own forge; an engine with no
-                        // forge would boot the JSON bytes as a ROM. Refused here, by name, like an unregistered
-                        // engine key; deferred, like the engine check above, on a host with no catalog at all.
-                        var cartridgeCompiling = WorldExtensionVocabularyHook.IsCartridgeCompilingScreenMachineEngine(engineId: machine.Engine);
-
-                        if (cartridgeCompiling == false) {
-                            errors.Add(item: $"{path}.machine.contentPath '{machine.ContentPath}' names a cartridge document ({WorldScreenSource.Machine.CartridgeDocumentSuffix}), but engine '{machine.Engine}' compiles none.");
-                        } else if (cartridgeCompiling is null) {
-                            deferred?.Add(item: $"{path}.machine.contentPath: engine '{machine.Engine}' cartridge-compilation registration deferred — this host carries no screen-machine engine catalog.");
-                        }
-                    }
-                }
-
-                // An empty contentPath is a valid "unconfigured" screen; the binder faults the slot gracefully at boot.
-                // A present-but-missing file is a runtime fact, not a structural authoring error, and so is a cartridge
-                // document the forge refuses — the bind faults with the forge's own message.
                 return false;
             case WorldScreenSource.TestPattern pattern:
                 if (
@@ -1068,7 +1046,7 @@ public static partial class WorldDefinitionValidator {
     // The session-source gate, shared by a declared/magazine-entry source (which carries the current document's
     // destinationNames) and a placement face override (ValidateFaceSources, which already threads destinationNames
     // for the PORTAL facet on the same row). Destination must name a declared destinations row — the row's own
-    // resolution (reference/instance/generation) is a bind-time fact this pass cannot see (see docs/vision.md).
+    // resolution (reference/instance/generation) is a bind-time fact this pass cannot see (see docs/architecture/worlds.md).
     // Camera, when present, is validated only as non-empty here — the destination's own definition is not joined at
     // boot, so an unknown camera name is a loud bind-time refusal (WorldScreenBinder), never a boot refusal.
     private static void ValidateSessionSource(WorldScreenSource.Session session, HashSet<string> destinationNames, WorldPlacementPortal? portal, string path, List<string> errors) {
@@ -1250,6 +1228,48 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        var pipelineNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var pipelines = views.Pipelines;
+
+        for (var index = 0; (index < pipelines.Count); index++) {
+            var pipeline = pipelines[index];
+            var path = $"views.pipelines[{index}]";
+
+            if (pipeline is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (!SafeName.TryParse(
+                candidate: pipeline.Name,
+                name: out _,
+                reason: out var nameReason
+            )) {
+                errors.Add(item: $"{path}.name {nameReason}");
+            } else if (!pipelineNames.Add(item: pipeline.Name)) {
+                errors.Add(item: $"{path}.name '{pipeline.Name}' is duplicated.");
+            }
+
+            if (string.IsNullOrWhiteSpace(value: pipeline.Source)) {
+                errors.Add(item: $"{path}.source is required.");
+            }
+
+            if (
+                (pipeline.Camera is { } pipelineCamera) &&
+                !cameras.Contains(item: pipelineCamera)
+            ) {
+                errors.Add(item: $"{path}.camera '{pipelineCamera}' names no camera row.");
+            }
+
+            if (
+                !float.IsFinite(f: pipeline.TimeScale) ||
+                (pipeline.TimeScale < 0f)
+            ) {
+                errors.Add(item: $"{path}.timeScale {pipeline.TimeScale} must be finite and non-negative.");
+            }
+        }
+
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var layouts = views.Layouts;
 
@@ -1316,10 +1336,20 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 if (
+                    (slot.Camera is not null) &&
+                    (slot.Pipeline is not null)
+                ) {
+                    errors.Add(item: $"{slotPath} must author at most one of camera/pipeline, never both.");
+                } else if (
                     (slot.Camera is { } camera) &&
                     !cameras.Contains(item: camera)
                 ) {
                     errors.Add(item: $"{slotPath}.camera '{camera}' names no camera row.");
+                } else if (
+                    (slot.Pipeline is { } pipeline) &&
+                    !pipelineNames.Contains(item: pipeline)
+                ) {
+                    errors.Add(item: $"{slotPath}.pipeline '{pipeline}' names no views.pipelines row.");
                 }
             }
         }

@@ -15,6 +15,15 @@ internal sealed class NativeWindowPlatformSupport(INativeDisplayEnvironment nati
             or NativeDisplayKind.Wayland
             or NativeDisplayKind.Xcb);
     }
+    public NativeDisplayKind ResolveDisplayKind(NativeDisplayKind requested) {
+        return ((requested == NativeDisplayKind.Auto)
+            ? CurrentDisplayKind
+            : requested
+        );
+    }
+    public bool SupportsWindowFor(NativeDisplayKind requested) {
+        return HasWindowBackend(displayKind: ResolveDisplayKind(requested: requested));
+    }
 
     private readonly INativeDisplayEnvironment m_nativeDisplayEnvironment = nativeDisplayEnvironment;
 
@@ -27,14 +36,5 @@ internal sealed class NativeWindowPlatformSupport(INativeDisplayEnvironment nati
 
     public NativeWindowPlatformSupport()
         : this(new NativeDisplayEnvironment()) {
-    }
-
-    public NativeDisplayKind ResolveDisplayKind(NativeDisplayKind requested) {
-        return ((requested == NativeDisplayKind.Auto)
-            ? CurrentDisplayKind
-            : requested);
-    }
-    public bool SupportsWindowFor(NativeDisplayKind requested) {
-        return HasWindowBackend(displayKind: ResolveDisplayKind(requested: requested));
     }
 }

@@ -54,7 +54,11 @@ public sealed record WorldPlacementDeal(
     /// <summary>Returns the id a child dealt for <paramref name="key"/> under <paramref name="template"/> carries.</summary>
     /// <param name="template">The template placement's id.</param>
     /// <param name="key">The dealt cell's key.</param>
-    public static string ChildId(string template, string key) => string.Concat(str0: template, str1: ChildSeparator.ToString(), str2: key);
+    public static string ChildId(string template, string key) => string.Concat(
+        str0: template,
+        str1: ChildSeparator.ToString(),
+        str2: key
+    );
     /// <summary>Returns whether <paramref name="id"/> spells <see cref="ChildSeparator"/> at all — the shape only a deal sweep
     /// may mint.</summary>
     /// <param name="id">The placement id.</param>
@@ -68,8 +72,11 @@ public sealed record WorldPlacementDeal(
         var span = id.AsSpan();
 
         return (
-            (span.Length == (template.Length + 1 + key.Length)) &&
-            span.StartsWith(value: template.AsSpan(), comparisonType: StringComparison.Ordinal) &&
+            (span.Length == ((template.Length + 1) + key.Length)) &&
+            span.StartsWith(
+            value: template.AsSpan(),
+            comparisonType: StringComparison.Ordinal
+        ) &&
             (span[template.Length] == ChildSeparator) &&
             span.Slice(start: (template.Length + 1)).SequenceEqual(other: key)
         );
@@ -82,14 +89,20 @@ public sealed record WorldPlacementDeal(
     public static bool TrySplitChildId(string id, out string template, out string key) {
         var separator = id.IndexOf(value: ChildSeparator);
 
-        if ((separator <= 0) || (separator >= (id.Length - 1))) {
+        if (
+            (separator <= 0) ||
+            (separator >= (id.Length - 1))
+        ) {
             template = string.Empty;
             key = string.Empty;
 
             return false;
         }
 
-        template = id.Substring(startIndex: 0, length: separator);
+        template = id.Substring(
+            length: separator,
+            startIndex: 0
+        );
         key = id.Substring(startIndex: (separator + 1));
 
         return true;
@@ -102,8 +115,14 @@ public sealed record WorldPlacementDeal(
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
     public static FixedVector3[] Offsets(WorldPlacement template, ulong worldSeed) {
         if (template.Distribution?.Region is WorldDistributionRegion.Lattice lattice) {
-            var countA = Math.Max(val1: lattice.CountA, val2: 1);
-            var countB = Math.Max(val1: lattice.CountB, val2: 1);
+            var countA = Math.Max(
+                val1: lattice.CountA,
+                val2: 1
+            );
+            var countB = Math.Max(
+                val1: lattice.CountB,
+                val2: 1
+            );
             var stepA = FixedVector3.FromVector3(value: lattice.StepA);
             var stepB = FixedVector3.FromVector3(value: lattice.StepB);
             var offsets = new FixedVector3[(countA * countB)];
@@ -118,7 +137,10 @@ public sealed record WorldPlacementDeal(
             return offsets;
         }
 
-        return ((WorldPlacementStamp.SampledFixedOffsetsFor(placement: template, worldSeed: worldSeed) is { } sampled)
+        return ((WorldPlacementStamp.SampledFixedOffsetsFor(
+            placement: template,
+            worldSeed: worldSeed
+        ) is { } sampled)
             ? [.. sampled]
             : []
         );
@@ -129,9 +151,22 @@ public sealed record WorldPlacementDeal(
     /// <param name="template">The template placement row.</param>
     /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
     public static int InstanceCount(WorldPlacement template, ulong worldSeed) => template.Distribution?.Region switch {
-        WorldDistributionRegion.Lattice lattice => (Math.Max(val1: lattice.CountA, val2: 1) * Math.Max(val1: lattice.CountB, val2: 1)),
-        WorldDistributionRegion.Scatter scatter => checked((int)CreationStampSampling.ScatterInstanceCeiling(width: scatter.Width, depth: scatter.Depth, spacing: scatter.Spacing)),
-        WorldDistributionRegion.Noise => Offsets(template: template, worldSeed: worldSeed).Length,
+        WorldDistributionRegion.Lattice lattice => (Math.Max(
+        val1: lattice.CountA,
+        val2: 1
+    ) * Math.Max(
+        val1: lattice.CountB,
+        val2: 1
+    )),
+        WorldDistributionRegion.Scatter scatter => checked((int)CreationStampSampling.ScatterInstanceCeiling(
+        width: scatter.Width,
+        depth: scatter.Depth,
+        spacing: scatter.Spacing
+    )),
+        WorldDistributionRegion.Noise => Offsets(
+        template: template,
+        worldSeed: worldSeed
+    ).Length,
         _ => 0,
     };
     /// <summary>Returns whether <paramref name="placement"/> is a dealt child: it names a parent carrying a deal facet and
@@ -143,9 +178,16 @@ public sealed record WorldPlacementDeal(
         (parent is { Deal: not null }) &&
         (placement.Id is not null) &&
         (placement.Parent is { } parentId) &&
-        string.Equals(a: parentId, b: parent.Id, comparisonType: StringComparison.Ordinal) &&
+        string.Equals(
+        a: parentId,
+        b: parent.Id,
+        comparisonType: StringComparison.Ordinal
+    ) &&
         (placement.Id.Length > (parentId.Length + 1)) &&
-        placement.Id.AsSpan().StartsWith(value: parentId.AsSpan(), comparisonType: StringComparison.Ordinal) &&
+        placement.Id.AsSpan().StartsWith(
+        value: parentId.AsSpan(),
+        comparisonType: StringComparison.Ordinal
+    ) &&
         (placement.Id[parentId.Length] == ChildSeparator)
     );
 }
@@ -156,7 +198,6 @@ public sealed record WorldPlacementDeal(
 /// child shows. Every value must resolve to a declared, non-animated creation.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlacementDealVariants(string Row, IReadOnlyDictionary<string, string> Map);
-
 /// <summary>Instance-owned properties which reconciliation seeds at creation and subsequently preserves.
 /// Membership and the allocated deal slot remain owned by the source row.</summary>
 /// <param name="Transform">Preserve an existing child's local position, yaw, and scale.</param>

@@ -6,29 +6,10 @@ namespace Puck.World.Protocol;
 /// transport-neutral grammar. The caps are per kind so an untrusted definition may be large without handing that
 /// same allocation budget to a command or query.</summary>
 public static class WorldFrameCodec {
+    /// <summary>The fixed mutation metadata prefix carrying the caller-preserved operation id.</summary>
+    public const int MutationMetadataBytes = 16;
     /// <summary>The fixed prefix size.</summary>
     public const int PrefixBytes = Puck.Networking.FrameCodec.PrefixBytes;
-
-    /// <summary>Returns the hard payload cap for a declared kind.</summary>
-    /// <param name="kind">The declared kind.</param>
-    /// <returns>The maximum leaf bytes accepted.</returns>
-    public static int MaxPayloadBytes(WorldSubmissionKind kind) => kind switch {
-        WorldSubmissionKind.Command => (4 * 1024),
-        WorldSubmissionKind.Grant => (4 * 1024),
-        WorldSubmissionKind.Revoke => (4 * 1024),
-        WorldSubmissionKind.Session => (256 * 1024),
-        WorldSubmissionKind.Rebuild => ((16 * 1024) * 1024),
-        WorldSubmissionKind.Mutation => ((4 * 1024) * 1024),
-        WorldSubmissionKind.Undo => sizeof(int),
-        WorldSubmissionKind.Composition => (16 * 1024),
-        WorldSubmissionKind.Lever => 64,
-        WorldSubmissionKind.Query => (4 * 1024),
-        // A screen.insert content path is a filesystem path, never file bytes — 4 KiB matches the other small
-        // structural leaves (Command/Grant/Query) rather than Rebuild's document-embedding cap.
-        WorldSubmissionKind.ScreenOp => (4 * 1024),
-        WorldSubmissionKind.Designation => (4 * 1024),
-        _ => 0,
-    };
 
     // WireRefusal (Puck.Networking, the transport-neutral frame/wire grammar) and WorldCodecRefusal (this leaf
     // vocabulary) are deliberately separate enums — this is the one seam a WireFailure crosses into a
@@ -48,13 +29,45 @@ public static class WorldFrameCodec {
         _ => WorldCodecRefusal.FrameLengthInvalid,
     };
 
+    /// <summary>Returns the hard payload cap for a declared kind.</summary>
+    /// <param name="kind">The declared kind.</param>
+    /// <returns>The maximum leaf bytes accepted.</returns>
+    public static int MaxPayloadBytes(WorldSubmissionKind kind) => kind switch {
+        WorldSubmissionKind.Command => (4 * 1024),
+        WorldSubmissionKind.Grant => (4 * 1024),
+        WorldSubmissionKind.Revoke => (4 * 1024),
+        WorldSubmissionKind.Session => (256 * 1024),
+        WorldSubmissionKind.Rebuild => ((16 * 1024) * 1024),
+        WorldSubmissionKind.Mutation => ((4 * 1024) * 1024),
+        WorldSubmissionKind.Undo => sizeof(int),
+        WorldSubmissionKind.Composition => (16 * 1024),
+        WorldSubmissionKind.Lever => 64,
+        WorldSubmissionKind.Query => (4 * 1024),
+        // A screen.insert content path is a filesystem path, never file bytes — 4 KiB matches the other small
+        // structural leaves (Command/Grant/Query) rather than Rebuild's document-embedding cap.
+        WorldSubmissionKind.ScreenOp => (4 * 1024),
+        WorldSubmissionKind.Designation => (4 * 1024),
+        // Generic provider payloads are bounded structural leaves; the complete leaf (instance, generation, operation id, and JSON) must fit this cap.
+        WorldSubmissionKind.Operation => (64 * 1024),
+        _ => 0,
+    };
     /// <summary>Decodes exactly one complete frame through the canonical leaf codec.</summary>
     /// <param name="frame">The complete frame bytes.</param>
     /// <param name="payload">The decoded payload on success.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> on success.</returns>
     public static bool TryDecode(ReadOnlySpan<byte> frame, out WorldSubmissionPayload? payload, out WorldCodecFailure failure) {
+        return TryDecode(
+            failure: out failure,
+            frame: frame,
+            operationId: out _,
+            payload: out payload
+        );
+    }
+    /// <summary>Decodes a frame and returns its mutation operation id. Non-mutation frames return an empty id.</summary>
+    public static bool TryDecode(ReadOnlySpan<byte> frame, out WorldSubmissionPayload? payload, out Guid operationId, out WorldCodecFailure failure) {
         payload = null;
+        operationId = Guid.Empty;
 
         // The kind byte gates the cap, but the grammar cannot admit an unbounded cap while it reads the kind —
         // decode with the widest cap any kind declares, then re-check the leaf against the kind's own cap below.
@@ -86,6 +99,26 @@ public static class WorldFrameCodec {
             return false;
         }
 
+        if (kind == WorldSubmissionKind.Mutation) {
+            if (leaf.Length < MutationMetadataBytes) {
+                failure = new WorldCodecFailure(
+                    Detail: "mutation frame has no operation-id metadata",
+                    Refusal: WorldCodecRefusal.PayloadMalformed
+                );
+                return false;
+            }
+
+            operationId = new Guid(b: leaf[..MutationMetadataBytes]);
+            if (operationId == Guid.Empty) {
+                failure = new WorldCodecFailure(
+                    Detail: "mutation operation id is empty",
+                    Refusal: WorldCodecRefusal.PayloadMalformed
+                );
+                return false;
+            }
+            leaf = leaf[MutationMetadataBytes..];
+        }
+
         var cap = MaxPayloadBytes(kind: kind);
 
         if (leaf.Length > cap) {
@@ -110,6 +143,19 @@ public static class WorldFrameCodec {
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> on success.</returns>
     public static bool TryEncode(WorldSubmissionPayload payload, out byte[] frame, out WorldCodecFailure failure) {
+        return TryEncode(
+            failure: out failure,
+            frame: out frame,
+            operationId: Guid.Empty,
+            payload: payload
+        );
+    }
+    /// <summary>Encodes one frame, carrying the supplied operation id for a mutation.</summary>
+    /// <param name="payload">The submission payload.</param>
+    /// <param name="operationId">The caller-preserved mutation id; empty is valid only for non-mutation payloads.</param>
+    /// <param name="frame">The complete frame on success.</param>
+    /// <param name="failure">The named refusal on failure.</param>
+    public static bool TryEncode(WorldSubmissionPayload payload, Guid operationId, out byte[] frame, out WorldCodecFailure failure) {
         frame = [];
 
         if (!WorldSubmissionCodec.TryEncode(
@@ -118,6 +164,17 @@ public static class WorldFrameCodec {
             kind: out var kind,
             payload: payload
         )) {
+            return false;
+        }
+
+        if (
+            (kind == WorldSubmissionKind.Mutation) &&
+            (operationId == Guid.Empty)
+        ) {
+            failure = new WorldCodecFailure(
+                Detail: "mutation operation id is required",
+                Refusal: WorldCodecRefusal.PayloadMalformed
+            );
             return false;
         }
 
@@ -130,6 +187,17 @@ public static class WorldFrameCodec {
             );
 
             return false;
+        }
+
+        if (kind == WorldSubmissionKind.Mutation) {
+            var metadata = new byte[checked((MutationMetadataBytes + leaf.Length))];
+
+            operationId.TryWriteBytes(destination: metadata.AsSpan(
+                length: MutationMetadataBytes,
+                start: 0
+            ));
+            leaf.CopyTo(destination: metadata.AsSpan(start: MutationMetadataBytes));
+            leaf = metadata;
         }
 
         frame = Puck.Networking.FrameCodec.Join(

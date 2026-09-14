@@ -55,7 +55,8 @@ public sealed partial class WorldServer {
                 Principal: WorldPrincipal.World
             ),
             preMetered: false,
-            tick: tick
+            tick: tick,
+            engineTick: CompletedEngineTicks
         );
     }
     // Retraction: the host's frame stands, the piece goes. One UpsertPlacement re-points prototypeId back at the
@@ -95,7 +96,8 @@ public sealed partial class WorldServer {
                 Principal: WorldPrincipal.World
             ),
             preMetered: false,
-            tick: tick
+            tick: tick,
+            engineTick: CompletedEngineTicks
         )) {
             return;
         }
@@ -129,7 +131,8 @@ public sealed partial class WorldServer {
                 Principal: WorldPrincipal.World
             ),
             preMetered: false,
-            tick: tick
+            tick: tick,
+            engineTick: CompletedEngineTicks
         );
     }
     // The placement upsert arm. Everything here is about the contribution facet's server-stamped half; a row carrying

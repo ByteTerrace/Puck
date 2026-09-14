@@ -9,22 +9,21 @@ namespace Puck.HumbleGamingBrick.Post;
 /// sorted by (suite, path, model) so a diff shows only what actually changed, and written with LF line endings.</summary>
 internal static partial class ExpectationsLedger {
     private sealed class EntryDto {
-        public required string Suite { get; init; }
-        public required string Path { get; init; }
-        public required string Model { get; init; }
-        public required string Probe { get; init; }
-        public required string RomHash { get; init; }
-        public required string Outcome { get; init; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? Reason { get; init; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public int? DiffPixels { get; init; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? ExpectedImageHash { get; init; }
+        public required string Model { get; init; }
+        public required string Outcome { get; init; }
+        public required string Path { get; init; }
+        public required string Probe { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Reason { get; init; }
+        public required string RomHash { get; init; }
+        public required string Suite { get; init; }
     }
-
-    [JsonSourceGenerationOptions(WriteIndented = true)]
     [JsonSerializable(typeof(EntryDto[]))]
+    [JsonSourceGenerationOptions(WriteIndented = true)]
     private sealed partial class EntryDtoJsonContext : JsonSerializerContext;
 
     /// <summary>Resolves the committed <c>Expectations.json</c> in the running checkout, independently of compiler

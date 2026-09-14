@@ -107,14 +107,14 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
                 ? "never"
                 : (grace.IsZero
                     ? "off"
-                    : $"{grace.Ticks}t")
-            );
+                    : $"{grace.Ticks}t"
+            ));
             var state = (grace.IsZero
                 ? "unsensed"
                 : ((!grace.IsNever && (stale >= grace.Ticks))
                     ? "dropped"
-                    : "live")
-            );
+                    : "live"
+            ));
             var endpoint = string.Empty;
             var laneAvailable = false;
             // The remote table is keyed by whatever name the dial resolved under — the destinations row for a
@@ -258,7 +258,10 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
                     return CommandResult.Error(output: $"[world.peers: refused ({refusal})]");
                 }
 
-                return new CommandResult(Output: Describe(server: instance.Server, peerHost: instance.Door));
+                return new CommandResult(Output: Describe(
+                    server: instance.Server,
+                    peerHost: instance.Door
+                ));
             }
         );
 

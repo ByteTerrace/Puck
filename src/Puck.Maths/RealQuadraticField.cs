@@ -30,11 +30,11 @@ public readonly record struct RealQuadraticField {
         Radicand = radicand;
     }
 
+    /// <summary>Gets whether this descriptor names the rationals rather than a quadratic extension of them.</summary>
+    public bool IsRationals => Radicand.IsZero;
     /// <summary>Gets the canonical radicand: above one and not a perfect square for a genuine quadratic field, or
     /// zero for <see cref="Rationals"/>.</summary>
     public BigInteger Radicand { get; }
-    /// <summary>Gets whether this descriptor names the rationals rather than a quadratic extension of them.</summary>
-    public bool IsRationals => Radicand.IsZero;
     /// <summary>Gets the descriptor of the rationals — the field with no adjoined root, compatible with every other.</summary>
     public static RealQuadraticField Rationals => default;
     /// <summary>Gets <c>√d</c> as a value of this field.</summary>
@@ -51,52 +51,6 @@ public readonly record struct RealQuadraticField {
             );
         }
     }
-
-    /// <summary>Names the real quadratic field <c>ℚ(√radicand)</c>.</summary>
-    /// <param name="radicand">The radicand; must be positive and not a perfect square.</param>
-    /// <returns>The descriptor, with the radicand canonicalized (a radicand of <c>8</c> names <c>ℚ(√2)</c>).</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radicand"/> is not positive.</exception>
-    /// <exception cref="ArgumentException"><paramref name="radicand"/> is a perfect square, so it adjoins nothing; use <see cref="Rationals"/> or <see cref="Rational"/> instead.</exception>
-    public static RealQuadraticField Create(BigInteger radicand) =>
-        Create(
-            radicand: radicand,
-            scale: out _
-        );
-    /// <summary>Names the real quadratic field <c>ℚ(√radicand)</c> and reports the square factor canonicalization
-    /// removed, so that <c>√radicand = scale · √Radicand</c>.</summary>
-    /// <param name="radicand">The radicand; must be positive and not a perfect square.</param>
-    /// <param name="scale">Receives the positive integer with <c>radicand = scale² · Radicand</c>.</param>
-    /// <returns>The descriptor.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radicand"/> is not positive.</exception>
-    /// <exception cref="ArgumentException"><paramref name="radicand"/> is a perfect square.</exception>
-    public static RealQuadraticField Create(BigInteger radicand, out BigInteger scale) {
-        if (radicand.Sign <= 0) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(radicand), message: "The radicand of a real quadratic field must be positive.");
-        }
-
-        var (canonical, factor) = Canonicalize(radicand: radicand);
-
-        if (canonical.IsOne) {
-            throw new ArgumentException(message: $"{radicand} is a perfect square and adjoins no root; the field is the rationals.", paramName: nameof(radicand));
-        }
-
-        scale = factor;
-
-        return new(radicand: canonical);
-    }
-    /// <summary>Builds a value of this field from its coordinates.</summary>
-    /// <param name="rationalNumerator">The rational coordinate's numerator.</param>
-    /// <param name="surdNumerator">The coefficient of <c>√d</c>'s numerator.</param>
-    /// <param name="denominator">The shared denominator; must be nonzero.</param>
-    /// <returns>The reduced value <c>(rationalNumerator + surdNumerator·√d) / denominator</c>.</returns>
-    /// <exception cref="DivideByZeroException"><paramref name="denominator"/> is zero.</exception>
-    public RealQuadratic Element(BigInteger rationalNumerator, BigInteger surdNumerator, BigInteger denominator) =>
-        RealQuadratic.Create(
-            denominator: denominator,
-            radicand: Radicand,
-            rationalNumerator: rationalNumerator,
-            surdNumerator: surdNumerator
-        );
 
     // (canonical, scale) with radicand = scale² · canonical: a perfect square collapses to canonical one; otherwise
     // every small prime's square is divided out — the factor four by its trailing zero count, the odd primes from
@@ -125,7 +79,10 @@ public readonly record struct RealQuadraticField {
 
             if (radicand < square) { break; }
 
-            while (BigInteger.Remainder(dividend: radicand, divisor: square).IsZero) {
+            while (BigInteger.Remainder(
+                dividend: radicand,
+                divisor: square
+            ).IsZero) {
                 radicand /= square;
                 scale *= prime;
             }
@@ -171,4 +128,56 @@ public readonly record struct RealQuadraticField {
 
         return false;
     }
+
+    /// <summary>Names the real quadratic field <c>ℚ(√radicand)</c>.</summary>
+    /// <param name="radicand">The radicand; must be positive and not a perfect square.</param>
+    /// <returns>The descriptor, with the radicand canonicalized (a radicand of <c>8</c> names <c>ℚ(√2)</c>).</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radicand"/> is not positive.</exception>
+    /// <exception cref="ArgumentException"><paramref name="radicand"/> is a perfect square, so it adjoins nothing; use <see cref="Rationals"/> or <see cref="Rational"/> instead.</exception>
+    public static RealQuadraticField Create(BigInteger radicand) =>
+        Create(
+            radicand: radicand,
+            scale: out _
+        );
+    /// <summary>Names the real quadratic field <c>ℚ(√radicand)</c> and reports the square factor canonicalization
+    /// removed, so that <c>√radicand = scale · √Radicand</c>.</summary>
+    /// <param name="radicand">The radicand; must be positive and not a perfect square.</param>
+    /// <param name="scale">Receives the positive integer with <c>radicand = scale² · Radicand</c>.</param>
+    /// <returns>The descriptor.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radicand"/> is not positive.</exception>
+    /// <exception cref="ArgumentException"><paramref name="radicand"/> is a perfect square.</exception>
+    public static RealQuadraticField Create(BigInteger radicand, out BigInteger scale) {
+        if (radicand.Sign <= 0) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(radicand),
+                message: "The radicand of a real quadratic field must be positive."
+            );
+        }
+
+        var (canonical, factor) = Canonicalize(radicand: radicand);
+
+        if (canonical.IsOne) {
+            throw new ArgumentException(
+                message: $"{radicand} is a perfect square and adjoins no root; the field is the rationals.",
+                paramName: nameof(radicand)
+            );
+        }
+
+        scale = factor;
+
+        return new(radicand: canonical);
+    }
+    /// <summary>Builds a value of this field from its coordinates.</summary>
+    /// <param name="rationalNumerator">The rational coordinate's numerator.</param>
+    /// <param name="surdNumerator">The coefficient of <c>√d</c>'s numerator.</param>
+    /// <param name="denominator">The shared denominator; must be nonzero.</param>
+    /// <returns>The reduced value <c>(rationalNumerator + surdNumerator·√d) / denominator</c>.</returns>
+    /// <exception cref="DivideByZeroException"><paramref name="denominator"/> is zero.</exception>
+    public RealQuadratic Element(BigInteger rationalNumerator, BigInteger surdNumerator, BigInteger denominator) =>
+        RealQuadratic.Create(
+            denominator: denominator,
+            radicand: Radicand,
+            rationalNumerator: rationalNumerator,
+            surdNumerator: surdNumerator
+        );
 }

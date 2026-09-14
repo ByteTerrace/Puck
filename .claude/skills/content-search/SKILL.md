@@ -49,6 +49,12 @@ support for Puck-only intersection, complement, or lookaround behavior.
 - Text occurrences do not prove C# references, implementers, or deletion
   safety. Route those questions to `symbol-analysis`.
 - Quote patterns for the active shell; do not silently rewrite regex syntax.
+- The walk has no extension filter, so it reads `.puck` DSL sources by
+  default. An authored `.puck` file and its compiled `.world.json`/
+  `.cartridge.json` can each hold a fact the other lacks — a `let`/template
+  name or unexpanded `for`/lambda body exists only in `.puck`; a lowered
+  default or basis-merged value exists only in the compiled JSON. Search both
+  before concluding a value is absent.
 
 ## Load the full reference selectively
 

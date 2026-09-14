@@ -108,6 +108,41 @@ public static class MusicCanonicalizer {
         "schema", "name", "tempo", "segments",
     };
 
+    /// <summary>THE full pipeline: validates (throwing on failure), normalizes, then serializes to canonical UTF-8
+    /// bytes and hashes them.</summary>
+    /// <param name="document">The document to canonicalize.</param>
+    /// <param name="source">An optional source label for a validation-failure message.</param>
+    /// <returns>The validated, normalized document plus its canonical bytes and hash.</returns>
+    public static CanonicalDocument<MusicDocument> Canonicalize(MusicDocument document, string? source = null) {
+        ValidateOrThrow(
+            document: document,
+            source: source
+        );
+
+        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
+    }
+    /// <summary>Normalizes an already-schema-valid document: defaults every optional member. Idempotent. Does NOT
+    /// itself validate; <see cref="Canonicalize"/> always crosses <see cref="ValidateOrThrow"/> first.</summary>
+    /// <param name="document">The document to normalize.</param>
+    /// <returns>The normalized document.</returns>
+    public static MusicDocument Normalize(MusicDocument document) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        return (document with {
+            Name = (string.IsNullOrWhiteSpace(value: document.Name)
+            ? "score"
+            : document.Name.Trim()),
+            Schema = MusicDocument.CurrentSchema,
+            Segments = [.. document.Segments.Select(selector: segment => (segment with {
+                Transitions = [.. (segment.Transitions ?? []).Select(selector: transition => (transition with {
+                    At = (transition.At ?? MusicTransitionBoundary.BarEnd),
+                }))],
+            }))],
+            Tempo = (document.Tempo with {
+                BeatsPerBar = (document.Tempo.BeatsPerBar ?? 4),
+            }),
+        });
+    }
     /// <summary>Validates a document's schema and structural invariants in one pass — every violation is collected
     /// rather than throwing on the first.</summary>
     /// <param name="document">The document to validate, as deserialized — not yet normalized.</param>
@@ -115,26 +150,47 @@ public static class MusicCanonicalizer {
     public static IReadOnlyList<DocumentValidationError> Validate(MusicDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 
-        if (DocumentCanonicalizer.SchemaViolationMessage(declared: document.Schema, recognized: MusicDocument.CurrentSchema) is { } schemaViolation) {
-            return [new DocumentValidationError(Message: schemaViolation, Path: "schema")];
+        if (DocumentCanonicalizer.SchemaViolationMessage(
+            declared: document.Schema,
+            recognized: MusicDocument.CurrentSchema
+        ) is { } schemaViolation) {
+            return [new DocumentValidationError(
+                    Message: schemaViolation,
+                    Path: "schema"
+                )];
         }
 
         var errors = new List<DocumentValidationError>();
 
         if (document.Tempo is not { } tempo) {
-            errors.Add(item: new(Message: "tempo is required.", Path: "tempo"));
+            errors.Add(item: new(
+                Message: "tempo is required.",
+                Path: "tempo"
+            ));
         } else {
             if (tempo.TicksPerBeat <= 0) {
-                errors.Add(item: new(Message: $"{tempo.TicksPerBeat} must be positive.", Path: "tempo.ticksPerBeat"));
+                errors.Add(item: new(
+                    Message: $"{tempo.TicksPerBeat} must be positive.",
+                    Path: "tempo.ticksPerBeat"
+                ));
             }
 
-            if ((tempo.BeatsPerBar is { } beatsPerBar) && (beatsPerBar <= 0)) {
-                errors.Add(item: new(Message: $"{beatsPerBar} must be positive.", Path: "tempo.beatsPerBar"));
+            if (
+                (tempo.BeatsPerBar is { } beatsPerBar) &&
+                (beatsPerBar <= 0)
+            ) {
+                errors.Add(item: new(
+                    Message: $"{beatsPerBar} must be positive.",
+                    Path: "tempo.beatsPerBar"
+                ));
             }
         }
 
         if (document.Segments is not { Count: > 0 } segments) {
-            errors.Add(item: new(Message: "at least one segment is required.", Path: "segments"));
+            errors.Add(item: new(
+                Message: "at least one segment is required.",
+                Path: "segments"
+            ));
         } else {
             var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -143,15 +199,24 @@ public static class MusicCanonicalizer {
                 var path = $"segments[{index}]";
 
                 if (segment is null) {
-                    errors.Add(item: new(Message: "is required.", Path: path));
+                    errors.Add(item: new(
+                        Message: "is required.",
+                        Path: path
+                    ));
 
                     continue;
                 }
 
                 if (string.IsNullOrWhiteSpace(value: segment.Id)) {
-                    errors.Add(item: new(Message: "id is required.", Path: $"{path}.id"));
+                    errors.Add(item: new(
+                        Message: "id is required.",
+                        Path: $"{path}.id"
+                    ));
                 } else if (!ids.Add(item: segment.Id)) {
-                    errors.Add(item: new(Message: $"'{segment.Id}' is duplicated.", Path: $"{path}.id"));
+                    errors.Add(item: new(
+                        Message: $"'{segment.Id}' is duplicated.",
+                        Path: $"{path}.id"
+                    ));
                 }
 
                 var transitions = (segment.Transitions ?? []);
@@ -161,21 +226,36 @@ public static class MusicCanonicalizer {
                     var transitionPath = $"{path}.transitions[{transitionIndex}]";
 
                     if (transition is null) {
-                        errors.Add(item: new(Message: "is required.", Path: transitionPath));
+                        errors.Add(item: new(
+                            Message: "is required.",
+                            Path: transitionPath
+                        ));
 
                         continue;
                     }
 
                     if (string.IsNullOrWhiteSpace(value: transition.To)) {
-                        errors.Add(item: new(Message: "to is required.", Path: $"{transitionPath}.to"));
+                        errors.Add(item: new(
+                            Message: "to is required.",
+                            Path: $"{transitionPath}.to"
+                        ));
                     }
 
                     if (string.IsNullOrWhiteSpace(value: transition.When)) {
-                        errors.Add(item: new(Message: "when is required.", Path: $"{transitionPath}.when"));
+                        errors.Add(item: new(
+                            Message: "when is required.",
+                            Path: $"{transitionPath}.when"
+                        ));
                     }
 
-                    if ((transition.At is { } at) && !Enum.IsDefined(value: at)) {
-                        errors.Add(item: new(Message: $"'{((int)at)}' is not a defined boundary.", Path: $"{transitionPath}.at"));
+                    if (
+                        (transition.At is { } at) &&
+                        !Enum.IsDefined(value: at)
+                    ) {
+                        errors.Add(item: new(
+                            Message: $"'{((int)at)}' is not a defined boundary.",
+                            Path: $"{transitionPath}.at"
+                        ));
                     }
                 }
 
@@ -186,13 +266,19 @@ public static class MusicCanonicalizer {
                     var layerPath = $"{path}.layers[{layerIndex}]";
 
                     if (layer is null) {
-                        errors.Add(item: new(Message: "is required.", Path: layerPath));
+                        errors.Add(item: new(
+                            Message: "is required.",
+                            Path: layerPath
+                        ));
 
                         continue;
                     }
 
                     if (string.IsNullOrWhiteSpace(value: layer.TuneId)) {
-                        errors.Add(item: new(Message: "tuneId is required.", Path: $"{layerPath}.tuneId"));
+                        errors.Add(item: new(
+                            Message: "tuneId is required.",
+                            Path: $"{layerPath}.tuneId"
+                        ));
                     }
                 }
 
@@ -203,17 +289,26 @@ public static class MusicCanonicalizer {
                     var embellishmentPath = $"{path}.embellishments[{embellishmentIndex}]";
 
                     if (embellishment is null) {
-                        errors.Add(item: new(Message: "is required.", Path: embellishmentPath));
+                        errors.Add(item: new(
+                            Message: "is required.",
+                            Path: embellishmentPath
+                        ));
 
                         continue;
                     }
 
                     if (string.IsNullOrWhiteSpace(value: embellishment.PatchId)) {
-                        errors.Add(item: new(Message: "patchId is required.", Path: $"{embellishmentPath}.patchId"));
+                        errors.Add(item: new(
+                            Message: "patchId is required.",
+                            Path: $"{embellishmentPath}.patchId"
+                        ));
                     }
 
                     if (string.IsNullOrWhiteSpace(value: embellishment.When)) {
-                        errors.Add(item: new(Message: "when is required.", Path: $"{embellishmentPath}.when"));
+                        errors.Add(item: new(
+                            Message: "when is required.",
+                            Path: $"{embellishmentPath}.when"
+                        ));
                     }
                 }
             }
@@ -232,14 +327,20 @@ public static class MusicCanonicalizer {
                         !string.IsNullOrWhiteSpace(value: transition.To) &&
                         !ids.Contains(item: transition.To)
                     ) {
-                        errors.Add(item: new(Message: $"'{transition.To}' does not resolve to a declared segment.", Path: $"{path}.transitions.to"));
+                        errors.Add(item: new(
+                            Message: $"'{transition.To}' does not resolve to a declared segment.",
+                            Path: $"{path}.transitions.to"
+                        ));
                     }
                 }
             }
         }
 
         DocumentCanonicalizer.ValidateExtensions(
-            addError: (path, message) => errors.Add(item: new(Message: message, Path: path)),
+            addError: (path, message) => errors.Add(item: new(
+                Message: message,
+                Path: path
+            )),
             extensions: document.Extensions,
             knownMemberNames: KnownMemberNames
         );
@@ -252,35 +353,8 @@ public static class MusicCanonicalizer {
     /// <exception cref="DocumentValidationException">The document declares an absent/foreign schema, or fails a
     /// structural invariant.</exception>
     public static void ValidateOrThrow(MusicDocument document, string? source = null) =>
-        DocumentCanonicalizer.ThrowIfInvalid(errors: Validate(document: document), source: source);
-    /// <summary>Normalizes an already-schema-valid document: defaults every optional member. Idempotent. Does NOT
-    /// itself validate; <see cref="Canonicalize"/> always crosses <see cref="ValidateOrThrow"/> first.</summary>
-    /// <param name="document">The document to normalize.</param>
-    /// <returns>The normalized document.</returns>
-    public static MusicDocument Normalize(MusicDocument document) {
-        ArgumentNullException.ThrowIfNull(document);
-
-        return (document with {
-            Name = (string.IsNullOrWhiteSpace(value: document.Name) ? "score" : document.Name.Trim()),
-            Schema = MusicDocument.CurrentSchema,
-            Segments = [.. document.Segments.Select(selector: segment => (segment with {
-                Transitions = [.. (segment.Transitions ?? []).Select(selector: transition => (transition with {
-                    At = (transition.At ?? MusicTransitionBoundary.BarEnd),
-                }))],
-            }))],
-            Tempo = (document.Tempo with {
-                BeatsPerBar = (document.Tempo.BeatsPerBar ?? 4),
-            }),
-        });
-    }
-    /// <summary>THE full pipeline: validates (throwing on failure), normalizes, then serializes to canonical UTF-8
-    /// bytes and hashes them.</summary>
-    /// <param name="document">The document to canonicalize.</param>
-    /// <param name="source">An optional source label for a validation-failure message.</param>
-    /// <returns>The validated, normalized document plus its canonical bytes and hash.</returns>
-    public static CanonicalDocument<MusicDocument> Canonicalize(MusicDocument document, string? source = null) {
-        ValidateOrThrow(document: document, source: source);
-
-        return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
-    }
+        DocumentCanonicalizer.ThrowIfInvalid(
+            errors: Validate(document: document),
+            source: source
+        );
 }

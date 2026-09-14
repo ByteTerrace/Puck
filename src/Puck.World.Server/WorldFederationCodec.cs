@@ -770,6 +770,8 @@ public static partial class WorldFederationCodec {
             writer.WriteInt64(value: delta.Raw);
         }
 
+        writer.WriteUInt64(value: snapshot.EngineTick);
+
         return writer.ToArray();
     }
     /// <summary>Encodes one forwarded submission frame behind its traveler credential.</summary>
@@ -1408,6 +1410,8 @@ public static partial class WorldFederationCodec {
             );
         }
 
+        var engineTick = reader.ReadUInt64();
+
         snapshot = new WorldSnapshot(
             Authority: authority,
             Entries: entries,
@@ -1415,7 +1419,8 @@ public static partial class WorldFederationCodec {
             FieldsFull: fieldsFull,
             Revision: revision,
             StepTicks: stepTicks,
-            Tick: tick
+            Tick: tick,
+            EngineTick: engineTick
         );
 
         return Finish(

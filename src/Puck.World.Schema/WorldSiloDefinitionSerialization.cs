@@ -2,7 +2,7 @@ using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 
-/// <summary>Canonical (de)serialization and file loading for the silo document (<c>puck.silo.def.v1</c>).</summary>
+/// <summary>Canonical (de)serialization and file loading for the silo document (<c>puck.silo.configuration.v1</c>).</summary>
 public static class WorldSiloDefinitionSerialization {
     /// <summary>Serializes a silo document to its canonical UTF-8 bytes (no BOM, LF newlines, one trailing
     /// newline).</summary>

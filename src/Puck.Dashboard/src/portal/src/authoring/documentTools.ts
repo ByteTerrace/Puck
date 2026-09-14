@@ -178,9 +178,6 @@ export function parsePaintValue(row: WorldStateRow, raw: string): bigint {
   if (row.max !== undefined && value > decodeCellValue(row.max)) {
     throw new Error(`Value is above this state's declared maximum (${row.max}).`);
   }
-  if (row.nonNegative && value < 0n) {
-    throw new Error("Value must be non-negative.");
-  }
   return value;
 }
 

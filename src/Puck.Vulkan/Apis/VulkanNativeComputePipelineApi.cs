@@ -31,6 +31,38 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
         m_allocator = allocator;
     }
 
+    private DevicePointers GetPointers(nint deviceHandle) {
+        return m_pointers.GetOrAdd(
+            key: deviceHandle,
+            valueFactory: static handle => new DevicePointers {
+                CreateComputePipelines = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateComputePipelines"u8
+            )),
+                CreatePipelineLayout = ((delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreatePipelineLayout"u8
+            )),
+                CreateDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkCreateDescriptorSetLayout"u8
+            )),
+                DestroyPipeline = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyPipeline"u8
+            )),
+                DestroyDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyDescriptorSetLayout"u8
+            )),
+                DestroyPipelineLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(
+                deviceHandle: handle,
+                functionName: "vkDestroyPipelineLayout"u8
+            )),
+            }
+        );
+    }
+
     /// <inheritdoc/>
     public VkResult CreateComputePipeline(
         VulkanComputePipelineCreateRequest request,
@@ -98,7 +130,10 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
                 }
 
                 setLayoutsPointer = m_allocator.Alloc(size: IntPtr.Size);
-                Marshal.WriteIntPtr(ptr: setLayoutsPointer, val: descriptorSetLayoutHandle);
+                Marshal.WriteIntPtr(
+                    ptr: setLayoutsPointer,
+                    val: descriptorSetLayoutHandle
+                );
                 pipelineLayoutCreateInfo.SetLayoutCount = 1;
                 pipelineLayoutCreateInfo.PSetLayouts = setLayoutsPointer;
             }
@@ -111,11 +146,14 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
                     );
                 }
 
-                pushConstantRangePointer = AllocateStruct(allocator: m_allocator, value: new VkPushConstantRange {
+                pushConstantRangePointer = AllocateStruct(
+                    allocator: m_allocator,
+                    value: new VkPushConstantRange {
                     Offset = 0,
                     Size = request.PushConstantSize,
                     StageFlags = request.PushConstantStageFlags,
-                });
+                }
+                );
                 pipelineLayoutCreateInfo.PushConstantRangeCount = 1;
                 pipelineLayoutCreateInfo.PPushConstantRanges = pushConstantRangePointer;
             }
@@ -129,7 +167,10 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
 
             if (!layoutResult.IsSuccess()) {
                 if (0 != descriptorSetLayoutHandle) {
-                    DestroyDescriptorSetLayout(deviceHandle: request.DeviceHandle, descriptorSetLayoutHandle: descriptorSetLayoutHandle);
+                    DestroyDescriptorSetLayout(
+                        deviceHandle: request.DeviceHandle,
+                        descriptorSetLayoutHandle: descriptorSetLayoutHandle
+                    );
                     descriptorSetLayoutHandle = 0;
                 }
 
@@ -152,7 +193,10 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
                 },
             };
 
-            createInfoPointer = AllocateStruct(allocator: m_allocator, value: createInfo);
+            createInfoPointer = AllocateStruct(
+                allocator: m_allocator,
+                value: createInfo
+            );
 
             var result = pointers.CreateComputePipelines(
                 request.DeviceHandle,
@@ -164,10 +208,16 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
             );
 
             if (!result.IsSuccess()) {
-                DestroyPipelineLayout(deviceHandle: request.DeviceHandle, pipelineLayoutHandle: pipelineLayoutHandle);
+                DestroyPipelineLayout(
+                    deviceHandle: request.DeviceHandle,
+                    pipelineLayoutHandle: pipelineLayoutHandle
+                );
 
                 if (0 != descriptorSetLayoutHandle) {
-                    DestroyDescriptorSetLayout(deviceHandle: request.DeviceHandle, descriptorSetLayoutHandle: descriptorSetLayoutHandle);
+                    DestroyDescriptorSetLayout(
+                        deviceHandle: request.DeviceHandle,
+                        descriptorSetLayoutHandle: descriptorSetLayoutHandle
+                    );
                     descriptorSetLayoutHandle = 0;
                 }
 
@@ -251,19 +301,5 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyPipeline;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyDescriptorSetLayout;
         public delegate* unmanaged[Cdecl]<nint, nint, nint, void> DestroyPipelineLayout;
-    }
-
-    private DevicePointers GetPointers(nint deviceHandle) {
-        return m_pointers.GetOrAdd(
-            key: deviceHandle,
-            valueFactory: static handle => new DevicePointers {
-                CreateComputePipelines = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateComputePipelines"u8)),
-                CreatePipelineLayout = ((delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreatePipelineLayout"u8)),
-                CreateDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateDescriptorSetLayout"u8)),
-                DestroyPipeline = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipeline"u8)),
-                DestroyDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDescriptorSetLayout"u8)),
-                DestroyPipelineLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipelineLayout"u8)),
-            }
-        );
     }
 }

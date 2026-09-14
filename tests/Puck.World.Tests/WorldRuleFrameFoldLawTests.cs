@@ -15,18 +15,28 @@ public sealed class WorldRuleFrameFoldLawTests {
         using var fixture = Fixtures.FreshServer(definition: Game(game: "solitaireKlondike"));
         var installsByTick = new Dictionary<ulong, int>();
 
-        fixture.Server.MutationJournalTap = (tick, mutation) => {
+        fixture.Server.MutationJournalTap = (tick, _, mutation) => {
             if (mutation.Principal == WorldPrincipal.World) {
-                installsByTick[tick] = (installsByTick.GetValueOrDefault(tick) + 1);
+                installsByTick[tick] = (installsByTick.GetValueOrDefault(key: tick) + 1);
             }
         };
 
-        Request(f: fixture, game: "solitaireKlondike", action: 1);
+        Request(
+            f: fixture,
+            game: "solitaireKlondike",
+            action: 1
+        );
 
-        Assert.True(condition: (installsByTick.Count > 0), userMessage: "the deal must apply at least one tick's worth of rule-fired mutations to prove the fold");
-        Assert.All(collection: installsByTick, action: entry => Assert.True(
-            condition: (entry.Value == 1),
-            userMessage: $"tick {entry.Key} installed {entry.Value} times — a tick whose rules wrote should install exactly once, not once per effect"
-        ));
+        Assert.True(
+            condition: (installsByTick.Count > 0),
+            userMessage: "the deal must apply at least one tick's worth of rule-fired mutations to prove the fold"
+        );
+        Assert.All(
+            collection: installsByTick,
+            action: entry => Assert.True(
+                condition: (entry.Value == 1),
+                userMessage: $"tick {entry.Key} installed {entry.Value} times — a tick whose rules wrote should install exactly once, not once per effect"
+            )
+        );
     }
 }

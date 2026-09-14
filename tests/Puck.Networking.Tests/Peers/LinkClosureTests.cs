@@ -9,22 +9,6 @@ namespace Puck.Networking.Tests.Peers;
 /// <see cref="PeerRefusal.FrameMalformed"/> — never a handshake name — when one arrived that does not decode; and
 /// <see cref="PeerLink.CloseFailure"/> always agrees with the event.</summary>
 public sealed class LinkClosureTests {
-    /// <summary>Connects a plain peer A to a tapped peer B and hands back the control stream at B, so a law can
-    /// write a raw frame onto the stream A's link reads.</summary>
-    private static async Task<(Peer PeerA, Peer PeerB, PeerLink LinkAtoB, Stream ControlStreamAtB)> ConnectTappedAsync(CancellationToken ct) {
-        var peerA = PeerTestSupport.NewPeer();
-
-        var (peerB, tapB) = PeerTestSupport.NewTappedPeer(identity: PeerIdentity.Create());
-        var endpointB = await PeerTestSupport.ListenLoopbackAsync(peer: peerB);
-        var linkAtoB = await peerA.DialAsync(
-            ct: ct,
-            endpoint: endpointB
-        );
-
-        _ = await peerB.IncomingLinks.ReadAsync(cancellationToken: ct);
-
-        return (peerA, peerB, linkAtoB, Assert.Single(collection: tapB.Streams));
-    }
     private static async Task AssertHelloRefusedBodyClosesAsAsync(byte[] body, PeerRefusal expected) {
         using var deadline = Laws.SocketDeadline();
 
@@ -60,22 +44,23 @@ public sealed class LinkClosureTests {
             ct: deadline.Token
         );
     }
+    /// <summary>Connects a plain peer A to a tapped peer B and hands back the control stream at B, so a law can
+    /// write a raw frame onto the stream A's link reads.</summary>
+    private static async Task<(Peer PeerA, Peer PeerB, PeerLink LinkAtoB, Stream ControlStreamAtB)> ConnectTappedAsync(CancellationToken ct) {
+        var peerA = PeerTestSupport.NewPeer();
 
-    [Fact]
-    public Task Closed_CarriesFrameMalformed_WhenAHelloRefusedFrameWithATrailingByteArrivesOnTheEstablishedLink() => AssertHelloRefusedBodyClosesAsAsync(
-        body: [((byte)PeerRefusal.ChannelUnbound), 0],
-        expected: PeerRefusal.FrameMalformed
-    );
-    [Fact]
-    public Task Closed_CarriesFrameMalformed_WhenAHelloRefusedFrameNamesAnUnknownRefusalOnTheEstablishedLink() => AssertHelloRefusedBodyClosesAsAsync(
-        body: [0x7f],
-        expected: PeerRefusal.FrameMalformed
-    );
-    [Fact]
-    public Task Closed_CarriesRefusedByPeer_WhenAWellFormedHelloRefusedFrameArrivesOnTheEstablishedLink() => AssertHelloRefusedBodyClosesAsAsync(
-        body: [((byte)PeerRefusal.ChannelUnbound)],
-        expected: PeerRefusal.RefusedByPeer
-    );
+        var (peerB, tapB) = PeerTestSupport.NewTappedPeer(identity: PeerIdentity.Create());
+        var endpointB = await PeerTestSupport.ListenLoopbackAsync(peer: peerB);
+        var linkAtoB = await peerA.DialAsync(
+            ct: ct,
+            endpoint: endpointB
+        );
+
+        _ = await peerB.IncomingLinks.ReadAsync(cancellationToken: ct);
+
+        return (peerA, peerB, linkAtoB, Assert.Single(collection: tapB.Streams));
+    }
+
     [Fact]
     public async Task Closed_CarriesConnectionClosed_WhenThePeerDisposes() {
         using var deadline = Laws.SocketDeadline();
@@ -131,4 +116,19 @@ public sealed class LinkClosureTests {
         await linkAtoB.Events.Completion.WaitAsync(cancellationToken: deadline.Token);
         Assert.Empty(collection: peerA.Links);
     }
+    [Fact]
+    public Task Closed_CarriesFrameMalformed_WhenAHelloRefusedFrameNamesAnUnknownRefusalOnTheEstablishedLink() => AssertHelloRefusedBodyClosesAsAsync(
+        body: [0x7f],
+        expected: PeerRefusal.FrameMalformed
+    );
+    [Fact]
+    public Task Closed_CarriesFrameMalformed_WhenAHelloRefusedFrameWithATrailingByteArrivesOnTheEstablishedLink() => AssertHelloRefusedBodyClosesAsAsync(
+        body: [((byte)PeerRefusal.ChannelUnbound), 0],
+        expected: PeerRefusal.FrameMalformed
+    );
+    [Fact]
+    public Task Closed_CarriesRefusedByPeer_WhenAWellFormedHelloRefusedFrameArrivesOnTheEstablishedLink() => AssertHelloRefusedBodyClosesAsAsync(
+        body: [((byte)PeerRefusal.ChannelUnbound)],
+        expected: PeerRefusal.RefusedByPeer
+    );
 }
