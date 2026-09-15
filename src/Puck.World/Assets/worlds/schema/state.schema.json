@@ -1756,6 +1756,48 @@
         "title": "LatticeTopology"
       },
       "default": null
+    },
+    "spaces": {
+      "description": "The declared vector embedding spaces, or null for none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "Declares one vector embedding space with its model, revision, and component dimensions.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The stable space name, unique within the section.",
+            "title": "CellName",
+            "type": "string"
+          },
+          "model": {
+            "description": "The model name, non-empty and at most 128 characters.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "The model revision, non-empty and at most 128 characters.",
+            "type": "string"
+          },
+          "dimensions": {
+            "description": "The component dimension count, in [8, 1024].",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "model",
+          "revision",
+          "dimensions"
+        ],
+        "additionalProperties": false,
+        "title": "StateSpace"
+      },
+      "default": null
     }
   },
   "additionalProperties": false,

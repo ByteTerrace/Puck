@@ -38,6 +38,7 @@
              puck.release.v1 documents (ReleaseManifest/ReleaseCanonicalizer) and mint an AttestationReleaseVerifier
              — reusing the one type rather than a second hand-rolled mirror of it (rule 8). -->
         <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
+        <ProjectReference Include="..\Puck.Embeddings\Puck.Embeddings.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />

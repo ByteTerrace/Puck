@@ -263,4 +263,147 @@ public sealed class VectorExpressionTests {
         );
         Assert.Equal(RuleRefusal.VectorOperandNotVector, ex.Refusal);
     }
+
+    [Fact]
+    public void CosineTrig_EvaluatesAlongsideSimilarity_InSameRule() {
+        var space = TestSpace();
+        var v1 = MakeUnitVector(8, 0, 127);
+
+        var rows = new[] {
+            VectorTable("vecs", "testSpace", 4, ("a", v1))
+        };
+        var section = new StateSection(Spaces: [space], Rows: rows);
+        var catalog = StateCatalog.Compile(section: section);
+        var context = new RuleCompileContext(section, catalog, null, null, null, 240, RuleVocabulary.Core);
+
+        // cosine(0.0) * similarity(vecs[a], vecs[a])
+        var exprCombined = new ValueExpression(Tokens: [
+            new ValueToken.Constant(0m),
+            new ValueToken.Cosine(),
+            new ValueToken.VectorCall(
+                Operation: ExpressionOp.Similarity,
+                Left: new VectorOperandToken.Cell("vecs", "a"),
+                Right: new VectorOperandToken.Cell("vecs", "a")
+            ),
+            new ValueToken.Multiply()
+        ]);
+
+        var compiled = RuleCompiler.CompileExpression(exprCombined, CellKind.Fixed, "testRule", "setState", context);
+        var layout = new FrameLayout(rows, static _ => null, name => (name == "testSpace") ? space : null);
+        var host = new FrameHost(layout, rows, catalog, CompiledPatterns.Empty, []);
+        host.Frame.Load(new RowStore(rows));
+
+        Assert.True(condition: RuleEvaluation.TryEvaluateExpression(reader: host, program: compiled, kind: CellKind.Fixed, value: out var value));
+        Assert.Equal(expected: FixedQ4816.One.Value, actual: value);
+    }
+
+    [Fact]
+    public void VectorCalls_InRuleBindings_EvaluateCorrectly() {
+        var space = TestSpace();
+        var v1 = MakeUnitVector(8, 0, 127);
+        var v2 = MakeUnitVector(8, 0, 127);
+
+        var rows = new[] {
+            VectorTable("vecs", "testSpace", 4, ("a", v1), ("b", v2))
+        };
+        var section = new StateSection(Spaces: [space], Rows: rows);
+        var catalog = StateCatalog.Compile(section: section);
+        var context = new RuleCompileContext(section, catalog, null, null, null, 240, RuleVocabulary.Core);
+
+        var exprDot = new ValueExpression(Tokens: [
+            new ValueToken.VectorCall(
+                Operation: ExpressionOp.Dot,
+                Left: new VectorOperandToken.Cell("vecs", "a"),
+                Right: new VectorOperandToken.Cell("vecs", "b")
+            )
+        ]);
+        var exprSim = new ValueExpression(Tokens: [
+            new ValueToken.VectorCall(
+                Operation: ExpressionOp.Similarity,
+                Left: new VectorOperandToken.Cell("vecs", "a"),
+                Right: new VectorOperandToken.Cell("vecs", "b")
+            )
+        ]);
+        var exprIdent = new ValueExpression(Tokens: [
+            new ValueToken.VectorCall(
+                Operation: ExpressionOp.Identical,
+                Left: new VectorOperandToken.Cell("vecs", "a"),
+                Right: new VectorOperandToken.Cell("vecs", "b")
+            )
+        ]);
+
+        var rule = new Rule(
+            Name: Name("testRule"),
+            Bindings: [
+                new RuleBinding(Name: Name("bDot"), Kind: CellKind.Int, Expression: exprDot),
+                new RuleBinding(Name: Name("bSim"), Kind: CellKind.Fixed, Expression: exprSim),
+                new RuleBinding(Name: Name("bIdent"), Kind: CellKind.Int, Expression: exprIdent)
+            ],
+            Effects: []
+        );
+
+        var compiledBindings = RuleCompiler.CompileBindings(rule: rule, context: context);
+        Assert.Equal(expected: 3, actual: compiledBindings.Length);
+
+        var layout = new FrameLayout(rows, static _ => null, name => (name == "testSpace") ? space : null);
+        var host = new FrameHost(layout, rows, catalog, CompiledPatterns.Empty, []);
+        host.Frame.Load(new RowStore(rows));
+
+        Assert.True(condition: RuleEvaluation.TryEvaluateExpression(reader: host, program: compiledBindings[0].Expression, kind: CellKind.Int, value: out var valDot));
+        Assert.Equal(expected: 127L * 127L, actual: valDot);
+
+        Assert.True(condition: RuleEvaluation.TryEvaluateExpression(reader: host, program: compiledBindings[1].Expression, kind: CellKind.Fixed, value: out var valSim));
+        Assert.Equal(expected: FixedQ4816.One.Value, actual: valSim);
+
+        Assert.True(condition: RuleEvaluation.TryEvaluateExpression(reader: host, program: compiledBindings[2].Expression, kind: CellKind.Int, value: out var valIdent));
+        Assert.Equal(expected: 1L, actual: valIdent);
+    }
+
+    [Fact]
+    public void VectorCalls_InScoreProgram_EvaluateCorrectly() {
+        var space = TestSpace();
+        var v1 = MakeUnitVector(8, 0, 127);
+        var v2 = MakeUnitVector(8, 0, 127);
+
+        var rows = new[] {
+            VectorTable("vecs", "testSpace", 4, ("a", v1), ("b", v2))
+        };
+        var section = new StateSection(Spaces: [space], Rows: rows);
+        var catalog = StateCatalog.Compile(section: section);
+        var context = new RuleCompileContext(section, catalog, null, null, null, 240, RuleVocabulary.Core);
+
+        var exprDot = new ValueExpression(Tokens: [
+            new ValueToken.VectorCall(
+                Operation: ExpressionOp.Dot,
+                Left: new VectorOperandToken.Cell("vecs", "a"),
+                Right: new VectorOperandToken.Cell("vecs", "b")
+            )
+        ]);
+        var compiledScore = RuleCompiler.CompileExpression(exprDot, CellKind.Int, "searchRule", "score", context);
+
+        var plan = new SearchPlan(
+            Name: "testSearch",
+            Tokens: "",
+            Topology: null,
+            Zones: [],
+            CellCount: 0,
+            Turn: "",
+            Verdict: "",
+            Off: 0L,
+            Nodes: 10,
+            JudgeCost: 1L,
+            Depth: 1,
+            Score: compiledScore,
+            Best: null,
+            Shapes: []
+        );
+
+        var layout = new FrameLayout(rows, static _ => null, name => (name == "testSpace") ? space : null);
+        var host = new FrameHost(layout, rows, catalog, CompiledPatterns.Empty, []);
+        host.Frame.Load(new RowStore(rows));
+
+        Assert.True(condition: RuleEvaluation.TryEvaluateExpression(reader: host, program: plan.Score!, kind: CellKind.Int, value: out var scoreVal));
+        Assert.Equal(expected: 127L * 127L, actual: scoreVal);
+    }
 }
+

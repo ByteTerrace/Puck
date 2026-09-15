@@ -119,6 +119,7 @@ internal static class CompileCommand {
             b: CartridgeVocabulary.Schema,
             comparisonType: StringComparison.Ordinal
         );
+        var lockFile = Puck.World.Transpiler.Embeddings.EmbeddingLock.TryLoad(rootSourcePath: sourcePath);
         var loweringResult = (isCartridge
             ? CartridgeDocumentEmitter.LowerWithDiagnostics(
                 diagnostics: diagnostics,
@@ -129,6 +130,7 @@ internal static class CompileCommand {
                 basePath: baseDirectory,
                 diagnostics: diagnostics,
                 document: effectiveAst,
+                embeddings: lockFile,
                 sourceMap: sourceMap
             )
         );

@@ -80,11 +80,13 @@ internal static class PuckWorldLoader {
             return false;
         }
 
+        var lockFile = Puck.World.Transpiler.Embeddings.EmbeddingLock.TryLoad(rootSourcePath: path);
         var loweringDiags = new DiagnosticBag();
         var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
             basePath: Path.GetDirectoryName(path: path),
             diagnostics: loweringDiags,
-            document: parseResult.Value
+            document: parseResult.Value,
+            embeddings: lockFile
         );
 
         if (

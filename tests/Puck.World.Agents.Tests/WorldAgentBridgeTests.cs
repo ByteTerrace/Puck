@@ -640,6 +640,66 @@ public sealed class WorldAgentBridgeTests {
     }
 
     [Fact]
+    public async Task WriteVectorAsync_SubmissionCorrelation_GrantedVsUngranted() {
+        var components = new sbyte[32];
+        components[0] = 127;
+        var principal = WorldPrincipal.Peer(
+            generation: 1,
+            index: 4
+        );
+
+        // Correlated / Granted: link returns a non-zero correlation id
+        var grantedLink = new RecordingLink { CorrelationId = 77 };
+        var grantedBridge = Bridge(
+            bodyIndex: 4,
+            link: grantedLink,
+            principal: principal
+        );
+
+        var grantedReceipt = await grantedBridge.WriteVectorAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            components: components,
+            key: "cellA",
+            row: "vectors"
+        );
+
+        Assert.True(condition: grantedReceipt.Correlated);
+        Assert.Equal(
+            expected: 77,
+            actual: grantedReceipt.CorrelationId
+        );
+        Assert.Contains(
+            expectedSubstring: "Submitted to Puck authority",
+            actualString: grantedReceipt.Message
+        );
+
+        // Uncorrelated / Ungranted: link returns 0
+        var ungrantedLink = new RecordingLink { CorrelationId = 0 };
+        var ungrantedBridge = Bridge(
+            bodyIndex: 4,
+            link: ungrantedLink,
+            principal: principal
+        );
+
+        var ungrantedReceipt = await ungrantedBridge.WriteVectorAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            components: components,
+            key: "cellB",
+            row: "vectors"
+        );
+
+        Assert.False(condition: ungrantedReceipt.Correlated);
+        Assert.Equal(
+            expected: 0,
+            actual: ungrantedReceipt.CorrelationId
+        );
+        Assert.Contains(
+            expectedSubstring: "No local correlation was minted",
+            actualString: ungrantedReceipt.Message
+        );
+    }
+
+    [Fact]
     public async Task WriteVectorAsync_RefusesNonUnitOrInvalidComponentCountsBeforeDispatch() {
         var link = new RecordingLink();
         var bridge = Bridge(

@@ -507,18 +507,18 @@ transform recall = nearest(from: memories, query: "situation", into: recalled, k
   - `--timeout-seconds <n>`, default 60.
 
   Exit codes: 0 success, 1 failed check or provider refusal, 2 usage or I/O.
-- **Providers** live in `src/Puck.Embeddings` and implement
-  `IEmbeddingProvider.EmbedAsync(EmbeddingIdentity identity, IReadOnlyList<string> texts, CancellationToken)`,
-  returning one `double[]` per text. `EmbeddingIdentity` is `(Model, Revision, Dimensions)`.
-  - **`fixture`** answers only model `puck-fixture`. Component `i` is signed byte
-    `i mod 32` of
+- **Providers** live in `src/Puck.Embeddings` and are built on Microsoft's provider-agnostic
+  `IEmbeddingGenerator<string, Embedding<float>>` (`Microsoft.Extensions.AI`).
+  `EmbeddingIdentity` is `(Model, Revision, Dimensions)`.
+  - **`fixture`** answers only model `puck-fixture` via `FixtureEmbeddingGenerator`.
+    Component `i` is signed byte `i mod 32` of
     `SHA-256(model ‖ 0 ‖ revision ‖ 0 ‖ dimensions ‖ 0 ‖ text ‖ 0 ‖ ⌊i/32⌋)`, with
     `-128 → -127`, then normalized.
-  - **`openai-compatible`** posts `{ model, input[], dimensions, encoding_format: "float" }`
-    to `<endpoint>/embeddings` and reads `data[].embedding` by `index`.
-    - A count or length mismatch, a non-finite value, or a non-success status fails
-      with the status and at most 512 characters of body.
+  - **`openai-compatible`** uses `Microsoft.Extensions.AI.OpenAI` (`OpenAIClient.AsEmbeddingGenerator()`)
+    targeting `<endpoint>`, configuring `--api-key-header` and `--omit-dimensions`.
+    - Generates embeddings via `IEmbeddingGenerator.GenerateAsync()`.
     - The key is read only from the named environment variable and never printed.
+  - Embeddings are quantized to signed byte components via `SignedByteVectorFunctions.TryQuantizeUnit` (`Puck.Maths`).
 
 ## Writing and inspecting at runtime
 
@@ -627,7 +627,8 @@ the existing configuration:
 
 ## New projects
 
-- **`src/Puck.Embeddings`** references only `Puck.Maths`. It holds the providers,
+- **`src/Puck.Embeddings`** references `Puck.Maths` and Microsoft AI libraries
+  (`Microsoft.Extensions.AI`, `Microsoft.Extensions.AI.OpenAI`). It holds the generators,
   `EmbeddingIdentity`, batching, and quantization.
 - **`src/Puck.World.Embeddings`** references `Puck.World.Server` and `Puck.Embeddings`,
   in the layer of `Puck.World.Azure`. Install it wherever `Puck.World.Azure` is
@@ -837,7 +838,7 @@ and `Puck.World.Schema.Tests`. Add to them:
 - **`tests/Puck.Cli.Tests`:**
   - `EmbedCommandTests`: byte-identical fixture locks; pruning; offline `--check` and
     `probe`; offline compile; `PUCK079`; decompile with and without the lock;
-  - `OpenAiCompatibleEmbeddingProviderTests` against an in-process `HttpListener`:
+  - `OpenAiEmbeddingGeneratorTests` against an in-process `HttpListener`:
     request shape, `index` order, both key headers, `--omit-dimensions`, failure exits,
     and the key never printed.
 

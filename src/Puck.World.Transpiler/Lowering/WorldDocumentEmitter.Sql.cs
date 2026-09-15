@@ -4,6 +4,7 @@ using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
+using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Sql;
 
 namespace Puck.World.Transpiler.Lowering;
@@ -1227,7 +1228,10 @@ public static partial class WorldDocumentEmitter {
 
         if (expr is SqlVectorLiteralExpression vec) {
             if (vec.Kind == "embed") {
-                return (vec.Space is not null) ? $"embed(\"{vec.Payload}\", space: {vec.Space})" : $"embed(\"{vec.Payload}\")";
+                if (TryResolveEmbeddedText(vec.Payload, vec.Space, scope, vec.Span, out var base64)) {
+                    return $"vector(\"{base64}\")";
+                }
+                return "";
             }
             return $"vector(\"{vec.Payload}\")";
         }
@@ -1834,15 +1838,10 @@ public static partial class WorldDocumentEmitter {
                     return;
                 }
                 if (vecLit.Kind == "embed") {
-                    if (TryResolveEmbeddedText(vecLit.Payload, vecLit.Space, scope, out var base64)) {
+                    if (TryResolveEmbeddedText(vecLit.Payload, vecLit.Space, scope, expr.Span, out var base64)) {
                         effectObj["vector"] = base64;
                         return;
                     }
-                    scope.Diagnostics.ReportError(
-                        code: PuckDiagnosticCodes.EmbeddingLockMissing,
-                        message: $"No embedding lock entry for \"{vecLit.Payload}\"; run puck embed.",
-                        span: expr.Span
-                    );
                     effectObj["vector"] = "";
                     return;
                 }
@@ -1964,7 +1963,10 @@ public static partial class WorldDocumentEmitter {
 
             case SqlVectorLiteralExpression vec:
                 if (vec.Kind == "embed") {
-                    return (vec.Space is not null) ? $"embed(\"{vec.Payload}\", space: {vec.Space})" : $"embed(\"{vec.Payload}\")";
+                    if (TryResolveEmbeddedText(vec.Payload, vec.Space, scope, vec.Span, out var base64)) {
+                        return $"vector(\"{base64}\")";
+                    }
+                    return "";
                 }
                 return $"vector(\"{vec.Payload}\")";
 
@@ -2091,14 +2093,9 @@ public static partial class WorldDocumentEmitter {
                         return JsonValue.Create(vecLit.Payload)!;
                     }
                     if (vecLit.Kind == "embed") {
-                        if (TryResolveEmbeddedText(vecLit.Payload, vecLit.Space, scope, out var base64)) {
+                        if (TryResolveEmbeddedText(vecLit.Payload, vecLit.Space, scope, span, out var base64)) {
                             return JsonValue.Create(base64)!;
                         }
-                        scope.Diagnostics.ReportError(
-                            code: PuckDiagnosticCodes.EmbeddingLockMissing,
-                            message: $"No embedding lock entry for \"{vecLit.Payload}\"; run puck embed.",
-                            span: span
-                        );
                         return JsonValue.Create("")!;
                     }
                 }
@@ -2231,11 +2228,77 @@ public static partial class WorldDocumentEmitter {
         return null;
     }
 
-    private static bool TryResolveEmbeddedText(string text, string? space, DocumentScope scope, out string base64) {
+    private static bool TryResolveEmbeddedText(string text, string? space, DocumentScope scope, SourceSpan span, out string base64) {
         base64 = "";
-        if (scope.Annotations.TryGetValue("EmbeddingLock", out var lockObj)) {
-            // Reserved for Step 7 EmbeddingLock integration
+        var resolvedSpace = space;
+
+        if (string.IsNullOrEmpty(resolvedSpace)) {
+            if (scope.Annotations.TryGetValue("WorldDocumentRoot", out var pObj) && pObj is JsonObject parent) {
+                resolvedSpace = FindDefaultSpace(parent);
+            }
         }
+
+        if (!scope.Annotations.TryGetValue("EmbeddingLock", out var lockObj) || lockObj is not EmbeddingLock lockFile) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.EmbeddingLockMissing,
+                message: $"No embedding lock entry for \"{text}\"; run puck embed.",
+                span: span
+            );
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(resolvedSpace)) {
+            if (lockFile.Spaces.Count == 1) {
+                resolvedSpace = lockFile.Spaces.Keys.First();
+            } else {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.EmbeddingSpaceAmbiguous,
+                    message: $"Embedding literal \"{text}\" has no space source.",
+                    span: span
+                );
+                return false;
+            }
+        }
+
+        if (!lockFile.Spaces.TryGetValue(resolvedSpace, out var lockSpace)) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.EmbeddingLockMissing,
+                message: $"No embedding lock entry for \"{text}\"; run puck embed.",
+                span: span
+            );
+            return false;
+        }
+
+        // Check if space is stale against document declaration
+        if (scope.Annotations.TryGetValue("WorldDocumentRoot", out var rootObj) && rootObj is JsonObject rootParent &&
+            rootParent["state"]?["spaces"] is JsonArray spacesArr) {
+            foreach (var spNode in spacesArr) {
+                if (spNode is JsonObject spObj && string.Equals(spObj["name"]?.ToString(), resolvedSpace, StringComparison.Ordinal)) {
+                    var docModel = spObj["model"]?.ToString() ?? "";
+                    var docRev = spObj["revision"]?.ToString() ?? "";
+                    var docDims = (spObj["dimensions"] is JsonValue dv && (dv.TryGetValue<int>(out var dVal) || (dv.TryGetValue<long>(out var lVal) && (dVal = (int)lVal) == dVal))) ? dVal : 0;
+                    if (lockFile.IsSpaceStale(resolvedSpace, docModel, docRev, docDims)) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.EmbeddingLockStale,
+                            message: $"Embedding space '{resolvedSpace}' in lock is stale; run puck embed.",
+                            span: span
+                        );
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if (lockFile.TryGet(resolvedSpace, text, out var foundVector)) {
+            base64 = foundVector;
+            return true;
+        }
+
+        scope.Diagnostics.ReportError(
+            code: PuckDiagnosticCodes.EmbeddingLockMissing,
+            message: $"No embedding lock entry for \"{text}\"; run puck embed.",
+            span: span
+        );
         return false;
     }
 }

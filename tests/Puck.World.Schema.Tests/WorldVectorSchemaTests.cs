@@ -1,9 +1,45 @@
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
+using Puck.Commands;
+using Puck.SignedDistance;
+using Puck.World.Authoring;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
 
 public sealed class WorldVectorSchemaTests {
+    private static WorldPrototype Prototype(string id) {
+        var shape = new ShapeDocument(
+            Id: 0,
+            Name: null,
+            Type: SdfSolidPrimitive.Sphere,
+            Position: new DocumentVector3(0f, 0f, 0f),
+            Rotation: new DocumentQuaternion(0f, 0f, 0f, 1f),
+            Scale: new DocumentVector3(1f, 1f, 1f),
+            Material: 0,
+            Blend: SdfBlendOp.Union,
+            Smooth: 0f,
+            Group: 0
+        );
+        var document = new CreationDocument(
+            Schema: CreationDocument.CurrentSchema,
+            Name: id,
+            Palette: null,
+            Shapes: [shape],
+            Frames: null
+        );
+        var canonical = CreationCanonicalizer.Canonicalize(
+            document: document,
+            source: id
+        );
+
+        return new WorldPrototype(
+            Id: id,
+            Document: canonical.Document,
+            HashRaw: canonical.Hash
+        );
+    }
+
     private static StateVector SampleVector(int dimensions) {
         var components = new sbyte[dimensions];
         components[0] = 127;
@@ -394,4 +430,227 @@ public sealed class WorldVectorSchemaTests {
         Assert.Contains(expectedSubstring: "does not match host space identity", actualString: failReason);
     }
 
+    [Fact]
+    public void VectorCellRefusesAdvanceDynamicsAndCycle() {
+        var space = SampleSpace(dimensions: 32);
+        var vector = SampleVector(dimensions: 32);
+
+        var defAdvance = BuildDefinition(
+            rows: [
+                new WorldStateRow(
+                    Cells: [
+                        new StateCell(
+                            Key: WorldStateRow.SlotKey,
+                            Vector: vector,
+                            Advance: new StateAdvance(1, 1)
+                        )
+                    ],
+                    Kind: CellKind.Vector,
+                    Name: CellName.Parse(candidate: "adv")
+                )
+            ],
+            spaces: [space]
+        );
+        Assert.Contains("declares advance on a vector cell — vector cells do not accumulate.", Validate(defAdvance));
+
+        var defDynamics = BuildDefinition(
+            rows: [
+                new WorldStateRow(
+                    Cells: [
+                        new StateCell(
+                            Key: WorldStateRow.SlotKey,
+                            Vector: vector,
+                            Dynamics: new StateDynamics("dynRow")
+                        )
+                    ],
+                    Kind: CellKind.Vector,
+                    Name: CellName.Parse(candidate: "dyn")
+                )
+            ],
+            spaces: [space]
+        );
+        Assert.Contains("declares dynamics on a vector cell — vector cells do not ease.", Validate(defDynamics));
+
+        var defCycle = BuildDefinition(
+            rows: [
+                new WorldStateRow(
+                    Cells: [
+                        new StateCell(
+                            Key: WorldStateRow.SlotKey,
+                            Vector: vector,
+                            Cycle: new StateCycle()
+                        )
+                    ],
+                    Kind: CellKind.Vector,
+                    Name: CellName.Parse(candidate: "cyc")
+                )
+            ],
+            spaces: [space]
+        );
+        Assert.Contains("declares cycle on a vector cell — vector cells do not turn.", Validate(defCycle));
+    }
+
+    [Fact]
+    public void HudRefusesVectorRowBinding() {
+        var space = SampleSpace(dimensions: 32);
+        var vector = SampleVector(dimensions: 32);
+        var unitRect = new WorldHudRect(0f, 0f, 100f, 100f);
+        var definition = BuildDefinition(
+            rows: [
+                new WorldStateRow(
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Vector: vector)],
+                    Kind: CellKind.Vector,
+                    Name: CellName.Parse(candidate: "situation")
+                )
+            ],
+            spaces: [space]
+        ) with {
+            HudRaw = new WorldHudSection(
+                Defaults: new WorldHudDefaults(Enabled: true),
+                Panels: [
+                    new WorldHudPanel(
+                        Id: "p1",
+                        Rect: unitRect,
+                        Layer: WorldHudLayer.Over,
+                        Style: WorldHudPanelStyle.Chip,
+                        Elements: [
+                            new WorldHudElement(
+                                Id: "e1",
+                                Kind: WorldHudElementKind.Text,
+                                Rect: unitRect,
+                                Style: WorldHudStyleToken.Primary,
+                                Binding: "state.situation"
+                            )
+                        ]
+                    )
+                ]
+            )
+        };
+
+        var reason = Validate(definition);
+        Assert.Contains("addresses vector row 'situation' — a HUD element cannot bind to a vector row.", reason);
+    }
+
+    [Fact]
+    public void ResponseRefusesVectorRow() {
+        var space = SampleSpace(dimensions: 32);
+        var vector = SampleVector(dimensions: 32);
+        var definition = BuildDefinition(
+            rows: [
+                new WorldStateRow(
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Vector: vector)],
+                    Kind: CellKind.Vector,
+                    Name: CellName.Parse(candidate: "situation")
+                )
+            ],
+            spaces: [space]
+        ) with {
+            CreationsRaw = [Prototype(id: "proto1")],
+            PlacementsRaw = new WorldPlacementsSection(
+                Rows: [
+                    new WorldPlacement(
+                        Id: "pl1",
+                        PrototypeId: "proto1",
+                        Position: new DocumentVector3(0f, 0f, 0f),
+                        YawDegrees: 0f,
+                        Scale: 1f,
+                        Respond: [
+                            new WorldPlacementResponse(
+                                When: new WorldPlacementResponseCondition.StateCondition(
+                                    State: "situation",
+                                    Comparison: ActionStateComparison.Equal,
+                                    Value: 10f
+                                ),
+                                PrototypeId: "proto1"
+                            )
+                        ]
+                    )
+                ]
+            )
+        };
+
+        var reason = Validate(definition);
+        Assert.Contains("references state row 'situation', which is kind=Vector — a response compares numbers, never Vector.", reason);
+    }
+
+    [Fact]
+    public void SearchRefusesVectorTokens() {
+        var space = SampleSpace(dimensions: 32);
+        var vector = SampleVector(dimensions: 32);
+        var definition = BuildDefinition(
+            rows: [
+                new WorldStateRow(
+                    Capacity: 4,
+                    Cells: [new StateCell(Key: CellName.Parse("t1"), Vector: vector)],
+                    Kind: CellKind.Vector,
+                    Name: CellName.Parse(candidate: "vTokens")
+                ),
+                new WorldStateRow(
+                    Capacity: 4,
+                    Cells: [],
+                    Kind: CellKind.Int,
+                    Name: CellName.Parse(candidate: "z1")
+                ),
+                new WorldStateRow(
+                    Capacity: 4,
+                    Cells: [],
+                    Kind: CellKind.Int,
+                    Name: CellName.Parse(candidate: "z2")
+                )
+            ],
+            spaces: [space]
+        ) with {
+            SearchRaw = new WorldSearchSection(
+                Jobs: [
+                    new WorldSearchRow(
+                        Name: "job1",
+                        Tokens: "vTokens",
+                        Zones: ["z1", "z2"]
+                    )
+                ]
+            )
+        };
+
+        var reason = Validate(definition);
+        Assert.Contains("tokens 'vTokens' must be the keyed row the zones draw their tokens from", reason);
+    }
+
+    [Fact]
+    public void BindingRefusesVectorControlContext() {
+        var doc = new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [],
+            Chords: [],
+            Contexts: [new BindingContextDefinition(Family: "state:vRow", State: "1", Group: "g1")]
+        );
+        var errors = new List<string>();
+        WorldStateBindingContext.Validate(
+            document: doc,
+            stateRows: new Dictionary<string, WorldStateRow> {
+                ["vRow"] = new WorldStateRow(Kind: CellKind.Vector, Name: CellName.Parse("vRow"))
+            },
+            errors: errors
+        );
+
+        Assert.Contains(errors, e => e.Contains("whose row is kind vector — vector rows cannot serve as control contexts"));
+    }
+
+    [Fact]
+    public void Defect3_UnauthoredCapacityVectorTableUsesDefaultRoom() {
+        var space = SampleSpace(dimensions: 128);
+        var definition = BuildDefinition(
+            rows: [
+                new WorldStateRow(
+                    Kind: CellKind.Vector,
+                    Name: CellName.Parse(candidate: "unbounded"),
+                    Space: "lore"
+                )
+            ],
+            spaces: [space]
+        );
+
+        Assert.Equal(string.Empty, Validate(definition));
+    }
 }
+
+

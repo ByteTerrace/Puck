@@ -45,11 +45,13 @@ internal static class LintCommand {
             // Attempt lowering for semantic check
             var loweringDiags = new DiagnosticBag();
             var sourceMap = new SourceMap();
+            var lockFile = Puck.World.Transpiler.Embeddings.EmbeddingLock.TryLoad(rootSourcePath: filePath);
             var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-                document: documentNode,
                 basePath: Path.GetDirectoryName(path: filePath),
-                sourceMap: sourceMap,
-                diagnostics: loweringDiags
+                diagnostics: loweringDiags,
+                document: documentNode,
+                embeddings: lockFile,
+                sourceMap: sourceMap
             );
 
             diagnostics.AddRange(diagnostics: loweringDiags);

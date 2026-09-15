@@ -110,6 +110,7 @@ internal static class PuckRootCommand {
             DeclarationsCommand.Create(),
             DocLinksCommand.Create(),
             DocsBuildCommand.Create(),
+            EmbedCommand.Create(),
             FirmwareCommand.Create(),
             FontAtlasCommand.Create(),
             FormatCommand.Create(),

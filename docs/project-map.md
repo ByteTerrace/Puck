@@ -76,7 +76,7 @@ Shared substrate         Puck.Commands  Puck.Hosting  Puck.Input
                          Puck.Networking  Puck.Platform  Puck.Platform.Linux
                          Puck.Platform.Windows  Puck.Scripting  Puck.Shaders
 Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
-                         Puck.Azure  Puck.Maths  Puck.Storage
+                         Puck.Azure  Puck.Embeddings  Puck.Maths  Puck.Storage
 (Test)                   Puck.Abstractions.Tests
                          Puck.AdvancedGamingBrick.Forge.Tests
                          Puck.Analyzers.Tests  Puck.Assets.Tests

@@ -161,5 +161,95 @@ public sealed class VectorRefusalTests {
         var fired = evaluator.FireEffects([effect], "testRule", 1UL, 1UL);
         Assert.False(fired);
     }
+
+    [Fact]
+    public void VectorMixZero_OppositeVectors_FailsEvaluation() {
+        var space = TestSpace();
+        var v1 = StateVector.TryCreate(components: [127, 0, 0, 0, 0, 0, 0, 0], vector: out var vec1, error: out var err1) ? vec1! : throw new Exception(err1);
+        var v2 = StateVector.TryCreate(components: [-127, 0, 0, 0, 0, 0, 0, 0], vector: out var vec2, error: out var err2) ? vec2! : throw new Exception(err2);
+
+        var srcRow = new StateRow(
+            Name: Name("src"),
+            Kind: CellKind.Vector,
+            Space: "testSpace",
+            Capacity: 4,
+            Cells: [
+                new StateCell(Key: Name("a"), Vector: v1),
+                new StateCell(Key: Name("b"), Vector: v2)
+            ]
+        );
+        var destRow = new StateRow(
+            Name: Name("dest"),
+            Kind: CellKind.Vector,
+            Space: "testSpace",
+            Capacity: 4,
+            Cells: [new StateCell(Key: Name("out"))]
+        );
+
+        var section = new StateSection(Spaces: [space], Rows: [srcRow, destRow]);
+        var catalog = StateCatalog.Compile(section: section);
+        var context = new RuleCompileContext(section, catalog, null, null, null, 240, RuleVocabulary.Core);
+
+        var transform = new StateTransform.Mix(
+            Into: "dest[out]",
+            Terms: [
+                new VectorTerm("src[a]", 1),
+                new VectorTerm("src[b]", 1)
+            ]
+        );
+        var effect = new ActionEffect.TransformState(Transform: transform);
+        var compiled = RuleCompiler.CompileEffects(effects: [effect], ruleName: "rMixZero", context: context, subject: "rule");
+
+        var rows = new[] { srcRow, destRow };
+        var layout = new FrameLayout(rows, static _ => null, name => (name == "testSpace") ? space : null);
+        var host = new FrameHost(layout, rows, catalog, CompiledPatterns.Empty, []);
+        host.Frame.Load(new RowStore(rows));
+
+        var evaluator = new RuleEvaluator(host: host);
+        var fired = evaluator.FireEffects(compiled, "rMixZero", 1UL, 1UL);
+        Assert.False(fired);
+        Assert.True(host.Refusals > 0);
+    }
+
+    [Fact]
+    public void VectorMeanEmpty_EmptyTable_FailsEvaluation() {
+        var space = TestSpace();
+        var srcRow = new StateRow(
+            Name: Name("src"),
+            Kind: CellKind.Vector,
+            Space: "testSpace",
+            Capacity: 4,
+            Cells: []
+        );
+        var destRow = new StateRow(
+            Name: Name("dest"),
+            Kind: CellKind.Vector,
+            Space: "testSpace",
+            Capacity: 4,
+            Cells: [new StateCell(Key: Name("out"))]
+        );
+
+        var section = new StateSection(Spaces: [space], Rows: [srcRow, destRow]);
+        var catalog = StateCatalog.Compile(section: section);
+        var context = new RuleCompileContext(section, catalog, null, null, null, 240, RuleVocabulary.Core);
+
+        var transform = new StateTransform.Mean(
+            From: "src",
+            Into: "dest[out]"
+        );
+        var effect = new ActionEffect.TransformState(Transform: transform);
+        var compiled = RuleCompiler.CompileEffects(effects: [effect], ruleName: "rMeanEmpty", context: context, subject: "rule");
+
+        var rows = new[] { srcRow, destRow };
+        var layout = new FrameLayout(rows, static _ => null, name => (name == "testSpace") ? space : null);
+        var host = new FrameHost(layout, rows, catalog, CompiledPatterns.Empty, []);
+        host.Frame.Load(new RowStore(rows));
+
+        var evaluator = new RuleEvaluator(host: host);
+        var fired = evaluator.FireEffects(compiled, "rMeanEmpty", 1UL, 1UL);
+        Assert.False(fired);
+        Assert.True(host.Refusals > 0);
+    }
 }
+
 

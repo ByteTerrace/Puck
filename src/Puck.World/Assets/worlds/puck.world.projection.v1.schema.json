@@ -7103,6 +7103,253 @@
                                             },
                                             "additionalProperties": false,
                                             "title": "ValueTokenArrangementMember"
+                                          },
+                                          {
+                                            "description": "Calls a vector function (dot, similarity, identical) over two vector operands and pushes the scalar result.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "vectorCall"
+                                              },
+                                              "operation": {
+                                                "description": "The vector operation (ExpressionOp.Dot, ExpressionOp.Similarity, or ExpressionOp.Identical).",
+                                                "enum": [
+                                                  "Constant",
+                                                  "Operand",
+                                                  "Add",
+                                                  "Subtract",
+                                                  "Multiply",
+                                                  "Divide",
+                                                  "Minimum",
+                                                  "Maximum",
+                                                  "Clamp",
+                                                  "Modulo",
+                                                  "BitAnd",
+                                                  "BitOr",
+                                                  "BitXor",
+                                                  "BitNot",
+                                                  "ShiftLeft",
+                                                  "ShiftRight",
+                                                  "ShiftRightLogical",
+                                                  "Equal",
+                                                  "NotEqual",
+                                                  "Less",
+                                                  "LessOrEqual",
+                                                  "Greater",
+                                                  "GreaterOrEqual",
+                                                  "Select",
+                                                  "PopCount",
+                                                  "LeadingZeroCount",
+                                                  "TrailingZeroCount",
+                                                  "LowestSetBit",
+                                                  "ClearLowestSetBit",
+                                                  "RotateLeft",
+                                                  "RotateRight",
+                                                  "ByteSwap",
+                                                  "BitReverse",
+                                                  "Negate",
+                                                  "Abs",
+                                                  "ParallelBitExtract",
+                                                  "ParallelBitDeposit",
+                                                  "BitField",
+                                                  "BitInsert",
+                                                  "BoardShift",
+                                                  "BoardFill",
+                                                  "BoardImage",
+                                                  "Sign",
+                                                  "Pair",
+                                                  "PairX",
+                                                  "PairY",
+                                                  "PairSwap",
+                                                  "PairMax",
+                                                  "PairMin",
+                                                  "PairSum",
+                                                  "PairDifference",
+                                                  "PairTranslate",
+                                                  "PairScale",
+                                                  "Morton",
+                                                  "MortonX",
+                                                  "MortonY",
+                                                  "Hilbert",
+                                                  "HilbertX",
+                                                  "HilbertY",
+                                                  "HexIndex",
+                                                  "HexQ",
+                                                  "HexR",
+                                                  "HexRadius",
+                                                  "HexEuclideanSquared",
+                                                  "HexDistance",
+                                                  "HexNeighbor",
+                                                  "HexRotate",
+                                                  "HexMirror",
+                                                  "HexSwap",
+                                                  "HexAdd",
+                                                  "HexSubtract",
+                                                  "HexMultiply",
+                                                  "HexScale",
+                                                  "HexTranslate",
+                                                  "Layer",
+                                                  "LayerOffset",
+                                                  "LayerStart",
+                                                  "LayerSize",
+                                                  "SquareRoot",
+                                                  "Sine",
+                                                  "Cosine",
+                                                  "SquareIndex",
+                                                  "SquareX",
+                                                  "SquareY",
+                                                  "SquareRadius",
+                                                  "SquareLength",
+                                                  "SquareEuclideanSquared",
+                                                  "SquareDistance",
+                                                  "SquareChebyshev",
+                                                  "SquareNeighbor",
+                                                  "SquareRotate",
+                                                  "SquareMirror",
+                                                  "SquareSwap",
+                                                  "SquareAdd",
+                                                  "SquareSubtract",
+                                                  "SquareMultiply",
+                                                  "SquareScale",
+                                                  "SquareTranslate",
+                                                  "GreatestCommonDivisor",
+                                                  "LeastCommonMultiple",
+                                                  "FloorModulo",
+                                                  "CycleForward",
+                                                  "CycleDistance",
+                                                  "SmallestMissing",
+                                                  "IsPrime",
+                                                  "Prime",
+                                                  "Choose",
+                                                  "Factorial",
+                                                  "SubsetRank",
+                                                  "SubsetAt",
+                                                  "SubsetMember",
+                                                  "ArrangementRank",
+                                                  "ArrangementAt",
+                                                  "ArrangementMember",
+                                                  "Floor",
+                                                  "Ceiling",
+                                                  "Round",
+                                                  "ReplicationMask",
+                                                  "RepeatBits",
+                                                  "Dot",
+                                                  "Similarity",
+                                                  "Identical"
+                                                ],
+                                                "title": "ExpressionOp"
+                                              },
+                                              "left": {
+                                                "description": "The left vector operand (cell or literal).",
+                                                "type": "object",
+                                                "required": [
+                                                  "$type"
+                                                ],
+                                                "anyOf": [
+                                                  {
+                                                    "description": "A vector state cell operand.",
+                                                    "properties": {
+                                                      "$type": {
+                                                        "const": "cell"
+                                                      },
+                                                      "name": {
+                                                        "description": "The state row name.",
+                                                        "type": "string"
+                                                      },
+                                                      "key": {
+                                                        "description": "The optional key or key indirection.",
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ],
+                                                        "default": null
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "name"
+                                                    ],
+                                                    "additionalProperties": false,
+                                                    "title": "VectorOperandTokenCell"
+                                                  },
+                                                  {
+                                                    "description": "A base64url encoded vector literal operand.",
+                                                    "properties": {
+                                                      "$type": {
+                                                        "const": "literal"
+                                                      },
+                                                      "value": {
+                                                        "description": "The base64url encoded component bytes.",
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "value"
+                                                    ],
+                                                    "additionalProperties": false,
+                                                    "title": "VectorOperandTokenLiteral"
+                                                  }
+                                                ],
+                                                "title": "VectorOperandToken"
+                                              },
+                                              "right": {
+                                                "description": "The right vector operand (cell or literal).",
+                                                "type": "object",
+                                                "required": [
+                                                  "$type"
+                                                ],
+                                                "anyOf": [
+                                                  {
+                                                    "description": "A vector state cell operand.",
+                                                    "properties": {
+                                                      "$type": {
+                                                        "const": "cell"
+                                                      },
+                                                      "name": {
+                                                        "description": "The state row name.",
+                                                        "type": "string"
+                                                      },
+                                                      "key": {
+                                                        "description": "The optional key or key indirection.",
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ],
+                                                        "default": null
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "name"
+                                                    ],
+                                                    "additionalProperties": false,
+                                                    "title": "VectorOperandTokenCell"
+                                                  },
+                                                  {
+                                                    "description": "A base64url encoded vector literal operand.",
+                                                    "properties": {
+                                                      "$type": {
+                                                        "const": "literal"
+                                                      },
+                                                      "value": {
+                                                        "description": "The base64url encoded component bytes.",
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "value"
+                                                    ],
+                                                    "additionalProperties": false,
+                                                    "title": "VectorOperandTokenLiteral"
+                                                  }
+                                                ],
+                                                "title": "VectorOperandToken"
+                                              }
+                                            },
+                                            "required": [
+                                              "operation",
+                                              "left",
+                                              "right"
+                                            ],
+                                            "additionalProperties": false,
+                                            "title": "ValueTokenVectorCall"
                                           }
                                         ],
                                         "title": "ValueToken"
@@ -16937,6 +17184,14 @@
                               "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/1/properties/left/anyOf/1"
                             }
                           ]
+                        },
+                        "vector": {
+                          "description": "The base64url-encoded vector literal a vector state row\u0027s cell takes.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "required": [
@@ -19247,6 +19502,10 @@
                 "hidden": {
                   "type": "boolean",
                   "default": false
+                },
+                "vector": {
+                  "default": null,
+                  "title": "StateVector"
                 }
               },
               "required": [

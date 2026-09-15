@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
 using Puck.World.Transpiler.Addons;
+using Puck.World.Transpiler.Embeddings;
 using Puck.Transpiler;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
@@ -17,13 +18,15 @@ public static partial class WorldDocumentEmitter {
     /// <param name="sourceMap">Optional SourceMap to populate with JSON pointer mappings.</param>
     /// <param name="diagnostics">Optional DiagnosticBag to collect lowering diagnostics.</param>
     /// <param name="cancellationToken">Cancels evaluation and expansion.</param>
+    /// <param name="embeddings">Optional embedding lock resolving embed literals to vectors.</param>
     /// <returns>A CompilationResult carrying the structured JsonObject and diagnostics.</returns>
     public static CompilationResult<JsonObject> LowerWithDiagnostics(
         DocumentNode document,
         string? basePath = null,
         SourceMap? sourceMap = null,
         DiagnosticBag? diagnostics = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        EmbeddingLock? embeddings = null
     ) {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -57,6 +60,10 @@ public static partial class WorldDocumentEmitter {
         ) {
             Budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken },
         };
+
+        if (embeddings is not null) {
+            scope.Annotations["EmbeddingLock"] = embeddings;
+        }
 
         scope.IndexDeclarations(statements: document.Statements);
         try {
