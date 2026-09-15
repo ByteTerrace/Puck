@@ -9,7 +9,7 @@ public sealed partial class WorldServer {
     // write is what the write sees. `rows` is read directly rather than through a WorldDefinition so a batch's
     // shared workspace list can be handed in live, mid-placement, without wrapping it into a section first. Hands
     // back the written row; the caller places it, whether into a fresh row list or a batch's workspace.
-    private static bool TryComposeCellUpsert(IReadOnlyList<WorldStateRow> rows, WorldMutation.UpsertStateCell mutation, ulong tick, ulong engineTick, [NotNullWhen(true)] out WorldStateRow? composed, out string reason, out CellName? evictedKey) {
+    private static bool TryComposeCellUpsert(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<StateSpace>? spaces, WorldMutation.UpsertStateCell mutation, ulong tick, ulong engineTick, [NotNullWhen(true)] out WorldStateRow? composed, out string reason, out CellName? evictedKey) {
         composed = null;
         reason = string.Empty;
         evictedKey = null;
@@ -40,6 +40,89 @@ public sealed partial class WorldServer {
             reason = $"state row '{mutation.Row}' cell key '{mutation.Key}' {keyReason}";
 
             return false;
+        }
+
+        if (mutation.Vector is not null && row.Kind != CellKind.Vector) {
+            reason = $"state row '{mutation.Row}' cell '{mutation.Key}' is not vector-kind and takes a {StateSpelling.Kind(row.Kind)} operand, never a vector one";
+
+            return false;
+        }
+
+        if (row.Kind == CellKind.Vector) {
+            if (mutation.Kind != WorldDocumentWriteKind.Set) {
+                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' — 'add' is refused on a vector-kind row";
+
+                return false;
+            }
+
+            if (mutation.Text is not null) {
+                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' is vector-kind and takes a vector operand, never a text one";
+
+                return false;
+            }
+
+            if (mutation.CycleTokens is not null) {
+                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' cycle is refused on a vector-kind row";
+
+                return false;
+            }
+
+            if (!WorldStateSpaces.TryResolveSpace(
+                spaces: spaces,
+                row: row,
+                space: out var space,
+                reason: out var spaceReason
+            )) {
+                reason = spaceReason;
+
+                return false;
+            }
+
+            StateVector vectorToWrite;
+
+            if (mutation.Vector is not null) {
+                vectorToWrite = mutation.Vector;
+            } else if (mutation.RawToken is { } rawToken) {
+                if (!StateVector.TryParseBase64Url(
+                    text: rawToken,
+                    dimensions: space.Dimensions,
+                    vector: out var parsedVector,
+                    error: out var parseError
+                )) {
+                    reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {parseError}";
+
+                    return false;
+                }
+
+                vectorToWrite = parsedVector;
+            } else {
+                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' requires a vector operand";
+
+                return false;
+            }
+
+            if (vectorToWrite.Dimensions != space.Dimensions) {
+                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' vector dimensions {vectorToWrite.Dimensions} do not match space '{space.Name}' dimensions {space.Dimensions}";
+
+                return false;
+            }
+
+            if (!StateCellWriter.TryComposeVectorCell(
+                cells: out var vectorCells,
+                evictedKey: out evictedKey,
+                key: cellKey,
+                reason: out var composeVectorReason,
+                row: row,
+                vector: vectorToWrite
+            )) {
+                reason = $"state row '{mutation.Row}' cell '{mutation.Key}' {composeVectorReason}";
+
+                return false;
+            }
+
+            composed = (row with { Cells = vectorCells });
+
+            return true;
         }
 
         // Whether this write is a text write is a fact of the write, not the row — a text write always
@@ -122,6 +205,12 @@ public sealed partial class WorldServer {
         // whatever the live definition happened to hold at text-submit time.
         if (row.Kind == CellKind.Text) {
             reason = $"state row '{mutation.Row}' cell '{mutation.Key}' is text-kind and takes a text operand, never a numeric one";
+
+            return false;
+        }
+
+        if (row.Kind == CellKind.Vector) {
+            reason = $"state row '{mutation.Row}' cell '{mutation.Key}' is vector-kind and takes a vector operand";
 
             return false;
         }

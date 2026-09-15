@@ -22,14 +22,25 @@ identically to.
 
 ## Implementation status
 
-Checked against base commit `e19bb5b3b` (`housekeeping/gemini`). The work is currently in progress across uncommitted working tree changes.
+Checked against `239770787`.
 
-Items 1–5 status:
-1. **Vocabulary selection** (corrections 9 and 10 from `state-embeddings.md`): Landed in `DocumentVocabularyResolver`, shared across CLI and LSP.
-2. **Language server parsing**: Landed using injected resolver in `PuckLanguageServer`, `PuckHoverInfo`, and `PuckSqlLsp`.
-3. **Projection verification in context**: Landed whole-document candidate re-lowering check in `WorldDecompiler.Sql.cs`, preserving projection for rules referencing native rows (such as grids).
-4. **Parity and status**: `ShippedWorldsParityTests` verifies zero diagnostics under `--sql`; status documented here.
-5. **Vector spelling**: In progress — replacing `VECTOR` refusal in `StateSqlParser.ValidateType` with vector column, literal, distance operator (`<=>`), vector copy, and `nearest` query lowering per Part 1 Item 5.
+The dialect is implemented:
+
+- **Parsing and lowering.** The lexer and parser live in
+  `src/Puck.World.Transpiler/Sql/`. `WorldDocumentEmitter.Sql.cs` lowers to native
+  rows and rules.
+- **Vocabulary.** `DocumentVocabularyResolver` chooses the vocabulary from the
+  document's top-level `schema:` for `compile`, `lint`, and `lsp`.
+- **Decompiling.** `WorldDecompiler.Sql.cs` projects to SQL only what re-lowers
+  identically in the context of the whole document. `ShippedWorldsParityTests`
+  asserts zero diagnostics under `--sql`.
+- **Language server.** `PuckSqlLsp.cs` serves completion and hover inside parsed SQL
+  block spans.
+- **Vectors.** Vector columns, literals, `dot`/`similarity`/`identical`, copies, and
+  `nearest` queries (`ORDER BY … <=> … LIMIT`) lower and decompile.
+
+What remains is resolving SQL `embed(...)` literals through the embedding lock file,
+which [Embeddings in state](state-embeddings.md) owns.
 
 `src/Puck.Dashboard/src/portal/src/components/SqlEditor.tsx` is an unrelated
 DuckDB query editor over published files; it is not a starting point.

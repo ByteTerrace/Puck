@@ -46,14 +46,14 @@ public readonly record struct BrowserJudgeResult(IReadOnlyList<BrowserRuleTrace>
 /// <summary>One <c>ReadRow</c> result: whether the cell exists in the frame, and its value (numeric rows) or text
 /// (a text row's own cell, read straight through the row rather than the frame — see <see cref="StateFrame"/>'s
 /// own remarks on an unframed row).</summary>
-public readonly record struct BrowserCellValue(bool Found, [property: JsonConverter(typeof(LongAsStringJsonConverter))] long Value, string? Text);
+public readonly record struct BrowserCellValue(bool Found, [property: JsonConverter(typeof(LongAsStringJsonConverter))] long Value, string? Text, string? Vector = null);
 /// <summary>One row's whole current content — the shape <c>Rows</c> exports. Only the row's AUTHORED cells are
 /// listed (its <see cref="StateRow.Cells"/>); a dense board's un-authored cells (still readable individually
 /// through <c>ReadRow</c> or in bulk through <c>Cells</c>/<c>BoardMask</c>) are not enumerated here, since a large
 /// lattice's full cell list would dwarf the rest of the read-back for no board a studio actually authors sparsely.</summary>
 public readonly record struct BrowserRowSnapshot(string Name, string Kind, bool Keyed, IReadOnlyList<BrowserRowCell> Cells);
 /// <summary>One authored cell of a <see cref="BrowserRowSnapshot"/>.</summary>
-public readonly record struct BrowserRowCell(string Key, [property: JsonConverter(typeof(LongAsStringJsonConverter))] long Value, string? Text);
+public readonly record struct BrowserRowCell(string Key, [property: JsonConverter(typeof(LongAsStringJsonConverter))] long Value, string? Text, string? Vector = null);
 /// <summary>The most evaluations one <c>Judge</c> call captures across every rule combined — a forEach-heavy document
 /// could otherwise produce an unbounded trace in one tick.</summary>
 public static class BrowserJudgeLimits {
@@ -289,6 +289,26 @@ public sealed class BrowserSession {
             );
         }
 
+        if (source.Kind == CellKind.Vector) {
+            var vectorFound = m_host.Frame.TryStoredVector(
+                key: cellKey,
+                row: source,
+                components: out var components
+            );
+
+            string? vectorText = null;
+            if (vectorFound && !components.IsEmpty && StateVector.TryCreate(components: components, out var sv, out _)) {
+                vectorText = sv.ToBase64Url();
+            }
+
+            return new BrowserCellValue(
+                Found: vectorFound,
+                Text: null,
+                Value: 0L,
+                Vector: vectorText
+            );
+        }
+
         var found = m_host.Frame.TryStored(
             key: cellKey,
             row: source,
@@ -320,7 +340,8 @@ public sealed class BrowserSession {
                 cells.Add(item: new BrowserRowCell(
                     Key: cell.Key.Value,
                     Value: read.Value,
-                    Text: read.Text
+                    Text: read.Text,
+                    Vector: read.Vector
                 ));
             }
 
@@ -481,6 +502,33 @@ public sealed class BrowserSession {
             write: (add
             ? StateWriteKind.Add
             : StateWriteKind.Set)
+        );
+    }
+    /// <summary>Writes one vector cell through the frame.</summary>
+    /// <param name="row">The row name.</param>
+    /// <param name="key">The cell key.</param>
+    /// <param name="components">The unit vector components.</param>
+    /// <param name="reason">Why the write refused, or empty.</param>
+    /// <returns><see langword="true"/> when the write applied.</returns>
+    public bool TryWriteVectorRow(string row, string key, ReadOnlySpan<sbyte> components, out string reason) {
+        if (m_host.Frame.Find(name: row) is not { } source) {
+            reason = $"row '{row}' is not in the installed document.";
+
+            return false;
+        }
+        if (!CellName.TryParse(
+            candidate: key,
+            name: out var cellKey,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        return m_host.Frame.TryWriteVector(
+            key: cellKey,
+            reason: out reason,
+            row: source,
+            components: components
         );
     }
 }

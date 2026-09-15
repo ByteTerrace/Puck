@@ -56,6 +56,7 @@ public static partial class RuleCompiler {
                 ValueToken.BoardShift shift => ResolveBoardShift(shift: shift),
                 ValueToken.BoardFill fill => ResolveBoardFill(fill: fill),
                 ValueToken.BoardImage image => ResolveBoardImage(image: image),
+                ValueToken.VectorCall vectorCall => ResolveVectorCall(call: vectorCall),
                 null => throw Malformed(detail: "contains a null token"),
                 _ => ResolveOperator(token: authored[index]),
             };
@@ -240,6 +241,90 @@ public static partial class RuleCompiler {
             depth -= 2;
             kinds[(depth - 1)] = result;
             return new CompiledExpressionToken(Operation: ExpressionOp.Select);
+        }
+        CompiledExpressionToken ResolveVectorCall(ValueToken.VectorCall call) {
+            if (call.Operation is not (ExpressionOp.Dot or ExpressionOp.Similarity or ExpressionOp.Identical)) {
+                throw Malformed(detail: $"token '{call.Operation}' is not a supported vector function");
+            }
+
+            var opKind = (call.Operation == ExpressionOp.Similarity) ? CellKind.Fixed : CellKind.Int;
+
+            CompiledVectorOperand left;
+            CompiledVectorOperand right;
+
+            if (call.Left is VectorOperandToken.Cell) {
+                left = ResolveVectorOperand(
+                    token: call.Left,
+                    context: context,
+                    ruleName: ruleName,
+                    where: $"{verb} vector {call.Operation}"
+                );
+                right = ResolveVectorOperand(
+                    token: call.Right,
+                    context: context,
+                    ruleName: ruleName,
+                    where: $"{verb} vector {call.Operation}",
+                    expectedSpace: left.Space
+                );
+            } else if (call.Right is VectorOperandToken.Cell) {
+                right = ResolveVectorOperand(
+                    token: call.Right,
+                    context: context,
+                    ruleName: ruleName,
+                    where: $"{verb} vector {call.Operation}"
+                );
+                left = ResolveVectorOperand(
+                    token: call.Left,
+                    context: context,
+                    ruleName: ruleName,
+                    where: $"{verb} vector {call.Operation}",
+                    expectedSpace: right.Space
+                );
+            } else {
+                var defaultSpace = context.FindSpace(name: null)
+                    ?? throw new RuleException(
+                        refusal: RuleRefusal.VectorSpaceMismatch,
+                        ruleName: ruleName,
+                        detail: $"'{verb}' vector literal has no space; declare a default space or address a typed vector row"
+                    );
+                left = ResolveVectorOperand(
+                    token: call.Left,
+                    context: context,
+                    ruleName: ruleName,
+                    where: $"{verb} vector {call.Operation}",
+                    expectedSpace: defaultSpace
+                );
+                right = ResolveVectorOperand(
+                    token: call.Right,
+                    context: context,
+                    ruleName: ruleName,
+                    where: $"{verb} vector {call.Operation}",
+                    expectedSpace: defaultSpace
+                );
+            }
+
+            if (!string.Equals(left.Space.Name.Value, right.Space.Name.Value, StringComparison.Ordinal) || !left.Space.HasSameIdentity(other: right.Space)) {
+                throw new RuleException(
+                    refusal: RuleRefusal.VectorSpaceMismatch,
+                    ruleName: ruleName,
+                    detail: $"'{verb}' vector call spaces mismatch: left is '{left.Space.Name}', right is '{right.Space.Name}'"
+                );
+            }
+
+            var operandFact = new VectorCallOperand(
+                operation: call.Operation,
+                left: left,
+                right: right,
+                valueKind: opKind
+            );
+
+            return Push(
+                new CompiledExpressionToken(
+                    Operation: ExpressionOp.Operand,
+                    Operand: operandFact
+                ),
+                opKind
+            );
         }
         RuleException Malformed(string detail) => new(
             refusal: RuleRefusal.EffectSourceAmbiguous,

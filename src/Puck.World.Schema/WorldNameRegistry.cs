@@ -804,6 +804,18 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Key
         ),
         new(
+            typeof(VectorOperandToken.Cell),
+            nameof(VectorOperandToken.Cell.Name),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
+            typeof(VectorOperandToken.Cell),
+            nameof(VectorOperandToken.Cell.Key),
+            WorldNameKind.State,
+            WorldNameRole.Key
+        ),
+        new(
             typeof(ValueToken.BoardShift),
             nameof(ValueToken.BoardShift.Topology),
             WorldNameKind.Topology,
@@ -1236,6 +1248,11 @@ public static partial class WorldNameRegistry {
         ),
     ];
     private static readonly WorldNameExclusion[] Exclusions = [
+        new(
+            typeof(StateSpace),
+            nameof(StateSpace.Name),
+            "a space name declares a vector embedding space local to the document"
+        ),
         new(
             typeof(StateCell),
             nameof(StateCell.Key),

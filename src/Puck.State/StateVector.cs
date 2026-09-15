@@ -15,6 +15,9 @@ public sealed class StateVector : IEquatable<StateVector> {
     /// <summary>Gets the vector components as a read-only span of signed 8-bit integers.</summary>
     public ReadOnlySpan<sbyte> Components => m_components;
 
+    /// <summary>Gets the vector components as a read-only memory of signed 8-bit integers.</summary>
+    public ReadOnlyMemory<sbyte> Memory => m_components;
+
     /// <summary>Gets the component dimension count.</summary>
     public int Dimensions => m_components.Length;
 

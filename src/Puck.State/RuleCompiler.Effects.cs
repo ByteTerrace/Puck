@@ -88,7 +88,8 @@ public static partial class RuleCompiler {
                     expression: set.Expression,
                     ruleName: ruleName,
                     context: context,
-                    verb: "setState"
+                    verb: "setState",
+                    vector: set.Vector
                 );
             case ActionEffect.PushState push:
                 return ResolvePush(
@@ -665,7 +666,7 @@ public static partial class RuleCompiler {
     // value XOR valueSeconds XOR (fromState, fromKey) XOR expression XOR text: the same duality ResolvePredicate
     // enforces for compareState's comparand, applied to the write side. 'fromKey' is an appendage of 'fromState' on
     // the same terms 'comparandKey' is.
-    private static EffectFact ResolveWrite(string rowName, string? key, ActionTarget target, StateWriteKind write, decimal? value, string? fromState, string? fromKey, decimal? valueSeconds, string? text, ValueExpression? expression, string ruleName, RuleCompileContext context, string verb) {
+    private static EffectFact ResolveWrite(string rowName, string? key, ActionTarget target, StateWriteKind write, decimal? value, string? fromState, string? fromKey, decimal? valueSeconds, string? text, ValueExpression? expression, string ruleName, RuleCompileContext context, string verb, string? vector = null) {
         if (target != ActionTarget.Self) {
             throw new RuleException(
                 refusal: RuleRefusal.TargetInadmissible,
@@ -742,6 +743,93 @@ public static partial class RuleCompiler {
             ? pk
             : default
         );
+
+        if (row.Kind == CellKind.Vector) {
+            if (write != StateWriteKind.Set) {
+                throw new RuleException(
+                    refusal: RuleRefusal.VectorEffectNotAdmitted,
+                    ruleName: ruleName,
+                    detail: $"state row '{rowName}' is kind=Vector — '{verb}' cannot write to a vector row; only setState or transforms are permitted"
+                );
+            }
+
+            var hasVec = (vector is not null);
+            var hasFromVec = (fromState is not null);
+
+            if (expression is { Tokens: [ValueToken.State stateToken] }) {
+                hasFromVec = true;
+                fromState = stateToken.Name;
+                fromKey = stateToken.Key;
+                expression = null;
+            }
+
+            var vectorSourcesCount = (hasVec ? 1 : 0) + (hasFromVec ? 1 : 0);
+
+            if (vectorSourcesCount != 1 || value is not null || valueSeconds is not null || text is not null || expression is not null) {
+                throw new RuleException(
+                    refusal: RuleRefusal.EffectSourceAmbiguous,
+                    ruleName: ruleName,
+                    detail: $"'{verb}' on vector row '{rowName}' must name EXACTLY ONE vector source: 'vector' or 'fromState'"
+                );
+            }
+
+            var space = context.FindSpace(name: row.Space)
+                ?? throw new RuleException(
+                    refusal: RuleRefusal.VectorSpaceMismatch,
+                    ruleName: ruleName,
+                    detail: $"Row '{rowName}' names undeclared vector space '{row.Space}'"
+                );
+
+            CompiledVectorOperand sourceOperand;
+            if (hasVec) {
+                var vecSpelling = vector!.Trim();
+                if (vecSpelling.StartsWith("vector(", StringComparison.OrdinalIgnoreCase) && vecSpelling.EndsWith(')')) {
+                    sourceOperand = ResolveVectorOperand(
+                        operandSpelling: vecSpelling,
+                        context: context,
+                        ruleName: ruleName,
+                        where: $"{verb} {rowName}",
+                        expectedSpace: space
+                    );
+                } else {
+                    sourceOperand = ResolveVectorLiteralOperand(
+                        literal: vecSpelling,
+                        context: context,
+                        ruleName: ruleName,
+                        where: $"{verb} {rowName}",
+                        expectedSpace: space
+                    );
+                }
+            } else {
+                sourceOperand = ResolveVectorCellOperand(
+                    rowName: fromState!,
+                    key: fromKey,
+                    context: context,
+                    ruleName: ruleName,
+                    where: $"{verb} {rowName}",
+                    expectedSpace: space
+                );
+            }
+
+            return new VectorCopyEffect(
+                row: rowName,
+                key: resolvedKey,
+                keyFrom: destinationKeyFrom,
+                handle: handle,
+                cellKey: cellKey,
+                rowOrdinal: handle.Ordinal,
+                source: sourceOperand,
+                describe: $"{verb} {rowName}.{resolvedKey} = {(hasVec ? "vector(...)" : $"{fromState}[{fromKey}]")}"
+            );
+        }
+
+        if (vector is not null) {
+            throw new RuleException(
+                refusal: RuleRefusal.EffectSourceAmbiguous,
+                ruleName: ruleName,
+                detail: $"state row '{rowName}' is kind={StateSpelling.Kind(row.Kind)} — 'vector' can only write to a kind=Vector row"
+            );
+        }
 
         var hasValue = (value is not null);
         var hasFrom = (fromState is not null);
@@ -956,6 +1044,14 @@ public static partial class RuleCompiler {
         );
         StateRow Row(string name) => (context.FindRow(name: name) ?? throw Invalid(message: $"unknown state row '{name}'"));
         switch (transform) {
+            case StateTransform.Mix mix:
+                return ResolveVectorMixTransform(mix: mix, ruleName: ruleName, context: context);
+            case StateTransform.Mean mean:
+                return ResolveVectorMeanTransform(mean: mean, ruleName: ruleName, context: context);
+            case StateTransform.Nearest nearest:
+                return ResolveVectorNearestTransform(nearest: nearest, ruleName: ruleName, context: context);
+            case StateTransform.Remember remember:
+                return ResolveVectorRememberTransform(remember: remember, ruleName: ruleName, context: context);
             case StateTransform.Observe observe:
                 if (Row(name: observe.Row).Knowledge is null) {
                     throw Invalid(message: "observe requires a knowledge board");

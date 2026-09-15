@@ -1,4 +1,6 @@
 using Puck.Physics.Motion;
+using Puck.World.Protocol;
+
 namespace Puck.World.Server;
 
 /// <summary>The server as the rule evaluator's host: the state library's <see cref="IRuleHost"/> over the installed
@@ -152,6 +154,29 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
                             );
                         }
 
+                        if (frame.Layout[ordinal].Kind == FrameRowKind.Vector) {
+                            if (cell.Vector is not { } vec) {
+                                reason = "numeric write to vector row";
+                                return false;
+                            }
+
+                            if (!frame.TryStoredVector(rowOrdinal: ordinal, key: key, components: out _)) {
+                                return TryApplyCrossRowStateMutation(
+                                    mapped: MapStateMutation(mutation: mutation),
+                                    tick: tick,
+                                    reason: out reason
+                                );
+                            }
+
+                            if (!frame.TryWriteVector(rowOrdinal: ordinal, key: key, components: vec.Components, reason: out reason)) {
+                                return false;
+                            }
+
+                            QueueRuleFrameMutation(mutation: MapStateMutation(mutation: mutation));
+
+                            return true;
+                        }
+
                         var keyed = (frame.Layout[ordinal].Kind == FrameRowKind.Keyed);
 
                         if (
@@ -189,6 +214,56 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
                         tick: tick,
                         reason: out reason
                     );
+                }
+            case StateMutation.ApplyVector applyVector: {
+                    var transform = applyVector.Transform;
+
+                    switch (transform) {
+                        case ResolvedVectorTransform.Mix or ResolvedVectorTransform.Mean: {
+                                var frame = EnsureRuleFrame();
+                                var (targetOrdinal, targetKey) = transform switch {
+                                    ResolvedVectorTransform.Mix m => (m.TargetRowOrdinal, m.TargetKey),
+                                    ResolvedVectorTransform.Mean me => (me.TargetRowOrdinal, me.TargetKey),
+                                    _ => (-1, StateRow.SlotKey),
+                                };
+
+                                if ((targetOrdinal >= 0) &&
+                                    (targetOrdinal < frame.Layout.RowCount) &&
+                                    (frame.Layout[targetOrdinal].Kind == FrameRowKind.Vector) &&
+                                    frame.TryStoredVector(rowOrdinal: targetOrdinal, key: targetKey, components: out _) &&
+                                    frame.TryApplyVector(transform: transform, resultVector: out var resultVector, reason: out reason)) {
+                                    var targetRowName = transform switch {
+                                        ResolvedVectorTransform.Mix m => m.TargetRowName,
+                                        ResolvedVectorTransform.Mean me => me.TargetRowName,
+                                        _ => throw new InvalidOperationException(),
+                                    };
+
+                                    QueueRuleFrameMutation(mutation: new WorldMutation.UpsertStateCell(
+                                        Principal: WorldPrincipal.World,
+                                        Row: targetRowName,
+                                        Key: targetKey.Value,
+                                        Value: 0L,
+                                        Kind: WorldDocumentWriteKind.Set,
+                                        Vector: resultVector
+                                    ));
+
+                                    return true;
+                                }
+
+                                return TryApplyCrossRowStateMutation(
+                                    mapped: MapStateMutation(mutation: mutation),
+                                    tick: tick,
+                                    reason: out reason
+                                );
+                            }
+                        case ResolvedVectorTransform.Nearest or ResolvedVectorTransform.Remember:
+                        default:
+                            return TryApplyCrossRowStateMutation(
+                                mapped: MapStateMutation(mutation: mutation),
+                                tick: tick,
+                                reason: out reason
+                            );
+                    }
                 }
             case StateMutation.Apply { Transform: StateTransform.BoardCombine combine }: {
                     if (!EnsureRuleFrame().TryBoardCombine(

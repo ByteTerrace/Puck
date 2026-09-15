@@ -1559,6 +1559,7 @@ public sealed partial class WorldServer {
                 if (!TryComposeCellUpsert(
                     composed: out var upsertedRow,
                     rows: current.State,
+                    spaces: current.Spaces,
                     evictedKey: out evictedKey,
                     mutation: m,
                     reason: out reason,

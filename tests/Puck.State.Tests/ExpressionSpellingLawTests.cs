@@ -232,9 +232,9 @@ public sealed class ExpressionSpellingLawTests {
             RuleVocabulary.Core
         );
         var types = typeof(ValueToken).GetNestedTypes().Where(predicate: type => (type.IsSubclassOf(c: typeof(ValueToken)) && (type.GetConstructor(types: Type.EmptyTypes) is not null))).ToArray();
-        // The other opcodes carry literal, operand, or topology payloads.
+        // The other opcodes carry literal, operand, topology, or vector call payloads.
         Assert.Equal(
-            (Enum.GetValues<ExpressionOp>().Length - 5),
+            (Enum.GetValues<ExpressionOp>().Length - 8),
             types.Length
         );
         foreach (var type in types) {

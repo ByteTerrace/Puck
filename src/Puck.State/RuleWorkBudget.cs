@@ -323,6 +323,7 @@ public static class RuleWorkBudget {
         ExpressionOp.BoardFill => ((board is { } fill)
         ? (((long)fill.Topology.CellCount) * ((fill.Topology.CellCount / 2) + fill.Visits))
         : 1_536L),
+        ExpressionOp.Similarity or ExpressionOp.Dot or ExpressionOp.Identical => 2L,
         _ => (ExpressionOperators.Find(operation: operation)?.Cost ?? long.MaxValue),
     };
     /// <summary>Returns the cost bound of one non-operand operation token.</summary>

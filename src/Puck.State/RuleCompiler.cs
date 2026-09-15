@@ -885,20 +885,21 @@ public static partial class RuleCompiler {
     /// <param name="context">The compile context.</param>
     /// <param name="channel">The authored spelling, for refusal text.</param>
     public static CompiledCellRef ResolveCellRef(string row, string key, string ruleName, RuleCompileContext context, string channel) {
-        var declared = ResolveNumericRow(
+        var declared = ResolveRequiredRow(
             channel: channel,
             context: context,
             malformed: RuleRefusal.StateCellUnaddressable,
             name: row,
             requireKeyed: false,
-            ruleName: ruleName
+            ruleName: ruleName,
+            requireNumeric: false
         );
 
-        if (declared.Kind != CellKind.Int) {
+        if (declared.Kind != CellKind.Int && declared.Kind != CellKind.Text) {
             throw new RuleException(
                 refusal: RuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName,
-                detail: $"'{channel}' reads row '{row}' as a body index, but it is kind={StateSpelling.Kind(kind: declared.Kind)} — an index cell is kind=Int"
+                detail: $"'{channel}' reads row '{row}' as a key, but it is kind={StateSpelling.Kind(kind: declared.Kind)} — a key cell is kind=Int or Text"
             );
         }
 
@@ -921,7 +922,8 @@ public static partial class RuleCompiler {
                 ),
                 InnerKeyBinding: innerBinding,
                 Key: string.Empty,
-                Row: row
+                Row: row,
+                Kind: declared.Kind
             );
         }
 
@@ -957,7 +959,8 @@ public static partial class RuleCompiler {
                 context: context,
                 name: row
             ),
-            CellKey: cellKey
+            CellKey: cellKey,
+            Kind: declared.Kind
         );
     }
     /// <summary>Resolves a dynamic key spelling — a binding token, a registered key family's spelling, a

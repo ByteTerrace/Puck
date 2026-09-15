@@ -597,7 +597,7 @@ public static class WorldSearchCompilation {
             // A zone job's tokens row is the zones' shared domain: its keys are the tokens, its values are its own.
             if (
                 (tokens is not { IsKeyed: true }) ||
-                (tokens.Kind == CellKind.Text) ||
+                (tokens.Kind is CellKind.Text or CellKind.Vector) ||
                 (tokens.EffectiveDomain is StateDomain.CellsOf or StateDomain.Ring or StateDomain.KeysOf { Ordered: true })
             ) {
                 reason = $"search '{row.Name}' tokens '{row.Tokens}' must be the keyed row the zones draw their tokens from";

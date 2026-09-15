@@ -273,7 +273,7 @@ public sealed class FrameHost : IRuleHost {
     private bool TryApplyVector(StateMutation.ApplyVector applyVector, out string reason) {
         var transform = applyVector.Transform;
         return transform switch {
-            ResolvedVectorTransform.Copy or ResolvedVectorTransform.Mix or ResolvedVectorTransform.Mean =>
+            ResolvedVectorTransform.Mix or ResolvedVectorTransform.Mean =>
                 Frame.TryApplyVector(transform: transform, reason: out reason),
             _ => Refuse(
                 message: $"a frame does not apply a {transform.GetType().Name} vector transform",

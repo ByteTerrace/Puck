@@ -6,7 +6,8 @@ namespace Puck.World;
 /// <summary>A disclosed literal cell, or, under <see cref="HiddenCells.Placeholder"/>, an anonymous card back
 /// (<see cref="Hidden"/> true, empty key, zero value, no text, no observation).</summary>
 public sealed record WorldObservedCell(string Key, long Value, string? Text = null, StateObservation? Observation = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Hidden = false);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Hidden = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateVector? Vector = null);
 /// <summary>A presentation observation, without draw seeds, cursors, masks, grants, or executable traits.
 /// <see cref="HiddenCount"/> counts the cells the row's <see cref="StateVisibility.Hidden"/> policy withheld
 /// from this observer (placeholders included), zero under <see cref="HiddenCells.Omit"/>.</summary>
@@ -62,7 +63,9 @@ public static class WorldStateDisclosure {
                         cell.Key.Value,
                         cell.Value,
                         cell.Text,
-                        cell.Observation
+                        cell.Observation,
+                        Hidden: false,
+                        Vector: cell.Vector
                     ));
                     continue;
                 }

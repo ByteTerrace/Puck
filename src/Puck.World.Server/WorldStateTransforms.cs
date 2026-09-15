@@ -23,8 +23,55 @@ public static partial class WorldStateTransforms {
         StateTransform.Arrange arrange => [arrange.Row],
         StateTransform.Push push => [push.Row],
         StateTransform.ClearEnclosed enclosed => [enclosed.Row],
+        StateTransform.Mix mix => CollectMixSubjects(mix: mix),
+        StateTransform.Mean mean => CollectMeanSubjects(mean: mean),
+        StateTransform.Nearest nearest => CollectNearestSubjects(nearest: nearest),
+        StateTransform.Remember remember => CollectRememberSubjects(remember: remember),
         _ => [],
     };
+
+    private static IEnumerable<string> CollectMixSubjects(StateTransform.Mix mix) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        AddSpellingSubject(spelling: mix.Into, names: names);
+        return names;
+    }
+
+    private static IEnumerable<string> CollectMeanSubjects(StateTransform.Mean mean) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        AddSpellingSubject(spelling: mean.Into, names: names);
+        return names;
+    }
+
+    private static IEnumerable<string> CollectNearestSubjects(StateTransform.Nearest nearest) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        AddSpellingSubject(spelling: nearest.Into, names: names);
+        return names;
+    }
+
+    private static IEnumerable<string> CollectRememberSubjects(StateTransform.Remember remember) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        AddSpellingSubject(spelling: remember.Into, names: names);
+        return names;
+    }
+
+    private static void AddSpellingSubject(string? spelling, ISet<string> names) {
+        if (string.IsNullOrWhiteSpace(value: spelling)) {
+            return;
+        }
+        spelling = spelling.Trim();
+        if (spelling.StartsWith(value: "vector(", comparisonType: StringComparison.Ordinal)) {
+            return;
+        }
+        var bracketIndex = spelling.IndexOf(value: '[');
+        if (bracketIndex > 0 && spelling.EndsWith(value: ']')) {
+            var rowName = spelling[..bracketIndex].Trim();
+            if (rowName.Length > 0) {
+                names.Add(item: rowName);
+            }
+            return;
+        }
+        names.Add(item: spelling);
+    }
     /// <summary>Composes one operation without changing the supplied definition.</summary>
     /// <param name="definition">The validated current definition.</param>
     /// <param name="transform">The operation.</param>
@@ -108,6 +155,30 @@ public static partial class WorldStateTransforms {
                 StateTransform.ClearEnclosed enclosed => TryClearEnclosed(
                 definition: definition,
                 enclosed: enclosed,
+                reason: out reason,
+                rows: rows
+            ),
+                StateTransform.Mix mix => TryMix(
+                definition: definition,
+                mix: mix,
+                reason: out reason,
+                rows: rows
+            ),
+                StateTransform.Mean mean => TryMean(
+                definition: definition,
+                mean: mean,
+                reason: out reason,
+                rows: rows
+            ),
+                StateTransform.Nearest nearest => TryNearest(
+                definition: definition,
+                nearest: nearest,
+                reason: out reason,
+                rows: rows
+            ),
+                StateTransform.Remember remember => TryRemember(
+                definition: definition,
+                remember: remember,
                 reason: out reason,
                 rows: rows
             ),

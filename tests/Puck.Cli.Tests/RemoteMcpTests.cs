@@ -462,4 +462,91 @@ public sealed class RemoteMcpTests {
         Assert.Throws<ArgumentException>(testCode: () => RemoteMcpServer.Build(options with { SubjectClaim = "oid" }));
         Assert.Throws<ArgumentException>(testCode: () => RemoteMcpServer.Build(options with { AllowedOrigins = ["*"] }));
     }
+    [Fact]
+    public async Task StateVectorWrite_GrantedPrincipalSucceedsAndUngrantedIsRefused() {
+        if (!SupportedPlatform()) { return; }
+        await using var fixture = new RemoteMcpFixture();
+        fixture.CommandHelp = "read; set <value>; wait; world.state.cell.set <row> <key> <value>";
+        fixture.GrantedPrincipals = ["alice"];
+        await fixture.StartAsync(Token);
+
+        using var aliceHttp = fixture.Http(token: fixture.Token(subject: "alice"));
+        using var bobHttp = fixture.Http(token: fixture.Token(subject: "bob"));
+        await using var alice = await fixture.ClientAsync(
+            http: aliceHttp,
+            revision: "2026-07-28",
+            token: Token
+        );
+        await using var bob = await fixture.ClientAsync(
+            http: bobHttp,
+            revision: "2026-07-28",
+            token: Token
+        );
+
+        var tools = await alice.ListToolsAsync(cancellationToken: Token);
+        Assert.Contains("puck_state_vector_write", tools.Select(tool => tool.Name));
+
+        var aliceAttachment = await Attach(client: alice);
+        var bobAttachment = await Attach(client: bob);
+
+        var aliceResult = await alice.CallToolAsync(
+            "puck_state_vector_write",
+            new Dictionary<string, object?> {
+                ["attachmentId"] = aliceAttachment,
+                ["row"] = "embedding",
+                ["key"] = "cell1",
+                ["vector"] = "b64u:AQID"
+            },
+            cancellationToken: Token
+        );
+        Assert.False(condition: aliceResult.IsError, userMessage: aliceResult.Content.OfType<TextContentBlock>().FirstOrDefault()?.Text);
+        Assert.Equal(
+            expected: "world.state.cell.set embedding cell1 b64u:AQID",
+            actual: Output(result: aliceResult)
+        );
+
+        var aliceSlotResult = await alice.CallToolAsync(
+            "puck_state_vector_write",
+            new Dictionary<string, object?> {
+                ["attachmentId"] = aliceAttachment,
+                ["row"] = "slot_embedding",
+                ["vector"] = "b64u:AQID"
+            },
+            cancellationToken: Token
+        );
+        Assert.False(condition: aliceSlotResult.IsError);
+        Assert.Equal(
+            expected: "world.state.cell.set slot_embedding $value b64u:AQID",
+            actual: Output(result: aliceSlotResult)
+        );
+
+        var bobResult = await bob.CallToolAsync(
+            "puck_state_vector_write",
+            new Dictionary<string, object?> {
+                ["attachmentId"] = bobAttachment,
+                ["row"] = "embedding",
+                ["key"] = "cell1",
+                ["vector"] = "b64u:AQID"
+            },
+            cancellationToken: Token
+        );
+        Assert.True(condition: bobResult.IsError);
+        Assert.Contains(
+            expectedSubstring: "Refused: principal 'bob' is not granted",
+            actualString: Output(result: bobResult)
+        );
+
+        var crossResult = await bob.CallToolAsync(
+            "puck_state_vector_write",
+            new Dictionary<string, object?> {
+                ["attachmentId"] = aliceAttachment,
+                ["row"] = "embedding",
+                ["key"] = "cell1",
+                ["vector"] = "b64u:AQID"
+            },
+            cancellationToken: Token
+        );
+        Assert.True(condition: crossResult.IsError);
+    }
 }
+

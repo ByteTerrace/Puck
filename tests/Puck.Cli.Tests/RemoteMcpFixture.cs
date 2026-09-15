@@ -23,6 +23,8 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
     internal const string Tenant = "c75f3c9e-c844-4023-bfdf-81d996d67eb9";
 
     internal int Active;
+    internal string CommandHelp = "read; set <value>; wait";
+    internal HashSet<string>? GrantedPrincipals;
     internal int KeyReads;
     internal int MetadataReads;
     internal int Opened;
@@ -191,7 +193,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
             ) });
         }
     }
-    private sealed class ProbeSession(RemoteMcpFixture owner) : IControlSession {
+    private sealed class ProbeSession(RemoteMcpFixture owner, RemoteMcpCaller caller) : IControlSession {
         private int m_disposed;
         private string m_value = "fresh";
 
@@ -208,6 +210,24 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
                 comparisonType: StringComparison.Ordinal,
                 value: "set "
             ) == true) { m_value = request.Command[4..]; }
+            if (request.Command?.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "world.state.cell.set"
+            ) == true) {
+                if (owner.GrantedPrincipals is not null && !owner.GrantedPrincipals.Contains(caller.Subject)) {
+                    return new(
+                        request.Id,
+                        "refused",
+                        Output: $"Refused: principal '{caller.Subject}' is not granted to write state cells.",
+                        IsError: true
+                    );
+                }
+                return new(
+                    request.Id,
+                    "completed",
+                    Output: request.Command
+                );
+            }
             if (request.Operation == "capture") {
                 return new(
                     request.Id,
@@ -229,10 +249,10 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
         public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) {
             Interlocked.Increment(location: ref owner.Opened);
             Interlocked.Increment(location: ref owner.Active);
-            return ValueTask.FromResult<IControlSession>(new ProbeSession(owner: owner));
+            return ValueTask.FromResult<IControlSession>(new ProbeSession(owner: owner, caller: caller));
         }
         public override ValueTask<ControlCapabilities> DescribeControlAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => ValueTask.FromResult(new ControlCapabilities(
-            CommandHelp: "read; set <value>; wait",
+            CommandHelp: owner.CommandHelp,
             SupportsCapture: true
         ));
 

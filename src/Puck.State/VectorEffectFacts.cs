@@ -57,7 +57,7 @@ public sealed class VectorCopyEffect : EffectFact, IStateAddressedEffect {
 
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) =>
-        2L + Source.Space.Dimensions;
+        Source.Space.Dimensions;
 }
 
 /// <summary>A state effect computing a weighted mix of vector operands into a target vector cell.</summary>
@@ -119,7 +119,7 @@ public sealed class VectorMixEffect : EffectFact, IStateAddressedEffect {
 
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) =>
-        2L + (Terms.Count * Dimensions);
+        (Terms.Count + 1L) * Dimensions;
 }
 
 /// <summary>A state effect computing the mean of vector cells from a table into a target vector cell.</summary>
@@ -206,7 +206,7 @@ public sealed class VectorMeanEffect : EffectFact, IStateAddressedEffect {
 
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) =>
-        2L + (FromCapacity * Dimensions);
+        ((FromCapacity + 1L) * (long)Dimensions) + (WhereRowOrdinal.HasValue ? (long)FromCapacity : 0L);
 }
 
 /// <summary>A state effect computing top-K nearest matches from a vector table into a target table or text slot.</summary>
@@ -313,8 +313,12 @@ public sealed class VectorNearestEffect : EffectFact {
         into.Add(item: new RuleAccess(Row: IntoRowName, Key: null));
 
     /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) =>
-        2L + (FromCapacity * Dimensions) + (K * FromCapacity);
+    public override long Cost(RuleCompileContext context) {
+        var baseFactor = (IntoKind == CellKind.Int)
+            ? (Dimensions + 2L)
+            : ((3L * Dimensions) + 2L);
+        return (FromCapacity * baseFactor) + (WhereRowOrdinal.HasValue ? (long)FromCapacity : 0L);
+    }
 }
 
 /// <summary>A state effect conditionally upserting a vector into a history table unless a near vector exists.</summary>
@@ -383,5 +387,5 @@ public sealed class VectorRememberEffect : EffectFact, IStateAddressedEffect {
 
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) =>
-        2L + (Capacity * Dimensions);
+        (Capacity * 3L * Dimensions) + Dimensions;
 }

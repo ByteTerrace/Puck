@@ -1,4 +1,5 @@
 using Puck.Maths;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Puck.World.Server;
@@ -125,6 +126,11 @@ public static partial class WorldRuntimeStateHash {
                     );
 
                     hash.Add(values: utf8[..written]);
+                }
+
+                if (cell.Vector is { } cellVec) {
+                    hash.Add(value: (uint)cellVec.Dimensions);
+                    hash.Add(values: MemoryMarshal.Cast<sbyte, byte>(cellVec.Components));
                 }
             }
         }
@@ -470,6 +476,11 @@ public static partial class WorldRuntimeStateHash {
                     clock: cell.Clock,
                     hash: ref hash
                 );
+
+                if (cell.Vector is { } cellVec) {
+                    hash.Add(value: (uint)cellVec.Dimensions);
+                    hash.Add(values: MemoryMarshal.Cast<sbyte, byte>(cellVec.Components));
+                }
 
                 if (
                     hasHandle &&

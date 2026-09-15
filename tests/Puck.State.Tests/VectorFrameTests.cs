@@ -163,21 +163,6 @@ public sealed class VectorFrameTests {
         var sourceOrd = Ordinal(layout, "sources");
         var targetOrd = Ordinal(layout, "target");
 
-        // 1. Copy transform
-        var copy = new ResolvedVectorTransform.Copy(
-            TargetRowOrdinal: targetOrd,
-            TargetRowName: "target",
-            TargetKey: StateRow.SlotKey,
-            SourceRowOrdinal: sourceOrd,
-            SourceRowName: "sources",
-            SourceKey: Name("s1"),
-            SourceVector: null
-        );
-
-        Assert.True(frame.TryApplyVector(copy, out var copyResult, out var reasonCopy), reasonCopy);
-        Assert.NotNull(copyResult);
-        Assert.True(frame.TryStoredVector(targetSlot, StateRow.SlotKey, out var copied));
-        Assert.Equal(127, copied[0]);
 
         // 2. Mix transform (no allocations)
         var mix = new ResolvedVectorTransform.Mix(

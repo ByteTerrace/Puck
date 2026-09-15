@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -156,29 +157,85 @@ public sealed partial class WorldServer {
     // path below queue the same replay-ready shape.
     private static WorldMutation MapStateMutation(StateMutation mutation) => mutation switch {
         StateMutation.UpsertCell cell => new WorldMutation.UpsertStateCell(
-        Principal: WorldPrincipal.World,
-        Row: cell.Row,
-        Key: cell.Key,
-        Value: cell.Value,
-        Kind: ((cell.Write == StateWriteKind.Add)
-        ? WorldDocumentWriteKind.Add
-        : WorldDocumentWriteKind.Set),
-        Text: cell.Text
-    ),
+            Principal: WorldPrincipal.World,
+            Row: cell.Row,
+            Key: cell.Key,
+            Value: cell.Value,
+            Kind: ((cell.Write == StateWriteKind.Add)
+                ? WorldDocumentWriteKind.Add
+                : WorldDocumentWriteKind.Set),
+            Text: cell.Text,
+            Vector: cell.Vector
+        ),
         StateMutation.RemoveCell cell => new WorldMutation.RemoveStateCell(
-        Principal: WorldPrincipal.World,
-        Row: cell.Row,
-        Key: cell.Key
-    ),
+            Principal: WorldPrincipal.World,
+            Row: cell.Row,
+            Key: cell.Key
+        ),
         StateMutation.Generate generate => new WorldMutation.Generate(
-        Principal: WorldPrincipal.World,
-        Row: generate.Row
-    ),
+            Principal: WorldPrincipal.World,
+            Row: generate.Row
+        ),
         StateMutation.Apply apply => new WorldMutation.TransformState(
-        WorldPrincipal.World,
-        apply.Transform
-    ),
+            WorldPrincipal.World,
+            apply.Transform
+        ),
+        StateMutation.ApplyVector applyVector => MapResolvedVectorTransform(transform: applyVector.Transform),
         _ => throw new InvalidOperationException(message: $"state mutation '{mutation.GetType().Name}' has no world mapping."),
+    };
+
+    private static WorldMutation MapResolvedVectorTransform(ResolvedVectorTransform transform) => transform switch {
+        ResolvedVectorTransform.Mix mix => new WorldMutation.TransformState(
+            Principal: WorldPrincipal.World,
+            Transform: new StateTransform.Mix(
+                Into: $"{mix.TargetRowName}[{mix.TargetKey.Value}]",
+                Terms: mix.Terms.Select(selector: static t => new VectorTerm(
+                    From: (t.Vector is not null)
+                        ? $"vector(\"{t.Vector.ToBase64Url()}\")"
+                        : $"{t.SourceRowName}[{t.SourceKey.Value}]",
+                    Weight: t.Weight
+                )).ToList()
+            )
+        ),
+        ResolvedVectorTransform.Mean mean => new WorldMutation.TransformState(
+            Principal: WorldPrincipal.World,
+            Transform: new StateTransform.Mean(
+                From: mean.FromRowName,
+                Into: $"{mean.TargetRowName}[{mean.TargetKey.Value}]",
+                Where: mean.WhereRowName
+            )
+        ),
+        ResolvedVectorTransform.Nearest nearest => new WorldMutation.TransformState(
+            Principal: WorldPrincipal.World,
+            Transform: new StateTransform.Nearest(
+                From: nearest.FromRowName,
+                Query: (nearest.QueryVector is not null)
+                    ? $"vector(\"{nearest.QueryVector.ToBase64Url()}\")"
+                    : $"{nearest.QueryRowName}[{nearest.QueryKey.Value}]",
+                Into: nearest.TargetRowName,
+                K: nearest.K,
+                Threshold: nearest.Threshold.HasValue
+                    ? ((nearest.IntoKind == CellKind.Int)
+                        ? nearest.Threshold.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        : FixedQ4816.FromRawBits(nearest.Threshold.Value).ToString())
+                    : null,
+                Where: nearest.WhereRowName,
+                Exclude: nearest.Exclude.HasValue ? nearest.Exclude.Value.Value : null,
+                Farthest: nearest.Farthest
+            )
+        ),
+        ResolvedVectorTransform.Remember remember => new WorldMutation.TransformState(
+            Principal: WorldPrincipal.World,
+            Transform: new StateTransform.Remember(
+                Into: remember.IntoRowName,
+                Key: remember.Key.Value,
+                From: (remember.FromVector is not null)
+                    ? $"vector(\"{remember.FromVector.ToBase64Url()}\")"
+                    : $"{remember.FromRowName}[{remember.FromKey.Value}]",
+                UnlessWithin: FixedQ4816.FromRawBits(remember.UnlessWithinQ16).ToString()
+            )
+        ),
+        _ => throw new InvalidOperationException(message: $"resolved vector transform '{transform.GetType().Name}' has no world mapping."),
     };
 
     // Scratch for TryComposeRuleFrameCandidate's own combined member list — cleared and refilled on every call

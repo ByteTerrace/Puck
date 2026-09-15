@@ -34,6 +34,7 @@ public class RuleCompileContext {
 
         Rows = (section?.Rows ?? []);
         Lattices = (section?.Lattices ?? []);
+        Spaces = (section?.Spaces ?? []);
         Catalog = catalog;
         Tables = (tables ?? []);
         Patterns = (patterns ?? []);
@@ -67,6 +68,8 @@ public class RuleCompileContext {
     public IReadOnlyList<PatternRow> Patterns { get; }
     /// <summary>Gets the section's rows.</summary>
     public IReadOnlyList<StateRow> Rows { get; }
+    /// <summary>Gets the section's vector embedding spaces.</summary>
+    public IReadOnlyList<StateSpace> Spaces { get; }
     /// <summary>Gets or sets the rule-scoped bound values the rule being compiled has declared so far — a binding's
     /// own expression sees only the bindings declared before it; the gate and effects see all of them.</summary>
     public List<CompiledRuleBinding>? RuleBindings { get; set; }
@@ -105,6 +108,21 @@ public class RuleCompileContext {
         rows: Rows,
         name: name
     );
+    /// <summary>Finds a declared vector space by name, or the default space if exactly one space exists and name is null.</summary>
+    /// <param name="name">The space name, or null for default space.</param>
+    public StateSpace? FindSpace(string? name = null) {
+        if (string.IsNullOrEmpty(name)) {
+            return (Spaces.Count == 1) ? Spaces[0] : null;
+        }
+
+        foreach (var space in Spaces) {
+            if (string.Equals(space.Name.Value, name, StringComparison.Ordinal)) {
+                return space;
+            }
+        }
+
+        return null;
+    }
     /// <summary>Finds a discrete topology by name, compiled with no frame anchor. A document project overrides this
     /// to anchor the topology in the frame it declares.</summary>
     /// <param name="name">The topology name.</param>

@@ -109,6 +109,7 @@ public sealed partial class WorldServer {
                             mutation: upsert,
                             reason: out reason,
                             rows: workspace,
+                            spaces: working.Spaces,
                             tick: tick,
                             engineTick: engineTick
                         )) {

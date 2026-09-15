@@ -61,12 +61,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].motion.shaping[].when[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].motion.shaping[].when[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].motion.shaping[].when[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].motion.shaping[].when[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].motion.shaping[].when[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].motion.shaping[].when[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].motion.shaping[].when[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].motion.shaping[].when[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `kits.rows[].motion.shaping[].when[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `kits.rows[].motion.shaping[].when[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `kits.rows[].motion.shaping[].when[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].motion.shaping[].when[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].motion.shaping[].when[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].motion.shaping[].when[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].motion.shaping[].when[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].motion.shaping[].when[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].motion.shaping[].when[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].motion.shaping[].when[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].motion.shaping[].when[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].motion.shaping[].when[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -76,12 +84,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].producers{*}.flock.cohesionAffinity{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].producers{*}.flock.cohesionAffinity{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].producers{*}.flock.cohesionAffinity{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].producers{*}.flock.cohesionAffinity{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].producers{*}.flock.cohesionAffinity{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].producers{*}.flock.cohesionAffinity{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].producers{*}.flock.cohesionAffinity{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].producers{*}.flock.alignmentAffinity` | State | Expression | Read | `WorldFlockProfile.AlignmentAffinity` |
 | `kits.rows[].producers{*}.flock.alignmentAffinity{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `kits.rows[].producers{*}.flock.alignmentAffinity{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `kits.rows[].producers{*}.flock.alignmentAffinity{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].producers{*}.flock.alignmentAffinity{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].producers{*}.flock.alignmentAffinity{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].producers{*}.flock.alignmentAffinity{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].producers{*}.flock.alignmentAffinity{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].producers{*}.flock.alignmentAffinity{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].producers{*}.flock.alignmentAffinity{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setState].state` | State | Names | Action | `ActionEffect.SetState.State` |
 | `kits.rows[].actions{*}.onPress.effects[][setState].key` | State | Key | Read | `ActionEffect.SetState.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setState].fromState` | State | Names | Read | `ActionEffect.SetState.FromState` |
@@ -92,6 +108,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][setState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][setState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][setState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][addState].state` | State | Names | Action | `ActionEffect.AddState.State` |
 | `kits.rows[].actions{*}.onPress.effects[][addState].key` | State | Key | Read | `ActionEffect.AddState.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][addState].fromState` | State | Names | Read | `ActionEffect.AddState.FromState` |
@@ -102,6 +122,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][addState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][addState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][addState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][pushState].state` | State | Names | Action | `ActionEffect.PushState.State` |
 | `kits.rows[].actions{*}.onPress.effects[][pushState].fromState` | State | Names | Read | `ActionEffect.PushState.FromState` |
 | `kits.rows[].actions{*}.onPress.effects[][pushState].fromKey` | State | Key | Read | `ActionEffect.PushState.FromKey` |
@@ -111,6 +135,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][pushState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][pushState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][pushState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[transfer].from` | Zone | Names | Action | `StateTransform.Transfer.From` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[transfer].to` | Zone | Names | Action | `StateTransform.Transfer.To` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[transfer].key` | State | Key | Read | `StateTransform.Transfer.Key` |
@@ -145,7 +173,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[nearest].query` | State | Expression | Read | `StateTransform.Nearest.Query` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[nearest].into` | State | Names | Read | `StateTransform.Nearest.Into` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[nearest].where` | State | Names | Read | `StateTransform.Nearest.Where` |
-| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[nearest].exclude` | State | Expression | Read | `StateTransform.Nearest.Exclude` |
+| `kits.rows[].actions{*}.onPress.effects[][transformState].transform[nearest].exclude` | State | Key | Read | `StateTransform.Nearest.Exclude` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
@@ -168,12 +196,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onPress.effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -225,6 +261,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -235,12 +275,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.gate[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onPress.gate[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onPress.gate[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.gate[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.gate[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.gate[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.gate[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.gate[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `kits.rows[].actions{*}.onPress.gate[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `kits.rows[].actions{*}.onPress.gate[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `kits.rows[].actions{*}.onPress.gate[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onPress.gate[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onPress.gate[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onPress.gate[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.gate[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.gate[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.gate[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.gate[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onPress.gate[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onPress.gate[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -254,6 +302,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][setState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][setState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][setState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][addState].state` | State | Names | Action | `ActionEffect.AddState.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][addState].key` | State | Key | Read | `ActionEffect.AddState.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][addState].fromState` | State | Names | Read | `ActionEffect.AddState.FromState` |
@@ -264,6 +316,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][addState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][addState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][addState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][pushState].state` | State | Names | Action | `ActionEffect.PushState.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][pushState].fromState` | State | Names | Read | `ActionEffect.PushState.FromState` |
 | `kits.rows[].actions{*}.onRelease.effects[][pushState].fromKey` | State | Key | Read | `ActionEffect.PushState.FromKey` |
@@ -273,6 +329,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][pushState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][pushState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][pushState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[transfer].from` | Zone | Names | Action | `StateTransform.Transfer.From` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[transfer].to` | Zone | Names | Action | `StateTransform.Transfer.To` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[transfer].key` | State | Key | Read | `StateTransform.Transfer.Key` |
@@ -307,7 +367,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[nearest].query` | State | Expression | Read | `StateTransform.Nearest.Query` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[nearest].into` | State | Names | Read | `StateTransform.Nearest.Into` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[nearest].where` | State | Names | Read | `StateTransform.Nearest.Where` |
-| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[nearest].exclude` | State | Expression | Read | `StateTransform.Nearest.Exclude` |
+| `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[nearest].exclude` | State | Key | Read | `StateTransform.Nearest.Exclude` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
@@ -330,12 +390,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onRelease.effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -387,6 +455,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -397,12 +469,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.gate[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onRelease.gate[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onRelease.gate[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.gate[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.gate[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.gate[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.gate[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.gate[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `kits.rows[].actions{*}.onRelease.gate[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `kits.rows[].actions{*}.onRelease.gate[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `kits.rows[].actions{*}.onRelease.gate[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onRelease.gate[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onRelease.gate[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onRelease.gate[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.gate[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.gate[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.gate[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.gate[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onRelease.gate[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onRelease.gate[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -416,6 +496,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][setState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][setState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][setState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][addState].state` | State | Names | Action | `ActionEffect.AddState.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][addState].key` | State | Key | Read | `ActionEffect.AddState.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][addState].fromState` | State | Names | Read | `ActionEffect.AddState.FromState` |
@@ -426,6 +510,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][addState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][addState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][addState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][pushState].state` | State | Names | Action | `ActionEffect.PushState.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][pushState].fromState` | State | Names | Read | `ActionEffect.PushState.FromState` |
 | `kits.rows[].actions{*}.onFact[].effects[][pushState].fromKey` | State | Key | Read | `ActionEffect.PushState.FromKey` |
@@ -435,6 +523,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][pushState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][pushState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][pushState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[transfer].from` | Zone | Names | Action | `StateTransform.Transfer.From` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[transfer].to` | Zone | Names | Action | `StateTransform.Transfer.To` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[transfer].key` | State | Key | Read | `StateTransform.Transfer.Key` |
@@ -469,7 +561,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[nearest].query` | State | Expression | Read | `StateTransform.Nearest.Query` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[nearest].into` | State | Names | Read | `StateTransform.Nearest.Into` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[nearest].where` | State | Names | Read | `StateTransform.Nearest.Where` |
-| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[nearest].exclude` | State | Expression | Read | `StateTransform.Nearest.Exclude` |
+| `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[nearest].exclude` | State | Key | Read | `StateTransform.Nearest.Exclude` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
@@ -492,12 +584,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onFact[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -549,6 +649,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -559,12 +663,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].gate[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onFact[].gate[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onFact[].gate[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].gate[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].gate[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].gate[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].gate[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].gate[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `kits.rows[].actions{*}.onFact[].gate[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `kits.rows[].actions{*}.onFact[].gate[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `kits.rows[].actions{*}.onFact[].gate[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `kits.rows[].actions{*}.onFact[].gate[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `kits.rows[].actions{*}.onFact[].gate[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `kits.rows[].actions{*}.onFact[].gate[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].gate[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].gate[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].gate[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].gate[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onFact[].gate[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onFact[].gate[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -620,6 +732,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `looks.rows[].motion.lanes[]{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `looks.rows[].motion.lanes[]{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `looks.rows[].motion.lanes[]{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `dynamics[].name` | Dynamics | Declares |  | `DynamicsRow.Name` |
 | `hud.defaults.cursor.visible[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `hud.defaults.cursor.visible[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -754,6 +870,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].effects[][setState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].effects[][setState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].effects[][addState].state` | State | Names | Action | `ActionEffect.AddState.State` |
 | `rules[].effects[][addState].key` | State | Key | Read | `ActionEffect.AddState.Key` |
 | `rules[].effects[][addState].fromState` | State | Names | Read | `ActionEffect.AddState.FromState` |
@@ -764,6 +884,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][addState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].effects[][addState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].effects[][addState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].effects[][pushState].state` | State | Names | Action | `ActionEffect.PushState.State` |
 | `rules[].effects[][pushState].fromState` | State | Names | Read | `ActionEffect.PushState.FromState` |
 | `rules[].effects[][pushState].fromKey` | State | Key | Read | `ActionEffect.PushState.FromKey` |
@@ -773,6 +897,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][pushState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].effects[][pushState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].effects[][pushState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].effects[][transformState].transform[transfer].from` | Zone | Names | Action | `StateTransform.Transfer.From` |
 | `rules[].effects[][transformState].transform[transfer].to` | Zone | Names | Action | `StateTransform.Transfer.To` |
 | `rules[].effects[][transformState].transform[transfer].key` | State | Key | Read | `StateTransform.Transfer.Key` |
@@ -807,7 +935,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][transformState].transform[nearest].query` | State | Expression | Read | `StateTransform.Nearest.Query` |
 | `rules[].effects[][transformState].transform[nearest].into` | State | Names | Read | `StateTransform.Nearest.Into` |
 | `rules[].effects[][transformState].transform[nearest].where` | State | Names | Read | `StateTransform.Nearest.Where` |
-| `rules[].effects[][transformState].transform[nearest].exclude` | State | Expression | Read | `StateTransform.Nearest.Exclude` |
+| `rules[].effects[][transformState].transform[nearest].exclude` | State | Key | Read | `StateTransform.Nearest.Exclude` |
 | `rules[].effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `rules[].effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `rules[].effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
@@ -830,12 +958,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -887,6 +1023,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `rules[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `rules[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -897,12 +1037,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].gate[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].gate[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].gate[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].gate[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].gate[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].gate[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].gate[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].gate[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `rules[].gate[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `rules[].gate[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `rules[].gate[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].gate[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].gate[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].gate[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].gate[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].gate[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].gate[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].gate[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].gate[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].gate[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -913,6 +1061,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].score{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.options[].score{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.options[].score{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].score{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].score{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.options[].score{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].score{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.options[].effects[][setState].state` | State | Names | Action | `ActionEffect.SetState.State` |
 | `rules[].decision.options[].effects[][setState].key` | State | Key | Read | `ActionEffect.SetState.Key` |
 | `rules[].decision.options[].effects[][setState].fromState` | State | Names | Read | `ActionEffect.SetState.FromState` |
@@ -923,6 +1075,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.options[].effects[][setState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.options[].effects[][setState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.options[].effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.options[].effects[][addState].state` | State | Names | Action | `ActionEffect.AddState.State` |
 | `rules[].decision.options[].effects[][addState].key` | State | Key | Read | `ActionEffect.AddState.Key` |
 | `rules[].decision.options[].effects[][addState].fromState` | State | Names | Read | `ActionEffect.AddState.FromState` |
@@ -933,6 +1089,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][addState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.options[].effects[][addState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.options[].effects[][addState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.options[].effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.options[].effects[][pushState].state` | State | Names | Action | `ActionEffect.PushState.State` |
 | `rules[].decision.options[].effects[][pushState].fromState` | State | Names | Read | `ActionEffect.PushState.FromState` |
 | `rules[].decision.options[].effects[][pushState].fromKey` | State | Key | Read | `ActionEffect.PushState.FromKey` |
@@ -942,6 +1102,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][pushState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.options[].effects[][pushState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.options[].effects[][pushState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.options[].effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.options[].effects[][transformState].transform[transfer].from` | Zone | Names | Action | `StateTransform.Transfer.From` |
 | `rules[].decision.options[].effects[][transformState].transform[transfer].to` | Zone | Names | Action | `StateTransform.Transfer.To` |
 | `rules[].decision.options[].effects[][transformState].transform[transfer].key` | State | Key | Read | `StateTransform.Transfer.Key` |
@@ -976,7 +1140,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][transformState].transform[nearest].query` | State | Expression | Read | `StateTransform.Nearest.Query` |
 | `rules[].decision.options[].effects[][transformState].transform[nearest].into` | State | Names | Read | `StateTransform.Nearest.Into` |
 | `rules[].decision.options[].effects[][transformState].transform[nearest].where` | State | Names | Read | `StateTransform.Nearest.Where` |
-| `rules[].decision.options[].effects[][transformState].transform[nearest].exclude` | State | Expression | Read | `StateTransform.Nearest.Exclude` |
+| `rules[].decision.options[].effects[][transformState].transform[nearest].exclude` | State | Key | Read | `StateTransform.Nearest.Exclude` |
 | `rules[].decision.options[].effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `rules[].decision.options[].effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `rules[].decision.options[].effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
@@ -999,12 +1163,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.options[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.options[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].decision.options[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].decision.options[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -1056,6 +1228,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.options[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `rules[].decision.options[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `rules[].decision.options[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -1066,12 +1242,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].gate[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.options[].gate[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.options[].gate[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].gate[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].gate[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.options[].gate[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].gate[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.options[].gate[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `rules[].decision.options[].gate[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `rules[].decision.options[].gate[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `rules[].decision.options[].gate[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.options[].gate[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.options[].gate[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.options[].gate[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].gate[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.options[].gate[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.options[].gate[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.options[].gate[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].decision.options[].gate[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].decision.options[].gate[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -1085,12 +1269,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.interrupt[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.interrupt[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.interrupt[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.interrupt[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.interrupt[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.interrupt[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.interrupt[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.interrupt[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `rules[].decision.interrupt[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `rules[].decision.interrupt[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `rules[].decision.interrupt[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.interrupt[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.interrupt[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.interrupt[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.interrupt[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.interrupt[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.interrupt[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.interrupt[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].decision.interrupt[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].decision.interrupt[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -1104,6 +1296,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][setState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.onNoChoice[][setState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.onNoChoice[][setState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.onNoChoice[][setState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][setState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.onNoChoice[][setState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][setState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.onNoChoice[][addState].state` | State | Names | Action | `ActionEffect.AddState.State` |
 | `rules[].decision.onNoChoice[][addState].key` | State | Key | Read | `ActionEffect.AddState.Key` |
 | `rules[].decision.onNoChoice[][addState].fromState` | State | Names | Read | `ActionEffect.AddState.FromState` |
@@ -1114,6 +1310,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][addState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.onNoChoice[][addState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.onNoChoice[][addState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.onNoChoice[][addState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][addState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.onNoChoice[][addState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][addState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.onNoChoice[][pushState].state` | State | Names | Action | `ActionEffect.PushState.State` |
 | `rules[].decision.onNoChoice[][pushState].fromState` | State | Names | Read | `ActionEffect.PushState.FromState` |
 | `rules[].decision.onNoChoice[][pushState].fromKey` | State | Key | Read | `ActionEffect.PushState.FromKey` |
@@ -1123,6 +1323,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][pushState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.onNoChoice[][pushState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.onNoChoice[][pushState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.onNoChoice[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.onNoChoice[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.onNoChoice[][transformState].transform[transfer].from` | Zone | Names | Action | `StateTransform.Transfer.From` |
 | `rules[].decision.onNoChoice[][transformState].transform[transfer].to` | Zone | Names | Action | `StateTransform.Transfer.To` |
 | `rules[].decision.onNoChoice[][transformState].transform[transfer].key` | State | Key | Read | `StateTransform.Transfer.Key` |
@@ -1157,7 +1361,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][transformState].transform[nearest].query` | State | Expression | Read | `StateTransform.Nearest.Query` |
 | `rules[].decision.onNoChoice[][transformState].transform[nearest].into` | State | Names | Read | `StateTransform.Nearest.Into` |
 | `rules[].decision.onNoChoice[][transformState].transform[nearest].where` | State | Names | Read | `StateTransform.Nearest.Where` |
-| `rules[].decision.onNoChoice[][transformState].transform[nearest].exclude` | State | Expression | Read | `StateTransform.Nearest.Exclude` |
+| `rules[].decision.onNoChoice[][transformState].transform[nearest].exclude` | State | Key | Read | `StateTransform.Nearest.Exclude` |
 | `rules[].decision.onNoChoice[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `rules[].decision.onNoChoice[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `rules[].decision.onNoChoice[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
@@ -1180,12 +1384,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.onNoChoice[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].decision.onNoChoice[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].decision.onNoChoice[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `rules[].decision.onNoChoice[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -1237,12 +1449,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].bindings[].expression` | State | Expression | Read | `RuleBinding.Expression` |
 | `rules[].bindings[].expression{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `rules[].bindings[].expression{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `rules[].bindings[].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `rules[].bindings[].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `rules[].bindings[].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `rules[].bindings[].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].bindings[].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `rules[].bindings[].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `rules[].bindings[].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `rules[].zones` | Zone | Names | Read | `Rule.Zones` |
 | `interactions.interactions[].left` | State | Names | Read | `WorldInteraction.Left` |
 | `interactions.interactions[].right` | State | Names | Read | `WorldInteraction.Right` |
@@ -1256,6 +1476,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `interactions.interactions[].effects[][setState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `interactions.interactions[].effects[][setState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `interactions.interactions[].effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][setState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `interactions.interactions[].effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][setState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `interactions.interactions[].effects[][addState].state` | State | Names | Action | `ActionEffect.AddState.State` |
 | `interactions.interactions[].effects[][addState].key` | State | Key | Read | `ActionEffect.AddState.Key` |
 | `interactions.interactions[].effects[][addState].fromState` | State | Names | Read | `ActionEffect.AddState.FromState` |
@@ -1266,6 +1490,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][addState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `interactions.interactions[].effects[][addState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `interactions.interactions[].effects[][addState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `interactions.interactions[].effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][addState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `interactions.interactions[].effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][addState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `interactions.interactions[].effects[][pushState].state` | State | Names | Action | `ActionEffect.PushState.State` |
 | `interactions.interactions[].effects[][pushState].fromState` | State | Names | Read | `ActionEffect.PushState.FromState` |
 | `interactions.interactions[].effects[][pushState].fromKey` | State | Key | Read | `ActionEffect.PushState.FromKey` |
@@ -1275,6 +1503,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][pushState].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `interactions.interactions[].effects[][pushState].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `interactions.interactions[].effects[][pushState].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `interactions.interactions[].effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][pushState].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `interactions.interactions[].effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][pushState].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `interactions.interactions[].effects[][transformState].transform[transfer].from` | Zone | Names | Action | `StateTransform.Transfer.From` |
 | `interactions.interactions[].effects[][transformState].transform[transfer].to` | Zone | Names | Action | `StateTransform.Transfer.To` |
 | `interactions.interactions[].effects[][transformState].transform[transfer].key` | State | Key | Read | `StateTransform.Transfer.Key` |
@@ -1309,7 +1541,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][transformState].transform[nearest].query` | State | Expression | Read | `StateTransform.Nearest.Query` |
 | `interactions.interactions[].effects[][transformState].transform[nearest].into` | State | Names | Read | `StateTransform.Nearest.Into` |
 | `interactions.interactions[].effects[][transformState].transform[nearest].where` | State | Names | Read | `StateTransform.Nearest.Where` |
-| `interactions.interactions[].effects[][transformState].transform[nearest].exclude` | State | Expression | Read | `StateTransform.Nearest.Exclude` |
+| `interactions.interactions[].effects[][transformState].transform[nearest].exclude` | State | Key | Read | `StateTransform.Nearest.Exclude` |
 | `interactions.interactions[].effects[][transformState].transform[remember].into` | State | Names | Read | `StateTransform.Remember.Into` |
 | `interactions.interactions[].effects[][transformState].transform[remember].key` | State | Key | Read | `StateTransform.Remember.Key` |
 | `interactions.interactions[].effects[][transformState].transform[remember].from` | State | Expression | Read | `StateTransform.Remember.From` |
@@ -1332,12 +1564,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][if].condition[compareValue].left{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `interactions.interactions[].effects[][if].condition[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
 | `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
 | `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][if].condition[compareValue].right{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `interactions.interactions[].effects[][if].condition[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `interactions.interactions[].effects[][if].condition[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `interactions.interactions[].effects[][if].condition[not].predicate…` | | | | re-enters `ActionPredicate` |
@@ -1389,6 +1629,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `generators[].name` | Generator | Declares |  | `GeneratorRow.Name` |
 | `navigation.domains[].medium` | Field | Names | Read | `WorldNavigationDomain.Medium` |
 | `patterns[].name` | Pattern | Declares |  | `PatternRow.Name` |
@@ -1407,6 +1651,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `patterns[].value{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
 | `patterns[].value{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
 | `patterns[].value{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
+| `patterns[].value{tokens}.tokens[][vectorCall].left[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `patterns[].value{tokens}.tokens[][vectorCall].left[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
+| `patterns[].value{tokens}.tokens[][vectorCall].right[cell].name` | State | Names | Read | `VectorOperandToken.Cell.Name` |
+| `patterns[].value{tokens}.tokens[][vectorCall].right[cell].key` | State | Key | Read | `VectorOperandToken.Cell.Key` |
 | `tables[].name` | Table | Declares |  | `TableRow.Name` |
 | `search.jobs[].tokens` | State | Names | Read | `WorldSearchRow.Tokens` |
 | `search.jobs[].board` | State | Names | Read | `WorldSearchRow.Board` |
@@ -1612,6 +1860,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.lattices[][graph].edges[].from` | `GraphEdge.From` | a graph cell id is local to its topology |
 | `state.lattices[][graph].edges[].to` | `GraphEdge.To` | a graph cell id is local to its topology |
 | `state.lattices[][field].reactions[][emit].tag` | `WorldReaction.Emit.Tag` | an emission tag |
+| `state.spaces[].name` | `StateSpace.Name` | a space name declares a vector embedding space local to the document |
 | `markers[].id` | `WorldMarkerRow.Id` | a marker id |
 | `rules[].effects[][if].condition[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |

@@ -141,6 +141,79 @@ public static class StateCellWriter {
 
         return true;
     }
+    /// <summary>Composes one vector-cell write onto <paramref name="row"/> — upsert-or-append plus eviction — running
+    /// the same reserved-cell rule (<see cref="StateReservedCells.TryValidateReservedCell"/>) the running world's
+    /// own mutation pipeline runs.</summary>
+    /// <param name="row">The carrying row (must declare <see cref="CellKind.Vector"/>).</param>
+    /// <param name="key">The cell key to write.</param>
+    /// <param name="vector">The vector value.</param>
+    /// <param name="cells">The composed cell list, on success (or the row's current cells on refusal).</param>
+    /// <param name="evictedKey">The evicted key, or <see langword="null"/> when nothing was evicted.</param>
+    /// <param name="reason">Why the write was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the write composed.</returns>
+    public static bool TryComposeVectorCell(StateRow row, CellName key, StateVector vector, out IReadOnlyList<StateCell> cells, out CellName? evictedKey, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+        ArgumentNullException.ThrowIfNull(argument: vector);
+
+        cells = (row.Cells ?? []);
+        evictedKey = null;
+
+        if (row.Kind != CellKind.Vector) {
+            reason = "is not a vector row";
+
+            return false;
+        }
+
+        if (!StateReservedCells.TryValidateReservedCell(
+            key: key,
+            reason: out reason,
+            row: row
+        )) {
+            return false;
+        }
+
+        var existing = (row.Cells ?? []);
+        var addedNewKey = !ContainsKey(
+            cells: existing,
+            key: key
+        );
+        var replaced = false;
+        var next = new List<StateCell>(capacity: (existing.Count + 1));
+
+        foreach (var cell in existing) {
+            if (
+                !replaced &&
+                (cell.Key == key)
+            ) {
+                next.Add(item: new StateCell(
+                    Key: key,
+                    Vector: vector,
+                    Visibility: cell.Visibility
+                ));
+                replaced = true;
+            } else {
+                next.Add(item: cell);
+            }
+        }
+
+        if (!replaced) {
+            next.Add(item: new StateCell(
+                Key: key,
+                Vector: vector
+            ));
+        }
+
+        cells = ApplyEviction(
+            addedNewKey: addedNewKey,
+            cells: next,
+            evictedKey: out evictedKey,
+            row: row
+        );
+
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Parses a human-authored wire token into a cell's raw-encoded operand, against a row <c>Kind</c>
     /// resolved from the candidate document at compose time — never at console submit time, where the row this token
     /// targets may not exist yet in the same batch (see the document project's cell-upsert mutation for
@@ -155,6 +228,16 @@ public static class StateCellWriter {
     /// <returns><see langword="true"/> when the token parsed under <paramref name="kind"/>'s grammar.</returns>
     public static bool TryParseNumericToken(CellKind kind, string token, out long value, out string reason) {
         switch (kind) {
+            case CellKind.Vector:
+                value = 0L;
+                reason = "vector-kind row takes a vector operand, never a numeric one";
+
+                return false;
+            case CellKind.Text:
+                value = 0L;
+                reason = "text-kind row takes a text operand, never a numeric one";
+
+                return false;
             case CellKind.Fixed:
                 if (FixedQ4816.TryParse(
                     s: token,

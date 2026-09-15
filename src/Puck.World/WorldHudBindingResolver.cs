@@ -181,6 +181,8 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
                 text = (cellText ?? string.Empty);
 
                 break;
+            default:
+                throw new ArgumentOutOfRangeException(paramName: nameof(row.Kind));
         }
     }
     private void ResolveTick(out float fraction, out string text) {

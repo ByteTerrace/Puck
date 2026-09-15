@@ -37,6 +37,7 @@ public static partial class WorldDefinitionValidator {
 
         var catalog = definition.StateCatalog;
         var rows = definition.State;
+        var spacesByName = definition.Spaces.Where(predicate: static s => s is not null).ToDictionary(keySelector: static s => s.Name.Value, elementSelector: static s => s, comparer: StringComparer.Ordinal);
         Dictionary<string, List<WorldStateRow>>? dependentsByRow = null;
 
         while (queue.Count > 0) {
@@ -67,7 +68,8 @@ public static partial class WorldDefinitionValidator {
                 errors: errors,
                 generators: definition.Generators,
                 path: path,
-                row: row
+                row: row,
+                spaces: spacesByName
             );
             ValidateTokenAndPhaseRow(
                 definition: definition,
@@ -213,6 +215,35 @@ public static partial class WorldDefinitionValidator {
                 names.Add(item: clear.Row);
 
                 break;
+            case StateTransform.Mix mix:
+                AddSpellingRowName(mix.Into, names);
+                foreach (var term in (mix.Terms ?? [])) {
+                    AddSpellingRowName(term?.From, names);
+                }
+
+                break;
+            case StateTransform.Mean mean:
+                AddSpellingRowName(mean.From, names);
+                AddSpellingRowName(mean.Into, names);
+                if (!string.IsNullOrWhiteSpace(mean.Where)) {
+                    AddSpellingRowName(mean.Where, names);
+                }
+
+                break;
+            case StateTransform.Nearest nearest:
+                AddSpellingRowName(nearest.From, names);
+                AddSpellingRowName(nearest.Query, names);
+                AddSpellingRowName(nearest.Into, names);
+                if (!string.IsNullOrWhiteSpace(nearest.Where)) {
+                    AddSpellingRowName(nearest.Where, names);
+                }
+
+                break;
+            case StateTransform.Remember remember:
+                AddSpellingRowName(remember.Into, names);
+                AddSpellingRowName(remember.From, names);
+
+                break;
             default:
                 reason = $"transform kind '{transform.GetType().Name}' is not recognized";
 
@@ -221,4 +252,25 @@ public static partial class WorldDefinitionValidator {
 
         return true;
     }
+
+    private static void AddSpellingRowName(string? spelling, ISet<string> names) {
+        if (string.IsNullOrWhiteSpace(spelling)) {
+            return;
+        }
+        spelling = spelling.Trim();
+        if (spelling.StartsWith("vector(", StringComparison.Ordinal)) {
+            return;
+        }
+        var bracketIndex = spelling.IndexOf('[');
+        if (bracketIndex > 0 && spelling.EndsWith(']')) {
+            var rowName = spelling[..bracketIndex].Trim();
+            if (rowName.Length > 0) {
+                names.Add(item: rowName);
+            }
+            return;
+        }
+        names.Add(item: spelling);
+    }
+
 }
+

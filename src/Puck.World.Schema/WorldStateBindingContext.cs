@@ -92,6 +92,7 @@ public static class WorldStateBindingContext {
             : "false"),
             CellKind.Fixed => FixedQ4816.FromRawBits(value: raw).ToString(),
             CellKind.Text => (text ?? string.Empty),
+            CellKind.Vector => string.Empty,
             _ => raw.ToString(provider: CultureInfo.InvariantCulture),
         };
     }
@@ -237,6 +238,12 @@ public static class WorldStateBindingContext {
             }
             if (Advances(row: row)) {
                 errors.Add(item: $"contexts row {index} names family \"{context.Family}\", whose row advances or turns with the tick; control contexts must change through explicit state writes");
+
+                continue;
+            }
+
+            if (row.Kind == CellKind.Vector) {
+                errors.Add(item: $"contexts row {index} names family \"{context.Family}\", whose row is kind vector — vector rows cannot serve as control contexts");
 
                 continue;
             }

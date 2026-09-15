@@ -147,6 +147,16 @@ internal static class HudRowValidation {
                 return;
             }
 
+            if (row.Kind == CellKind.Vector) {
+                Refuse(
+                    errors: errors,
+                    message: $"{path} '{token}' addresses vector row '{parsed.StateName}' — a HUD element cannot bind to a vector row.",
+                    reason: refusal
+                );
+
+                return;
+            }
+
             if (
                 (parsed.StateCellKey is { } cellKey) &&
                 !row.HasCell(key: cellKey)

@@ -124,6 +124,41 @@ public sealed partial class RuleEvaluator {
                     strict: strict,
                     tick: tick
                 );
+            case VectorCopyEffect vectorCopy:
+                return FireVectorCopy(
+                    copy: vectorCopy,
+                    preflight: preflight,
+                    ruleName: ruleName,
+                    tick: tick
+                );
+            case VectorMixEffect vectorMix:
+                return FireVectorMix(
+                    mix: vectorMix,
+                    preflight: preflight,
+                    ruleName: ruleName,
+                    tick: tick
+                );
+            case VectorMeanEffect vectorMean:
+                return FireVectorMean(
+                    mean: vectorMean,
+                    preflight: preflight,
+                    ruleName: ruleName,
+                    tick: tick
+                );
+            case VectorNearestEffect vectorNearest:
+                return FireVectorNearest(
+                    nearest: vectorNearest,
+                    preflight: preflight,
+                    ruleName: ruleName,
+                    tick: tick
+                );
+            case VectorRememberEffect vectorRemember:
+                return FireVectorRemember(
+                    remember: vectorRemember,
+                    preflight: preflight,
+                    ruleName: ruleName,
+                    tick: tick
+                );
         }
 
         if (!effect.SubmitsMutation) {

@@ -95,6 +95,7 @@ public sealed record WorldStateSection(
 /// <param name="Knowledge">See <see cref="StateRow.Knowledge"/>.</param>
 /// <param name="PhaseOf">See <see cref="StateRow.PhaseOf"/>.</param>
 /// <param name="HistoryCursor">See <see cref="StateRow.HistoryCursor"/>.</param>
+/// <param name="Space">See <see cref="StateRow.Space"/>.</param>
 public sealed record WorldStateRow(
     CellName Name,
     CellKind Kind,
@@ -116,7 +117,8 @@ public sealed record WorldStateRow(
     string? ValuesFrom = null,
     StateInverse? Inverse = null,
     StatePhase? Phase = null, StateVisibility? Visibility = null, StateKnowledge? Knowledge = null, string? PhaseOf = null,
-    long HistoryCursor = 0
+    long HistoryCursor = 0,
+    string? Space = null
 ) : StateRow(
     Name,
     Kind,
@@ -139,7 +141,8 @@ public sealed record WorldStateRow(
     Visibility,
     Knowledge,
     PhaseOf,
-    HistoryCursor
+    HistoryCursor,
+    Space
 ) {
     /// <summary>Initializes a document row over an engine row, adding the two world-only traits.</summary>
     /// <param name="row">The engine row.</param>
@@ -169,7 +172,8 @@ public sealed record WorldStateRow(
         Visibility: row.Visibility,
         Knowledge: row.Knowledge,
         PhaseOf: row.PhaseOf,
-        HistoryCursor: row.HistoryCursor
+        HistoryCursor: row.HistoryCursor,
+        Space: row.Space
     ) {
     }
 }

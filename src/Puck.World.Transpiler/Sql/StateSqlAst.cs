@@ -217,7 +217,7 @@ public sealed record SqlVectorLiteralExpression(
     SourceSpan Span
 ) : SqlExpression(Span);
 
-/// <summary>Function call expression: <c>cosine(a, b)</c>, <c>dot(a, b)</c>, etc.</summary>
+/// <summary>Function call expression: <c>similarity(a, b)</c>, <c>dot(a, b)</c>, etc.</summary>
 public sealed record SqlFunctionCallExpression(
     string FunctionName,
     IReadOnlyList<SqlExpression> Arguments,

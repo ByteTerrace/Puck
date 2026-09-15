@@ -120,6 +120,15 @@ public sealed class WorldOwnedWorlds {
                 continue;
             }
 
+            if (!WorldIdentity.TryValidateSpacesAgainstHost(identitySpaces: document.Spaces, hostSpaces: m_template.Spaces, out var spaceMismatchReason)) {
+                RefuseInPlace(
+                    fileName: fileName,
+                    reason: spaceMismatchReason
+                );
+
+                continue;
+            }
+
             m_identities.Add(item: new WorldIdentity(
                 document: document,
                 defaults: Defaults
@@ -827,6 +836,9 @@ public sealed class WorldOwnedWorlds {
         ArgumentNullException.ThrowIfNull(argument: document);
         if (document.Identity is null) {
             reason = "document has no identity section";
+            return false;
+        }
+        if (!WorldIdentity.TryValidateSpacesAgainstHost(identitySpaces: document.Spaces, hostSpaces: m_template.Spaces, out reason)) {
             return false;
         }
         var incoming = new WorldIdentity(

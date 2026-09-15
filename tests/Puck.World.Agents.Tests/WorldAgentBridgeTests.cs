@@ -544,10 +544,150 @@ public sealed class WorldAgentBridgeTests {
         ));
     }
 
+    [Fact]
+    public async Task WriteVectorAsync_StampsPrincipalAndSuppliedKey() {
+        var link = new RecordingLink();
+        var principal = WorldPrincipal.Peer(
+            generation: 1,
+            index: 4
+        );
+        var bridge = Bridge(
+            bodyIndex: 4,
+            link: link,
+            principal: principal
+        );
+
+        var components = new sbyte[32];
+        components[0] = 127;
+
+        var receipt = await bridge.WriteVectorAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            components: components,
+            key: "cell1",
+            row: "embedding"
+        );
+
+        Assert.Equal(
+            expected: "write_vector:embedding:cell1",
+            actual: receipt.Action
+        );
+        Assert.Equal(
+            expected: principal,
+            actual: link.LastPrincipal
+        );
+
+        var payload = Assert.IsType<WorldSubmissionPayload.Mutation>(@object: link.LastPayload);
+        var mutation = Assert.IsType<WorldMutation.UpsertStateCell>(@object: payload.Value);
+        Assert.Equal(
+            expected: "embedding",
+            actual: mutation.Row
+        );
+        Assert.Equal(
+            expected: "cell1",
+            actual: mutation.Key
+        );
+        Assert.Equal(
+            expected: principal,
+            actual: mutation.Principal
+        );
+        Assert.NotNull(@object: mutation.Vector);
+        Assert.True(condition: mutation.Vector.Components.SequenceEqual(other: components));
+    }
+
+    [Fact]
+    public async Task WriteVectorAsync_FallsBackToSlotKeyWhenNull() {
+        var link = new RecordingLink();
+        var principal = WorldPrincipal.Addon(name: "guide");
+        var bridge = Bridge(
+            bodyIndex: 1,
+            link: link,
+            principal: principal
+        );
+
+        var components = new sbyte[32];
+        components[0] = 127;
+
+        var receipt = await bridge.WriteVectorAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            components: components,
+            key: null,
+            row: "slot_row"
+        );
+
+        Assert.Equal(
+            expected: $"write_vector:slot_row:{StateRow.SlotKey.Value}",
+            actual: receipt.Action
+        );
+        Assert.Equal(
+            expected: principal,
+            actual: link.LastPrincipal
+        );
+
+        var payload = Assert.IsType<WorldSubmissionPayload.Mutation>(@object: link.LastPayload);
+        var mutation = Assert.IsType<WorldMutation.UpsertStateCell>(@object: payload.Value);
+        Assert.Equal(
+            expected: "slot_row",
+            actual: mutation.Row
+        );
+        Assert.Equal(
+            expected: StateRow.SlotKey.Value,
+            actual: mutation.Key
+        );
+        Assert.Equal(
+            expected: principal,
+            actual: mutation.Principal
+        );
+    }
+
+    [Fact]
+    public async Task WriteVectorAsync_RefusesNonUnitOrInvalidComponentCountsBeforeDispatch() {
+        var link = new RecordingLink();
+        var bridge = Bridge(
+            bodyIndex: 0,
+            link: link,
+            principal: WorldPrincipal.Console
+        );
+
+        await Assert.ThrowsAsync<ArgumentException>(testCode: async () =>
+            await bridge.WriteVectorAsync(
+                cancellationToken: TestContext.Current.CancellationToken,
+                components: new sbyte[32],
+                key: "k",
+                row: " "
+            ));
+
+        await Assert.ThrowsAsync<ArgumentException>(testCode: async () =>
+            await bridge.WriteVectorAsync(
+                cancellationToken: TestContext.Current.CancellationToken,
+                components: ReadOnlyMemory<sbyte>.Empty,
+                key: "k",
+                row: "embedding"
+            ));
+
+        await Assert.ThrowsAsync<ArgumentException>(testCode: async () =>
+            await bridge.WriteVectorAsync(
+                cancellationToken: TestContext.Current.CancellationToken,
+                components: new sbyte[] { 1, 2, 3 },
+                key: "k",
+                row: "embedding"
+            ));
+
+        await Assert.ThrowsAsync<ArgumentException>(testCode: async () =>
+            await bridge.WriteVectorAsync(
+                cancellationToken: TestContext.Current.CancellationToken,
+                components: new sbyte[32],
+                key: "k",
+                row: "embedding"
+            ));
+
+        Assert.Null(@object: link.LastPayload);
+    }
+
     private sealed class RecordingLink : IPrincipalServerLink {
         public bool CompleteQueries { get; init; } = true;
         public long CorrelationId { get; init; } = 1;
         public WorldSubmissionPayload? LastPayload { get; private set; }
+        public WorldPrincipal LastPrincipal { get; private set; }
         public WorldQuery? LastQuery { get; private set; }
         public WorldPrincipal LastQueryPrincipal { get; private set; }
         public List<WorldPrincipal> QueryPrincipals { get; } = [];
@@ -577,6 +717,7 @@ public sealed class WorldAgentBridgeTests {
         }
         public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) {
             LastPayload = payload;
+            LastPrincipal = principal;
             return CorrelationId;
         }
         public void SubmitIntent(in IntentSubmission submission) => throw new NotSupportedException();

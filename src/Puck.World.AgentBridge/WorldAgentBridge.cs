@@ -141,6 +141,23 @@ public sealed class WorldAgentBridge {
             : "No local correlation was minted. The link may have minted the envelope remotely or refused it before authority; observe the body to verify the outcome.")
         );
     }
+    private WorldAgentActionReceipt Submit(string action, WorldMutation mutation) {
+        var correlationId = m_link.SubmitEnvelope(
+            payload: new WorldSubmissionPayload.Mutation(Value: mutation),
+            principal: Principal
+        );
+        var correlated = (correlationId != 0L);
+
+        return new WorldAgentActionReceipt(
+            Action: action,
+            BodyIndex: BodyIndex,
+            Correlated: correlated,
+            CorrelationId: correlationId,
+            Message: (correlated
+            ? "Submitted to Puck authority. This receipt does not claim the action was authorized or applied; observe the body to verify the outcome."
+            : "No local correlation was minted. The link may have minted the envelope remotely or refused it before authority; observe the body to verify the outcome.")
+        );
+    }
     private static bool VerdictAllows(QueryAnswer answer) => (!answer.Refused &&
         (answer.Payload is GrantVerdict verdict) &&
         verdict.IsAllowed);
@@ -367,4 +384,47 @@ public sealed class WorldAgentBridge {
             ),
             cancellationToken: cancellationToken
         );
+    /// <summary>Submits an authoritative vector-cell write into an admitted state row.</summary>
+    /// <param name="row">The authored row name.</param>
+    /// <param name="key">The cell key, or null for the row's slot cell.</param>
+    /// <param name="components">The unit vector components to write.</param>
+    /// <param name="cancellationToken">Cancels the action while it is waiting in the dispatcher.</param>
+    /// <returns>A submission receipt. Read back the row to learn the resulting authoritative state.</returns>
+    /// <exception cref="ArgumentException"><paramref name="row"/> is blank, or <paramref name="components"/> is not an admitted unit vector.</exception>
+    public ValueTask<WorldAgentActionReceipt> WriteVectorAsync(
+        string row,
+        string? key,
+        ReadOnlyMemory<sbyte> components,
+        CancellationToken cancellationToken = default
+    ) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: row);
+        if (!StateVector.TryCreate(components: components.Span, out var vector, out var error)) {
+            throw new ArgumentException(
+                message: (error ?? "Invalid vector components."),
+                paramName: nameof(components)
+            );
+        }
+
+        return m_dispatcher.InvokeAsync(
+            operation: () => {
+                var cellKey = (key ?? StateRow.SlotKey.Value);
+
+                return Submit(
+                    action: $"write_vector:{row}:{cellKey}",
+                    mutation: new WorldMutation.UpsertStateCell(
+                        CycleTokens: null,
+                        Key: cellKey,
+                        Kind: WorldDocumentWriteKind.Set,
+                        Principal: Principal,
+                        RawToken: null,
+                        Row: row,
+                        Text: null,
+                        Value: 0L,
+                        Vector: vector
+                    )
+                );
+            },
+            cancellationToken: cancellationToken
+        );
+    }
 }

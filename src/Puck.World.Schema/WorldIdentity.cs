@@ -480,4 +480,27 @@ public sealed class WorldIdentity {
         Document = Document.WithWorldState(rows: state);
         m_factsRevision++;
     }
+    /// <summary>Validates that any space in an identity document sharing a name with a host space satisfies <see cref="StateSpace.HasSameIdentity"/>.</summary>
+    public static bool TryValidateSpacesAgainstHost(IReadOnlyList<StateSpace>? identitySpaces, IReadOnlyList<StateSpace>? hostSpaces, out string reason) {
+        reason = string.Empty;
+        if ((identitySpaces is null) || (hostSpaces is null) || (identitySpaces.Count == 0) || (hostSpaces.Count == 0)) {
+            return true;
+        }
+
+        var hostByName = hostSpaces.Where(predicate: static s => s is not null).ToDictionary(keySelector: static s => s.Name.Value, elementSelector: static s => s, comparer: StringComparer.Ordinal);
+
+        foreach (var space in identitySpaces) {
+            if (space is null) {
+                continue;
+            }
+
+            if (hostByName.TryGetValue(key: space.Name.Value, value: out var hostSpace) && !space.HasSameIdentity(other: hostSpace)) {
+                reason = $"identity space '{space.Name}' does not match host space identity (model: '{space.Model}' vs '{hostSpace.Model}', revision: '{space.Revision}' vs '{hostSpace.Revision}', dimensions: {space.Dimensions} vs {hostSpace.Dimensions})";
+
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

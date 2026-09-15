@@ -548,6 +548,46 @@ public static class RuleEvaluation {
             : indirection.Key
         );
 
+        if (indirection.Kind == CellKind.Text) {
+            var found = ((indirection.CellKey != default) && (indirection.InnerKeyBinding == BoundKey.None))
+                ? StateReader.TryReadHandle(
+                    catalog: reader.Catalog,
+                    engineTick: reader.EngineTick,
+                    handle: indirection.Handle,
+                    key: indirection.CellKey,
+                    rawValue: out _,
+                    row: out _,
+                    store: reader.Store,
+                    text: out var textVal,
+                    tick: reader.Tick
+                )
+                : StateReader.TryReadHandle(
+                    catalog: reader.Catalog,
+                    engineTick: reader.EngineTick,
+                    handle: indirection.Handle,
+                    key: innerKey,
+                    rawValue: out _,
+                    row: out _,
+                    store: reader.Store,
+                    text: out textVal,
+                    tick: reader.Tick
+                );
+
+            if (!found || string.IsNullOrEmpty(textVal)) {
+                return string.Empty;
+            }
+
+            if (!CellName.TryParse(candidate: textVal, name: out var parsedKey, reason: out _)) {
+                throw new RuleException(
+                    refusal: RuleRefusal.KeyIndirectionInvalid,
+                    ruleName: string.Empty,
+                    detail: $"Text '{textVal}' is not a valid cell key"
+                );
+            }
+
+            return parsedKey.Value;
+        }
+
         return IndexKeyCache.Get(index: IntegerOf(value: (((indirection.CellKey != default) && (indirection.InnerKeyBinding == BoundKey.None))
             ? ReadFixed(
                 reader: reader,

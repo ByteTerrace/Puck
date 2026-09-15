@@ -533,6 +533,28 @@ public static partial class WorldDecompiler {
                         continue;
                     }
                 }
+            } else if (run.Count == 1) {
+                var name = run[0].Row["name"]?.ToString() ?? "";
+                var splitIdx = -1;
+                for (var k = 1; k < name.Length; k++) {
+                    if (char.IsUpper(name[k])) {
+                        splitIdx = k;
+                        break;
+                    }
+                }
+                if (splitIdx > 0) {
+                    var prefix = name[..splitIdx];
+                    var colName = char.ToLowerInvariant(name[splitIdx]) + name[(splitIdx + 1)..];
+                    if (prefix.Length >= 2 && IsValidSqlIdentifier(prefix) && IsValidSqlIdentifier(colName)) {
+                        groups.Add(new MultiColumnCandidateGroup(
+                            Indices: [run[0].Index],
+                            Rows: [run[0].Row],
+                            Keys: firstKeys
+                        ));
+                        i = j;
+                        continue;
+                    }
+                }
             }
 
             i++;
@@ -543,7 +565,7 @@ public static partial class WorldDecompiler {
 
     private static (string? Sql, Dictionary<string, (string TableName, string ColumnName)> RowMap) DecompileMultiColumnTable(List<JsonObject> rows) {
         var emptyMap = new Dictionary<string, (string TableName, string ColumnName)>(StringComparer.Ordinal);
-        if (rows.Count < 2) {
+        if (rows.Count == 0) {
             return (null, emptyMap);
         }
 
@@ -552,11 +574,32 @@ public static partial class WorldDecompiler {
             return (null, emptyMap);
         }
 
-        var commonPrefix = FindCommonPrefix(rowNames);
-        if (commonPrefix.Length < 2 || !IsValidSqlIdentifier(commonPrefix)) {
-            return (null, emptyMap);
+        string tableName;
+        string? singleColName = null;
+        if (rows.Count == 1) {
+            var rName = rowNames[0];
+            var splitIdx = -1;
+            for (var k = 1; k < rName.Length; k++) {
+                if (char.IsUpper(rName[k])) {
+                    splitIdx = k;
+                    break;
+                }
+            }
+            if (splitIdx <= 0) {
+                return (null, emptyMap);
+            }
+            tableName = rName[..splitIdx];
+            singleColName = char.ToLowerInvariant(rName[splitIdx]) + rName[(splitIdx + 1)..];
+            if (tableName.Length < 2 || !IsValidSqlIdentifier(tableName) || !IsValidSqlIdentifier(singleColName)) {
+                return (null, emptyMap);
+            }
+        } else {
+            var commonPrefix = FindCommonPrefix(rowNames);
+            if (commonPrefix.Length < 2 || !IsValidSqlIdentifier(commonPrefix)) {
+                return (null, emptyMap);
+            }
+            tableName = commonPrefix;
         }
-        var tableName = commonPrefix;
 
         var rowMap = new Dictionary<string, (string TableName, string ColumnName)>(StringComparer.Ordinal);
         var colDefs = new List<string>();
@@ -567,8 +610,10 @@ public static partial class WorldDecompiler {
             var rName = rowNames[i];
             string colName;
 
-            if (rName.Length > commonPrefix.Length && rName.StartsWith(commonPrefix, StringComparison.Ordinal)) {
-                var suffix = rName[commonPrefix.Length..];
+            if (rows.Count == 1) {
+                colName = singleColName!;
+            } else if (rName.Length > tableName.Length && rName.StartsWith(tableName, StringComparison.Ordinal)) {
+                var suffix = rName[tableName.Length..];
                 if (char.IsUpper(suffix[0])) {
                     colName = char.ToLowerInvariant(suffix[0]) + suffix[1..];
                 } else {

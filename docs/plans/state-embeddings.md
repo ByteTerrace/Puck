@@ -26,7 +26,7 @@ own host service composition.
 
 ## Implementation status
 
-Checked against `e19bb5b3b` plus the uncommitted working tree.
+Checked against `239770787` plus the staged working tree.
 
 ### Implemented
 
@@ -46,102 +46,134 @@ Keep the following, and build on it without reworking it.
   with a scalar reference, lanes folded every 256 blocks), plus `CosineQ16`,
   `AdmissionTolerance`, `IsUnitAdmissible`, `TryNormalize`, and `TryQuantizeUnit`.
   The six `signed-byte-vectors.*` laws pass at the default tier.
-- **State types:**
-  - `CellKind.Vector` and `StateValueKind.Vector`;
-  - `StateVector`, with byte equality and a base64url JSON converter;
-  - `StateSpace`, with `HasSameIdentity`;
-  - `StateCell.Vector` and `StateRow.Space`;
-  - `IStateSection.Spaces`, `StateSection.Spaces`, and `WorldStateSection.Spaces`;
-  - the `StateCapacity` vector constants;
-  - JSON arms for vector cells and `space`, and a schema branch that forbids `min`
-    and `max` on vectors.
-- **Frame:**
-  - `FrameRowKind.Vector` with `VectorOffset`, `Dimensions`, `VectorCells`, and
-    `VectorCellStart`, which `Fits` compares;
-  - one contiguous `sbyte` buffer, with a per-cell load cache, zeroing, a byte
-    journal behind a `long`-journal sentinel, `CopyFrom`, and the `StateFrameHash`
-    fold;
-  - `TryStoredVector`, which falls back to row cells when a row is not framed;
-  - `TryWriteVector`;
-  - `TryApplyVector` for `ResolvedVectorTransform.Copy`, `Mix`, and `Mean`, without
-    allocation.
+- **State types:** `CellKind.Vector`, `StateVector` (byte equality, base64url JSON),
+  `StateSpace` (`HasSameIdentity`), `StateCell.Vector`, `StateRow.Space`,
+  `IStateSection.Spaces`, the `StateCapacity` vector constants, and the JSON and schema
+  arms.
+- **Frame:** `FrameRowKind.Vector`, one contiguous `sbyte` buffer with its journal and
+  `StateFrameHash` fold, `TryStoredVector`, `TryWriteVector`, and allocation-free
+  `TryApplyVector`. `WorldServer.RuleFrame`, `WorldServer.Step` (search), and
+  `BrowserSession` pass `WorldStateSpaces.Find` as the space resolver. Tests:
+  `VectorFrameTests`.
+- **Transforms:** `StateTransform.Mix`, `Mean`, `Nearest`, `Remember`, and
+  `VectorTerm`; the `VectorTransforms` kernels; `ResolvedVectorTransform`;
+  `StateMutation.ApplyVector` and `StateMutation.UpsertCell.Vector`. Tests:
+  `VectorTransformTests`.
+- **Rule compilation and evaluation** (`RuleCompiler.Vectors.cs`,
+  `RuleEvaluator.Vectors.cs`):
+  - `dot`, `similarity`, and `identical` compile to `VectorCallOperand`; copy and the
+    four transforms compile to the `Vector*Effect` facts;
+  - every cost matches the cost table, and literal-key reads allocate nothing;
+  - operand kind, space, `mix` shape, `where`, `k`, and `nearest` destination shape
+    refuse at compile time;
+  - `addState`, `countdownState`, `scheduleState`, and `pushState` on a vector row
+    refuse with `VectorEffectNotAdmitted`;
+  - `Text` key indirection resolves in `RuleEvaluation.ResolveKey`.
 
-  `WorldServer.RuleFrame`, `WorldServer.Step` (search), and `BrowserSession` pass
-  `WorldStateSpaces.Find` as the space resolver. Tests: `VectorFrameTests`.
-- **Transforms and resolved forms:**
-  - `StateTransform.Mix`, `Mean`, `Nearest`, `Remember`, and `VectorTerm`;
-  - the `VectorTransforms` kernels (`TryMix`, `TryMean`, `SelectNearest`,
-    `TryRemember`);
-  - `ResolvedVectorTransform` (thresholds pre-parsed to raw values);
-  - `StateMutation.ApplyVector` and `StateMutation.UpsertCell.Vector`, which
-    `FrameHost` routes.
-
-  Tests: `VectorTransformTests`.
-- **Expression and effect types, not yet used by the compiler:**
-  - `ExpressionOp.Dot`, `Similarity`, and `Identical`;
-  - `ValueToken.VectorCall` with `VectorOperandToken`, parsed by `ExpressionSpelling`
-    (including `vector("…")`);
-  - `CompiledVectorOperand` and `VectorCallOperand`;
-  - `VectorCopyEffect`, `VectorMixEffect`, `VectorMeanEffect`, `VectorNearestEffect`,
-    and `VectorRememberEffect`;
-  - `CompiledCellRef.Kind` (for `Text` key indirection);
-  - `ActionEffect.SetState.Vector`.
+  Tests: `VectorCostTests`, `VectorExpressionTests`, `VectorEffectTests`,
+  `VectorRefusalTests`, `VectorTraceTests`, and `TextKeyIndirectionTests`.
+- **Schema:** space validation, row space resolution, the trait, domain, cell, HUD,
+  response, search, and binding refusals, space identity checks across basis, imports,
+  and owned worlds, `WorldObservedCell.Vector`, and the name registry sites
+  (`docs/world-name-registry.md` regenerated). Tests: `WorldVectorSchemaTests`.
+- **Server and surfaces:**
+  - `WorldMutation.UpsertStateCell.Vector` and its `TryComposeCellUpsert` arm;
+  - `MapStateMutation` for `ApplyVector`, routing in `WorldServer.RuleHost.cs`, and
+    sparse `mix`, `mean`, `nearest`, and `remember` in `WorldStateTransforms.Vectors.cs`;
+  - vector folding in `WorldRuntimeStateHash`;
+  - the `world.state` digest echo and `world.state.similar`;
+  - `WorldAgentBridge.WriteVectorAsync` and browser vector cell reads and writes.
 - **Refusals and codes.** The vector `RuleRefusal` members exist with their doors, and
   `PuckDiagnosticCodes` holds `PUCK077`–`PUCK088` and `PUCK_LINT_010` exactly as
   tabled in Part 2.
-- **Names.** `WorldNameRegistry` registers the transform fields.
 
-### Open defects in existing code
+### Open defects
 
-Fix these first. Each has a done condition.
+Fix these in order. Each has a done condition.
 
-1. **Effect costs don't match the cost table in Part 1.** The facts return
-   `2 + dimensions` (copy), `2 + terms × dimensions` (mix),
-   `2 + capacity × dimensions` (mean and remember), and
-   `2 + capacity × dimensions + k × capacity` (nearest). Make every
-   `EffectFact.Cost` and `VectorCallOperand.Cost` return exactly the table's value,
-   including the `similarity` factor of 3 for `nearest` into `Fixed`/`Text` and for
-   `remember`. **Done** when a test asserts each cost at 256 dimensions.
-2. **`CompiledVectorOperand.TryReadSpan` re-parses literal keys on every read.** Use
-   `CellKey` for literal and slot keys, and parse only a dynamically resolved key.
-   **Done** when a literal-key `dot` evaluates with no allocation.
-3. **SQL `embed(...)` is a stub.** `WorldDocumentEmitter.Sql.cs` writes `""` into
-   `vector` and `embed("…")` into `query` when no lock entry resolves. Resolve
-   through `EmbeddingLock` (work step 5), and write only `vector("<base64url>")` or
-   raw base64url into JSON. **Done** when a SQL `embed` literal lowers to the same
-   bytes as the native literal.
-4. **A stale comment.** The `SqlFunctionCallExpression` comment in `StateSqlAst.cs`
-   names `cosine`; it should name `similarity`.
+1. **A copy into an absent key is refused.** `FireVectorCopy` submits
+   `ApplyVector(Copy)`, and for a cell source `MapResolvedVectorTransform`
+   (`WorldServer.RuleFrame.cs`) sends `RawToken: "row[key]"`, which
+   `TryComposeCellUpsert` decodes as base64url. Make `FireVectorCopy` read the source
+   span and submit `StateMutation.UpsertCell.Vector` carrying a `StateVector` for every
+   copy, literal or cell. Delete `ResolvedVectorTransform.Copy`, every arm that
+   handles it, and its cases in `VectorFrameTests` and `VectorTransformTests`. **Done** when a test fires `memories[$each] = events[$each]` into an
+   absent key through the world server and reads back the copied bytes.
+2. **Cross-row `nearest` corrupts a `Fixed` threshold.** `MapResolvedVectorTransform`
+   writes the raw Q16 `Threshold` with `long.ToString`, and `TryNearest` parses it as a
+   decimal, so `0.5` becomes `32768.0`. Write `FixedQ4816.FromRawBits(raw).ToString()`
+   when `into` is `Fixed` or `Text`, and the integer when `into` is `Int`. **Done** when
+   a cross-row `nearest` into `Fixed` with `threshold: 0.5` writes exactly the
+   candidates scoring at least `0.5`.
+3. **Vector row ceilings mis-size rows without `capacity`.** Both `effectiveCapacity`
+   computations in `WorldDefinitionValidator.State.cs` fall back to `MaxCellsPerRow`.
+   Use `row.CellCeiling`. **Done** when `table events : Vector { ambush = … gift = … }`
+   in a 256-dimension space validates.
+4. **Console transforms skip checks the rule compiler makes.** In
+   `WorldStateTransforms.Vectors.cs`:
+   - compare spaces with `HasSameIdentity`, not `Dimensions`, for every operand pair;
+   - refuse a `where` row that is not a keyed `Bool` row;
+   - refuse a keyed `nearest` `into` without a declared `capacity` instead of falling
+     back to `CellCeiling`;
+   - refuse a `Text` `into` that is not a slot, or has `k` other than `1`.
+
+   Delete `WorldDefinitionValidator.TryValidateTransform`: nothing calls it, and the
+   rule compiler and `WorldStateTransforms` own these checks. Move its tests onto
+   `world.state.transform`. **Done** when `world.state.transform` refuses each shape
+   above by name.
+5. **Transform grants demand Edit on rows they only read.**
+   `WorldStateTransforms.Subjects` returns sources for `mix`, `mean`, `nearest`, and
+   `remember`. Return only the written row, as `Arrange` and `BoardCombine` do.
+   **Done** when a principal holding Edit only on `into` applies each transform through
+   `world.state.transform`.
+6. **A malformed `exclude` is ignored.** `ResolveVectorNearestTransform`
+   (`RuleCompiler.Vectors.cs`) and `FireVectorNearest` (`RuleEvaluator.Vectors.cs`)
+   drop an `exclude` that is neither a dynamic key nor a `CellName`. Refuse with
+   `VectorExcludeKey` at compile time, and fail the effect at evaluation. **Done** when
+   `VectorRefusalTests` covers both.
+7. **No vector trace records.** `RuleEvaluator.Vectors.cs` records nothing. Record each
+   vector call's value, what `nearest` wrote, and `remember`'s verdict with its
+   matching key. **Done** when `VectorTraceTests` asserts all three in
+   `DescribeTrace` output.
+8. **`puck_state_vector_write` is not dispatched.** `RemoteMcpHost.StateVectorWriteTool`
+   is defined but absent from the tool name lists in `RemoteMcpTools.cs` and
+   `OperatorMcpServer.cs`. List it and route it to `WorldAgentBridge.WriteVectorAsync`.
+   **Done** when an MCP call writes a vector through a granted principal and refuses an
+   ungranted one.
+9. **The HUD resolver renders a vector.** `WorldHudBindingResolver.cs` handles
+   `CellKind.Vector` by returning empty text. Validation already refuses the binding,
+   so throw as the `default` arm does.
+10. **Addon guests are not refused by name.** `WorldAddonMutationDecoder.DecodeStateCell`
+    sends a `Vector` cell to the numeric reader. Add a `Vector` arm that refuses by
+    name. **Done** when a test shows an addon vector write refused with a message
+    naming the vector kind.
+11. **SQL `embed(...)` is a stub.** `WorldDocumentEmitter.Sql.cs` writes `""` into
+    `vector` and `embed("…")` into `query` when no lock entry resolves. Resolve through
+    `EmbeddingLock` (work step 3), and write only `vector("<base64url>")` or raw
+    base64url into JSON. **Done** when a SQL `embed` literal lowers to the same bytes as
+    the native literal.
 
 ### Not started
 
-- rule compilation and evaluation;
-- `Text` key indirection;
-- the schema validator and composition checks;
-- the world server's mutation, routing, sparse transforms, and hashing;
-- console, agent bridge, MCP, and HUD;
+- the vector tests in `Puck.World.Tests`, `Puck.World.Browser.Tests`, and
+  `Puck.World.Agents.Tests` (Part 3);
 - the `Puck.Embeddings` and `Puck.World.Embeddings` projects;
 - `puck embed` and the lock file;
-- native `.puck` lowering, decompiler, and language server for vectors;
+- native `.puck` lowering, decompiler, language server, and linter for vectors;
 - runtime embedding connections;
 - samples and docs.
 
 ## Work order
 
-1. Fix the open defects 1, 2, and 4.
-2. **Rule compilation and evaluation.** Compile `VectorCall`, copy, `mix`, `mean`,
-   `nearest`, and `remember` into the existing facts. Add `Text` key indirection.
-   Have evaluation submit `ApplyVector` or `UpsertCell.Vector`.
-3. **`Puck.World.Schema`:** validation, composition, disclosure, and the remaining
-   `CellKind` arms.
-4. **`Puck.World.Protocol` and `Puck.World.Server`:** the mutation, compose, routing,
-   sparse transforms, and hashing. Then the console, agent bridge, MCP, HUD, and
-   browser surfaces.
-5. **`Puck.Embeddings`, `EmbeddingLock`, and `puck embed`** (`--check`, `probe`).
-   This also fixes defect 3.
-6. **Native `.puck`:** lowering, decompiler, language server, and linter.
-7. **Runtime embedding connections** and `Puck.World.Embeddings`.
-8. **Finish:** samples, docs, and the full command list in Part 3.
+1. Fix open defects 1–10.
+2. Add the missing tests listed in Part 3 for `Puck.State`, `Puck.World.Schema`,
+   `Puck.World.Tests`, `Puck.World.Browser.Tests`, and `Puck.World.Agents.Tests`, and
+   fix whatever they expose.
+3. **`Puck.Embeddings`, `EmbeddingLock`, and `puck embed`** (`--check`, `probe`).
+   This also fixes defect 11.
+4. **Native `.puck`:** lowering, decompiler, language server, and linter.
+5. **Runtime embedding connections** and `Puck.World.Embeddings`.
+6. **Finish:** samples, docs, and the full command list in Part 3.
 
 Run each step's tests before starting the next.
 
@@ -254,8 +286,8 @@ them with `PUCK041`.
   - every other domain;
   - `addState`, `countdownState`, `scheduleState`, and `pushState`;
   - HUD bindings.
-- **Ceilings.** `capacity × dimensions ≤ 65536` per row, and at most 4 MiB across all
-  vector rows.
+- **Ceilings.** `StateRow.CellCeiling × dimensions ≤ 65536` per row, and at most 4 MiB
+  across all vector rows.
 - **`evicts`.** The `table` declaration has an `evicts` modifier for every row kind,
   and it requires `capacity`.
 
@@ -281,8 +313,9 @@ when that row is `Text` (`CompiledCellRef.Kind`). Text that is not a `CellName` 
 with `KeyIndirectionInvalid`.
 
 **Mismatches.** A non-vector operand or a space mismatch refuses: at compile time when
-both rows are known (`VectorOperandNotVector`, `VectorSpaceMismatch`), and at the
-validator for authored transforms.
+both rows are known (`VectorOperandNotVector`, `VectorSpaceMismatch`), and in
+`WorldStateTransforms` for console-submitted transforms. Spaces match by
+`HasSameIdentity`.
 
 Costs, in rule work units, where `d` is the space's dimensions:
 
@@ -366,11 +399,11 @@ transform recall = nearest(from: memories, query: "situation", into: recalled, k
 
 | SQL | Native |
 |---|---|
-| `CREATE TABLE t (key TEXT PRIMARY KEY, embedding VECTOR(lore)) CAPACITY 128 EVICTS` | a `Vector` row |
-| `INSERT INTO t (key, embedding) VALUES ('a', embed('text'))` | a vector cell; `vector('…')` spells bytes |
+| `CREATE TABLE t (id TEXT PRIMARY KEY, embedding VECTOR(lore)) CAPACITY 128 EVICTS` | a `Vector` row |
+| `INSERT INTO t (id, embedding) VALUES ('a', embed('text'))` | a vector cell; `vector('…')` spells bytes |
 | `WHERE similarity(a.embedding, b.embedding) > 0.6`, `dot(...)`, `identical(...)` | expression functions |
 | `UPDATE t SET embedding = u.embedding WHERE …` | copy |
-| `INSERT INTO r (key, score) SELECT key, similarity(embedding, q.embedding) FROM t [WHERE …] ORDER BY embedding <=> q.embedding [DESC] LIMIT k` | `nearest`; `WHERE similarity(...) >= x` is `threshold`, `DESC` is `farthest`, a `Bool` column is `where`, `key <> 'x'` is `exclude` |
+| `INSERT INTO r (id, score) SELECT id, similarity(embedding, q.embedding) FROM t [WHERE …] ORDER BY embedding <=> q.embedding [DESC] LIMIT k` | `nearest`; `WHERE similarity(...) >= x` is `threshold`, `DESC` is `farthest`, a `Bool` column is `where`, `id <> 'x'` is `exclude` |
 
 `mix`, `mean`, and `remember` have no SQL spelling.
 
@@ -382,19 +415,24 @@ transform recall = nearest(from: memories, query: "situation", into: recalled, k
   operand is a `VectorCallOperand`. `RuleWorkBudget.ExpressionCost` uses that
   operand's cost.
 - **Effects.** Copy and the four transforms compile to the `Vector*Effect` facts. At
-  evaluation each resolves keys against the evaluator's bindings and submits
-  `StateMutation.ApplyVector` (or `UpsertCell.Vector` for a literal or copied write),
-  with concrete ordinals, keys, and `StateVector` constants.
-- **Journal and replay.** `WorldServer.RuleFrame.MapStateMutation` maps the resolved
-  form to `WorldMutation.TransformState` or `UpsertStateCell`, naming literal keys and
-  `vector("…")` literals, so the journal and replay record concrete operations.
+  evaluation each resolves keys against the evaluator's bindings.
+  - Copy reads its source and submits `StateMutation.UpsertCell.Vector` carrying a
+    `StateVector`.
+  - `mix`, `mean`, `nearest`, and `remember` submit `StateMutation.ApplyVector` with
+    concrete ordinals, keys, and `StateVector` constants.
+- **Journal and replay.** `WorldServer.RuleFrame.MapStateMutation` maps
+  `UpsertCell.Vector` to `UpsertStateCell` with `Vector`, and `ApplyVector` to
+  `TransformState`. It names literal keys and `vector("…")` literals, and writes
+  `threshold` and `unlessWithin` as canonical decimals in the score's kind, so the
+  journal and replay record concrete operations.
 - **Routing** in `WorldServer.RuleHost.cs` `IRuleHost.TryApply`:
-  - copy, `mix`, or `mean` into an existing framed cell applies on the frame and queues
-    the mutation;
+  - a vector write, `mix`, or `mean` into an existing framed cell applies on the frame
+    and queues the mutation;
   - an absent key goes cross-row;
   - `nearest` and `remember` always go cross-row.
 
   `FrameHost` applies the frame cases and refuses the rest.
+- **Grants.** `WorldStateTransforms.Subjects` names only the row a transform writes.
 
 ## Storage, hashing, persistence
 
@@ -587,59 +625,6 @@ the existing configuration:
   find them with `puck references` on `Puck.State.CellKind`.
 - **File length.** Keep every file under the length ledger.
 
-## `Puck.State`
-
-- **Compilation** (`RuleCompiler.Expressions.cs`, `RuleCompiler.Effects.cs`,
-  `RuleCompiler.Operands.cs`):
-  - compile `VectorCall` and vector destinations, and the four transforms, into
-    `VectorCallOperand` and the `Vector*Effect` facts;
-  - refuse arithmetic effects on vector rows;
-  - validate `mix` terms, `where` rows, `exclude`, `k`, and thresholds.
-- **Evaluation** (`RuleEvaluation.cs`, `RuleEvaluator.Effects.cs`):
-  - the effects submit `ApplyVector` or `UpsertCell.Vector`;
-  - `Text` key indirection resolves through `CompiledCellRef.Kind`;
-  - `RuleWorkBudget.ExpressionCost` uses the operand's cost.
-- **Composition helper.** `StateCellWriter.TryComposeVectorCell`.
-- **Trace.** Records for vector calls, `nearest` results, and `remember` verdicts.
-
-## `Puck.World.Schema`
-
-- **`WorldDefinitionValidator.State.cs`:**
-  - spaces;
-  - that each `Vector` row names a space, and no other kind does;
-  - the trait, domain, and effect refusals;
-  - the row and section ceilings;
-  - per-cell dimensions;
-  - the HUD refusal.
-- **`WorldDefinitionValidator.Mutations.cs`:** validation of the four transforms.
-- **Composition** (`WorldDocumentBasis.cs`, `WorldImport.cs`, and owned-identity
-  composition): refuse space identity mismatches.
-- **`WorldStateDisclosure.cs`:** `WorldObservedCell.Vector`.
-- **Other `CellKind` sites:** `Vector` arms in `WorldStateBindingContext.cs`,
-  `BindableValue.cs`, `WorldStateDocumentValues.cs`, `WorldOperandKinds.cs`, and
-  `WorldSearch.cs`.
-
-## `Puck.World.Protocol`, `Puck.World.Server`, surfaces
-
-- **`WorldMutation.UpsertStateCell.Vector`** and the vector arm of
-  `TryComposeCellUpsert`.
-- **`WorldServer.RuleFrame.cs` `MapStateMutation`:** map `ApplyVector` and
-  `UpsertCell.Vector`.
-- **`WorldServer.RuleHost.cs`:** routing.
-- **`WorldStateTransforms.cs`:** add the touched-rows and apply arms, with sparse
-  implementations in a new `WorldStateTransforms.Vectors.cs`.
-- **`WorldRuntimeStateHash.cs`:** vector folding.
-- **`WorldStateCommandModule.cs`:** digest echo, base64url `cell.set`, space in
-  `DescribeRow`, `world.state.similar`, and trace output.
-- **`WorldHudBindingResolver.cs`:** an explicit `Vector` arm, and a throwing `default`.
-- **`WorldAgentBridge.WriteVectorAsync`** and **`RemoteMcpHost`
-  `puck_state_vector_write`.**
-- **Browser.** `BrowserRuleReader.cs` and `BrowserJsonConverters.cs` get `Vector`
-  arms.
-- **Extensions.** The `WorldExtensionConfiguration.Embeddings` settings,
-  `WorldExtensionEmbedding.cs`, `WorldConfiguredExtensions.Embeddings.cs`, and the
-  `world.extensions` read-back.
-
 ## New projects
 
 - **`src/Puck.Embeddings`** references only `Puck.Maths`. It holds the providers,
@@ -797,23 +782,24 @@ its JSON, and the decompiler prints it back when the lock is present.
 
 ## Tests to add
 
-Existing suites (the Maths laws, `VectorFrameTests`, `VectorTransformTests`,
-`DocumentVocabularyTests`, and the SQL emitter, decompiler, and LSP tests) stay green.
+Existing suites stay green, including the vector tests already in `Puck.State.Tests`
+and `Puck.World.Schema.Tests`. Add to them:
 
 - **`tests/Puck.State.Tests`:**
   - `StateVectorTests` and `StateVectorJsonTests`;
-  - `VectorExpressionTests`: `dot`, `similarity`, and `identical` in a gate, a binding,
-    an effect operand, and a `Score` program; literals with space inference;
-    absent-cell failure; mismatch refusals; `cosine(x)` still evaluating as trig in the
-    same rule; exact costs;
-  - `VectorEffectTests`: compiled copy, `mix` over `$each`, `mean` with `where`,
-    `nearest` into `Int`/`Fixed`/`Text` (ties, both threshold directions, `where`,
-    `exclude`, `farthest`, fewer than `k`, empty source, `k` bounds), `remember`
-    (skips a near-duplicate, ignores its own key), and each effect's exact cost;
-  - `TextKeyIndirectionTests`, `VectorRefusalTests` (every trait, domain, effect, and
-    refusal door), and `VectorTraceTests`.
-- **`tests/Puck.World.Schema.Tests`:** `WorldStateSpacesValidationTests` (spaces,
-  default space, ceilings, composition mismatch) and `WorldStateDisclosureVectorTests`.
+  - `VectorExpressionTests`: `cosine(x)` evaluating as trig in the same rule as
+    `similarity`; each vector call in a binding and a `Score` program;
+  - `VectorEffectTests`: `nearest` into `Int`, `Fixed`, and `Text` (ties, both threshold
+    directions, `where`, `exclude`, `farthest`, fewer than `k`, an empty source) and
+    `remember` (skips a near-duplicate, ignores its own key), fired through a test host
+    whose `TryApply` applies `ApplyVector` cross-row;
+  - `VectorRefusalTests`: `VectorExcludeKey`, `VectorMixZero`, and `VectorMeanEmpty`
+    through compiled rules;
+  - `VectorTraceTests`: defect 7.
+- **`tests/Puck.World.Schema.Tests`:**
+  - `WorldVectorSchemaTests`: the cell-level `advance`, `dynamics`, and `cycle`
+    refusals, the HUD, response, search, and binding refusals, and defect 3;
+  - `WorldStateDisclosureVectorTests`.
 - **`tests/Puck.World.Tests`:**
   - `VectorStateLawTests`:
     - granted and ungranted writes;
@@ -857,7 +843,9 @@ Existing suites (the Maths laws, `VectorFrameTests`, `VectorTransformTests`,
 
 ## Commands
 
-Run these in order; each must exit 0.
+Run these in order. Each must exit 0, except `Puck.World.Tests`, which already fails
+tests unrelated to embeddings: record its failing set before starting, and finish with
+nothing failing outside that set.
 
 ```bash
 dotnet build -c Release

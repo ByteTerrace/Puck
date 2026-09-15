@@ -237,39 +237,6 @@ public sealed partial class StateFrame {
         ArgumentNullException.ThrowIfNull(argument: transform);
 
         switch (transform) {
-            case ResolvedVectorTransform.Copy copy: {
-                if (((uint)copy.TargetRowOrdinal) >= ((uint)Layout.RowCount)) {
-                    reason = "Target row ordinal out of range.";
-                    return false;
-                }
-
-                var targetLayout = Layout[copy.TargetRowOrdinal];
-                if (targetLayout.Kind != FrameRowKind.Vector) {
-                    reason = $"Target row '{copy.TargetRowName}' is not a framed vector row.";
-                    return false;
-                }
-
-                ReadOnlySpan<sbyte> sourceSpan;
-                if (copy.SourceVector is { } vec) {
-                    sourceSpan = vec.Components;
-                } else if (copy.SourceRowOrdinal.HasValue) {
-                    if (!TryStoredVector(rowOrdinal: copy.SourceRowOrdinal.Value, key: copy.SourceKey, out sourceSpan)) {
-                        reason = $"Source vector cell '{copy.SourceRowName}[{copy.SourceKey}]' not found.";
-                        return false;
-                    }
-                } else {
-                    reason = "Copy transform has no source vector or cell.";
-                    return false;
-                }
-
-                if (sourceSpan.Length != targetLayout.Dimensions) {
-                    reason = $"Source vector length {sourceSpan.Length} does not match target dimensions {targetLayout.Dimensions}.";
-                    return false;
-                }
-
-                return TryWriteVector(rowOrdinal: copy.TargetRowOrdinal, key: copy.TargetKey, components: sourceSpan, reason: out reason);
-            }
-
             case ResolvedVectorTransform.Mix mix: {
                 if (((uint)mix.TargetRowOrdinal) >= ((uint)Layout.RowCount)) {
                     reason = "Target row ordinal out of range.";
@@ -435,7 +402,6 @@ public sealed partial class StateFrame {
         }
 
         var (targetOrd, targetKey) = transform switch {
-            ResolvedVectorTransform.Copy c => (c.TargetRowOrdinal, c.TargetKey),
             ResolvedVectorTransform.Mix m => (m.TargetRowOrdinal, m.TargetKey),
             ResolvedVectorTransform.Mean me => (me.TargetRowOrdinal, me.TargetKey),
             _ => (-1, StateRow.SlotKey)

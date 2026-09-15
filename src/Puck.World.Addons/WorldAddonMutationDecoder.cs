@@ -26,7 +26,7 @@ namespace Puck.World.Addons;
 /// declared kinds have no entry yet;
 /// <see cref="TryDecode"/> refuses an unwired ordinal by name rather than guessing a shape for it, so wiring one in
 /// is strictly additive — a new <c>case</c> arm, never a change to this method's own contract.</remarks>
-internal static class WorldAddonMutationDecoder {
+public static class WorldAddonMutationDecoder {
     private static readonly string[] RectMembers = ["x", "y", "width", "height"];
     private static readonly string[] ElementMembers = ["id", "kind", "rect", "style", "text", "binding"];
     private static readonly string[] PanelMembers = ["id", "rect", "layer", "style", "elements"];
@@ -45,6 +45,7 @@ internal static class WorldAddonMutationDecoder {
         ["fixed"] = CellKind.Fixed,
         ["bool"] = CellKind.Bool,
         ["text"] = CellKind.Text,
+        ["vector"] = CellKind.Vector,
     };
     private static readonly Dictionary<string, StateOverflow> Overflows = new(comparer: StringComparer.Ordinal) {
         ["refuse"] = StateOverflow.Refuse,
@@ -1306,6 +1307,8 @@ internal static class WorldAddonMutationDecoder {
                     ? 1
                     : 0)
                 );
+            case CellKind.Vector:
+                throw new AddonMutationDecodeException(message: $"{context}: vector state cells cannot be written by addons");
             default:
                 return new StateCell(
                     Key: key,

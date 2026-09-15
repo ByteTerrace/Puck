@@ -253,6 +253,10 @@ public static class WorldStateDocumentValues {
             ) {
                 return true;
             }
+            if (stateRow.Kind == CellKind.Vector) {
+                reason = $"{path} reference '{reference}' names vector row '{stateRow.Name}'; vector rows cannot be resolved as document values";
+                return false;
+            }
             if (stateRow.Kind != CellKind.Text) {
                 if (rawValue is not { } raw) {
                     reason = $"{path} reference '{reference}' names a cell that holds no value";
@@ -264,6 +268,7 @@ public static class WorldStateDocumentValues {
                     CellKind.Bool => ((raw != 0L)
                     ? "true"
                     : "false"),
+                    CellKind.Int => raw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
                     _ => raw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
                 };
             }

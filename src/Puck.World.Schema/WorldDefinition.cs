@@ -372,6 +372,9 @@ public sealed record WorldDefinition(
     /// <summary>Gets the <c>state</c> section — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldStateRow> State => (StateRaw?.World ?? []);
+    /// <summary>Gets the declared vector embedding spaces — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<StateSpace> Spaces => (StateRaw?.Spaces ?? []);
     /// <summary>Gets the typed descriptor catalog compiled from the authored <c>state</c> section. Runtime processors
     /// resolve names against this catalog once, retain <see cref="StateHandle"/> values, and then use ordinal
     /// descriptor access without repeated string lookup.</summary>
@@ -651,6 +654,16 @@ public sealed record WorldDefinition(
     public WorldDefinition WithWorldState(IReadOnlyList<WorldStateRow> rows) {
         var updated = this with {
             StateRaw = ((StateRaw ?? new WorldStateSection()) with { World = rows }),
+        };
+
+        PreserveCompatibleCompilation(target: updated);
+
+        return updated;
+    }
+    /// <summary>Returns a copy with its declared state spaces replaced.</summary>
+    public WorldDefinition WithWorldSpaces(IReadOnlyList<StateSpace>? spaces) {
+        var updated = this with {
+            StateRaw = ((StateRaw ?? new WorldStateSection()) with { Spaces = spaces }),
         };
 
         PreserveCompatibleCompilation(target: updated);

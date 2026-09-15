@@ -66,22 +66,28 @@ public sealed class CompiledVectorOperand {
             return true;
         }
 
+        if (!KeyFrom.HasValue) {
+            var cellKey = (CellKey != default) ? CellKey : ((Key is null) ? StateRow.SlotKey : default);
+            if (cellKey == default) {
+                span = default;
+                return false;
+            }
+
+            return reader.Store.TryStoredVector(rowOrdinal: RowOrdinal, key: cellKey, components: out span);
+        }
+
         var resolvedKey = RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom);
-        if (string.IsNullOrEmpty(resolvedKey) && KeyFrom.HasValue) {
+        if (string.IsNullOrEmpty(resolvedKey)) {
             span = default;
             return false;
         }
 
-        var cellName = (KeyFrom.HasValue || (Key is not null))
-            ? (CellName.TryParse(candidate: resolvedKey, name: out var parsed, reason: out _) ? parsed : default)
-            : StateRow.SlotKey;
-
-        if ((cellName == default) && (Key is not null)) {
+        if (!CellName.TryParse(candidate: resolvedKey, name: out var parsed, reason: out _)) {
             span = default;
             return false;
         }
 
-        return reader.Store.TryStoredVector(rowOrdinal: RowOrdinal, key: cellName, components: out span);
+        return reader.Store.TryStoredVector(rowOrdinal: RowOrdinal, key: parsed, components: out span);
     }
 
     /// <summary>Appends the state cell reads this operand touches.</summary>

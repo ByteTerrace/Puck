@@ -506,6 +506,46 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
             userMessage: $"expected under 80 KiB per cross-row cell; measured {perCell:F0} bytes/cell over {cells} cells"
         );
     }
+    [Fact]
+    public void AddonVectorWrite_RefusedByName() {
+        var payload = System.Text.Encoding.UTF8.GetBytes("""{"name":"memories","kind":"vector","value":"AQID"}""");
+        var decoded = Puck.World.Addons.WorldAddonMutationDecoder.TryDecode(
+            kindOrdinal: 46,
+            section: WorldSection.State,
+            payload: payload,
+            principal: WorldPrincipal.Addon(name: "guest"),
+            mutation: out var mutation,
+            error: out var error
+        );
+
+        Assert.False(condition: decoded);
+        Assert.Null(@object: mutation);
+        Assert.Contains(
+            expectedSubstring: "vector",
+            actualString: error,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
+    }
+    [Fact]
+    public void AddonVectorKeyedWrite_RefusedByName() {
+        var payload = System.Text.Encoding.UTF8.GetBytes("""{"name":"memories","kind":"vector","cells":[{"key":"v1","value":"AQID"}]}""");
+        var decoded = Puck.World.Addons.WorldAddonMutationDecoder.TryDecode(
+            kindOrdinal: 46,
+            section: WorldSection.State,
+            payload: payload,
+            principal: WorldPrincipal.Addon(name: "guest"),
+            mutation: out var mutation,
+            error: out var error
+        );
+
+        Assert.False(condition: decoded);
+        Assert.Null(@object: mutation);
+        Assert.Contains(
+            expectedSubstring: "vector",
+            actualString: error,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
+    }
 
     private static int CountCells(WorldMutation mutation) => ((mutation is WorldMutation.Batch batch)
         ? batch.Mutations.Sum(selector: CountCells)
