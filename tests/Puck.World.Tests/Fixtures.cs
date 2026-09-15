@@ -687,8 +687,8 @@ internal static class Fixtures {
         var population = new WorldPopulation(definition: definition);
         var machines = new WorldMachineHost(
             screens: definition.Screens,
-            catalog: (machineCatalog ?? new WorldMachineCatalog((engines ?? []))),
-            documentPath: documentPath
+            catalog: (machineCatalog ?? ((engines is not null) ? new WorldMachineCatalog(engines) : TestHookInstaller.CreateMachineCatalog())),
+            documentPath: (documentPath ?? Path.Combine(AuthoredGameFixtures.Root, "src", "Puck.World", "Assets", "worlds", "puck.world.json"))
         );
         // A PATH, not a directory: WorldOwnedWorlds creates and enumerates it itself, so pre-creating it here was a
         // second round trip to disk for nothing. It sits under one run-wide root that is removed once, rather than

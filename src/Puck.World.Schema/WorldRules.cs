@@ -18,6 +18,7 @@ namespace Puck.World;
 /// <param name="Zones">The rule's zone table (<see cref="Rule.Zones"/>), which every <c>$zones[&lt;index&gt;]</c> in
 /// the rule selects from, or <see langword="null"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+[method: JsonConstructor]
 public sealed record WorldRule(
     CellName Name,
     IReadOnlyList<ActionEffect> Effects,
@@ -35,7 +36,22 @@ public sealed record WorldRule(
     ForEach: ForEach,
     Bindings: Bindings,
     Zones: Zones
-);
+) {
+    /// <summary>Initializes a world rule over an engine rule, adding the optional choice policy.</summary>
+    /// <param name="rule">The engine rule.</param>
+    /// <param name="decision">The choice policy, or <see langword="null"/>.</param>
+    public WorldRule(Rule rule, WorldDecision? decision = null) : this(
+        Name: rule.Name,
+        Effects: rule.Effects,
+        Gate: rule.Gate,
+        Mode: rule.Mode,
+        ForEach: rule.ForEach,
+        Decision: decision,
+        Bindings: rule.Bindings,
+        Zones: rule.Zones
+    ) {
+    }
+}
 /// <summary>How a body reference token resolved at compile time.</summary>
 public enum CompiledBodyRefKind : byte {
     /// <summary>A literal <c>body:&lt;n&gt;</c> index.</summary>

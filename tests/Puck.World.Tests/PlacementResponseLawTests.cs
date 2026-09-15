@@ -163,7 +163,7 @@ public sealed class PlacementResponseLawTests {
             ),
         ]));
 
-        for (var index = 0; (index < 2); index++) {
+        for (var index = 0; (index < 20); index++) {
             present.Step();
         }
 
@@ -194,7 +194,7 @@ public sealed class PlacementResponseLawTests {
             CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation), Creation(id: SecondTarget)],
         }));
 
-        for (var index = 0; (index < 1); index++) {
+        for (var index = 0; (index < 3); index++) {
             firstWins.Step();
         }
 
@@ -218,7 +218,7 @@ public sealed class PlacementResponseLawTests {
             CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation), Creation(id: SecondTarget)],
         }));
 
-        for (var index = 0; (index < 1); index++) {
+        for (var index = 0; (index < 3); index++) {
             secondWins.Step();
         }
 
@@ -243,7 +243,7 @@ public sealed class PlacementResponseLawTests {
         using var a = Fixtures.FreshServer(definition: Build());
         using var b = Fixtures.FreshServer(definition: Build());
 
-        for (var index = 0; (index < 2); index++) {
+        for (var index = 0; (index < 20); index++) {
             a.Step();
             b.Step();
 

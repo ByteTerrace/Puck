@@ -583,26 +583,23 @@ public static partial class RuleCompiler {
                     );
                 }
                 gate.Add(item: new(
-                    null,
-                    expression.Comparison,
-                    0,
-                    expression.Kind,
-                    null,
-                    $"compareValue {expression.Kind} {expression.Comparison}",
-                    LeftExpression: CompileExpression(
-                        expression.Left,
-                        expression.Kind,
-                        ruleName,
-                        "compareValue left",
-                        context
-                    ),
-                    RightExpression: CompileExpression(
-                        expression.Right,
-                        expression.Kind,
-                        ruleName,
-                        "compareValue right",
-                        context
-                    )
+                    leftSource: CompiledValueSource.FromExpression(expression: CompileExpression(
+                        context: context,
+                        expression: expression.Left,
+                        kind: expression.Kind,
+                        ruleName: ruleName,
+                        verb: "compareValue left"
+                    )),
+                    comparison: expression.Comparison,
+                    rightSource: CompiledValueSource.FromExpression(expression: CompileExpression(
+                        context: context,
+                        expression: expression.Right,
+                        kind: expression.Kind,
+                        ruleName: ruleName,
+                        verb: "compareValue right"
+                    )),
+                    valueKind: expression.Kind,
+                    describe: $"compareValue {expression.Kind} {expression.Comparison}"
                 ));
                 break;
             case ActionPredicate.CompareState compare:
@@ -631,14 +628,13 @@ public static partial class RuleCompiler {
         }
 
         static GateToken Logical(GateOp op, int arity, string describe) => new(
-            Left: null,
-            Comparison: default,
-            Value: 0L,
-            ValueKind: default,
-            Comparand: null,
-            Describe: describe,
-            Op: op,
-            Arity: arity
+            leftSource: default,
+            comparison: ActionStateComparison.Equal,
+            rightSource: default,
+            valueKind: CellKind.Bool,
+            describe: describe,
+            op: op,
+            arity: arity
         );
     }
     private static GateToken ResolvePredicate(ActionPredicate.CompareState compare, string ruleName, RuleCompileContext context) {
@@ -693,12 +689,11 @@ public static partial class RuleCompiler {
             );
 
             return new GateToken(
-                Left: lhs.Operand,
-                Comparison: lowered,
-                Value: value,
-                ValueKind: lhs.ValueKind,
-                Comparand: null,
-                Describe: describe
+                leftSource: CompiledValueSource.FromOperand(operand: lhs.Operand),
+                comparison: lowered,
+                rightSource: CompiledValueSource.Constant(rawValue: value),
+                valueKind: lhs.ValueKind,
+                describe: describe
             );
         }
 
@@ -725,12 +720,11 @@ public static partial class RuleCompiler {
         }
 
         return new GateToken(
-            Left: lhs.Operand,
-            Comparison: comparison,
-            Value: default,
-            ValueKind: lhs.ValueKind,
-            Comparand: rhs.Operand,
-            Describe: $"{lhs.Describe} {RuleEvaluation.DescribeComparison(comparison: comparison)} {rhs.Describe}"
+            leftSource: CompiledValueSource.FromOperand(operand: lhs.Operand),
+            comparison: comparison,
+            rightSource: CompiledValueSource.FromOperand(operand: rhs.Operand),
+            valueKind: lhs.ValueKind,
+            describe: $"{lhs.Describe} {RuleEvaluation.DescribeComparison(comparison: comparison)} {rhs.Describe}"
         );
     }
     // A constant comparand against an int or bool operand is lowered exactly: an integral literal is the raw it

@@ -178,26 +178,39 @@ public sealed class EmitCueEffect : EffectFact {
 public sealed class IdentityFactEffect : EffectFact, IValueSourcedEffect {
     private CellName[]? m_laneKeys;
 
-    public IdentityFactEffect(string key, CompiledCellRef? keyFrom, CellName fact, long rawValue, CompiledExpressionToken[]? expression, string describe) : base(describe: describe) {
+    public IdentityFactEffect(string key, CompiledCellRef? keyFrom, CellName fact, CompiledValueSource source, string describe) : base(describe: describe) {
         Key = key;
         KeyFrom = keyFrom;
         Fact = fact;
-        RawValue = rawValue;
-        Expression = expression;
+        Source = source;
+    }
+
+    public IdentityFactEffect(string key, CompiledCellRef? keyFrom, CellName fact, long rawValue, CompiledExpressionToken[]? expression, string describe)
+        : this(
+            describe: describe,
+            fact: fact,
+            key: key,
+            keyFrom: keyFrom,
+            source: ((expression is not null)
+                ? CompiledValueSource.FromExpression(expression: expression)
+                : CompiledValueSource.Constant(rawValue: rawValue))
+        ) {
     }
 
     /// <inheritdoc/>
-    public CompiledExpressionToken[]? Expression { get; }
+    public CompiledValueSource Source { get; }
+    /// <inheritdoc/>
+    public CompiledExpressionToken[]? Expression => Source.Expression;
     /// <summary>Gets the fact key on the identity's row.</summary>
     public CellName Fact { get; }
     /// <inheritdoc/>
-    public OperandFact? From => null;
+    public OperandFact? From => Source.Operand;
     /// <summary>Gets the body address — a literal index, or the spelling <see cref="KeyFrom"/> resolves live.</summary>
     public string Key { get; }
     /// <summary>Gets the live body indirection, or <see langword="null"/> for a literal <see cref="Key"/>.</summary>
     public CompiledCellRef? KeyFrom { get; }
     /// <inheritdoc/>
-    public long RawValue { get; }
+    public long RawValue => Source.RawValue;
     public override bool ReadsHost => true;
 
     public override void CollectReads(List<RuleAccess> into) {

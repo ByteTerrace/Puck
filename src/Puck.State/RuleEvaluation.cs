@@ -266,50 +266,52 @@ public static class RuleEvaluation {
 
         foreach (var predicate in gate) {
             if (predicate.Op == GateOp.Not) {
-                stack[(top - 1)] = !stack[(top - 1)];
+                GateProgramEvaluator.Invert(
+                    stack: stack,
+                    top: top
+                );
                 trace?.Add(item: $"not -> {(stack[(top - 1)]
                     ? "true"
                     : "false")}");
                 continue;
             }
             if (predicate.Op is GateOp.All or GateOp.Any) {
-                var start = (top - predicate.Arity);
-                var result = (predicate.Op == GateOp.All);
-
-                for (var index = start; (index < top); index++) {
-                    result = ((predicate.Op == GateOp.All)
-                        ? (result && stack[index])
-                        : (result || stack[index])
-                    );
-                }
-
-                top = start;
-                stack[top++] = result;
+                GateProgramEvaluator.FoldGroup(
+                    arity: predicate.Arity,
+                    isAll: (predicate.Op == GateOp.All),
+                    stack: stack,
+                    top: ref top
+                );
                 trace?.Add(item: $"{((predicate.Op == GateOp.All)
                     ? "all"
-                    : "any")} of {predicate.Arity} -> {(result
+                    : "any")} of {predicate.Arity} -> {(stack[(top - 1)]
                     ? "true"
                     : "false")}");
                 continue;
             }
 
-            if (predicate.LeftExpression is { } leftExpression) {
+            if (predicate.LeftSource.IsExpression || predicate.RightSource.IsExpression) {
                 var rightValue = 0L;
                 var rightFault = ExpressionFault.None;
-                var leftOk = TryEvaluateExpression(
-                    reader: reader,
-                    program: leftExpression,
+                var leftOk = predicate.LeftSource.TryRead(
+                    engineTick: 0UL,
+                    fact: out var leftFact,
+                    fault: out var leftFault,
                     kind: predicate.ValueKind,
-                    value: out var leftValue,
-                    fault: out var leftFault
+                    reader: reader,
+                    tick: 0UL
                 );
-                var rightOk = (leftOk && TryEvaluateExpression(
-                    reader: reader,
-                    program: predicate.RightExpression!,
+                var leftValue = leftFact.Value;
+                var rightFact = default(RuleFact);
+                var rightOk = (leftOk && predicate.RightSource.TryRead(
+                    engineTick: 0UL,
+                    fact: out rightFact,
+                    fault: out rightFault,
                     kind: predicate.ValueKind,
-                    value: out rightValue,
-                    fault: out rightFault
+                    reader: reader,
+                    tick: 0UL
                 ));
+                rightValue = rightFact.Value;
 
                 faulted |= ((leftFault is ExpressionFault.Domain or ExpressionFault.Forever or ExpressionFault.Absent) || (rightFault is ExpressionFault.Domain or ExpressionFault.Forever or ExpressionFault.Absent));
                 var holds = (rightOk && predicate.Comparison.Holds(
@@ -345,18 +347,23 @@ public static class RuleEvaluation {
                 continue;
             }
 
-            // Reached only for a Compare token with no LeftExpression, so Left is always set here.
-            var value = predicate.Left!.Read(reader: reader);
-            // The comparand is either the compile-time constant (Comparand null) or a second live operand read on the
-            // same terms as the primary side. Both facts read this tick's live section, so a rule that just advanced
-            // its own comparand row sees the post-advance value on the very next evaluation.
-            var expected = ((predicate.Comparand is { } comparand)
-                ? comparand.Read(reader: reader)
-                : RuleFact.Finite(
-                    value: predicate.Value,
-                    kind: predicate.ValueKind
-                )
+            predicate.LeftSource.TryRead(
+                engineTick: 0UL,
+                fact: out var value,
+                fault: out _,
+                kind: predicate.ValueKind,
+                reader: reader,
+                tick: 0UL
             );
+            predicate.RightSource.TryRead(
+                engineTick: 0UL,
+                fact: out var expected,
+                fault: out _,
+                kind: predicate.ValueKind,
+                reader: reader,
+                tick: 0UL
+            );
+
             // An absent side names no cell, so no comparison holds against it — not even NotEqual: "the top card is
             // not a king" must not read as true of an empty pile.
             var holdsHere = (!value.IsAbsent && !expected.IsAbsent && predicate.Comparison.Holds(

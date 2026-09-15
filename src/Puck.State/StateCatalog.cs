@@ -47,6 +47,17 @@ public enum StateValueKind : byte {
     /// <summary>A per-participant duration stored in engine ticks.</summary>
     Timer = 6,
 }
+/// <summary>Identifies the semantic participant role or unit for a compiled state descriptor.</summary>
+public enum StateRole : byte {
+    /// <summary>Standard state declaration without specialized participant role semantics.</summary>
+    None = 0,
+
+    /// <summary>A per-participant Q48.16 counter.</summary>
+    Counter = 1,
+
+    /// <summary>A per-participant duration stored in engine ticks.</summary>
+    Timer = 2,
+}
 /// <summary>Identifies one descriptor in the <see cref="StateCatalog"/> that minted it.</summary>
 /// <remarks>Handles are bound to one catalog instance. A processor resolves a name during compilation, retains the
 /// handle while that catalog is current, and uses the catalog indexer during execution instead of repeating a string
@@ -85,7 +96,26 @@ public readonly record struct StateDescriptor(
     StateStorageShape Storage,
     StateValueKind ValueKind,
     int LaneOrdinal
-);
+) {
+    /// <summary>Gets the storage cell kind (encoding) for this state declaration.</summary>
+    public CellKind CellKind => ValueKind switch {
+        StateValueKind.Int => CellKind.Int,
+        StateValueKind.Fixed => CellKind.Fixed,
+        StateValueKind.Bool => CellKind.Bool,
+        StateValueKind.Text => CellKind.Text,
+        StateValueKind.Vector => CellKind.Vector,
+        StateValueKind.Counter => CellKind.Fixed,
+        StateValueKind.Timer => CellKind.Int,
+        _ => throw new InvalidOperationException(message: $"Unknown StateValueKind '{ValueKind}'."),
+    };
+
+    /// <summary>Gets the semantic participant role for this state declaration.</summary>
+    public StateRole Role => ValueKind switch {
+        StateValueKind.Counter => StateRole.Counter,
+        StateValueKind.Timer => StateRole.Timer,
+        _ => StateRole.None,
+    };
+}
 /// <summary>Compiles an <see cref="IStateSection"/> into immutable typed descriptors and catalog-instance-relative
 /// handles. Descriptor ordinals are assigned deterministically in document, participant, then identity declaration
 /// order.</summary>

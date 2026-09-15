@@ -96,6 +96,7 @@ public sealed record WorldStateSection(
 /// <param name="PhaseOf">See <see cref="StateRow.PhaseOf"/>.</param>
 /// <param name="HistoryCursor">See <see cref="StateRow.HistoryCursor"/>.</param>
 /// <param name="Space">See <see cref="StateRow.Space"/>.</param>
+[method: JsonConstructor]
 public sealed record WorldStateRow(
     CellName Name,
     CellKind Kind,

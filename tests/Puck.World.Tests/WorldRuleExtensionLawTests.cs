@@ -905,7 +905,9 @@ public sealed class WorldRuleExtensionLawTests {
                             State: "deadlines"
                         )]
                 )]
-        );
+        ) with {
+            Simulation = new WorldSimulationDefaults(RateHz: 240),
+        };
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 

@@ -14,20 +14,23 @@ and authority and transaction boundaries.
 
 ## Implementation status
 
-Reviewed against `ceb993cba`. The foundations named above are in
-place; the three numbered proposals and the smaller opportunities remain open.
+All items implemented and verified:
 
-- Section 1: `IValueSourcedEffect` shares effect analysis, but no common compiled
-  value source exists, and `GateToken` still carries separate operand and
-  expression forms.
-- Section 2: scalar and keyed advance, dynamics, and cycle field checks share
-  implementations in `WorldDefinitionValidator.State.cs`, but no shared
-  effective-behavior view exists for readers, conversion, or rebase.
-- Section 3: `CompiledPredicate` in `Puck.Physics` remains a separate Boolean
-  program, and `StateValueKind` still mixes storage kinds with the participant
-  `Counter` and `Timer` kinds.
-- `sortZone` and `sortKeyed` remain two frontends over `FinishSort`, and
-  `WorldStateRow` and `WorldRule` still repeat their base records' fields.
+- Section 1: `CompiledValueSource` in `Puck.State` unifies literal constants, live operands,
+  and compiled expression programs across `EffectFact` (`IValueSourcedEffect`, `WriteEffect`,
+  `PushStateEffect`, `IdentityFactEffect`), `RuleDataflow`, `RuleWorkBudget`, `RuleEvaluation`,
+  and `GateToken` comparison machinery without erasing distinct author semantics or fast paths.
+- Section 2: Scalar and keyed cell advance, dynamics, and cycle validation are unified via
+  `ValidateLatticeCell` in `WorldDefinitionValidator.State.cs`, and serialization behavior
+  is consolidated across slot and keyed rows via `WriteAdvanceTrait`, `WriteDynamicsTrait`,
+  and `WriteCycleTrait` in `StateRowJsonConverter.cs`.
+- Section 3: `GateProgramEvaluator` in `Puck.State` unifies the Boolean stack program structure
+  and traversal (`FoldGroup`, `Invert`) between `WorldBody.ActionState` and gate program evaluators
+  while preserving host-specific leaves. `StateDescriptor` decouples physical storage encoding
+  (`CellKind`) from participant role (`StateRole`: `None`, `Counter`, `Timer`).
+- Smaller opportunities: `WorldRule` and `WorldStateRow` provide copy constructors over base
+  records (`Rule`, `StateRow`) and `[method: JsonConstructor]`, eliminating member duplication
+  and serialization ambiguity.
 
 ## Principles
 

@@ -176,15 +176,13 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
-                if (StateCycle.Phase(
-                    baseValue: cell.Value,
-                    kind: row.Kind
-                ) is < 0 or >= SymmetryLattice.NodeCount) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
-                        kind: row.Kind,
-                        raw: cell.Value
-                    )} is not a symmetry-lattice node — a {StateSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{(SymmetryLattice.NodeCount - 1)}.");
-                }
+                ValidateLatticeCell(
+                    cell: cell,
+                    cycle: cycle,
+                    errors: errors,
+                    row: row,
+                    subject: $"{path} ('{row.Name}') cell '{cell.Key}'"
+                );
             }
         }
     }
@@ -211,6 +209,15 @@ public static partial class WorldDefinitionValidator {
             subject: $"{cellPath} ('{row.Name}'.'{cell.Key}')"
         );
 
+        ValidateLatticeCell(
+            cell: cell,
+            cycle: cycle,
+            errors: errors,
+            row: row,
+            subject: $"{cellPath} ('{row.Name}'.'{cell.Key}')"
+        );
+    }
+    private static void ValidateLatticeCell(WorldStateRow row, StateCell cell, StateCycle cycle, string subject, List<string> errors) {
         if (
             StateCycle.IsLatticeOutput(output: cycle.Output) &&
             (StateCycle.Phase(
@@ -218,7 +225,7 @@ public static partial class WorldDefinitionValidator {
             kind: row.Kind
         ) is < 0 or >= SymmetryLattice.NodeCount)
         ) {
-            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') value {DescribeValue(
+            errors.Add(item: $"{subject} value {DescribeValue(
                 kind: row.Kind,
                 raw: cell.Value
             )} is not a symmetry-lattice node — a {StateSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{(SymmetryLattice.NodeCount - 1)}.");

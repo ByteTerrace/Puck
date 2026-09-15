@@ -213,7 +213,8 @@ public sealed class DiscreteStateLawTests {
                 new WorldSubmissionPayload.Mutation(Value: new WorldMutation.TransformState(
                     WorldPrincipal.Console,
                     operation
-                ))
+                )),
+                Guid.NewGuid()
             ),
             _ => { }
         );
@@ -243,7 +244,8 @@ public sealed class DiscreteStateLawTests {
                         "turn",
                         0
                     )
-                ))
+                )),
+                Guid.NewGuid()
             ),
             _ => { }
         );

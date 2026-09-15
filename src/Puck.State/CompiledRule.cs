@@ -14,37 +14,100 @@ public enum GateOp : byte {
 /// <summary>One token in a compiled postfix rule gate. The representation preserves arbitrary nested
 /// <see cref="ActionPredicate.All"/>/<see cref="ActionPredicate.Any"/>/<see cref="ActionPredicate.Not"/> trees while
 /// evaluation remains a single bounded, allocation-free pass.</summary>
-/// <param name="Left">The primary operand — the <c>(State, Key)</c> side of the authored <c>compareState</c>. Set
-/// only for a <see cref="GateOp.Compare"/> token spelled as an ordinary comparison; <see langword="null"/> for a
-/// logical token (which reads no operand) and for a <c>compareValue</c> token (which reads
-/// <paramref name="LeftExpression"/>/<paramref name="RightExpression"/> instead).</param>
-/// <param name="Comparison">The comparison to apply.</param>
-/// <param name="Value">The authored constant comparand, converted directly from its exact decimal token to the
-/// left operand's raw cell encoding at compile time — read only when <paramref name="Comparand"/> is
-/// <see langword="null"/> (the constant spelling).</param>
-/// <param name="ValueKind">The encoding carried by <paramref name="Value"/>.</param>
-/// <param name="Comparand">The comparand operand — another row/reserved channel read live on the same terms as
-/// <paramref name="Left"/> (the <c>(ComparandState, ComparandKey)</c> spelling) — or <see langword="null"/> when the
-/// comparand is the authored constant <paramref name="Value"/> instead.</param>
-/// <param name="Describe">The authored spelling of this conjunct, for the rules read-back — an
-/// <see cref="ActionPredicate.All"/> gate prints its predicates rather than a type name, which is the whole point of
-/// keeping the text beside the compiled form.</param>
-/// <param name="Op">The postfix Boolean operation.</param>
-/// <param name="Arity">The number of preceding results consumed by an <c>all</c> or <c>any</c> token.</param>
-/// <param name="LeftExpression">Left postfix expression for compareValue; null for an ordinary comparison.</param>
-/// <param name="RightExpression">Right postfix expression for compareValue.</param>
-public readonly record struct GateToken(
-    OperandFact? Left,
-    ActionStateComparison Comparison,
-    long Value,
-    CellKind ValueKind,
-    OperandFact? Comparand,
-    string Describe,
-    GateOp Op = GateOp.Compare,
-    int Arity = 0,
-    CompiledExpressionToken[]? LeftExpression = null,
-    CompiledExpressionToken[]? RightExpression = null
-);
+public readonly record struct GateToken {
+    /// <summary>The left-hand value source (literal, operand, or expression).</summary>
+    public CompiledValueSource LeftSource { get; }
+    /// <summary>The comparison to apply.</summary>
+    public ActionStateComparison Comparison { get; }
+    /// <summary>The right-hand value source (literal, operand, or expression).</summary>
+    public CompiledValueSource RightSource { get; }
+    /// <summary>The encoding carried by the comparison.</summary>
+    public CellKind ValueKind { get; }
+    /// <summary>The authored spelling of this conjunct.</summary>
+    public string Describe { get; }
+    /// <summary>The postfix Boolean operation.</summary>
+    public GateOp Op { get; }
+    /// <summary>The number of preceding results consumed by an <c>all</c> or <c>any</c> token.</summary>
+    public int Arity { get; }
+
+    /// <summary>The primary operand, or <see langword="null"/>.</summary>
+    public OperandFact? Left => LeftSource.Operand;
+    /// <summary>The comparand operand, or <see langword="null"/>.</summary>
+    public OperandFact? Comparand => RightSource.Operand;
+    /// <summary>The authored constant comparand.</summary>
+    public long Value => RightSource.RawValue;
+    /// <summary>Left postfix expression for compareValue; null for an ordinary comparison.</summary>
+    public CompiledExpressionToken[]? LeftExpression => LeftSource.Expression;
+    /// <summary>Right postfix expression for compareValue.</summary>
+    public CompiledExpressionToken[]? RightExpression => RightSource.Expression;
+
+    /// <summary>Initializes a gate token from unified value sources.</summary>
+    /// <param name="leftSource">The left-hand value source.</param>
+    /// <param name="comparison">The comparison to apply.</param>
+    /// <param name="rightSource">The right-hand value source.</param>
+    /// <param name="valueKind">The encoding carried by the comparison.</param>
+    /// <param name="describe">The authored spelling of this conjunct.</param>
+    /// <param name="op">The postfix Boolean operation.</param>
+    /// <param name="arity">The number of preceding results consumed by an <c>all</c> or <c>any</c> token.</param>
+    public GateToken(
+        CompiledValueSource leftSource,
+        ActionStateComparison comparison,
+        CompiledValueSource rightSource,
+        CellKind valueKind,
+        string describe,
+        GateOp op = GateOp.Compare,
+        int arity = 0
+    ) {
+        LeftSource = leftSource;
+        Comparison = comparison;
+        RightSource = rightSource;
+        ValueKind = valueKind;
+        Describe = describe;
+        Op = op;
+        Arity = arity;
+    }
+
+    /// <summary>Initializes a gate token from constituent operands and expressions.</summary>
+    /// <param name="Left">The primary operand.</param>
+    /// <param name="Comparison">The comparison to apply.</param>
+    /// <param name="Value">The authored constant comparand.</param>
+    /// <param name="ValueKind">The encoding carried by the comparison.</param>
+    /// <param name="Comparand">The comparand operand.</param>
+    /// <param name="Describe">The authored spelling.</param>
+    /// <param name="Op">The postfix Boolean operation.</param>
+    /// <param name="Arity">The arity.</param>
+    /// <param name="LeftExpression">The left expression program.</param>
+    /// <param name="RightExpression">The right expression program.</param>
+    public GateToken(
+        OperandFact? Left,
+        ActionStateComparison Comparison,
+        long Value,
+        CellKind ValueKind,
+        OperandFact? Comparand,
+        string Describe,
+        GateOp Op = GateOp.Compare,
+        int Arity = 0,
+        CompiledExpressionToken[]? LeftExpression = null,
+        CompiledExpressionToken[]? RightExpression = null
+    ) : this(
+        leftSource: ((LeftExpression is not null)
+            ? CompiledValueSource.FromExpression(expression: LeftExpression)
+            : ((Left is not null)
+                ? CompiledValueSource.FromOperand(operand: Left)
+                : default)),
+        comparison: Comparison,
+        rightSource: ((RightExpression is not null)
+            ? CompiledValueSource.FromExpression(expression: RightExpression)
+            : ((Comparand is not null)
+                ? CompiledValueSource.FromOperand(operand: Comparand)
+                : CompiledValueSource.Constant(rawValue: Value))),
+        valueKind: ValueKind,
+        describe: Describe,
+        op: Op,
+        arity: Arity
+    ) {
+    }
+}
 /// <summary>One token in an allocation-free postfix numeric expression.</summary>
 /// <param name="Operation">The stack operation.</param>
 /// <param name="Constant">The raw destination-kind literal for a constant token.</param>

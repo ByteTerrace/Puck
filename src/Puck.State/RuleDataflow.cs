@@ -54,16 +54,8 @@ public static class RuleDataflow {
         ArgumentNullException.ThrowIfNull(argument: into);
 
         foreach (var token in gate) {
-            token.Left?.CollectReads(into: into);
-            token.Comparand?.CollectReads(into: into);
-            if (token.LeftExpression is { } left) { CollectExpression(
-                into: into,
-                tokens: left
-            ); }
-            if (token.RightExpression is { } right) { CollectExpression(
-                into: into,
-                tokens: right
-            ); }
+            token.LeftSource.CollectReads(into: into);
+            token.RightSource.CollectReads(into: into);
         }
     }
     /// <summary>Returns whether an expression program reads a fact only the document host answers — the same
@@ -122,12 +114,7 @@ public static class RuleDataflow {
             }
         }
         foreach (var token in rule.Gate) {
-            if (
-                (token.Left is { HostOnly: true }) ||
-                (token.Comparand is { HostOnly: true }) ||
-                ExpressionReadsHost(tokens: token.LeftExpression) ||
-                ExpressionReadsHost(tokens: token.RightExpression)
-            ) {
+            if (token.LeftSource.ReadsHost || token.RightSource.ReadsHost) {
                 return true;
             }
         }

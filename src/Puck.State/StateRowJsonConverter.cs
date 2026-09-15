@@ -492,6 +492,36 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                 break;
         }
     }
+    private static void WriteAdvanceTrait(Utf8JsonWriter writer, StateAdvance? advance, JsonSerializerOptions options) {
+        if (advance is { } value) {
+            WriteNested(
+                options: options,
+                propertyName: "advance",
+                value: value,
+                writer: writer
+            );
+        }
+    }
+    private static void WriteDynamicsTrait(Utf8JsonWriter writer, StateDynamics? dynamics, JsonSerializerOptions options) {
+        if (dynamics is { } value) {
+            WriteNested(
+                options: options,
+                propertyName: "dynamics",
+                value: value,
+                writer: writer
+            );
+        }
+    }
+    private static void WriteCycleTrait(Utf8JsonWriter writer, StateCycle? cycle, JsonSerializerOptions options) {
+        if (cycle is { } value) {
+            WriteNested(
+                options: options,
+                propertyName: "cycle",
+                value: value,
+                writer: writer
+            );
+        }
+    }
     // Written only when non-default (a fresh cell, or one settled back to epoch zero, carries no "clock" member at
     // all) — the follower's continuous state is fixed-native on every row kind, so y0/v0 are written in the fixed
     // spelling.
@@ -1040,32 +1070,21 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                     cell: cell
                 );
 
-                if (cell.Advance is { } cellAdvance) {
-                    WriteNested(
-                        options: options,
-                        propertyName: "advance",
-                        value: cellAdvance,
-                        writer: writer
-                    );
-                }
-
-                if (cell.Dynamics is { } cellDynamics) {
-                    WriteNested(
-                        options: options,
-                        propertyName: "dynamics",
-                        value: cellDynamics,
-                        writer: writer
-                    );
-                }
-
-                if (cell.Cycle is { } cellCycle) {
-                    WriteNested(
-                        options: options,
-                        propertyName: "cycle",
-                        value: cellCycle,
-                        writer: writer
-                    );
-                }
+                WriteAdvanceTrait(
+                    advance: cell.Advance,
+                    options: options,
+                    writer: writer
+                );
+                WriteDynamicsTrait(
+                    dynamics: cell.Dynamics,
+                    options: options,
+                    writer: writer
+                );
+                WriteCycleTrait(
+                    cycle: cell.Cycle,
+                    options: options,
+                    writer: writer
+                );
 
                 if (cell.Behavior != StateCellBehavior.Inherit) {
                     WriteNested(
@@ -1112,32 +1131,21 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         // Advance and draw are mutually exclusive (see StateAdvance's remarks), so write order between them never
         // collides in practice. The facet goes last, after the drawn value's own cell, and its bookkeeping last of all
         // — so a saved draw site reads top-down as "what it is, then where it is".
-        if (value.Advance is { } advance) {
-            WriteNested(
-                options: options,
-                propertyName: "advance",
-                value: advance,
-                writer: writer
-            );
-        }
-
-        if (value.Dynamics is { } rowDynamics) {
-            WriteNested(
-                options: options,
-                propertyName: "dynamics",
-                value: rowDynamics,
-                writer: writer
-            );
-        }
-
-        if (value.Cycle is { } rowCycle) {
-            WriteNested(
-                options: options,
-                propertyName: "cycle",
-                value: rowCycle,
-                writer: writer
-            );
-        }
+        WriteAdvanceTrait(
+            advance: value.Advance,
+            options: options,
+            writer: writer
+        );
+        WriteDynamicsTrait(
+            dynamics: value.Dynamics,
+            options: options,
+            writer: writer
+        );
+        WriteCycleTrait(
+            cycle: value.Cycle,
+            options: options,
+            writer: writer
+        );
 
         WriteTraits(
             options: options,

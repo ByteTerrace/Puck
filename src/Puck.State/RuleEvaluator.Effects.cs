@@ -599,24 +599,21 @@ public sealed partial class RuleEvaluator {
     }
     // One source read per execution pass. Absence/forever skip a direct copy; expression faults remain diagnostic.
     private bool TryReadSource(IValueSourcedEffect source, CellKind kind, ulong tick, ulong engineTick, out long raw, out ExpressionFault fault) {
-        fault = ExpressionFault.None;
-        if (source.Expression is { } expression) {
-            return TryEvaluateExpression(
-                fault: out fault,
-                kind: kind,
-                program: expression,
-                tick: tick,
-                engineTick: engineTick,
-                value: out raw
-            );
+        Tick = tick;
+        EngineTick = engineTick;
+        if (!source.Source.TryRead(
+            engineTick: engineTick,
+            fact: out var fact,
+            fault: out fault,
+            kind: kind,
+            reader: m_host,
+            tick: tick
+        )) {
+            raw = 0;
+            return false;
         }
-        if (source.From is { } from) {
-            var fact = Read(
-                operand: from,
-                tick: tick,
-                engineTick: engineTick
-            );
 
+        if (source.Source.IsOperand) {
             raw = 0;
             if (
                 fact.IsAbsent ||
@@ -625,9 +622,10 @@ public sealed partial class RuleEvaluator {
                 return false;
             }
             raw = fact.ToRaw(kind: kind);
-        } else {
-            raw = source.RawValue;
+            return true;
         }
+
+        raw = fact.Value;
         return true;
     }
     private void RefuseSource(EffectFact effect, string ruleName, ulong tick, bool preflight, ExpressionFault fault) {

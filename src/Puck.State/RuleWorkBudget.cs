@@ -268,35 +268,27 @@ public static class RuleWorkBudget {
         var cost = 0L;
 
         foreach (var token in tokens) {
-            if (token.LeftExpression is { } expression) {
+            if (token.LeftSource.IsExpression || token.RightSource.IsExpression) {
                 cost = SaturatingAdd(
                     left: cost,
                     right: SaturatingAdd(
                         left: 1L,
                         right: SaturatingAdd(
-                            left: ExpressionCost(
-                                tokens: expression,
-                                kind: token.ValueKind,
-                                context: context
-                            ),
-                            right: ExpressionCost(
-                                tokens: token.RightExpression!,
-                                kind: token.ValueKind,
-                                context: context
-                            )
+                            left: token.LeftSource.Cost(context: context, kind: token.ValueKind),
+                            right: token.RightSource.Cost(context: context, kind: token.ValueKind)
                         )
                     )
                 );
                 continue;
             }
-            if (token.Left is { } left) { cost = SaturatingAdd(
+            cost = SaturatingAdd(
                 left: cost,
-                right: left.Cost(context: context)
-            ); }
-            if (token.Comparand is { } comparand) { cost = SaturatingAdd(
+                right: token.LeftSource.Cost(context: context, kind: token.ValueKind)
+            );
+            cost = SaturatingAdd(
                 left: cost,
-                right: comparand.Cost(context: context)
-            ); }
+                right: token.RightSource.Cost(context: context, kind: token.ValueKind)
+            );
         }
 
         return cost;
@@ -372,9 +364,9 @@ public static class RuleWorkBudget {
                 return [];
             }
             if (
-                (predicate.Comparand is not null) ||
-                (predicate.LeftExpression is not null) ||
-                (predicate.Left is not StateCellOperand { Key: { } key, KeyFrom: null } state)
+                predicate.RightSource.IsOperand ||
+                predicate.LeftSource.IsExpression ||
+                (predicate.LeftSource.Operand is not StateCellOperand { Key: { } key, KeyFrom: null } state)
             ) {
                 continue;
             }

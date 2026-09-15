@@ -71,18 +71,49 @@ public interface IStateWriteEffect : IStateAddressedEffect {
 /// <summary>Shared shape for the case types whose numeric value is read live rather than carried as a literal —
 /// <see cref="WriteEffect"/> and <see cref="PushStateEffect"/>.</summary>
 public interface IValueSourcedEffect {
+    /// <summary>The compiled value source.</summary>
+    CompiledValueSource Source { get; }
     /// <summary>The compiled numeric expression, or <see langword="null"/> for another source spelling.</summary>
-    CompiledExpressionToken[]? Expression { get; }
+    CompiledExpressionToken[]? Expression => Source.Expression;
     /// <summary>The live copy-source operand, or <see langword="null"/> when the value is a literal or an
     /// expression instead.</summary>
-    OperandFact? From { get; }
+    OperandFact? From => Source.Operand;
     /// <summary>The authored constant, pre-converted to the destination row's raw encoding at compile time — read
     /// only when neither <see cref="Expression"/> nor <see cref="From"/> applies.</summary>
-    long RawValue { get; }
+    long RawValue => Source.RawValue;
 }
 /// <summary>A state cell write — <c>setState</c>/<c>addState</c>, a literal, a live copy, an expression, or (for a
 /// kind=Text row) a text literal.</summary>
 public sealed class WriteEffect : EffectFact, IStateWriteEffect, IValueSourcedEffect {
+    /// <param name="row">The destination state row name.</param>
+    /// <param name="key">The destination cell key.</param>
+    /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal <paramref name="key"/>.</param>
+    /// <param name="write">Set or add.</param>
+    /// <param name="source">The compiled value source.</param>
+    /// <param name="text">The text literal for a kind=Text row, or <see langword="null"/> for a numeric write.</param>
+    /// <param name="describe">The authored spelling, for the rules read-back.</param>
+    /// <param name="handle">The pre-resolved destination row handle, or <see langword="default"/>.</param>
+    /// <param name="cellKey">The pre-parsed destination cell key for a literal key, or <see langword="default"/>.</param>
+    public WriteEffect(string row, string key, CompiledCellRef? keyFrom, StateWriteKind write, in CompiledValueSource source, string? text, string describe, StateHandle handle = default, CellName cellKey = default)
+        : base(describe) {
+        Row = row;
+        Key = key;
+        KeyFrom = keyFrom;
+        Write = write;
+        Source = source;
+        Text = text;
+        Handle = handle;
+        CellKey = ((cellKey != default)
+            ? cellKey
+            : (((key is not null) && CellName.TryParse(
+                candidate: key,
+                name: out var parsed,
+                reason: out _
+            ))
+                ? parsed
+                : default
+        ));
+    }
     /// <param name="row">The destination state row name.</param>
     /// <param name="key">The destination cell key.</param>
     /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal <paramref name="key"/>.</param>
@@ -96,34 +127,17 @@ public sealed class WriteEffect : EffectFact, IStateWriteEffect, IValueSourcedEf
     /// <param name="handle">The pre-resolved destination row handle, or <see langword="default"/>.</param>
     /// <param name="cellKey">The pre-parsed destination cell key for a literal key, or <see langword="default"/>.</param>
     public WriteEffect(string row, string key, CompiledCellRef? keyFrom, StateWriteKind write, long rawValue, OperandFact? from, string? text, CompiledExpressionToken[]? expression, string describe, StateHandle handle = default, CellName cellKey = default)
-        : base(describe) {
-        Row = row;
-        Key = key;
-        KeyFrom = keyFrom;
-        Write = write;
-        RawValue = rawValue;
-        From = from;
-        Text = text;
-        Expression = expression;
-        Handle = handle;
-        CellKey = ((cellKey != default)
-            ? cellKey
-            : (((key is not null) && CellName.TryParse(
-                candidate: key,
-                name: out var parsed,
-                reason: out _
-            ))
-                ? parsed
-                : default
-        ));
+        : this(row, key, keyFrom, write, new CompiledValueSource(rawValue: rawValue, operand: from, expression: expression), text, describe, handle, cellKey) {
     }
 
     /// <inheritdoc/>
     public CellName CellKey { get; }
     /// <inheritdoc/>
-    public CompiledExpressionToken[]? Expression { get; }
+    public CompiledValueSource Source { get; }
     /// <inheritdoc/>
-    public OperandFact? From { get; }
+    public CompiledExpressionToken[]? Expression => Source.Expression;
+    /// <inheritdoc/>
+    public OperandFact? From => Source.Operand;
     /// <inheritdoc/>
     public StateHandle Handle { get; }
     /// <inheritdoc/>
@@ -131,9 +145,9 @@ public sealed class WriteEffect : EffectFact, IStateWriteEffect, IValueSourcedEf
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
     /// <inheritdoc/>
-    public long RawValue { get; }
+    public long RawValue => Source.RawValue;
     /// <inheritdoc/>
-    public override bool ReadsHost => ((From is { HostOnly: true }) || ReferenceReadsHost(reference: KeyFrom) || RuleDataflow.ExpressionReadsHost(tokens: Expression));
+    public override bool ReadsHost => (Source.ReadsHost || ReferenceReadsHost(reference: KeyFrom));
     /// <inheritdoc/>
     public string Row { get; }
     /// <summary>Gets the text literal for a kind=Text row, or <see langword="null"/> for a numeric write.</summary>
@@ -632,6 +646,17 @@ public sealed class TransformStateEffect : EffectFact {
 /// <summary>Pushes one evaluated value into a history row's ring.</summary>
 public sealed class PushStateEffect : EffectFact, IValueSourcedEffect {
     /// <param name="row">The history row.</param>
+    /// <param name="source">The compiled value source.</param>
+    /// <param name="describe">The authored spelling, for the rules read-back.</param>
+    /// <param name="handle">The compiled history row handle, or default to resolve the row through the current catalog.</param>
+    public PushStateEffect(string row, in CompiledValueSource source, string describe, StateHandle handle = default)
+        : base(describe) {
+        Row = row;
+        Source = source;
+        Handle = handle;
+    }
+
+    /// <param name="row">The history row.</param>
     /// <param name="rawValue">The authored literal, pre-converted to the row's raw encoding — read only when
     /// neither <paramref name="from"/> nor <paramref name="expression"/> applies.</param>
     /// <param name="from">The live copy-source operand, or <see langword="null"/> for a literal/expression push.</param>
@@ -639,24 +664,21 @@ public sealed class PushStateEffect : EffectFact, IValueSourcedEffect {
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
     /// <param name="handle">The compiled history row handle, or default to resolve the row through the current catalog.</param>
     public PushStateEffect(string row, long rawValue, OperandFact? from, CompiledExpressionToken[]? expression, string describe, StateHandle handle = default)
-        : base(describe) {
-        Row = row;
-        RawValue = rawValue;
-        From = from;
-        Expression = expression;
-        Handle = handle;
+        : this(row, new CompiledValueSource(rawValue: rawValue, operand: from, expression: expression), describe, handle) {
     }
 
     /// <inheritdoc/>
-    public CompiledExpressionToken[]? Expression { get; }
+    public CompiledValueSource Source { get; }
     /// <inheritdoc/>
-    public OperandFact? From { get; }
+    public CompiledExpressionToken[]? Expression => Source.Expression;
+    /// <inheritdoc/>
+    public OperandFact? From => Source.Operand;
     /// <summary>Gets the compiled history row handle, or default.</summary>
     public StateHandle Handle { get; }
     /// <inheritdoc/>
-    public long RawValue { get; }
+    public long RawValue => Source.RawValue;
     /// <inheritdoc/>
-    public override bool ReadsHost => ((From is { HostOnly: true }) || RuleDataflow.ExpressionReadsHost(tokens: Expression));
+    public override bool ReadsHost => Source.ReadsHost;
     /// <summary>Gets the history row.</summary>
     public string Row { get; }
 
@@ -684,11 +706,9 @@ public sealed class PushStateEffect : EffectFact, IValueSourcedEffect {
     /// <param name="describe">The push's own read-back spelling.</param>
     public static PushStateEffect FromWrite(WriteEffect write, string describe) =>
         new(
-            write.Row,
-            write.RawValue,
-            write.From,
-            write.Expression,
-            describe,
+            row: write.Row,
+            source: write.Source,
+            describe: describe,
             handle: write.Handle
         );
 }
@@ -787,12 +807,7 @@ public static class EffectCosts {
     /// <param name="effect">The effect.</param>
     /// <param name="into">The read set being collected.</param>
     public static void CollectSourceReads(IValueSourcedEffect effect, List<RuleAccess> into) {
-        effect.From?.CollectReads(into: into);
-        if (effect.Expression is { } expression) {
-            foreach (var token in expression) {
-                token.Operand?.CollectReads(into: into);
-            }
-        }
+        effect.Source.CollectReads(into: into);
     }
     /// <summary>Counts operations and conservative state-candidate visits for a compiled expression.</summary>
     /// <param name="tokens">The compiled postfix expression.</param>
@@ -806,26 +821,11 @@ public static class EffectCosts {
     /// <param name="baseCost">The kind's own cost.</param>
     /// <param name="effect">The effect.</param>
     /// <param name="context">The compile context.</param>
-    public static long Sourced(long baseCost, IValueSourcedEffect effect, RuleCompileContext context) {
-        var cost = baseCost;
-
-        if (effect.From is { } source) {
-            cost = RuleWorkBudget.SaturatingAdd(
-                left: cost,
-                right: source.Cost(context: context)
-            );
-        }
-        if (effect.Expression is { } expression) {
-            cost = RuleWorkBudget.SaturatingAdd(
-                left: cost,
-                right: Expression(
-                    context: context,
-                    tokens: expression
-                )
-            );
-        }
-        return cost;
-    }
+    public static long Sourced(long baseCost, IValueSourcedEffect effect, RuleCompileContext context) =>
+        RuleWorkBudget.SaturatingAdd(
+            left: baseCost,
+            right: effect.Source.Cost(context: context)
+        );
     /// <summary>Sums the cost of a list of effects.</summary>
     /// <param name="effects">The effects.</param>
     /// <param name="context">The compile context.</param>

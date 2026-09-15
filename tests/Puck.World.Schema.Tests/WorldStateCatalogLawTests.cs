@@ -468,5 +468,21 @@ public sealed class WorldStateCatalogLawTests {
             expected: valueKind,
             actual: descriptor.ValueKind
         );
+        Assert.Equal(
+            expected: valueKind switch {
+                StateValueKind.Counter => CellKind.Fixed,
+                StateValueKind.Timer => CellKind.Int,
+                _ => ((CellKind)valueKind),
+            },
+            actual: descriptor.CellKind
+        );
+        Assert.Equal(
+            expected: valueKind switch {
+                StateValueKind.Counter => StateRole.Counter,
+                StateValueKind.Timer => StateRole.Timer,
+                _ => StateRole.None,
+            },
+            actual: descriptor.Role
+        );
     }
 }
