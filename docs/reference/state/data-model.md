@@ -33,11 +33,13 @@ member of a keyed row. A declared `Capacity` expresses table intent even
 when the row currently contains only one cell.
 
 In C#, `StateCell.Value` is a raw `long`: Int uses the integer directly,
-Fixed uses Q48.16 bits, and Bool uses zero or one. Text uses `StateCell.Text`.
+Fixed uses Q48.16 bits, and Bool uses zero or one. Text uses `StateCell.Text`,
+and Vector uses `StateCell.Vector` (`StateVector`).
 Q48.16 stores a number as an integer scaled by 65,536; a raw value of
 `65536` means one. Human-facing numeric literals are converted at ingress.
 An integer and a fixed-point number therefore cannot be interchanged by
-copying their raw bits.
+copying their raw bits. Vector components are normalized signed 8-bit integers (`sbyte[]`)
+scaled to radius 127, preserving bit-exact reproducibility across execution hosts.
 
 ## Choose an addressing shape
 
@@ -229,7 +231,49 @@ elongated-triangular, and truncated-trihexagonal tilings. It also generates
 Penrose P3 rhombs by Robinson-triangle inflation from a sun arrangement.
 
 Tiles become cells ordered outward from the origin. Shared sides supply
-adjacency, and edge normals such as `a0` and `a30` name the direction slots.
+## Embedding spaces and vectors
+
+An **embedding space** (`StateSpace`) establishes the model identity, revision, and
+dimensionality for semantic state vectors:
+
+- `Name`: a valid identifier referencing the space (e.g. `lore`).
+- `Model`: the model name (e.g. `puck-fixture` or `text-embedding-3-small`).
+- `Revision`: model revision string (e.g. `"1"`).
+- `Dimensions`: dimensionality in `[8, 1024]`.
+
+Every `Vector` table or slot must reference a declared space (`space: "lore"`).
+Vector components are stored in `StateVector` as unit-normalized signed 8-bit integers
+(`sbyte[]`) on radius 127:
+
+```puck
+state {
+    spaces {
+        space lore { model: "puck-fixture" revision: "1" dimensions: 256 }
+    }
+    world {
+        table events : Vector {
+            ambush = "Bandits ambushed the caravan on the north road"
+        }
+        table memories : Vector capacity(128) evicts { }
+        slot situation : Vector = "Travellers approach the gate at dusk"
+    }
+}
+```
+
+### Quantized drift and mean
+
+Quantized vector mutations preserve unit length on radius 127. Operations like
+`mix` compute weighted integer sums and re-project to the unit sphere using
+`SignedByteVectorFunctions.TryNormalize`, preventing drift or scale collapse over long
+simulation runs.
+
+### Model-change recovery
+
+Changing an embedding model or revision changes vector coordinates. Authored text
+in `.puck` sources is locked in `.embeddings.json` companion files via `puck embed`.
+When an embedding model changes, regenerating the lock file with `puck embed`
+re-embeds all authored text, preserving semantic intent under the new model without
+manual vector surgery.
 
 ## The catalog and the reader
 

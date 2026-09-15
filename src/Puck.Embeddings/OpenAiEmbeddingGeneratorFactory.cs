@@ -1,35 +1,38 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using Azure.AI.OpenAI;
+using Azure.Core;
+using Azure.Identity;
 using Microsoft.Extensions.AI;
-using OpenAI;
+using OpenAI.Embeddings;
 
 namespace Puck.Embeddings;
 
-/// <summary>Options for configuring an OpenAI-compatible embedding generator.</summary>
+/// <summary>Options for configuring an Azure OpenAI embedding generator using identity credentials.</summary>
 public sealed class OpenAiEmbeddingOptions {
-    /// <summary>The base endpoint URI (e.g. https://api.openai.com/v1).</summary>
+    /// <summary>The base endpoint URI (e.g. https://account.openai.azure.com/).</summary>
     public required Uri Endpoint { get; init; }
-    /// <summary>The model name.</summary>
+    /// <summary>The model or deployment name.</summary>
     public required string Model { get; init; }
     /// <summary>The embedding dimensions (if supported).</summary>
     public int? Dimensions { get; init; }
-    /// <summary>The raw API key string.</summary>
-    public string? ApiKey { get; init; }
-    /// <summary>Environment variable name containing the API key.</summary>
-    public string? ApiKeyEnvironment { get; init; }
-    /// <summary>HTTP header name for the API key (defaults to "Authorization").</summary>
-    public string ApiKeyHeader { get; init; } = "Authorization";
+    /// <summary>The token credential for identity authentication. Defaults to <see cref="DefaultAzureCredential"/>.</summary>
+    public TokenCredential? Credential { get; init; }
     /// <summary>When true, omits the dimensions field from requests.</summary>
     public bool OmitDimensions { get; init; }
-    /// <summary>HTTP request timeout. Defaults to 60 seconds.</summary>
+    /// <summary>Maximum retries on failure. Defaults to 3.</summary>
+    public int MaxRetries { get; init; } = 3;
+    /// <summary>HTTP pipeline timeout. Defaults to 60 seconds.</summary>
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(value: 60);
     /// <summary>Optional custom HttpClient for testing or custom transports.</summary>
     public HttpClient? HttpClient { get; init; }
+    /// <summary>Optional custom client options for testing.</summary>
+    public AzureOpenAIClientOptions? ClientOptions { get; init; }
 }
 
-/// <summary>Factory to create configured OpenAI-compatible embedding generators.</summary>
+/// <summary>Factory to create configured Azure OpenAI embedding generators using identity authentication.</summary>
 public static class OpenAiEmbeddingGeneratorFactory {
-    /// <summary>Creates a configured <see cref="IEmbeddingGenerator{TInput, TEmbedding}"/> for OpenAI-compatible endpoints.</summary>
+    /// <summary>Creates a configured <see cref="IEmbeddingGenerator{TInput, TEmbedding}"/> for Azure OpenAI endpoints.</summary>
     /// <param name="options">The generator configuration options.</param>
     /// <returns>A configured embedding generator.</returns>
     public static IEmbeddingGenerator<string, Embedding<float>> Create(OpenAiEmbeddingOptions options) {
@@ -37,144 +40,132 @@ public static class OpenAiEmbeddingGeneratorFactory {
         ArgumentNullException.ThrowIfNull(argument: options.Endpoint);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: options.Model);
 
-        string? apiKey = null;
+        var credential = (options.Credential ?? new DefaultAzureCredential());
+        var clientOptions = (options.ClientOptions ?? new AzureOpenAIClientOptions {
+            NetworkTimeout = options.Timeout,
+            RetryPolicy = new ClientRetryPolicy(maxRetries: Math.Max(0, options.MaxRetries)),
+        });
 
-        if (!string.IsNullOrEmpty(value: options.ApiKey)) {
-            apiKey = options.ApiKey;
-        } else if (!string.IsNullOrEmpty(value: options.ApiKeyEnvironment)) {
-            apiKey = Environment.GetEnvironmentVariable(variable: options.ApiKeyEnvironment);
+        if (options.HttpClient is not null) {
+            clientOptions.Transport = new HttpClientPipelineTransport(client: options.HttpClient);
         }
 
-        var effectiveKey = (string.IsNullOrEmpty(value: apiKey) ? "no-key" : apiKey);
-        var credential = new ApiKeyCredential(key: effectiveKey);
-
-        var clientOptions = new OpenAIClientOptions {
-            Endpoint = options.Endpoint,
-            NetworkTimeout = options.Timeout,
-        };
-
-        HttpMessageHandler httpHandler = (options.HttpClient is not null
-            ? new ForwardingHandler(options.HttpClient)
-            : new HttpClientHandler());
-
-        var customHeaderHandler = new HeaderOverrideHandler(
-            inner: httpHandler,
-            headerName: options.ApiKeyHeader,
-            apiKey: effectiveKey
+        var client = new AzureOpenAIClient(
+            endpoint: options.Endpoint,
+            credential: credential,
+            options: clientOptions
         );
-
-        var customHttpClient = new HttpClient(handler: customHeaderHandler) {
-            Timeout = options.Timeout,
-        };
-
-        clientOptions.Transport = new HttpClientPipelineTransport(client: customHttpClient);
-
-        var client = new OpenAIClient(credential: credential, options: clientOptions);
-        var embeddingClient = client.GetEmbeddingClient(model: options.Model);
 
         var dimensions = (options.OmitDimensions ? (int?)null : options.Dimensions);
-        var innerGenerator = embeddingClient.AsIEmbeddingGenerator(defaultModelDimensions: dimensions);
+        var embeddingClient = client.GetEmbeddingClient(options.Model);
 
-        return new SanitizingEmbeddingGenerator(
-            inner: innerGenerator,
-            apiKey: (string.IsNullOrEmpty(value: apiKey) ? null : apiKey),
-            expectedDimensions: dimensions
+        return new AzureOpenAiEmbeddingGenerator(
+            client: embeddingClient,
+            expectedDimensions: dimensions,
+            model: options.Model
         );
     }
 
-    private sealed class ForwardingHandler : HttpMessageHandler {
-        private readonly HttpClient m_client;
-
-        public ForwardingHandler(HttpClient client) {
-            m_client = client;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            m_client.SendAsync(request: request, cancellationToken: cancellationToken);
-    }
-
-    private sealed class HeaderOverrideHandler : DelegatingHandler {
-        private readonly string m_headerName;
-        private readonly string m_apiKey;
-
-        public HeaderOverrideHandler(HttpMessageHandler inner, string headerName, string apiKey) : base(innerHandler: inner) {
-            m_headerName = headerName;
-            m_apiKey = apiKey;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
-            if (!string.Equals(a: m_headerName, b: "Authorization", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                request.Headers.Remove(name: "Authorization");
-                request.Headers.TryAddWithoutValidation(name: m_headerName, value: m_apiKey);
-            }
-
-            return base.SendAsync(request: request, cancellationToken: cancellationToken);
-        }
-    }
-
-    private sealed class SanitizingEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>> {
-        private readonly IEmbeddingGenerator<string, Embedding<float>> m_inner;
-        private readonly string? m_apiKey;
-        private readonly int? m_expectedDimensions;
-
-        public SanitizingEmbeddingGenerator(
-            IEmbeddingGenerator<string, Embedding<float>> inner,
-            string? apiKey,
-            int? expectedDimensions
-        ) {
-            m_inner = inner;
-            m_apiKey = apiKey;
-            m_expectedDimensions = expectedDimensions;
-        }
-
+    private sealed class AzureOpenAiEmbeddingGenerator(
+        EmbeddingClient client,
+        int? expectedDimensions,
+        string model
+    ) : IEmbeddingGenerator<string, Embedding<float>> {
+        public EmbeddingGeneratorMetadata Metadata { get; } = new(
+            providerName: "Azure.AI.OpenAI",
+            defaultModelId: model,
+            defaultModelDimensions: expectedDimensions
+        );
 
         public async Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
             IEnumerable<string> values,
-            EmbeddingGenerationOptions? options = null,
+            Microsoft.Extensions.AI.EmbeddingGenerationOptions? options = null,
             CancellationToken cancellationToken = default
         ) {
+            ArgumentNullException.ThrowIfNull(argument: values);
+            var inputList = (values as IReadOnlyList<string> ?? values.ToList());
+
+            var genOptions = new OpenAI.Embeddings.EmbeddingGenerationOptions();
+            if (expectedDimensions.HasValue) {
+                genOptions.Dimensions = expectedDimensions.Value;
+            }
+
+            OpenAIEmbeddingCollection rawCollection;
+
             try {
-                var result = await m_inner.GenerateAsync(
-                    values: values,
-                    options: options,
+                var response = await client.GenerateEmbeddingsAsync(
+                    inputs: inputList,
+                    options: genOptions,
                     cancellationToken: cancellationToken
                 ).ConfigureAwait(continueOnCapturedContext: false);
+                rawCollection = response.Value;
+            } catch (ClientResultException crex) {
+                var body = crex.GetRawResponse()?.Content?.ToString() ?? "";
+                if (body.Length > 512) {
+                    body = body[..512];
+                }
+                body = SanitizeToken(text: body);
+                throw new InvalidOperationException(
+                    message: $"Azure OpenAI embedding request failed with HTTP {crex.Status}: {body}",
+                    innerException: null
+                );
+            } catch (Exception ex) {
+                throw new InvalidOperationException(
+                    message: SanitizeToken(text: ex.Message),
+                    innerException: null
+                );
+            }
 
-                foreach (var emb in result) {
-                    var span = emb.Vector.Span;
+            var orderedEmbeddings = rawCollection.OrderBy(static e => e.Index).ToList();
 
-                    if (m_expectedDimensions.HasValue && span.Length != m_expectedDimensions.Value) {
+            if (orderedEmbeddings.Count != inputList.Count) {
+                throw new InvalidOperationException(
+                    message: $"Answer count mismatch: expected {inputList.Count}, got {orderedEmbeddings.Count}."
+                );
+            }
+
+            var result = new List<Embedding<float>>(capacity: orderedEmbeddings.Count);
+
+            for (var i = 0; i < orderedEmbeddings.Count; i++) {
+                var item = orderedEmbeddings[i];
+                var floats = item.ToFloats();
+                var span = floats.Span;
+
+                if (expectedDimensions.HasValue && (span.Length != expectedDimensions.Value)) {
+                    throw new InvalidOperationException(
+                        message: $"Embedding vector length mismatch: expected {expectedDimensions.Value}, got {span.Length}."
+                    );
+                }
+
+                for (var j = 0; j < span.Length; j++) {
+                    if (!float.IsFinite(span[j])) {
                         throw new InvalidOperationException(
-                            message: $"Dimension mismatch: expected {m_expectedDimensions.Value}, received {span.Length}."
+                            message: "Non-finite embedding component encountered."
                         );
                     }
-
-                    for (var i = 0; i < span.Length; i++) {
-                        if (!float.IsFinite(span[i])) {
-                            throw new InvalidOperationException(message: "Received non-finite float value in embedding vector.");
-                        }
-                    }
                 }
 
-                return result;
-            } catch (Exception ex) when (ex is not OperationCanceledException) {
-                var message = ex.Message;
-
-                if (message.Length > 512) {
-                    message = string.Concat(message.AsSpan(start: 0, length: 509), "...");
-                }
-
-                if (!string.IsNullOrEmpty(value: m_apiKey)) {
-                    message = message.Replace(oldValue: m_apiKey, newValue: "***");
-                }
-
-                throw new InvalidOperationException(message: message, innerException: ex);
+                result.Add(new Embedding<float>(vector: floats));
             }
+
+            return new GeneratedEmbeddings<Embedding<float>>(embeddings: result);
+        }
+
+        private static string SanitizeToken(string text) {
+            if (string.IsNullOrEmpty(value: text)) {
+                return text;
+            }
+            return System.Text.RegularExpressions.Regex.Replace(
+                input: text,
+                pattern: @"(?i)bearer\s+[A-Za-z0-9_\-\.]+",
+                replacement: "Bearer [REDACTED]"
+            );
         }
 
         public object? GetService(Type serviceType, object? serviceKey = null) =>
-            m_inner.GetService(serviceType: serviceType, serviceKey: serviceKey);
+            serviceType == typeof(EmbeddingGeneratorMetadata) ? Metadata : null;
 
-        public void Dispose() => m_inner.Dispose();
+        public void Dispose() { }
     }
 }
+

@@ -17,11 +17,13 @@ namespace Puck.World.Server;
 /// <param name="ScanEveryTicks">Minimum completed world ticks between connection scans.</param>
 /// <param name="Recovery">checkpoint or recording; recording requires an active closed replay prefix.</param>
 /// <param name="Observations">Optional bounded collection observations, independent of effect dispatch.</param>
+/// <param name="Embeddings">Optional state text embedding connections.</param>
 public sealed record WorldExtensionConfiguration(string Schema, string World, Guid Lineage,
     IReadOnlyList<WorldExtensionProviderSettings> Providers, IReadOnlyList<WorldExtensionOperationSettings> Operations,
     IReadOnlyList<WorldExtensionClientSettings> Clients, IReadOnlyList<WorldExtensionConnection> Connections,
     WorldExtensionHostOptions? Worker = null, int MaximumEntries = 1024, int MaximumBytes = 16777216,
-    int ScanEveryTicks = 240, string Recovery = "checkpoint", IReadOnlyList<WorldExtensionObservationSettings>? Observations = null) {
+    int ScanEveryTicks = 240, string Recovery = "checkpoint", IReadOnlyList<WorldExtensionObservationSettings>? Observations = null,
+    IReadOnlyList<WorldExtensionEmbeddingSettings>? Embeddings = null) {
     private static void CheckDuplicates(JsonElement value) {
         if (value.ValueKind == JsonValueKind.Object) {
             var names = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -101,7 +103,34 @@ public interface IWorldConfiguredProvider : IDisposable {
     WorldExtensionOperation Bind(string name, string description, JsonElement settings);
 }
 
+/// <summary>One state text embedding connection connecting a text request table, vector result table, and optional status table.</summary>
+/// <param name="Name">Connection name.</param>
+/// <param name="Provider">Configured provider instance name.</param>
+/// <param name="Client">Canonical principal of a configured client.</param>
+/// <param name="Space">Declared space name in world definition.</param>
+/// <param name="Requests">Observable text table containing request text.</param>
+/// <param name="Results">Observable vector table receiving generated embeddings.</param>
+/// <param name="Status">Optional observable integer table receiving status.</param>
+/// <param name="MaximumItems">Batch selection limit in [1, 128]. Defaults to 64.</param>
+/// <param name="BatchSize">Provider call batch size in [1, 2048]. Defaults to 64.</param>
+/// <param name="RetryTicks">Minimum ticks to wait before retrying a failed key. Defaults to 1200.</param>
+/// <param name="CacheEntries">LRU cache capacity in [0, 65536]. Defaults to 4096.</param>
+public sealed record WorldExtensionEmbeddingSettings(
+    string Name,
+    string Provider,
+    string Client,
+    string Space,
+    string Requests,
+    string Results,
+    string? Status = null,
+    int MaximumItems = 64,
+    int BatchSize = 64,
+    int RetryTicks = 1200,
+    int CacheEntries = 4096
+);
+
 [JsonSerializable(typeof(WorldExtensionConfiguration))]
+[JsonSerializable(typeof(WorldExtensionEmbeddingSettings))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, RespectRequiredConstructorParameters = true,
     RespectNullableAnnotations = true, UseStringEnumConverter = true)]

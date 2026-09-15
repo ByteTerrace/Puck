@@ -77,14 +77,15 @@ public sealed partial class WorldServer {
                 engineTick,
                 out var row,
                 out var raw,
-                out _
+                out var text
             ) ||
                 (raw is not { } value) ||
                 ((cell.Kind is { } kind) && (row.Kind != kind)) ||
-                !cell.Comparison.Holds(
+                ((cell.Text is not null) && (text != cell.Text)) ||
+                ((cell.Kind != CellKind.Text) && !cell.Comparison.Holds(
                 FixedQ4816.FromRawBits(value: value),
                 FixedQ4816.FromRawBits(value: cell.Value)
-            )
+            ))
             ) {
                 candidate = current;
                 reason = $"the proposal is stale: state '{cell.Row}' changed; preview again";

@@ -7286,6 +7286,31 @@
                                                     ],
                                                     "additionalProperties": false,
                                                     "title": "VectorOperandTokenLiteral"
+                                                  },
+                                                  {
+                                                    "description": "An unlowered authored text embedding literal operand.",
+                                                    "properties": {
+                                                      "$type": {
+                                                        "const": "embed"
+                                                      },
+                                                      "text": {
+                                                        "description": "The text to embed.",
+                                                        "type": "string"
+                                                      },
+                                                      "space": {
+                                                        "description": "The optional space name.",
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ],
+                                                        "default": null
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false,
+                                                    "title": "VectorOperandTokenEmbed"
                                                   }
                                                 ],
                                                 "title": "VectorOperandToken"
@@ -7338,6 +7363,31 @@
                                                     ],
                                                     "additionalProperties": false,
                                                     "title": "VectorOperandTokenLiteral"
+                                                  },
+                                                  {
+                                                    "description": "An unlowered authored text embedding literal operand.",
+                                                    "properties": {
+                                                      "$type": {
+                                                        "const": "embed"
+                                                      },
+                                                      "text": {
+                                                        "description": "The text to embed.",
+                                                        "type": "string"
+                                                      },
+                                                      "space": {
+                                                        "description": "The optional space name.",
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ],
+                                                        "default": null
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false,
+                                                    "title": "VectorOperandTokenEmbed"
                                                   }
                                                 ],
                                                 "title": "VectorOperandToken"

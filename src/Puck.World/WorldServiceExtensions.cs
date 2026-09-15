@@ -10,6 +10,7 @@ internal sealed record WorldServiceExtensionOptions(WorldExtensionConfiguration?
 internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions options, WorldServer server,
     WorldInstanceHost instances, WorldReplayTape tape, IObjectBlobStore store) : IHostedService {
     private static readonly Dictionary<string, WorldExtensionProviderType> TypesValue = new(comparer: StringComparer.Ordinal);
+    private static readonly Dictionary<string, WorldExtensionEmbeddingProviderType> EmbeddingTypesValue = new(comparer: StringComparer.Ordinal);
     private static readonly Lock Gate = new();
 
     internal void Initialize() {
@@ -37,7 +38,8 @@ internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions option
             ),
             () => ((configuration.Recovery == "recording")
             ? tape.CaptureExternalOperationCause()
-            : server.CaptureExternalOperationCause(hostRow: instances.CaptureRow(row: boot)))
+            : server.CaptureExternalOperationCause(hostRow: instances.CaptureRow(row: boot))),
+            EmbeddingTypes
         );
         if (
             (configuration.Recovery == "recording") &&
@@ -56,6 +58,12 @@ internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions option
             TypesValue[providerType.Type] = providerType;
         }
     }
+    internal static void Register(WorldExtensionEmbeddingProviderType embeddingType) {
+        ArgumentNullException.ThrowIfNull(argument: embeddingType);
+        lock (Gate) {
+            EmbeddingTypesValue[embeddingType.Type] = embeddingType;
+        }
+    }
 
     public Task StartAsync(CancellationToken cancellationToken) {
         if (Runtime?.OperationNames.Count > 0) { Runtime.Host.Start(); }
@@ -71,6 +79,16 @@ internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions option
             lock (Gate) {
                 return new WorldExtensionRegistry<WorldExtensionProviderType>(
                     extensions: TypesValue.Values.ToArray(),
+                    keyOf: static type => type.Type
+                );
+            }
+        }
+    }
+    internal static WorldExtensionRegistry<WorldExtensionEmbeddingProviderType> EmbeddingTypes {
+        get {
+            lock (Gate) {
+                return new WorldExtensionRegistry<WorldExtensionEmbeddingProviderType>(
+                    extensions: EmbeddingTypesValue.Values.ToArray(),
                     keyOf: static type => type.Type
                 );
             }

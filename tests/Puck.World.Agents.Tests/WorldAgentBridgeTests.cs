@@ -4,7 +4,9 @@ using Microsoft.Extensions.AI;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Agents.Harness;
+using Puck.World.Machines;
 using Puck.World.Protocol;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Agents.Tests;
@@ -317,6 +319,106 @@ public sealed class WorldAgentBridgeTests {
             expected: "host answer",
             actual: answer.Text
         );
+    }
+    [Fact]
+    public async Task WriteVectorAsync_ThroughRealServer_GrantedLands_UngrantedRefused() {
+        var space = new StateSpace(Dimensions: 8, Model: "test-model", Name: CellName.Parse(candidate: "lore"), Revision: "1");
+        var eventsRow = new WorldStateRow(
+            Capacity: 4,
+            Kind: CellKind.Vector,
+            Name: CellName.Parse(candidate: "events"),
+            Space: "lore"
+        );
+        var definition = new WorldDefinition(
+            StateRaw: new WorldStateSection(
+                Spaces: [space],
+                World: [eventsRow]
+            )
+        );
+        var population = new WorldPopulation(definition: definition);
+        var stateDirectory = Path.Combine(Path.GetTempPath(), $"puck-agents-test-{Guid.NewGuid():N}");
+        var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
+        using var machines = new WorldMachineHost(screens: definition.Screens, catalog: new WorldMachineCatalog([]), documentPath: null);
+        var server = new WorldServer(
+            definition: definition,
+            population: population,
+            profiles: profiles,
+            envelope: new WorldRenderEnvelope(),
+            machines: machines
+        );
+
+        var transport = new LoopbackTransport(server: server);
+        var grantedPeer = WorldPrincipal.Peer(generation: 1, index: 1);
+        var ungrantedPeer = WorldPrincipal.Peer(generation: 1, index: 2);
+
+        Assert.True(WorldMutationKindCatalog.TryParseMask("UpsertStateCell", out var kindMask, out _));
+        server.Grant(
+            actor: WorldPrincipal.Console,
+            grant: new WorldGrant(
+                Budget: 10,
+                Capability: WorldCapability.Mutate,
+                Exclusive: false,
+                KindMask: kindMask,
+                Principal: grantedPeer,
+                Subject: GrantSubject.Section(section: WorldSection.State)
+            )
+        );
+        server.Grant(
+            actor: WorldPrincipal.Console,
+            grant: new WorldGrant(
+                Capability: WorldCapability.Edit,
+                Exclusive: false,
+                Principal: grantedPeer,
+                Subject: GrantSubject.State(name: "events")
+            )
+        );
+
+        server.Grant(
+            actor: WorldPrincipal.Console,
+            grant: new WorldGrant(
+                Budget: 10,
+                Capability: WorldCapability.Mutate,
+                Exclusive: false,
+                KindMask: kindMask,
+                Principal: ungrantedPeer,
+                Subject: GrantSubject.Section(section: WorldSection.State)
+            )
+        );
+
+        var grantedBridge = new WorldAgentBridge(
+            bodyIndex: 1,
+            channels: Channels,
+            dispatcher: InlineDispatcher.Instance,
+            link: transport,
+            principal: grantedPeer
+        );
+        var ungrantedBridge = new WorldAgentBridge(
+            bodyIndex: 2,
+            channels: Channels,
+            dispatcher: InlineDispatcher.Instance,
+            link: transport,
+            principal: ungrantedPeer
+        );
+
+        var vec = new sbyte[] { 127, 0, 0, 0, 0, 0, 0, 0 };
+
+        // Granted principal writes "g1"
+        _ = await grantedBridge.WriteVectorAsync(row: "events", key: "g1", components: vec, cancellationToken: TestContext.Current.CancellationToken);
+        server.Advance(stepTicks: 1);
+
+        var rowAfterGranted = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "events");
+        Assert.NotNull(rowAfterGranted);
+        Assert.NotNull(rowAfterGranted.Cells);
+        Assert.Contains(rowAfterGranted.Cells, c => c.Key.Value == "g1");
+
+        // Ungranted principal writes "u1"
+        _ = await ungrantedBridge.WriteVectorAsync(row: "events", key: "u1", components: vec, cancellationToken: TestContext.Current.CancellationToken);
+        server.Advance(stepTicks: 1);
+
+        var rowAfterUngranted = WorldDefinitionRows.FindStateRow(rows: server.Definition.State, name: "events");
+        Assert.NotNull(rowAfterUngranted);
+        Assert.NotNull(rowAfterUngranted.Cells);
+        Assert.DoesNotContain(rowAfterUngranted.Cells, c => c.Key.Value == "u1");
     }
     [Fact]
     public async Task MailboxCancellationPreventsQueuedWorldOperation() {
@@ -780,6 +882,8 @@ public sealed class WorldAgentBridgeTests {
             LastPrincipal = principal;
             return CorrelationId;
         }
+        public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal, Guid operationId) =>
+            SubmitEnvelope(payload: payload, principal: principal);
         public void SubmitIntent(in IntentSubmission submission) => throw new NotSupportedException();
         public void SubmitSession(SessionRequest request, Action<SessionReply> completion) => throw new NotSupportedException();
     }

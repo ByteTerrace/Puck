@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Parsing;
+using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Lowering;
 
 namespace Puck.World.Transpiler.Decompiler;
@@ -24,14 +25,17 @@ public static partial class WorldDecompiler {
         if (string.IsNullOrEmpty(name)) {
             return false;
         }
-        if (!char.IsLetter(name[0]) && name[0] != '_') {
+
+        if (name[0] != '_' && !char.IsLetter(name[0])) {
             return false;
         }
+
         for (var i = 1; i < name.Length; i++) {
-            if (!char.IsLetterOrDigit(name[i]) && name[i] != '_') {
+            if (name[i] != '_' && !char.IsLetterOrDigit(name[i])) {
                 return false;
             }
         }
+
         return !IsReservedSqlKeyword(name);
     }
 
@@ -39,20 +43,21 @@ public static partial class WorldDecompiler {
     /// representable state rows and rules into an embedded SQL block.</summary>
     /// <param name="root">The root JSON object representing the world definition.</param>
     /// <param name="sql">When <see langword="true"/>, emits representable state tables, slots, and rules inside a <c>sql { ... }</c> block.</param>
+    /// <param name="embeddings">Optional companion embedding lock file for resolving vector literals.</param>
     /// <returns>Formatted Puck DSL source code.</returns>
-    public static string Decompile(JsonObject root, bool sql) {
+    public static string Decompile(JsonObject root, bool sql, EmbeddingLock? embeddings = null) {
         if (!sql) {
-            return Decompile(root: root);
+            return Decompile(root: root, embeddings: embeddings);
         }
 
         var clonedRoot = (JsonObject)root.DeepClone();
-        var sqlBlock = ExtractSqlProjection(clonedRoot);
+        var sqlBlock = ExtractSqlProjection(clonedRoot, embeddings);
 
         if (string.IsNullOrWhiteSpace(sqlBlock)) {
-            return Decompile(root: root);
+            return Decompile(root: root, embeddings: embeddings);
         }
 
-        var decompiled = Decompile(root: clonedRoot);
+        var decompiled = Decompile(root: clonedRoot, embeddings: embeddings);
 
         if (string.IsNullOrWhiteSpace(decompiled)) {
             return sqlBlock;
@@ -70,8 +75,9 @@ public static partial class WorldDecompiler {
     /// representable state rows and rules into an embedded SQL block.</summary>
     /// <param name="jsonText">The raw or canonical JSON text.</param>
     /// <param name="sql">When <see langword="true"/>, emits representable state tables, slots, and rules inside a <c>sql { ... }</c> block.</param>
+    /// <param name="embeddings">Optional companion embedding lock file for resolving vector literals.</param>
     /// <returns>Formatted Puck DSL source code.</returns>
-    public static string Decompile(string jsonText, bool sql) {
+    public static string Decompile(string jsonText, bool sql, EmbeddingLock? embeddings = null) {
         ArgumentNullException.ThrowIfNull(jsonText);
 
         var node = JsonNode.Parse(jsonText);
@@ -79,7 +85,7 @@ public static partial class WorldDecompiler {
             throw new ArgumentException("Root JSON must be an object", nameof(jsonText));
         }
 
-        return Decompile(root: rootObj, sql: sql);
+        return Decompile(root: rootObj, sql: sql, embeddings: embeddings);
     }
 
     private sealed record SqlItem(
@@ -89,7 +95,7 @@ public static partial class WorldDecompiler {
         Dictionary<string, (string TableName, string ColumnName)> RowMappings
     );
 
-    private static string ExtractSqlProjection(JsonObject root) {
+    private static string ExtractSqlProjection(JsonObject root, EmbeddingLock? embeddings = null) {
         var stateObj = root["state"] as JsonObject;
         var worldArr = stateObj?["world"] as JsonArray;
         var rulesArr = root["rules"] as JsonArray;
@@ -113,8 +119,8 @@ public static partial class WorldDecompiler {
             // 1a. Contiguous multi-column candidate groups
             var candidateGroups = FindMultiColumnCandidateGroups(worldArr);
             foreach (var group in candidateGroups) {
-                var (sqlTable, rowMap) = DecompileMultiColumnTable(group.Rows);
-                if (sqlTable is not null && VerifyCandidateTable(sqlTable, group.Rows)) {
+                var (sqlTable, rowMap) = DecompileMultiColumnTable(group.Rows, embeddings);
+                if (sqlTable is not null && VerifyCandidateTable(sqlTable, group.Rows, embeddings)) {
                     candidateItems.Add(new SqlItem(
                         MinIndex: group.Indices[0],
                         ConsumedIndices: group.Indices,
@@ -139,7 +145,7 @@ public static partial class WorldDecompiler {
 
                 if (IsPileRow(rowObj)) {
                     var sqlPile = DecompilePileToSql(rowObj);
-                    if (sqlPile is not null && VerifyCandidateTable(sqlPile, [rowObj])) {
+                    if (sqlPile is not null && VerifyCandidateTable(sqlPile, [rowObj], embeddings)) {
                         var name = rowObj["name"]?.ToString() ?? "";
                         var map = new Dictionary<string, (string, string)>(StringComparer.Ordinal) {
                             [name] = (name, "")
@@ -152,7 +158,7 @@ public static partial class WorldDecompiler {
 
                 if (IsKeyOnlyRow(rowObj)) {
                     var sqlKeyOnly = DecompileKeyOnlyToSql(rowObj);
-                    if (sqlKeyOnly is not null && VerifyCandidateTable(sqlKeyOnly, [rowObj])) {
+                    if (sqlKeyOnly is not null && VerifyCandidateTable(sqlKeyOnly, [rowObj], embeddings)) {
                         var name = rowObj["name"]?.ToString() ?? "";
                         var map = new Dictionary<string, (string, string)>(StringComparer.Ordinal) {
                             [name] = (name, "")
@@ -164,8 +170,8 @@ public static partial class WorldDecompiler {
                 }
 
                 if (IsSlotRow(rowObj)) {
-                    var sqlSlot = DecompileSlotToSql(rowObj);
-                    if (sqlSlot is not null && VerifyCandidateTable(sqlSlot, [rowObj])) {
+                    var sqlSlot = DecompileSlotToSql(rowObj, embeddings);
+                    if (sqlSlot is not null && VerifyCandidateTable(sqlSlot, [rowObj], embeddings)) {
                         var name = rowObj["name"]?.ToString() ?? "";
                         var map = new Dictionary<string, (string, string)>(StringComparer.Ordinal) {
                             [name] = (name, "value")
@@ -267,7 +273,7 @@ public static partial class WorldDecompiler {
                     }
                 }
 
-                var nativeText = Decompile(root: candidateRoot);
+                var nativeText = Decompile(root: candidateRoot, embeddings: embeddings);
                 var sbCandidate = new StringBuilder();
                 sbCandidate.AppendLine("sql {");
                 foreach (var item in admittedSqlItems) {
@@ -298,7 +304,8 @@ public static partial class WorldDecompiler {
                 var loweringDiagnostics = new DiagnosticBag();
                 var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
                     document: parseResult.Value,
-                    diagnostics: loweringDiagnostics
+                    diagnostics: loweringDiagnostics,
+                    embeddings: embeddings
                 ).Value;
 
                 if (loweringDiagnostics.HasErrors || lowered is null) {
@@ -373,7 +380,7 @@ public static partial class WorldDecompiler {
         return false;
     }
 
-    private static bool VerifyCandidateTable(string sqlText, IReadOnlyList<JsonObject> originalRows) {
+    private static bool VerifyCandidateTable(string sqlText, IReadOnlyList<JsonObject> originalRows, EmbeddingLock? embeddings = null) {
         try {
             var puckSource = $"schema: \"puck.world.definition.v1\"\n\nsql {{\n{sqlText}\n}}\n";
             var diagnostics = new DiagnosticBag();
@@ -389,7 +396,8 @@ public static partial class WorldDecompiler {
             var loweringDiagnostics = new DiagnosticBag();
             var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
                 document: parseResult.Value,
-                diagnostics: loweringDiagnostics
+                diagnostics: loweringDiagnostics,
+                embeddings: embeddings
             ).Value;
 
             if (loweringDiagnostics.HasErrors || lowered is null) {
@@ -563,7 +571,7 @@ public static partial class WorldDecompiler {
         return groups;
     }
 
-    private static (string? Sql, Dictionary<string, (string TableName, string ColumnName)> RowMap) DecompileMultiColumnTable(List<JsonObject> rows) {
+    private static (string? Sql, Dictionary<string, (string TableName, string ColumnName)> RowMap) DecompileMultiColumnTable(List<JsonObject> rows, EmbeddingLock? embeddings = null) {
         var emptyMap = new Dictionary<string, (string TableName, string ColumnName)>(StringComparer.Ordinal);
         if (rows.Count == 0) {
             return (null, emptyMap);
@@ -715,7 +723,7 @@ public static partial class WorldDecompiler {
                 foreach (var r in rows) {
                     var cells = (JsonArray)r["cells"]!;
                     var cVal = cells[kIdx]?["value"];
-                    vals.Add(FormatSqlLiteral(cVal, r["kind"]?.ToString() ?? "Int"));
+                    vals.Add(FormatSqlLiteral(cVal, r["kind"]?.ToString() ?? "Int", r["space"]?.ToString(), embeddings));
                 }
 
                 var sep = (kIdx < firstRowCells.Count - 1) ? "," : ";";
@@ -733,7 +741,7 @@ public static partial class WorldDecompiler {
                !HasUnsupportedTraits(row);
     }
 
-    private static string? DecompileSlotToSql(JsonObject row) {
+    private static string? DecompileSlotToSql(JsonObject row, EmbeddingLock? embeddings = null) {
         var name = row["name"]?.ToString();
         if (!IsValidSqlIdentifier(name)) {
             return null;
@@ -746,7 +754,7 @@ public static partial class WorldDecompiler {
         var sb = new StringBuilder($"    DECLARE {name} {sqlType}");
 
         if (row["value"] is JsonNode valNode) {
-            sb.Append(CultureInfo.InvariantCulture, $" DEFAULT {FormatSqlLiteral(valNode, kind)}");
+            sb.Append(CultureInfo.InvariantCulture, $" DEFAULT {FormatSqlLiteral(valNode, kind, space, embeddings)}");
         }
 
         var hasMin = row["min"] is not null;
@@ -1327,13 +1335,17 @@ public static partial class WorldDecompiler {
         _ => "INT"
     };
 
-    private static string FormatSqlLiteral(JsonNode? node, string kind) {
+    private static string FormatSqlLiteral(JsonNode? node, string kind, string? space = null, EmbeddingLock? embeddings = null) {
         if (node is null) {
             return "NULL";
         }
 
         if (kind == "Vector") {
-            return $"vector('{EscapeSqlString(node.ToString())}')";
+            var raw = node.ToString();
+            if (embeddings is not null && embeddings.TryFindText(space, raw, out var sourceText)) {
+                return $"embed('{EscapeSqlString(sourceText)}')";
+            }
+            return $"vector('{EscapeSqlString(raw)}')";
         }
 
         if (kind == "Bool") {

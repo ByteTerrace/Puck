@@ -31,6 +31,11 @@ public static partial class RuleCompiler {
                 where: where,
                 expectedSpace: expectedSpace
             ),
+            VectorOperandToken.Embed embed => throw new RuleException(
+                detail: $"Embedded literal '{embed.Text}' was not resolved in lock file; run puck embed",
+                refusal: RuleRefusal.EffectSourceAmbiguous,
+                ruleName: ruleName
+            ),
             _ => throw new RuleException(
                 refusal: RuleRefusal.VectorOperandNotVector,
                 ruleName: ruleName,

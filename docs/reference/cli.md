@@ -27,7 +27,8 @@ System.CommandLine tree declared in `PuckRootCommand.cs`:
 | [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
 | [`puck registry`](#puck-registryworld-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
 | [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--bundle` inlines world imports, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`. |
-| [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror. |
+| [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror; optionally resolves companion vector locks with `--embeddings`. |
+| [`puck embed`](#the-puck-dsl-verbs) | resolves authored `embed(...)` text into committed `.embeddings.json` lock files, or probes cosine similarity rankings. |
 | [`puck fmt`](#the-puck-dsl-verbs) | formats `.puck` sources (distinct from `puck format`, which rewrites this repository's C#). |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting. |
@@ -911,13 +912,15 @@ error or missing repository root.
 
 ## The `.puck` DSL verbs
 
-Five verbs over `Puck.World.Transpiler`, the `.puck` authoring layer above the
+Six verbs over `Puck.World.Transpiler`, the `.puck` authoring layer above the
 world documents. JSON stays the wire form and the checked-in source of every
 shipped world; `.puck` is how one is written and read by hand.
 
 ```text
 puck compile <source.puck> [-o <out.json>] [--validate] [--bundle] [--strict] [--watch]
-puck decompile <source.json> [-o <out.puck>]
+puck decompile <source.json> [-o <out.puck>] [--sql] [--embeddings <file.embeddings.json>]
+puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
+puck embed probe <path> <text>
 puck fmt <path> [--check] [--indent-size 2] [--tabs]
 puck lint <path> [--strict]
 puck lsp
@@ -957,7 +960,14 @@ at boot.
 
 `decompile` writes beside its source when `-o` is omitted. A basis or import path
 inside the document resolves relative to the `.puck` file, so a round trip must
-write the `.puck` next to the JSON it came from.
+write the `.puck` next to the JSON it came from. Pass `--embeddings <file.embeddings.json>`
+to decompile vector cell arrays back into their original authored text literals when present
+in the lock.
+
+`embed` resolves all authored `embed(...)` text expressions and vector table literals in a
+`.puck` file or directory into committed `.embeddings.json` lock files. Pass `--check` in CI to verify
+that all locked vectors are present and fresh without network calls. Use `puck embed probe <path> <text>`
+to query a locked world's vector tables and rank matching keys by cosine similarity offline.
 
 Exit codes: **0** success, **1** diagnostics at or above the failing severity
 (`--strict` promotes warnings), **2** usage error or unreadable input.

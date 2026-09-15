@@ -17,9 +17,11 @@ public sealed class DynamicExtensionLoaderLawTests {
         public List<WorldSiloRetirementProvider> RetirementProviders { get; } = [];
         public List<WorldAuthenticationProvider> AuthenticationProviders { get; } = [];
         public List<WorldExtensionProviderType> OperationProviders { get; } = [];
+        public List<WorldExtensionEmbeddingProviderType> EmbeddingProviders { get; } = [];
         public Dictionary<string, Func<bool, (string ContentType, string Body)>> HealthChecks { get; } = new(comparer: StringComparer.OrdinalIgnoreCase);
 
         public void RegisterAuthentication(WorldAuthenticationProvider provider) => AuthenticationProviders.Add(item: provider);
+        public void RegisterEmbedding(WorldExtensionEmbeddingProviderType provider) => EmbeddingProviders.Add(item: provider);
         public void RegisterHealthCheck(string path, Func<bool, (string ContentType, string Body)> handler) => HealthChecks[path] = handler;
         public void RegisterOperation(WorldExtensionProviderType provider) => OperationProviders.Add(item: provider);
         public void RegisterRetirement(WorldSiloRetirementProvider provider) => RetirementProviders.Add(item: provider);

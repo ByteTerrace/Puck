@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
+        <ProjectReference Include="..\Puck.Embeddings\Puck.Embeddings.csproj" />
+    </ItemGroup>
+</Project>

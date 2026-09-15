@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Puck.Embeddings;
+using Puck.State;
 
 namespace Puck.World.Transpiler.Embeddings;
 
@@ -65,7 +65,9 @@ public sealed class EmbeddingLock {
         var dir = (Path.GetDirectoryName(path: sourcePath) ?? ".");
         var filename = Path.GetFileName(path: sourcePath);
 
-        if (filename.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (filename.EndsWith(value: ".world.json", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            filename = filename[..^11];
+        } else if (filename.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             filename = filename[..^5];
         }
 
@@ -164,18 +166,24 @@ public sealed class EmbeddingLock {
         return false;
     }
 
-    /// <summary>Finds the unique source text matching the given vector bytes in a space.</summary>
-    /// <param name="spaceName">The space name.</param>
-    /// <param name="vectorBase64Url">The base64url vector bytes.</param>
+    /// <summary>Finds the original text matching a vector base64url string across a given space (or the sole space if omitted).</summary>
+    /// <param name="spaceName">The name of the embedding space, or null to match across the single space if only one exists.</param>
+    /// <param name="vectorBase64Url">The base64url encoded vector bytes.</param>
     /// <param name="text">The single matching text, or null if zero or multiple entries match.</param>
     /// <returns><see langword="true"/> if exactly one entry holds the bytes; otherwise <see langword="false"/>.</returns>
-    public bool TryFindText(string spaceName, string vectorBase64Url, [NotNullWhen(returnValue: true)] out string? text) {
-        ArgumentNullException.ThrowIfNull(argument: spaceName);
+    public bool TryFindText(string? spaceName, string vectorBase64Url, [NotNullWhen(returnValue: true)] out string? text) {
         ArgumentNullException.ThrowIfNull(argument: vectorBase64Url);
 
         text = null;
 
-        if (!Spaces.TryGetValue(key: spaceName, value: out var space)) {
+        EmbeddingLockSpace? space;
+        if (spaceName is null) {
+            if (Spaces.Count == 1) {
+                space = Spaces.Values.First();
+            } else {
+                return false;
+            }
+        } else if (!Spaces.TryGetValue(key: spaceName, value: out space)) {
             return false;
         }
 
@@ -215,27 +223,43 @@ public sealed class EmbeddingLock {
         );
     }
 
+    /// <summary>Checks whether a space in the lock file differs from the specified space definition.</summary>
+    public bool IsSpaceStale(StateSpace space) {
+        ArgumentNullException.ThrowIfNull(argument: space);
+
+        return IsSpaceStale(dimensions: space.Dimensions, model: space.Model, revision: space.Revision, spaceName: space.Name.Value);
+    }
+
     /// <summary>Adds or updates an entry in the specified space.</summary>
-    public void SetEntry(string spaceName, EmbeddingIdentity identity, string text, string vectorBase64Url) {
+    public void SetEntry(string spaceName, string model, string revision, int dimensions, string text, string vectorBase64Url) {
         ArgumentNullException.ThrowIfNull(argument: spaceName);
+        ArgumentNullException.ThrowIfNull(argument: model);
+        ArgumentNullException.ThrowIfNull(argument: revision);
         ArgumentNullException.ThrowIfNull(argument: text);
         ArgumentNullException.ThrowIfNull(argument: vectorBase64Url);
 
         if (!Spaces.TryGetValue(key: spaceName, value: out var space)) {
             space = new EmbeddingLockSpace(
-                dimensions: identity.Dimensions,
-                model: identity.Model,
-                revision: identity.Revision
+                dimensions: dimensions,
+                model: model,
+                revision: revision
             );
             Spaces[spaceName] = space;
         } else {
-            space.Model = identity.Model;
-            space.Revision = identity.Revision;
-            space.Dimensions = identity.Dimensions;
+            space.Model = model;
+            space.Revision = revision;
+            space.Dimensions = dimensions;
         }
 
         var hash = ComputeTextHash(text: text);
         space.Entries[hash] = new EmbeddingLockEntry(Text: text, Vector: vectorBase64Url);
+    }
+
+    /// <summary>Adds or updates an entry in the specified space.</summary>
+    public void SetEntry(StateSpace space, string text, string vectorBase64Url) {
+        ArgumentNullException.ThrowIfNull(argument: space);
+
+        SetEntry(dimensions: space.Dimensions, model: space.Model, revision: space.Revision, spaceName: space.Name.Value, text: text, vectorBase64Url: vectorBase64Url);
     }
 
     /// <summary>Prunes entries in a space that are not in the used texts set.</summary>

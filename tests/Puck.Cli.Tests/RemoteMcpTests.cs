@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Puck.Mcp;
+using Puck.State;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -489,19 +490,22 @@ public sealed class RemoteMcpTests {
         var aliceAttachment = await Attach(client: alice);
         var bobAttachment = await Attach(client: bob);
 
+        Assert.True(StateVector.TryCreate(components: [127, 0, 0, 0, 0, 0, 0, 0], vector: out var sampleVector, error: out var err), err);
+        var validVector = sampleVector!.ToBase64Url();
+
         var aliceResult = await alice.CallToolAsync(
             "puck_state_vector_write",
             new Dictionary<string, object?> {
                 ["attachmentId"] = aliceAttachment,
                 ["row"] = "embedding",
                 ["key"] = "cell1",
-                ["vector"] = "b64u:AQID"
+                ["vector"] = validVector
             },
             cancellationToken: Token
         );
         Assert.False(condition: aliceResult.IsError, userMessage: aliceResult.Content.OfType<TextContentBlock>().FirstOrDefault()?.Text);
         Assert.Equal(
-            expected: "world.state.cell.set embedding cell1 b64u:AQID",
+            expected: $"world.state.cell.set embedding cell1 {validVector}",
             actual: Output(result: aliceResult)
         );
 
@@ -510,13 +514,13 @@ public sealed class RemoteMcpTests {
             new Dictionary<string, object?> {
                 ["attachmentId"] = aliceAttachment,
                 ["row"] = "slot_embedding",
-                ["vector"] = "b64u:AQID"
+                ["vector"] = validVector
             },
             cancellationToken: Token
         );
         Assert.False(condition: aliceSlotResult.IsError);
         Assert.Equal(
-            expected: "world.state.cell.set slot_embedding $value b64u:AQID",
+            expected: $"world.state.cell.set slot_embedding $value {validVector}",
             actual: Output(result: aliceSlotResult)
         );
 
@@ -526,7 +530,7 @@ public sealed class RemoteMcpTests {
                 ["attachmentId"] = bobAttachment,
                 ["row"] = "embedding",
                 ["key"] = "cell1",
-                ["vector"] = "b64u:AQID"
+                ["vector"] = validVector
             },
             cancellationToken: Token
         );
@@ -542,11 +546,27 @@ public sealed class RemoteMcpTests {
                 ["attachmentId"] = aliceAttachment,
                 ["row"] = "embedding",
                 ["key"] = "cell1",
-                ["vector"] = "b64u:AQID"
+                ["vector"] = validVector
             },
             cancellationToken: Token
         );
         Assert.True(condition: crossResult.IsError);
+
+        var invalidVectorResult = await alice.CallToolAsync(
+            "puck_state_vector_write",
+            new Dictionary<string, object?> {
+                ["attachmentId"] = aliceAttachment,
+                ["row"] = "embedding",
+                ["key"] = "cell1",
+                ["vector"] = "b64u:AQID"
+            },
+            cancellationToken: Token
+        );
+        Assert.True(condition: invalidVectorResult.IsError);
+        Assert.Contains(
+            expectedSubstring: "invalid vector",
+            actualString: Output(result: invalidVectorResult)
+        );
     }
 }
 

@@ -4,12 +4,10 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 using Puck.Embeddings;
 using Puck.Maths;
-using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Sql;
 
 namespace Puck.Cli.Transpiler;
 
@@ -34,14 +32,6 @@ public static class EmbedCommand {
             Description = "OpenAI-compatible HTTP endpoint URI.",
         };
 
-        var apiKeyEnvOption = new Option<string?>(name: "--api-key-env") {
-            Description = "Name of the environment variable containing the API key.",
-        };
-
-        var apiKeyHeaderOption = new Option<string?>(name: "--api-key-header") {
-            Description = "Header name for the API key (default: 'Authorization' with 'Bearer'; 'api-key' sends raw key).",
-        };
-
         var omitDimensionsOption = new Option<bool>(name: "--omit-dimensions") {
             Description = "When true, omits the dimensions field from embedding request payloads.",
         };
@@ -64,8 +54,6 @@ public static class EmbedCommand {
             checkOption,
             providerOption,
             endpointOption,
-            apiKeyEnvOption,
-            apiKeyHeaderOption,
             omitDimensionsOption,
             batchSizeOption,
             timeoutSecondsOption,
@@ -80,15 +68,11 @@ public static class EmbedCommand {
             var check = parseResult.GetValue(option: checkOption);
             var provider = parseResult.GetValue(option: providerOption);
             var endpoint = parseResult.GetValue(option: endpointOption);
-            var apiKeyEnv = parseResult.GetValue(option: apiKeyEnvOption);
-            var apiKeyHeader = parseResult.GetValue(option: apiKeyHeaderOption);
             var omitDimensions = parseResult.GetValue(option: omitDimensionsOption);
             var batchSize = parseResult.GetValue(option: batchSizeOption);
             var timeoutSeconds = parseResult.GetValue(option: timeoutSecondsOption);
 
             return await ExecuteEmbedAsync(
-                apiKeyEnv: apiKeyEnv,
-                apiKeyHeader: apiKeyHeader,
                 batchSize: batchSize,
                 cancellationToken: cancellationToken,
                 check: check,
@@ -127,8 +111,6 @@ public static class EmbedCommand {
 
         var providerOption = new Option<string?>(name: "--provider");
         var endpointOption = new Option<string?>(name: "--endpoint");
-        var apiKeyEnvOption = new Option<string?>(name: "--api-key-env");
-        var apiKeyHeaderOption = new Option<string?>(name: "--api-key-header");
         var omitDimensionsOption = new Option<bool>(name: "--omit-dimensions");
         var timeoutSecondsOption = new Option<int>(name: "--timeout-seconds") {
             DefaultValueFactory = static _ => 60,
@@ -145,8 +127,6 @@ public static class EmbedCommand {
             topOption,
             providerOption,
             endpointOption,
-            apiKeyEnvOption,
-            apiKeyHeaderOption,
             omitDimensionsOption,
             timeoutSecondsOption,
         };
@@ -159,15 +139,11 @@ public static class EmbedCommand {
             var top = parseResult.GetValue(option: topOption);
             var provider = parseResult.GetValue(option: providerOption);
             var endpoint = parseResult.GetValue(option: endpointOption);
-            var apiKeyEnv = parseResult.GetValue(option: apiKeyEnvOption);
-            var apiKeyHeader = parseResult.GetValue(option: apiKeyHeaderOption);
             var omitDimensions = parseResult.GetValue(option: omitDimensionsOption);
             var timeoutSeconds = parseResult.GetValue(option: timeoutSecondsOption);
 
             return await ExecuteProbeAsync(
                 against: against,
-                apiKeyEnv: apiKeyEnv,
-                apiKeyHeader: apiKeyHeader,
                 cancellationToken: cancellationToken,
                 endpoint: endpoint,
                 omitDimensions: omitDimensions,
@@ -188,8 +164,6 @@ public static class EmbedCommand {
         bool check,
         string? provider,
         string? endpoint,
-        string? apiKeyEnv,
-        string? apiKeyHeader,
         bool omitDimensions,
         int batchSize,
         int timeoutSeconds,
@@ -217,7 +191,7 @@ public static class EmbedCommand {
                 textsBySpace: out var textsBySpace
             )) {
                 Console.Error.WriteLine(value: $"error: Failed to analyze '{puckFile}': {failure}");
-                overallExitCode = 1;
+                overallExitCode = 2;
                 continue;
             }
 
@@ -235,13 +209,14 @@ public static class EmbedCommand {
             var declaredSpaceNames = spaces.Select(selector: s => s.Name).ToHashSet(comparer: StringComparer.Ordinal);
 
             // Pruning: check for unused spaces
-            foreach (var spaceName in lockFile.Spaces.Keys.ToList()) {
+            foreach (var spaceName in lockFile.Spaces.Keys) {
                 if (!declaredSpaceNames.Contains(value: spaceName)) {
                     unusedCount++;
-                    if (!check) {
-                        lockFile.Spaces.Remove(key: spaceName);
-                    }
                 }
+            }
+
+            if (!check) {
+                lockFile.PruneSpaces(usedSpaceNames: declaredSpaceNames);
             }
 
             // For each declared space, check entries
@@ -280,13 +255,14 @@ public static class EmbedCommand {
                 }
 
                 // Check unused entries in this space
-                foreach (var (hash, entry) in lockSpace.Entries.ToList()) {
+                foreach (var (_, entry) in lockSpace.Entries) {
                     if (!requiredTexts.Contains(value: entry.Text)) {
                         unusedCount++;
-                        if (!check) {
-                            lockSpace.Entries.Remove(key: hash);
-                        }
                     }
+                }
+
+                if (!check) {
+                    lockFile.PruneEntries(spaceName: space.Name, usedTexts: requiredTexts);
                 }
 
                 // Check missing entries
@@ -314,8 +290,6 @@ public static class EmbedCommand {
 
                     try {
                         generator = ResolveGenerator(
-                            apiKeyEnv: apiKeyEnv,
-                            apiKeyHeader: apiKeyHeader,
                             endpoint: endpoint,
                             identity: identity,
                             omitDimensions: omitDimensions,
@@ -360,7 +334,7 @@ public static class EmbedCommand {
                                     return 1;
                                 }
 
-                                lockFile.SetEntry(identity: identity, spaceName: space.Name, text: srcText, vectorBase64Url: b64);
+                                lockFile.SetEntry(dimensions: identity.Dimensions, model: identity.Model, revision: identity.Revision, spaceName: space.Name, text: srcText, vectorBase64Url: b64);
                             }
                         }
                     }
@@ -399,8 +373,6 @@ public static class EmbedCommand {
         int top,
         string? provider,
         string? endpoint,
-        string? apiKeyEnv,
-        string? apiKeyHeader,
         bool omitDimensions,
         int timeoutSeconds,
         CancellationToken cancellationToken
@@ -454,8 +426,6 @@ public static class EmbedCommand {
 
             try {
                 generator = ResolveGenerator(
-                    apiKeyEnv: apiKeyEnv,
-                    apiKeyHeader: apiKeyHeader,
                     endpoint: endpoint,
                     identity: identity,
                     omitDimensions: omitDimensions,
@@ -521,8 +491,6 @@ public static class EmbedCommand {
         EmbeddingIdentity identity,
         string? provider,
         string? endpoint,
-        string? apiKeyEnv,
-        string? apiKeyHeader,
         bool omitDimensions,
         int timeoutSeconds
     ) {
@@ -538,8 +506,6 @@ public static class EmbedCommand {
         }
 
         var options = new OpenAiEmbeddingOptions {
-            ApiKeyEnvironment = apiKeyEnv,
-            ApiKeyHeader = (apiKeyHeader ?? "Authorization"),
             Dimensions = identity.Dimensions,
             Endpoint = new Uri(uriString: endpoint),
             Model = identity.Model,
@@ -577,13 +543,26 @@ public static class EmbedCommand {
         }
 
         var document = parseResult.Value;
+        var existingLock = EmbeddingLock.TryLoad(rootSourcePath: puckFilePath);
         var loweringDiags = new DiagnosticBag();
         var lowerResult = WorldDocumentEmitter.LowerWithDiagnostics(
             basePath: Path.GetDirectoryName(path: puckFilePath),
+            cancellationToken: default,
             diagnostics: loweringDiags,
+            discoveredEmbeddings: out var discoveredEmbeddings,
             document: document,
-            embeddings: null
+            embeddings: existingLock,
+            sourceMap: null
         );
+
+        var realErrors = loweringDiags.Where(static d => (d.Severity == DiagnosticSeverity.Error) &&
+            (d.Code != PuckDiagnosticCodes.EmbeddingLockMissing) &&
+            (d.Code != PuckDiagnosticCodes.EmbeddingLockStale)).ToList();
+
+        if (realErrors.Count > 0) {
+            failure = $"Lowering errors in '{puckFilePath}': " + string.Join(separator: "; ", values: realErrors.Select(static e => $"{e.Code}: {e.Message}"));
+            return false;
+        }
 
         var discoveredSpaces = new List<DiscoveredSpace>();
 
@@ -603,124 +582,7 @@ public static class EmbedCommand {
         }
 
         spaces = discoveredSpaces;
-
-        var defaultSpace = (discoveredSpaces.Count == 1 ? discoveredSpaces[0].Name : null);
-        var textsMap = new Dictionary<string, HashSet<string>>(comparer: StringComparer.Ordinal);
-
-        foreach (var sp in discoveredSpaces) {
-            textsMap[sp.Name] = new HashSet<string>(comparer: StringComparer.Ordinal);
-        }
-
-        // Collect all embedded texts from SQL blocks in the AST
-        foreach (var stmt in document.Statements) {
-            if (stmt is EmbeddedBlockNode { Language: var lang } embeddedBlock &&
-                string.Equals(a: lang, b: "sql", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                var lexer = new StateSqlLexer(
-                    baseColumn: embeddedBlock.BodyColumn,
-                    baseLine: embeddedBlock.BodyLine,
-                    baseOffset: embeddedBlock.BodyOffset,
-                    source: embeddedBlock.Body
-                );
-                var tokens = lexer.Tokenize(diagnostics: new DiagnosticBag());
-                var parser = new StateSqlParser(diagnostics: new DiagnosticBag(), tokens: tokens);
-                var sqlStmts = parser.ParseStatements();
-
-                foreach (var sqlStmt in sqlStmts) {
-                    CollectSqlEmbedTexts(defaultSpace: defaultSpace, statement: sqlStmt, textsMap: textsMap);
-                }
-            }
-        }
-
-        textsBySpace = textsMap;
+        textsBySpace = discoveredEmbeddings;
         return true;
-    }
-
-    private static void CollectSqlEmbedTexts(
-        SqlStatement statement,
-        string? defaultSpace,
-        Dictionary<string, HashSet<string>> textsMap
-    ) {
-        var embedExprs = new List<SqlVectorLiteralExpression>();
-
-        CollectEmbedExpressionsFromStatement(sink: embedExprs, statement: statement);
-
-        foreach (var embed in embedExprs) {
-            var targetSpace = (embed.Space ?? defaultSpace);
-
-            if (!string.IsNullOrEmpty(value: targetSpace)) {
-                if (!textsMap.TryGetValue(key: targetSpace, value: out var set)) {
-                    set = new HashSet<string>(comparer: StringComparer.Ordinal);
-                    textsMap[targetSpace] = set;
-                }
-
-                set.Add(item: embed.Payload);
-            }
-        }
-    }
-
-    private static void CollectEmbedExpressionsFromStatement(SqlStatement statement, List<SqlVectorLiteralExpression> sink) {
-        switch (statement) {
-            case SqlInsertStatement insert:
-                foreach (var row in insert.ValuesRows) {
-                    foreach (var expr in row) {
-                        CollectEmbedExpressions(expr: expr, sink: sink);
-                    }
-                }
-                break;
-
-            case SqlUpdateStatement update:
-                foreach (var assign in update.Assignments) {
-                    CollectEmbedExpressions(expr: assign.Value, sink: sink);
-                }
-                if (update.Where is not null) {
-                    CollectEmbedExpressions(expr: update.Where, sink: sink);
-                }
-                break;
-
-            case SqlInsertSelectStatement insertSelect:
-                foreach (var sel in insertSelect.SelectList) {
-                    CollectEmbedExpressions(expr: sel, sink: sink);
-                }
-                if (insertSelect.Where is not null) {
-                    CollectEmbedExpressions(expr: insertSelect.Where, sink: sink);
-                }
-                CollectEmbedExpressions(expr: insertSelect.OrderBy, sink: sink);
-                break;
-
-            case SqlDeclareSlotStatement slot:
-                if (slot.DefaultValue is not null) {
-                    CollectEmbedExpressions(expr: slot.DefaultValue, sink: sink);
-                }
-                break;
-
-            case SqlCreateRuleStatement rule:
-                foreach (var ruleStmt in rule.Statements) {
-                    CollectEmbedExpressionsFromStatement(sink: sink, statement: ruleStmt);
-                }
-                break;
-        }
-    }
-
-    private static void CollectEmbedExpressions(SqlExpression expr, List<SqlVectorLiteralExpression> sink) {
-        switch (expr) {
-            case SqlVectorLiteralExpression { Kind: "embed" } embed:
-                sink.Add(item: embed);
-                break;
-
-            case SqlBinaryExpression bin:
-                CollectEmbedExpressions(expr: bin.Left, sink: sink);
-                CollectEmbedExpressions(expr: bin.Right, sink: sink);
-                break;
-
-            case SqlUnaryExpression un:
-                CollectEmbedExpressions(expr: un.Operand, sink: sink);
-                break;
-
-            case SqlFunctionCallExpression fn:
-                foreach (var arg in fn.Arguments) {
-                    CollectEmbedExpressions(expr: arg, sink: sink);
-                }
-                break;
-        }
     }
 }

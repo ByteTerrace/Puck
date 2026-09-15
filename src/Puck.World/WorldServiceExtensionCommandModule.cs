@@ -16,7 +16,7 @@ internal sealed class WorldServiceExtensionCommandModule(Func<WorldServiceExtens
             ) ??
                 new CommandResult(Output: (("[world.extensions.catalog: " + string.Join(
                 separator: ", ",
-                values: WorldServiceExtensions.Types.Keys
+                values: WorldServiceExtensions.Types.Keys.Concat(second: WorldServiceExtensions.EmbeddingTypes.Keys)
             )) + "]")))
         );
         yield return CommandDefinition.WithWireArgs(
@@ -32,7 +32,7 @@ internal sealed class WorldServiceExtensionCommandModule(Func<WorldServiceExtens
                 var principal = context.ActingPrincipal();
 
                 if (principal == WorldPrincipal.Console) {
-                    return new CommandResult(Output: (((((("[world.extensions: operations=" + string.Join(
+                    return new CommandResult(Output: (((((((("[world.extensions: operations=" + string.Join(
                         separator: ", ",
                         values: runtime.OperationNames
                     )) + "; connections=") + string.Join(
@@ -44,6 +44,11 @@ internal sealed class WorldServiceExtensionCommandModule(Func<WorldServiceExtens
                         separator: "; ",
                         values: runtime.Observations.Select(selector: source =>
                             $"{source.Name}: kind={source.Kind} items={source.Items} tick={(source.ObservedTick?.ToString() ?? "never")} reading={source.Reading} applied={source.Applied} submissions={source.Submissions} failure={(source.Failure ?? "none")} lastRefusedField={(source.LastRefusedField ?? "none")}")
+                    )) +
+                        "; embeddings=") + string.Join(
+                        separator: "; ",
+                        values: runtime.Embeddings.Select(selector: embedding =>
+                            $"{embedding.Name}: space={embedding.Space} model={embedding.Model} revision={embedding.Revision} dimensions={embedding.Dimensions} selected={embedding.Selected} cached={embedding.Cached} submitted={embedding.Submitted} failed={embedding.Failed} lastCallTick={(embedding.LastCallTick?.ToString() ?? "never")} inFlight={embedding.InFlight} failure={(embedding.LastFailure ?? "none")}")
                     )) +
                         $"; failure={(runtime.LastFailure ?? "none")}]"));
                 }

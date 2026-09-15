@@ -247,6 +247,8 @@ public sealed class VectorStateLawTests {
 
     [Fact]
     public void Vector_EvictingTableReplayDeterminism() {
+        Fixtures.SkipIfReplayDirectoryUnwritable();
+
         var space = SampleSpace(name: "lore", dimensions: 8);
         var eventsRow = new WorldStateRow(
             Capacity: 2,
@@ -258,41 +260,74 @@ public sealed class VectorStateLawTests {
         var definition = BuildDocumentWithState(spaces: [space], rows: [eventsRow]);
 
         using var serverA = Fixtures.FreshServer(definition: definition);
-        using var serverB = Fixtures.FreshServer(definition: definition);
+        var transport = new LoopbackTransport(server: serverA.Server);
+        var tape = new WorldReplayTape(
+            liveServer: serverA.Server,
+            profiles: serverA.Server.Profiles,
+            transport: transport,
+            engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
+            addonHostFactory: static (_, _) => new NullAddonHost()
+        );
+        var tapeName = $"vector-evicting-replay-{Guid.NewGuid():N}";
+        Assert.True(tape.TryBeginRecording(name: tapeName, refusal: out var refusal), refusal);
 
         var keys = new[] { "e1", "e2", "e3", "e4" };
+        var recordedHashes = new List<ulong>();
+
         for (var i = 0; i < keys.Length; i++) {
             var vec = SampleVector(dimensions: 8, nonZeroIndex: (i % 8));
-            var mutation = new WorldMutation.UpsertStateCell(
+            transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateCell(
                 Principal: WorldPrincipal.Console,
                 Row: "events",
                 Key: keys[i],
                 Value: 0L,
                 Kind: WorldDocumentWriteKind.Set,
                 Vector: vec
-            );
-
-            serverA.Server.EnqueueMutation(mutation: mutation);
-            serverB.Server.EnqueueMutation(mutation: mutation);
+            ));
 
             serverA.Step();
-            serverB.Step();
-
-            Assert.Equal(
-                expected: WorldRuntimeStateHash.HashAuthoritative(server: serverA.Server, tick: serverA.Server.NextInputTick),
-                actual: WorldRuntimeStateHash.HashAuthoritative(server: serverB.Server, tick: serverB.Server.NextInputTick)
-            );
+            tape.NoteTick();
+            recordedHashes.Add(WorldRuntimeStateHash.HashAuthoritative(server: serverA.Server, tick: serverA.Server.NextInputTick));
         }
 
-        // Both servers should have evicted the oldest entries and retain only e3 and e4
-        var rowA = WorldDefinitionRows.FindStateRow(rows: serverA.Server.Definition.State, name: "events")!;
-        var rowB = WorldDefinitionRows.FindStateRow(rows: serverB.Server.Definition.State, name: "events")!;
-        Assert.Equal(2, rowA.Cells!.Count);
-        Assert.Equal(2, rowB.Cells!.Count);
-        Assert.Equal("e3", rowA.Cells[0].Key.Value);
-        Assert.Equal("e4", rowA.Cells[1].Key.Value);
-        Assert.Equal("e3", rowB.Cells[0].Key.Value);
-        Assert.Equal("e4", rowB.Cells[1].Key.Value);
+        _ = tape.StopRecording();
+
+        try {
+            using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: tapeName));
+            var snapshot = WorldReplaySnapshot.Read(stream: stream);
+
+            using var serverB = Fixtures.FreshServer(definition: definition);
+            var tapeB = new WorldReplayTape(
+                liveServer: serverB.Server,
+                profiles: serverB.Server.Profiles,
+                transport: new LoopbackTransport(server: serverB.Server),
+                engines: [],
+                machineHostFactory: Fixtures.MachineHostFactory,
+                addonHostFactory: static (_, _) => new NullAddonHost()
+            );
+
+            Assert.True(tapeB.TryBeginDrive(documentPath: null, forkName: "never-recorded", name: tapeName, refusal: out refusal, toTick: null), refusal);
+
+            for (var i = 0; i < keys.Length; i++) {
+                tapeB.InjectDriveTick();
+                serverB.Step();
+                tapeB.NoteTick();
+
+                var replayHash = WorldRuntimeStateHash.HashAuthoritative(server: serverB.Server, tick: serverB.Server.NextInputTick);
+                Assert.Equal(recordedHashes[i], replayHash);
+            }
+
+            var rowB = WorldDefinitionRows.FindStateRow(rows: serverB.Server.Definition.State, name: "events")!;
+            Assert.Equal(2, rowB.Cells!.Count);
+            Assert.Equal("e3", rowB.Cells[0].Key.Value);
+            Assert.Equal("e4", rowB.Cells[1].Key.Value);
+        } finally {
+            var path = WorldReplayTape.PathFor(name: tapeName);
+            if (File.Exists(path)) {
+                File.Delete(path);
+            }
+        }
     }
 
     [Fact]
@@ -647,5 +682,383 @@ public sealed class VectorStateLawTests {
         var hiddenQueryResult = Assert.Single(hiddenResults);
         Assert.True(hiddenQueryResult.IsError);
         Assert.Contains(expectedSubstring: "query cell 'hiddenQuery.$value' is hidden", actualString: hiddenQueryResult.Output);
+    }
+
+    [Fact]
+    public void VectorRemember_SkipsNearDuplicate_AndIgnoresOwnKey() {
+        var space = SampleSpace(name: "lore", dimensions: 8);
+        var vecA = SampleVector(dimensions: 8, nonZeroIndex: 0);
+        var componentsPrime = new sbyte[8];
+        componentsPrime[0] = 126;
+        componentsPrime[1] = 15;
+        Assert.True(StateVector.TryCreate(components: componentsPrime, vector: out var vecAPrime, error: out var err), err);
+
+        var eventsRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [
+                new StateCell(Key: CellName.Parse(candidate: "e1"), Vector: vecAPrime),
+            ],
+            Kind: CellKind.Vector,
+            Name: CellName.Parse(candidate: "events"),
+            Space: "lore"
+        );
+        var memoriesRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [
+                new StateCell(Key: CellName.Parse(candidate: "k1"), Vector: vecA),
+            ],
+            Evicts: true,
+            Kind: CellKind.Vector,
+            Name: CellName.Parse(candidate: "memories"),
+            Space: "lore"
+        );
+
+        var rule = new WorldRule(
+            Effects: [
+                new ActionEffect.TransformState(Transform: new StateTransform.Remember(
+                    From: "events[e1]",
+                    Into: "memories",
+                    Key: "k1",
+                    UnlessWithin: "0.9"
+                )),
+            ],
+            Gate: null,
+            Name: CellName.Parse(candidate: "remember-own-key")
+        );
+
+        var definition = BuildDocumentWithState(
+            spaces: [space],
+            rows: [eventsRow, memoriesRow],
+            rules: [rule]
+        );
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+
+        var memoriesAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "memories")!;
+        Assert.NotNull(memoriesAfter.Cells);
+        var k1Cell = Assert.Single(memoriesAfter.Cells);
+        Assert.Equal("k1", k1Cell.Key.Value);
+        Assert.NotNull(k1Cell.Vector);
+        Assert.True(k1Cell.Vector.Components.SequenceEqual(vecAPrime.Components));
+    }
+
+    [Fact]
+    public void Vector_RuleCopyFiredIntoAbsentKey_ReadsBackCopiedBytes() {
+        var space = SampleSpace(name: "lore", dimensions: 8);
+        var vecA = SampleVector(dimensions: 8, nonZeroIndex: 0);
+        var vecB = SampleVector(dimensions: 8, nonZeroIndex: 1);
+
+        var eventsRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [
+                new StateCell(Key: CellName.Parse(candidate: "k1"), Vector: vecA),
+                new StateCell(Key: CellName.Parse(candidate: "k2"), Vector: vecB),
+            ],
+            Kind: CellKind.Vector,
+            Name: CellName.Parse(candidate: "events"),
+            Space: "lore"
+        );
+        var memoriesRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [],
+            Kind: CellKind.Vector,
+            Name: CellName.Parse(candidate: "memories"),
+            Space: "lore"
+        );
+
+        var rule = new WorldRule(
+            ForEach: "events",
+            Effects: [
+                new ActionEffect.SetState(
+                    FromKey: "$each",
+                    FromState: "events",
+                    Key: "$each",
+                    State: "memories"
+                ),
+            ],
+            Gate: null,
+            Name: CellName.Parse(candidate: "copy-each")
+        );
+
+        var definition = BuildDocumentWithState(
+            spaces: [space],
+            rows: [eventsRow, memoriesRow],
+            rules: [rule]
+        );
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+
+        var memoriesAfter = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "memories")!;
+        Assert.NotNull(memoriesAfter.Cells);
+        Assert.Equal(2, memoriesAfter.Cells.Count);
+
+        var c1 = StateRows.FindCell(cells: memoriesAfter.Cells, key: CellName.Parse("k1"));
+        var c2 = StateRows.FindCell(cells: memoriesAfter.Cells, key: CellName.Parse("k2"));
+
+        Assert.NotNull(c1);
+        Assert.NotNull(c2);
+        Assert.NotNull(c1.Vector);
+        Assert.NotNull(c2.Vector);
+        Assert.True(c1.Vector.Components.SequenceEqual(vecA.Components));
+        Assert.True(c2.Vector.Components.SequenceEqual(vecB.Components));
+    }
+
+    [Fact]
+    public void Vector_WorldStateTransform_RefusesInvalidShapesByName() {
+        var spaceLore = SampleSpace(name: "lore", dimensions: 8);
+        var spaceOther = SampleSpace(name: "other", dimensions: 16);
+
+        var vecLore = SampleVector(dimensions: 8, nonZeroIndex: 0);
+        var vecOther = SampleVector(dimensions: 16, nonZeroIndex: 0);
+
+        var loreRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [new StateCell(Key: CellName.Parse("c1"), Vector: vecLore)],
+            Kind: CellKind.Vector,
+            Name: CellName.Parse("loreRow"),
+            Space: "lore"
+        );
+        var otherRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [new StateCell(Key: CellName.Parse("c1"), Vector: vecOther)],
+            Kind: CellKind.Vector,
+            Name: CellName.Parse("otherRow"),
+            Space: "other"
+        );
+        var ranksRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [],
+            Kind: CellKind.Int,
+            Name: CellName.Parse("ranks")
+        );
+        var unconstrainedKeyedRow = new WorldStateRow(
+            Cells: [],
+            Domain: StateDomain.Keys.Instance,
+            Kind: CellKind.Int,
+            Name: CellName.Parse("unconstrainedKeyed")
+        );
+        var textSlotRow = new WorldStateRow(
+            Cells: [new StateCell(Key: WorldStateRow.SlotKey, Text: "")],
+            Kind: CellKind.Text,
+            Name: CellName.Parse("textSlot")
+        );
+        var textTableRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [],
+            Kind: CellKind.Text,
+            Name: CellName.Parse("textTable")
+        );
+        var notKeyedBoolRow = new WorldStateRow(
+            Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 1L)],
+            Kind: CellKind.Bool,
+            Name: CellName.Parse("boolSlot")
+        );
+        var intWhereRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [new StateCell(Key: CellName.Parse("c1"), Value: 1L)],
+            Kind: CellKind.Int,
+            Name: CellName.Parse("intWhere")
+        );
+
+        var definition = BuildDocumentWithState(
+            spaces: [spaceLore, spaceOther],
+            rows: [loreRow, otherRow, ranksRow, unconstrainedKeyedRow, textSlotRow, textTableRow, notKeyedBoolRow, intWhereRow]
+        );
+
+        using var row = HostRow.Build(name: "boot", definition: definition);
+        var registry = new CommandRegistry(modules: [new WorldStateCommandModule(
+            authority: new FakeConsoleAuthority(instance: row.Instance),
+            echoes: new WorldDeferredVerbEchoes(),
+            link: row.Instance.Link
+        )]);
+
+        string? diag = null;
+        row.Server.EchoTap = echo => { if (echo.Rejected) { diag = echo.Message; } };
+
+        void AssertRefused(string transformJson, string expectedReason) {
+            diag = null;
+            var res = registry.Submit($"world.state.transform {transformJson}");
+            Assert.False(res.IsError);
+            row.Server.Advance(stepTicks: Fixtures.StepTicks);
+            Assert.NotNull(diag);
+            Assert.Contains(expectedReason, diag, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // 1. Cross-space operand refused by name
+        AssertRefused(
+            """{"$type":"nearest","from":"loreRow","query":"otherRow[c1]","into":"ranks","k":1}""",
+            "do not match"
+        );
+
+        // 2. Where that is not a keyed Bool row:
+        // Case A: kind is not Bool (Int)
+        AssertRefused(
+            """{"$type":"nearest","from":"loreRow","query":"loreRow[c1]","into":"ranks","k":1,"where":"intWhere"}""",
+            "must be kind bool"
+        );
+
+        // Case B: Bool but not keyed (slot)
+        AssertRefused(
+            """{"$type":"nearest","from":"loreRow","query":"loreRow[c1]","into":"ranks","k":1,"where":"boolSlot"}""",
+            "must be a keyed Bool table"
+        );
+
+        // 3. Keyed nearest into without capacity
+        AssertRefused(
+            """{"$type":"nearest","from":"loreRow","query":"loreRow[c1]","into":"unconstrainedKeyed","k":1}""",
+            "declares no capacity"
+        );
+
+        // 4. Text into that is not a slot or has k != 1
+        // Case A: Text table (not a slot)
+        AssertRefused(
+            """{"$type":"nearest","from":"loreRow","query":"loreRow[c1]","into":"textTable","k":1}""",
+            "must be a slot"
+        );
+
+        // Case B: Text slot with k != 1 (k = 2)
+        AssertRefused(
+            """{"$type":"nearest","from":"loreRow","query":"loreRow[c1]","into":"textSlot","k":2}""",
+            "requires k = 1"
+        );
+    }
+
+    [Fact]
+    public void Vector_WorldStateTransform_PrincipalHoldingEditOnlyOnInto_SucceedsForMixMeanNearestRemember() {
+        var space = SampleSpace(name: "lore", dimensions: 8);
+        var vecA = SampleVector(dimensions: 8, nonZeroIndex: 0);
+        var vecB = SampleVector(dimensions: 8, nonZeroIndex: 1);
+
+        var sourceRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [
+                new StateCell(Key: CellName.Parse("s1"), Vector: vecA),
+                new StateCell(Key: CellName.Parse("s2"), Vector: vecB),
+            ],
+            Kind: CellKind.Vector,
+            Name: CellName.Parse("source"),
+            Space: "lore"
+        );
+        var intoMixRow = new WorldStateRow(
+            Cells: [new StateCell(Key: WorldStateRow.SlotKey, Vector: vecA)],
+            Kind: CellKind.Vector,
+            Name: CellName.Parse("intoMix"),
+            Space: "lore"
+        );
+        var intoMeanRow = new WorldStateRow(
+            Cells: [new StateCell(Key: WorldStateRow.SlotKey, Vector: vecA)],
+            Kind: CellKind.Vector,
+            Name: CellName.Parse("intoMean"),
+            Space: "lore"
+        );
+        var intoNearestRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [],
+            Kind: CellKind.Int,
+            Name: CellName.Parse("intoNearest")
+        );
+        var intoRememberRow = new WorldStateRow(
+            Capacity: 4,
+            Cells: [],
+            Evicts: true,
+            Kind: CellKind.Vector,
+            Name: CellName.Parse("intoRemember"),
+            Space: "lore"
+        );
+
+        var definition = BuildDocumentWithState(
+            spaces: [space],
+            rows: [sourceRow, intoMixRow, intoMeanRow, intoNearestRow, intoRememberRow]
+        );
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var peer = WorldPrincipal.Peer(generation: 1, index: 4);
+
+        var kinds = WorldMutationKindCatalog.KindsOf(section: WorldSection.State);
+        fixture.Server.Grant(
+            actor: WorldPrincipal.Console,
+            grant: new WorldGrant(
+                Budget: 64,
+                Capability: WorldCapability.Mutate,
+                Exclusive: false,
+                KindMask: kinds,
+                Principal: peer,
+                Subject: GrantSubject.Section(section: WorldSection.State)
+            )
+        );
+
+        foreach (var targetName in new[] { "intoMix", "intoMean", "intoNearest", "intoRemember" }) {
+            fixture.Server.Grant(
+                actor: WorldPrincipal.Console,
+                grant: new WorldGrant(
+                    Capability: WorldCapability.Edit,
+                    Exclusive: false,
+                    Principal: peer,
+                    Subject: GrantSubject.State(name: targetName)
+                )
+            );
+        }
+
+        // 1. mix into intoMix
+        fixture.Server.EnqueueMutation(new WorldMutation.TransformState(
+            Principal: peer,
+            Transform: new StateTransform.Mix(
+                Into: "intoMix",
+                Terms: [
+                    new VectorTerm(From: "source[s1]", Weight: 1),
+                    new VectorTerm(From: "source[s2]", Weight: 1),
+                ]
+            )
+        ));
+        fixture.Step();
+        var rowMix = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "intoMix")!;
+        Assert.NotNull(rowMix.Cells);
+        Assert.NotEmpty(rowMix.Cells);
+
+        // 2. mean into intoMean
+        fixture.Server.EnqueueMutation(new WorldMutation.TransformState(
+            Principal: peer,
+            Transform: new StateTransform.Mean(
+                From: "source",
+                Into: "intoMean"
+            )
+        ));
+        fixture.Step();
+        var rowMean = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "intoMean")!;
+        Assert.NotNull(rowMean.Cells);
+        Assert.NotEmpty(rowMean.Cells);
+
+        // 3. nearest into intoNearest
+        fixture.Server.EnqueueMutation(new WorldMutation.TransformState(
+            Principal: peer,
+            Transform: new StateTransform.Nearest(
+                From: "source",
+                Into: "intoNearest",
+                K: 1,
+                Query: "source[s1]"
+            )
+        ));
+        fixture.Step();
+        var rowNearest = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "intoNearest")!;
+        Assert.NotNull(rowNearest.Cells);
+        Assert.Single(rowNearest.Cells);
+
+        // 4. remember into intoRemember
+        fixture.Server.EnqueueMutation(new WorldMutation.TransformState(
+            Principal: peer,
+            Transform: new StateTransform.Remember(
+                From: "source[s1]",
+                Into: "intoRemember",
+                Key: "m1",
+                UnlessWithin: "0.9"
+            )
+        ));
+        fixture.Step();
+        var rowRemember = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "intoRemember")!;
+        Assert.NotNull(rowRemember.Cells);
+        Assert.Single(rowRemember.Cells);
+        Assert.Equal("m1", rowRemember.Cells[0].Key.Value);
     }
 }

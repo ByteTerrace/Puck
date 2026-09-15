@@ -11,9 +11,9 @@ namespace Puck.World.Transpiler.Lowering;
 // `state { world { table/slot/row declarations } }` (the concise-authoring surface over StateRow) — see
 // src/Puck.World.Transpiler/README.md's syntax-contract section for the exact grammar, lowering, and refusals.
 public static partial class WorldDocumentEmitter {
-    private static readonly HashSet<string> AdmittedCellKinds = new(comparer: StringComparer.Ordinal) { "Int", "Fixed", "Bool", "Text" };
-    private static readonly HashSet<string> TableRowModifierNames = new(comparer: StringComparer.Ordinal) { "capacity", "bounds", "advance" };
-    private static readonly HashSet<string> SlotRowModifierNames = new(comparer: StringComparer.Ordinal) { "bounds", "advance" };
+    private static readonly HashSet<string> AdmittedCellKinds = new(comparer: StringComparer.Ordinal) { "Int", "Fixed", "Bool", "Text", "Vector" };
+    private static readonly HashSet<string> TableRowModifierNames = new(comparer: StringComparer.Ordinal) { "capacity", "bounds", "advance", "evicts", "space", "embeds" };
+    private static readonly HashSet<string> SlotRowModifierNames = new(comparer: StringComparer.Ordinal) { "bounds", "advance", "space" };
     private static readonly HashSet<string> CellModifierNames = new(comparer: StringComparer.Ordinal) { "advance", "behavior" };
 
     private static void LowerStateSectionBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
@@ -30,7 +30,23 @@ public static partial class WorldDocumentEmitter {
             span: block.Span
         );
 
+        // Pre-pass: Lower spaces block first so that world block can reference declared spaces
         foreach (var stmt in block.Statements) {
+            if (stmt is BlockNode { Identifier: "spaces", Name: null, Target: null } spacesBlock) {
+                ValidateAndLowerSpacesBlock(
+                    block: spacesBlock,
+                    scope: scope,
+                    stateObj: stateObj,
+                    statePointer: statePointer
+                );
+            }
+        }
+
+        foreach (var stmt in block.Statements) {
+            if (stmt is BlockNode { Identifier: "spaces", Name: null, Target: null }) {
+                continue;
+            }
+
             if (stmt is BlockNode { Identifier: "world", Name: null, Target: null } worldBlock) {
                 LowerStateWorldBlock(
                     block: worldBlock,
@@ -97,19 +113,24 @@ public static partial class WorldDocumentEmitter {
 
         var seenNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var pendingReferences = new List<PendingStateReference>();
+        long totalVectorBytes = 0;
 
         foreach (var (stmt, rowScope) in Expand(
             block.Statements,
             scope
         )) {
+            JsonObject? companionRow = null;
             var rowObj = (stmt switch {
                 StateTableDeclarationNode table => LowerStateTableDeclaration(
                     scope: rowScope,
-                    table: table
+                    table: table,
+                    totalVectorBytes: ref totalVectorBytes,
+                    companionRow: out companionRow
                 ),
                 StateSlotDeclarationNode slot => LowerStateSlotDeclaration(
                     scope: rowScope,
-                    slot: slot
+                    slot: slot,
+                    totalVectorBytes: ref totalVectorBytes
                 ),
                 StatePileDeclarationNode pile => LowerStatePileDeclaration(
                     pending: pendingReferences,
@@ -159,6 +180,23 @@ public static partial class WorldDocumentEmitter {
                 span: stmt.Span
             );
             worldArr.AppendNode(item: rowObj);
+
+            if (companionRow is not null) {
+                if (companionRow["name"]?.ToString() is { } compName && !seenNames.Add(compName)) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.EmbedsInvalid,
+                        message: $"Companion vector table name '{compName}' collides with an existing row name.",
+                        span: stmt.Span
+                    );
+                } else {
+                    var compIdx = worldArr.Count;
+                    rowScope.SourceMap?.Register(
+                        jsonPointer: $"{worldPointer}/{compIdx}",
+                        span: stmt.Span
+                    );
+                    worldArr.AppendNode(item: companionRow);
+                }
+            }
         }
 
         ValidateStateCrossReferences(
@@ -167,7 +205,13 @@ public static partial class WorldDocumentEmitter {
             worldArr: worldArr
         );
     }
-    private static JsonObject LowerStateTableDeclaration(StateTableDeclarationNode table, DocumentScope scope) {
+    private static JsonObject LowerStateTableDeclaration(
+        StateTableDeclarationNode table,
+        DocumentScope scope,
+        ref long totalVectorBytes,
+        out JsonObject? companionRow
+    ) {
+        companionRow = null;
         ValidateStateRowName(
             kind: "table",
             name: table.Name,
@@ -185,6 +229,43 @@ public static partial class WorldDocumentEmitter {
             ["name"] = table.Name,
             ["kind"] = table.Kind,
         };
+
+        var rootObj = scope.Annotations.TryGetValue("WorldDocumentRoot", out var rObj) && rObj is JsonObject ro ? ro : new JsonObject();
+        string? spaceName = null;
+        (string Name, string Model, string Revision, int Dimensions)? spaceInfo = null;
+
+        if (table.Kind == "Vector") {
+            var spaceMod = table.Modifiers.FirstOrDefault(m => string.Equals(m.Name, "space", StringComparison.OrdinalIgnoreCase));
+            if (spaceMod is not null && spaceMod.Arguments.Count > 0) {
+                if (spaceMod.Arguments[0].Value is IdentifierExpressionNode idNode) {
+                    spaceName = idNode.Name;
+                } else if (spaceMod.Arguments[0].Value is LiteralExpressionNode { Value: string sVal }) {
+                    spaceName = sVal;
+                }
+            }
+
+            if (string.IsNullOrEmpty(spaceName)) {
+                spaceName = FindDefaultSpace(rootObj);
+            }
+
+            if (string.IsNullOrEmpty(spaceName)) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                    message: $"Vector row '{table.Name}' has no space and no default space was declared.",
+                    span: table.Span
+                );
+            } else {
+                rowObj["space"] = spaceName;
+                spaceInfo = FindSpaceInfo(rootObj, spaceName);
+                if (!spaceInfo.HasValue) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                        message: $"Embedding space '{spaceName}' declared on table '{table.Name}' was not found in 'spaces'.",
+                        span: table.Span
+                    );
+                }
+            }
+        }
 
         var cellsArr = new JsonArray();
         var seenKeys = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -207,12 +288,22 @@ public static partial class WorldDocumentEmitter {
 
             var cellObj = new JsonObject { ["key"] = cell.Key };
 
-            cellObj["value"] = LowerStateScalarValue(
-                context: $"table '{table.Name}' cell '{cell.Key}'",
-                expr: cell.Value,
-                kind: table.Kind,
-                scope: scope
-            );
+            if (table.Kind == "Vector") {
+                cellObj["value"] = LowerVectorCellValue(
+                    context: $"table '{table.Name}' cell '{cell.Key}'",
+                    expr: cell.Value,
+                    rootObj: rootObj,
+                    scope: scope,
+                    spaceName: spaceName ?? ""
+                );
+            } else {
+                cellObj["value"] = LowerStateScalarValue(
+                    context: $"table '{table.Name}' cell '{cell.Key}'",
+                    expr: cell.Value,
+                    kind: table.Kind,
+                    scope: scope
+                );
+            }
 
             var sawCellAdvance = false;
             var sawCellNone = false;
@@ -311,9 +402,25 @@ public static partial class WorldDocumentEmitter {
             rowObj["domain"] = new JsonObject { ["$type"] = "keys" };
         }
 
+        if (table.Kind == "Vector" && spaceInfo.HasValue) {
+            int? capInt = (rowObj["capacity"] is JsonValue cv && cv.TryGetValue<int>(out var ci)) ? ci : null;
+            ValidateVectorCeilings(table.Name, capInt, cellsArr.Count, spaceInfo.Value.Dimensions, scope, table.Span, ref totalVectorBytes);
+        }
+
+        if (table.Kind == "Text") {
+            var embedsMod = table.Modifiers.FirstOrDefault(m => string.Equals(m.Name, "embeds", StringComparison.OrdinalIgnoreCase));
+            if (embedsMod is not null) {
+                companionRow = CreateEmbedsCompanionRow(table, embedsMod, rowObj, rootObj, scope, ref totalVectorBytes);
+            }
+        }
+
         return rowObj;
     }
-    private static JsonObject LowerStateSlotDeclaration(StateSlotDeclarationNode slot, DocumentScope scope) {
+    private static JsonObject LowerStateSlotDeclaration(
+        StateSlotDeclarationNode slot,
+        DocumentScope scope,
+        ref long totalVectorBytes
+    ) {
         ValidateStateRowName(
             kind: "slot",
             name: slot.Name,
@@ -332,13 +439,60 @@ public static partial class WorldDocumentEmitter {
             ["kind"] = slot.Kind,
         };
 
+        var rootObj = scope.Annotations.TryGetValue("WorldDocumentRoot", out var rObj) && rObj is JsonObject ro ? ro : new JsonObject();
+        string? spaceName = null;
+        (string Name, string Model, string Revision, int Dimensions)? spaceInfo = null;
+
+        if (slot.Kind == "Vector") {
+            var spaceMod = slot.Modifiers.FirstOrDefault(m => string.Equals(m.Name, "space", StringComparison.OrdinalIgnoreCase));
+            if (spaceMod is not null && spaceMod.Arguments.Count > 0) {
+                if (spaceMod.Arguments[0].Value is IdentifierExpressionNode idNode) {
+                    spaceName = idNode.Name;
+                } else if (spaceMod.Arguments[0].Value is LiteralExpressionNode { Value: string sVal }) {
+                    spaceName = sVal;
+                }
+            }
+
+            if (string.IsNullOrEmpty(spaceName)) {
+                spaceName = FindDefaultSpace(rootObj);
+            }
+
+            if (string.IsNullOrEmpty(spaceName)) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                    message: $"Vector slot '{slot.Name}' has no space and no default space was declared.",
+                    span: slot.Span
+                );
+            } else {
+                rowObj["space"] = spaceName;
+                spaceInfo = FindSpaceInfo(rootObj, spaceName);
+                if (!spaceInfo.HasValue) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                        message: $"Embedding space '{spaceName}' declared on slot '{slot.Name}' was not found in 'spaces'.",
+                        span: slot.Span
+                    );
+                }
+            }
+        }
+
         if (slot.Value is { } value) {
-            rowObj["value"] = LowerStateScalarValue(
-                context: $"slot '{slot.Name}'",
-                expr: value,
-                kind: slot.Kind,
-                scope: scope
-            );
+            if (slot.Kind == "Vector") {
+                rowObj["value"] = LowerVectorCellValue(
+                    context: $"slot '{slot.Name}'",
+                    expr: value,
+                    rootObj: rootObj,
+                    scope: scope,
+                    spaceName: spaceName ?? ""
+                );
+            } else {
+                rowObj["value"] = LowerStateScalarValue(
+                    context: $"slot '{slot.Name}'",
+                    expr: value,
+                    kind: slot.Kind,
+                    scope: scope
+                );
+            }
         }
 
         ApplyStateRowModifiers(
@@ -349,6 +503,10 @@ public static partial class WorldDocumentEmitter {
             rowObj: rowObj,
             scope: scope
         );
+
+        if (slot.Kind == "Vector" && spaceInfo.HasValue) {
+            ValidateVectorCeilings(slot.Name, capacity: 1, cellCount: 1, spaceInfo.Value.Dimensions, scope, slot.Span, ref totalVectorBytes);
+        }
 
         return rowObj;
     }
@@ -1315,7 +1473,7 @@ public static partial class WorldDocumentEmitter {
         if (!AdmittedCellKinds.Contains(item: kind)) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.UnknownKindAnnotation,
-                message: $"'{rowName}' names an unrecognized kind '{kind}' — expected Int, Fixed, Bool, or Text",
+                message: $"'{rowName}' names an unrecognized kind '{kind}' — expected Int, Fixed, Bool, Text, or Vector",
                 span: span
             );
         }
@@ -1329,16 +1487,18 @@ public static partial class WorldDocumentEmitter {
         var sawCapacity = false;
         var sawBounds = false;
         var sawAdvance = false;
+        var sawEvicts = false;
+        var sawSpace = false;
 
         foreach (var modifier in modifiers) {
             if (!admitted.Contains(item: modifier.Name)) {
                 scope.Diagnostics.ReportError(
-                    code: ((SlotRowModifierNames.Contains(item: modifier.Name) || (modifier.Name == "capacity"))
+                    code: ((SlotRowModifierNames.Contains(item: modifier.Name) || (modifier.Name == "capacity") || (modifier.Name == "evicts") || (modifier.Name == "embeds"))
                         ? PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted
                         : PuckDiagnosticCodes.StateDeclarationUnknownModifier
                     ),
-                    message: ((modifier.Name == "capacity")
-                        ? $"'capacity' is only legal on a 'table' declaration — 'slot {rowName}' is always exactly one cell"
+                    message: ((modifier.Name == "capacity" || modifier.Name == "evicts" || modifier.Name == "embeds")
+                        ? $"'{modifier.Name}' is only legal on a 'table' declaration — 'slot {rowName}' is always exactly one cell"
                         : $"'{modifier.Name}' is not a modifier '{rowName}' admits — expected {string.Join(separator: ", ", values: admitted.Order(comparer: StringComparer.Ordinal))}"
                     ),
                     span: modifier.Span
@@ -1366,6 +1526,65 @@ public static partial class WorldDocumentEmitter {
                         scope: scope
                     );
 
+                    break;
+                case "evicts":
+                    if (sawEvicts) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationBehaviorConflict,
+                            message: $"table '{rowName}' declares 'evicts' more than once",
+                            span: modifier.Span
+                        );
+
+                        break;
+                    }
+
+                    sawEvicts = true;
+                    rowObj["evicts"] = true;
+                    break;
+                case "space":
+                    if (kind != "Vector") {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.EmbeddingSpaceUnknown,
+                            message: $"Row '{rowName}' of kind '{kind}' cannot declare 'space' — only Vector rows name a space.",
+                            span: modifier.Span
+                        );
+                        break;
+                    }
+                    if (sawSpace) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.StateDeclarationBehaviorConflict,
+                            message: $"'{rowName}' declares 'space' more than once",
+                            span: modifier.Span
+                        );
+                        break;
+                    }
+                    sawSpace = true;
+                    string? spaceName = null;
+                    if (modifier.Arguments.Count > 0) {
+                        if (modifier.Arguments[0].Value is IdentifierExpressionNode idNode) {
+                            spaceName = idNode.Name;
+                        } else if (modifier.Arguments[0].Value is LiteralExpressionNode { Value: string sVal }) {
+                            spaceName = sVal;
+                        }
+                    }
+                    if (string.IsNullOrEmpty(spaceName)) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.EmbeddingSpaceInvalid,
+                            message: $"Row '{rowName}' declares 'space' without a valid space name.",
+                            span: modifier.Span
+                        );
+                        break;
+                    }
+                    rowObj["space"] = spaceName;
+                    break;
+                case "embeds":
+                    if (kind != "Text") {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.EmbedsInvalid,
+                            message: $"'embeds' is only legal on a Text table — table '{rowName}' is {kind}.",
+                            span: modifier.Span
+                        );
+                    }
                     break;
                 case "bounds":
                     if (!AdmitsBoundsOrAdvance(kind: kind)) {
@@ -1426,6 +1645,14 @@ public static partial class WorldDocumentEmitter {
 
                     break;
             }
+        }
+
+        if (sawEvicts && !sawCapacity) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted,
+                message: $"table '{rowName}' declares 'evicts' without 'capacity' — evicts requires capacity",
+                span: modifiers.First(m => m.Name == "evicts").Span
+            );
         }
     }
     private static JsonNode LowerStateCapacityModifier(StateModifierNode modifier, string rowName, DocumentScope scope) {

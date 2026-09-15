@@ -286,7 +286,40 @@ A direct source is read once per execution pass; an ordinary write still has
 separate preflight and live passes. Absent and `forever` sources skip the
 effect, while expression faults retain their diagnostic behavior.
 Here `forever` is a fact representing positive infinity, not an unusually
-large stored integer.
+### Vector transforms
+
+Rules can transform, search, and combine vectors directly within simulation state using four
+specialized transform statements:
+
+```puck
+rule "remember-ambush" {
+    mode: Edge
+    when caravanAttacked == 1
+    transform note = remember(into: memories, key: "ambush", from: "events[ambush]", unlessWithin: 0.9)
+    situation = events[ambush]
+    transform drift = mix(into: "stance[guards]", terms: [
+        { from: "stance[guards]", weight: 3 }
+        { from: "events[ambush]", weight: 1 }
+    ])
+    transform recall = nearest(from: memories, query: "situation", into: recalled, k: 3, threshold: 0.5)
+    transform speak = nearest(from: lineVectors, query: "situation", into: reply, k: 1)
+}
+```
+
+| Transform | Primary parameters | Function |
+|---|---|---|
+| `nearest` | `from`, `query`, `into`, `k`, `[threshold]` | Performs cosine k-nearest-neighbors search across vector cells in a row against a query vector, writing matching keys, scores, or values into the target. |
+| `mix` | `into`, `terms: [{from, weight}, ...]` | Computes a weighted sum of vectors and renormalizes to unit radius 127 in destination. |
+| `remember` | `into`, `key`, `from`, `[unlessWithin]` | Inserts vector into memory table unless an existing vector is within cosine threshold `unlessWithin`. |
+| `decay` | `into`, `[towards]`, `rate` | Blends vector towards a baseline (or origin) by fixed rate per tick. |
+
+Vector copies can also be written directly: `situation = events[ambush]`.
+
+### Text key indirection
+
+When paired with `embeds(targetVectorRow)` declarations, Text rows and Vector rows share identical keys.
+`nearest` can query against the vector row and write directly into a Text slot or table, translating
+semantic vector proximity back into human-readable dialogue or intents without string embedding at runtime.
 
 ## Evaluation
 

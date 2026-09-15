@@ -29,14 +29,16 @@ is non-serialized; definitions sharing `StateRaw` share its compiled view, and
 `WithWorldState` preserves that view and its handles across value-only updates.
 
 `state.world` (`WorldStateRow`) is genre-neutral game state — score, rounds,
-inventory, flags. **A slot is a table with one
+inventory, flags, semantic memories, and vector embeddings. **A slot is a table with one
 key, and there is ONE authored spelling for both.** A row names itself,
-declares its `kind`, and carries EITHER a bare `value` — sugar for the one
+declares its `kind` (`Int`, `Fixed`, `Bool`, `Text`, or `Vector`), and carries EITHER a bare `value` — sugar for the one
 cell keyed `WorldStateRow.SlotKey` (`"$value"`) — OR a `cells` array of
 author-keyed `{"key","value"}` objects. Two optional fields, never two
 discriminators: a row carrying both, or a `value` beside a `capacity`
 (declaring a capacity is declaring keyed-row intent), refuses by name.
-Omitting both is a declared-but-empty row.
+Omitting both is a declared-but-empty row. When `kind` is `Vector`, the row references
+a declared embedding space in `state.spaces` (`spaces { space <name> { ... } }`).
+Text tables can declare `embeds(vectorRow)` to automatically link text entries to companion vector rows.
 
 Runtime rule operands compile world-row names to catalog-bound handles. Keyed
 reads return stored values and authored behavior metadata together. Reductions
@@ -68,6 +70,7 @@ future-decision state, rather than manifest compatibility, is the assertion.
 
 ```json
 "state": {
+  "spaces": [{"name":"lore","model":"puck-fixture","revision":"1","dimensions":256}],
   "world": [{"name":"score","kind":"Int","value":0,"min":0,"max":1000}],
   "body": [{"name":"jumpUses","kind":"Counter","initial":0,"resetFact":"Grounded"}],
   "identity": [{"name":"stance","kind":"Counter","initial":0,"playerWritable":true,

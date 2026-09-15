@@ -143,6 +143,7 @@ public sealed class WorldAgentBridge {
     }
     private WorldAgentActionReceipt Submit(string action, WorldMutation mutation) {
         var correlationId = m_link.SubmitEnvelope(
+            operationId: Guid.NewGuid(),
             payload: new WorldSubmissionPayload.Mutation(Value: mutation),
             principal: Principal
         );

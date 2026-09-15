@@ -54,6 +54,7 @@
         <Project Path="src/Puck.World.Browser/Puck.World.Browser.csproj" />
         <Project Path="src/Puck.World.Client/Puck.World.Client.csproj" />
         <Project Path="src/Puck.World.Console/Puck.World.Console.csproj" />
+        <Project Path="src/Puck.World.Embeddings/Puck.World.Embeddings.csproj" />
         <Project Path="src/Puck.Mcp/Puck.Mcp.csproj" />
         <Project Path="src/Puck.World.Machines/Puck.World.Machines.csproj" />
         <Project Path="src/Puck.World.Protocol/Puck.World.Protocol.csproj" />

@@ -1471,6 +1471,7 @@ internal static class WorldBootComposition {
         public void RegisterAuthentication(WorldAuthenticationProvider provider) => WorldConnectionAuthentication.Register(provider: provider);
         public void RegisterHealthCheck(string path, Func<bool, (string ContentType, string Body)> handler) { }
         public void RegisterOperation(WorldExtensionProviderType provider) => WorldServiceExtensions.Register(providerType: provider);
+        public void RegisterEmbedding(WorldExtensionEmbeddingProviderType provider) => WorldServiceExtensions.Register(embeddingType: provider);
         public void RegisterRetirement(WorldSiloRetirementProvider provider) { }
         public void RegisterStorage(WorldSiloStorageProvider provider) { }
     }

@@ -49,7 +49,7 @@ internal static class PuckHoverInfo {
                 $"Arguments: {function.Arity}. Value domain: {function.Domain}. Operation: {function.Operation}."
             );
         }
-        return null;
+        return PuckEmbeddingLsp.GetKeywordHoverCard(word: word);
     }
     internal static string? Declaration(string source, string word, int offset, DocumentVocabularyResolver? resolver = null) {
         var vocabulary = (resolver?.Resolve(source) ?? WorldDocumentVocabulary.Instance);
@@ -234,6 +234,7 @@ internal static class PuckHoverInfo {
         OnNoChoiceBlockNode fallback => fallback.Effects,
         TransactionStatementNode transaction => [.. transaction.MainEffects, .. (transaction.OnFailureEffects ?? [])],
         IfStatementNode branch => [.. branch.Then, .. (branch.Else ?? [])],
+        TransformStatementNode transform => [transform.Transform],
         CallExpressionNode call => call.Arguments,
         ArgumentNode argument => [argument.Value],
         StateTableDeclarationNode table => [.. table.Modifiers, .. table.Cells],

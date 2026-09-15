@@ -86,6 +86,9 @@ public static partial class PuckLinter {
 
             case CallExpressionNode call:
                 references.Add(item: call.Name);
+                if (string.Equals(call.Name, "mix", StringComparison.OrdinalIgnoreCase)) {
+                    LintVectorMix(call, diagnostics);
+                }
                 foreach (var arg in call.Arguments) {
                     CollectReferences(
                         arg.Value,
@@ -433,6 +436,160 @@ public static partial class PuckLinter {
                     diagnostics
                 );
                 break;
+
+            case RuleBlockNode rule:
+                foreach (var stmt in rule.Statements) {
+                    CollectReferences(
+                        stmt,
+                        references,
+                        diagnostics,
+                        inLet
+                    );
+                }
+                break;
+
+            case DecisionBlockNode decision:
+                foreach (var stmt in decision.Statements) {
+                    CollectReferences(
+                        stmt,
+                        references,
+                        diagnostics,
+                        inLet
+                    );
+                }
+                break;
+
+            case OptionBlockNode option:
+                foreach (var stmt in option.Statements) {
+                    CollectReferences(
+                        stmt,
+                        references,
+                        diagnostics,
+                        inLet
+                    );
+                }
+                break;
+
+            case OnNoChoiceBlockNode onNoChoice:
+                foreach (var stmt in onNoChoice.Effects) {
+                    CollectReferences(
+                        stmt,
+                        references,
+                        diagnostics,
+                        inLet
+                    );
+                }
+                break;
+
+            case TransactionStatementNode transaction:
+                foreach (var stmt in transaction.MainEffects) {
+                    CollectReferences(
+                        stmt,
+                        references,
+                        diagnostics,
+                        inLet
+                    );
+                }
+                if (transaction.OnFailureEffects is not null) {
+                    foreach (var stmt in transaction.OnFailureEffects) {
+                        CollectReferences(
+                            stmt,
+                            references,
+                            diagnostics,
+                            inLet
+                        );
+                    }
+                }
+                break;
+
+            case IfStatementNode ifStmt:
+                foreach (var stmt in ifStmt.Then) {
+                    CollectReferences(
+                        stmt,
+                        references,
+                        diagnostics,
+                        inLet
+                    );
+                }
+                if (ifStmt.Else is not null) {
+                    foreach (var stmt in ifStmt.Else) {
+                        CollectReferences(
+                            stmt,
+                            references,
+                            diagnostics,
+                            inLet
+                        );
+                    }
+                }
+                break;
+
+            case TransformStatementNode transform:
+                CollectReferences(
+                    transform.Transform,
+                    references,
+                    diagnostics,
+                    inLet
+                );
+                break;
+        }
+    }
+
+    private static void LintVectorMix(CallExpressionNode call, DiagnosticBag diagnostics) {
+        ExpressionNode? termsExpr = null;
+        foreach (var arg in call.Arguments) {
+            if (string.Equals(arg.Name, "terms", StringComparison.OrdinalIgnoreCase)) {
+                termsExpr = arg.Value;
+                break;
+            }
+        }
+
+        if (termsExpr is null && call.Arguments.Count > 1) {
+            termsExpr = call.Arguments[1].Value;
+        } else if (termsExpr is null && call.Arguments.Count == 1 && call.Arguments[0].Value is ArrayExpressionNode) {
+            termsExpr = call.Arguments[0].Value;
+        }
+
+        if (termsExpr is not ArrayExpressionNode arr) {
+            return;
+        }
+
+        var weights = new List<(long Weight, SourceSpan Span)>();
+        foreach (var elem in arr.Elements) {
+            if (elem is ObjectExpressionNode obj) {
+                foreach (var prop in obj.Properties) {
+                    if (string.Equals(prop.Name, "weight", StringComparison.OrdinalIgnoreCase)) {
+                        if (prop.Value is LiteralExpressionNode { Value: long wVal }) {
+                            weights.Add((wVal, prop.Span));
+                        } else if (prop.Value is UnaryExpressionNode { Operator: "-", Operand: LiteralExpressionNode { Value: long posW } }) {
+                            weights.Add((-posW, prop.Span));
+                        }
+                    }
+                }
+            }
+        }
+
+        if (weights.Count == 0) {
+            return;
+        }
+
+        var sumAbs = 0L;
+        foreach (var (weight, _) in weights) {
+            sumAbs += Math.Abs(weight);
+        }
+
+        if (sumAbs <= 0) {
+            return;
+        }
+
+        foreach (var (weight, span) in weights) {
+            var absW = Math.Abs(weight);
+            if (64L * absW < sumAbs) {
+                diagnostics.ReportWarning(
+                    code: PuckDiagnosticCodes.VectorMixStall,
+                    message: $"Vector mix term weight {weight} has relative share below 1/64; consider mean over a history table as the alternative.",
+                    span: span
+                );
+            }
         }
     }
 }

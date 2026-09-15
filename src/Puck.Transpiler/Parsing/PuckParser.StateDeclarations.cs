@@ -56,7 +56,7 @@ public static partial class PuckParser {
 
         SkipWhiteSpace(context: context);
         if (!TryReadIdentifier(context: context, identifier: out var kind)) {
-            throw CreateException(context: context, message: $"Expected a kind (Int, Fixed, Bool, or Text) after 'table {name} :'");
+            throw CreateException(context: context, message: $"Expected a kind (Int, Fixed, Bool, Text, or Vector) after 'table {name} :'");
         }
 
         var modifiers = ParseStateModifiers(context: context);
@@ -121,17 +121,18 @@ public static partial class PuckParser {
 
         SkipWhiteSpace(context: context);
         if (!TryReadIdentifier(context: context, identifier: out var kind)) {
-            throw CreateException(context: context, message: $"Expected a kind (Int, Fixed, Bool, or Text) after 'slot {name} :'");
+            throw CreateException(context: context, message: $"Expected a kind (Int, Fixed, Bool, Text, or Vector) after 'slot {name} :'");
         }
 
+        var modifiers = ParseStateModifiers(context: context);
         ExpressionNode? value = null;
 
         SkipWhiteSpace(context: context);
         if (TryConsume(c: '=', context: context)) {
             value = ParseExpression(context: context);
+            modifiers.AddRange(ParseStateModifiers(context: context));
         }
 
-        var modifiers = ParseStateModifiers(context: context);
         var len = (cursor.Offset - startOffset);
 
         return new StateSlotDeclarationNode(Column: col, Kind: kind, Length: len, Line: line, Modifiers: modifiers, Name: name, Offset: startOffset, Value: value);
@@ -280,6 +281,11 @@ public static partial class PuckParser {
 
             SkipWhiteSpace(context: context);
             if (cursor.Current != '(') {
+                if (string.Equals(a: modifierName, b: "evicts", comparisonType: StringComparison.Ordinal)) {
+                    modifiers.Add(item: new StateModifierNode(Arguments: [], Column: col, Length: (cursor.Offset - startOffset), Line: line, Name: modifierName, Offset: startOffset));
+                    continue;
+                }
+
                 cursor.ResetPosition(position: saved);
                 break;
             }

@@ -51,8 +51,17 @@ public sealed class EmbedCommandTests {
         await File.WriteAllTextAsync(puckPath, puckSource, cancellationToken: TestContext.Current.CancellationToken);
 
         // 1. Compile without lock should fail with exit code 1 due to missing lock (PUCK079)
-        var compileBeforeEmbedCode = await PuckRootCommand.InvokeAsync(args: ["compile", puckPath]);
+        var originalErr = Console.Error;
+        using var errSw = new StringWriter();
+        Console.SetError(errSw);
+        int compileBeforeEmbedCode;
+        try {
+            compileBeforeEmbedCode = await PuckRootCommand.InvokeAsync(args: ["compile", puckPath]);
+        } finally {
+            Console.SetError(originalErr);
+        }
         Assert.Equal(expected: 1, actual: compileBeforeEmbedCode);
+        Assert.Contains(expectedSubstring: "PUCK079", actualString: errSw.ToString(), comparisonType: StringComparison.Ordinal);
 
         // 2. Check before embed should report missing entries and exit 1
         var checkBeforeEmbedCode = await PuckRootCommand.InvokeAsync(args: ["embed", puckPath, "--check"]);
@@ -88,6 +97,13 @@ public sealed class EmbedCommandTests {
         Assert.Equal(expected: 0, actual: secondEmbedCode);
         var lockJsonAfter = await File.ReadAllTextAsync(lockPath, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(expected: lockJsonBefore, actual: lockJsonAfter);
+
+        // 7. Generated fixture lock matches committed expected file byte-for-byte
+        var expectedLockPath = Path.Combine(AppContext.BaseDirectory, "Assets", "expected_fixture.embeddings.json");
+        Assert.True(File.Exists(expectedLockPath));
+        var generatedBytes = await File.ReadAllBytesAsync(lockPath, cancellationToken: TestContext.Current.CancellationToken);
+        var expectedBytes = await File.ReadAllBytesAsync(expectedLockPath, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(expectedBytes, generatedBytes);
     }
 
     [Fact]
@@ -231,5 +247,155 @@ public sealed class EmbedCommandTests {
         // Probe for a new query text (fixture generator generates embedding on the fly)
         var probeNewCode = await PuckRootCommand.InvokeAsync(args: ["embed", "probe", puckPath, "scary reptile creature", "--top", "2"]);
         Assert.Equal(expected: 0, actual: probeNewCode);
+    }
+
+    [Fact]
+    public async Task DecompileWithLockResolvesEmbedAndWithoutLockResolvesVectorAsync() {
+        using var dir = new EmbedTestDirectory();
+        var puckPath = Path.Combine(dir.Path, "world.puck");
+        var worldJsonPath = Path.Combine(dir.Path, "world.world.json");
+        var lockPath = Path.Combine(dir.Path, "world.embeddings.json");
+        var outWithLockPath = Path.Combine(dir.Path, "world_decompiled.puck");
+
+        var puckSource = """
+            schema: "puck.world.definition.v1"
+
+            state {
+              spaces [
+                {
+                  name: "lore"
+                  dimensions: 8
+                  model: "puck-fixture"
+                  revision: "1"
+                }
+              ]
+            }
+
+            sql {
+                CREATE TABLE lore_table (
+                    id TEXT PRIMARY KEY,
+                    v  VECTOR(lore)
+                );
+                INSERT INTO lore_table (id, v) VALUES ('k1', embed('magic sword'));
+            }
+            """;
+
+        await File.WriteAllTextAsync(puckPath, puckSource, cancellationToken: TestContext.Current.CancellationToken);
+
+        // 1. Generate lock file and compile to JSON
+        var embedExit = await PuckRootCommand.InvokeAsync(args: ["embed", puckPath]);
+        Assert.Equal(expected: 0, actual: embedExit);
+        var compileExit = await PuckRootCommand.InvokeAsync(args: ["compile", puckPath]);
+        Assert.Equal(expected: 0, actual: compileExit);
+        Assert.True(File.Exists(worldJsonPath));
+        Assert.True(File.Exists(lockPath));
+
+        // 2. Decompile with companion lock beside the file
+        var decompileWithLock = await PuckRootCommand.InvokeAsync(args: ["decompile", worldJsonPath, "-o", outWithLockPath]);
+        Assert.Equal(expected: 0, actual: decompileWithLock);
+        Assert.True(File.Exists(outWithLockPath));
+        var textWithLock = await File.ReadAllTextAsync(outWithLockPath, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Contains("embed(\"magic sword\")", textWithLock, StringComparison.Ordinal);
+
+        // 3. Decompile without lock in an isolated directory
+        using var noLockDir = new EmbedTestDirectory();
+        var isolatedJson = Path.Combine(noLockDir.Path, "isolated.world.json");
+        var isolatedOut = Path.Combine(noLockDir.Path, "isolated.puck");
+        File.Copy(worldJsonPath, isolatedJson);
+
+        var decompileWithoutLock = await PuckRootCommand.InvokeAsync(args: ["decompile", isolatedJson, "-o", isolatedOut]);
+        Assert.Equal(expected: 0, actual: decompileWithoutLock);
+        var textWithoutLock = await File.ReadAllTextAsync(isolatedOut, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Contains("vector(", textWithoutLock, StringComparison.Ordinal);
+        Assert.DoesNotContain("embed(", textWithoutLock, StringComparison.Ordinal);
+
+        // 4. Decompile with explicit --embeddings option pointing to lockPath
+        var explicitOut = Path.Combine(noLockDir.Path, "explicit.puck");
+        var decompileExplicit = await PuckRootCommand.InvokeAsync(args: ["decompile", isolatedJson, "-o", explicitOut, "--embeddings", lockPath]);
+        Assert.Equal(expected: 0, actual: decompileExplicit);
+        var textExplicit = await File.ReadAllTextAsync(explicitOut, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Contains("embed(\"magic sword\")", textExplicit, StringComparison.Ordinal);
+
+        // 5. Decompile with --sql projects to SQL embed('...')
+        var sqlOut = Path.Combine(dir.Path, "sql_decompiled.puck");
+        var decompileSql = await PuckRootCommand.InvokeAsync(args: ["decompile", worldJsonPath, "-o", sqlOut, "--sql"]);
+        Assert.Equal(expected: 0, actual: decompileSql);
+        var textSql = await File.ReadAllTextAsync(sqlOut, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Contains("embed('magic sword')", textSql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DecompileEmbedsPairReconstructsTableSugarAsync() {
+        using var dir = new EmbedTestDirectory();
+        var worldJsonPath = Path.Combine(dir.Path, "pair.world.json");
+        var lockPath = Path.Combine(dir.Path, "pair.embeddings.json");
+        var outPuckPath = Path.Combine(dir.Path, "pair_decompiled.puck");
+
+        // Use puck embed on a small sql source to get real vectors for "dragon" and "knight"
+        var tempPuck = Path.Combine(dir.Path, "temp.puck");
+        var tempSource = """
+            schema: "puck.world.definition.v1"
+            state {
+              spaces [
+                { name: "lore", dimensions: 8, model: "puck-fixture", revision: "1" }
+              ]
+            }
+            sql {
+                CREATE TABLE t (id TEXT PRIMARY KEY, v VECTOR(lore));
+                INSERT INTO t (id, v) VALUES ('1', embed('dragon')), ('2', embed('knight'));
+            }
+            """;
+        await File.WriteAllTextAsync(tempPuck, tempSource, cancellationToken: TestContext.Current.CancellationToken);
+        var embedTempExit = await PuckRootCommand.InvokeAsync(args: ["embed", tempPuck]);
+        Assert.Equal(expected: 0, actual: embedTempExit);
+
+        var tempLock = EmbeddingLock.TryLoad(tempPuck);
+        Assert.NotNull(tempLock);
+        Assert.True(tempLock.TryGet(spaceName: "lore", text: "dragon", vectorBase64Url: out var vec1));
+        Assert.True(tempLock.TryGet(spaceName: "lore", text: "knight", vectorBase64Url: out var vec2));
+
+        // Copy lock to pair.embeddings.json
+        File.Copy(EmbeddingLock.DeriveLockPath(sourcePath: tempPuck), lockPath);
+
+        var worldJson = $$"""
+            {
+              "schema": "puck.world.definition.v1",
+              "state": {
+                "spaces": [
+                  { "name": "lore", "model": "puck-fixture", "revision": "1", "dimensions": 8 }
+                ],
+                "world": [
+                  {
+                    "name": "loreText",
+                    "kind": "Text",
+                    "capacity": 10,
+                    "cells": [
+                      { "key": "e1", "value": "dragon" },
+                      { "key": "e2", "value": "knight" }
+                    ]
+                  },
+                  {
+                    "name": "loreVec",
+                    "kind": "Vector",
+                    "space": "lore",
+                    "capacity": 10,
+                    "cells": [
+                      { "key": "e1", "value": "{{vec1}}" },
+                      { "key": "e2", "value": "{{vec2}}" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+        await File.WriteAllTextAsync(worldJsonPath, worldJson, cancellationToken: TestContext.Current.CancellationToken);
+
+        var decompileExit = await PuckRootCommand.InvokeAsync(args: ["decompile", worldJsonPath, "-o", outPuckPath]);
+        Assert.Equal(expected: 0, actual: decompileExit);
+
+        var decompiledText = await File.ReadAllTextAsync(outPuckPath, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Contains("embeds(loreVec)", decompiledText, StringComparison.Ordinal);
+        Assert.DoesNotContain("table loreVec", decompiledText, StringComparison.Ordinal);
     }
 }

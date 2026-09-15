@@ -1,7 +1,8 @@
 # Puck.Maths
 
 Puck.Maths provides deterministic numerics for simulation, including fixed-point
-values, reproducible random streams, and exact integer and algebraic operations.
+values, reproducible random streams, exact integer and algebraic operations, and
+quantized signed 8-bit vector arithmetic (`SignedByteVectorFunctions`).
 
 ## Documentation
 

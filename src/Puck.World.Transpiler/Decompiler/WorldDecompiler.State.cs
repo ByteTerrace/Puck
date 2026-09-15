@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.World.Transpiler.Embeddings;
 
 namespace Puck.World.Transpiler.Decompiler;
 
@@ -8,8 +9,8 @@ namespace Puck.World.Transpiler.Decompiler;
 // loss, and falls back to `row { }` (the explicit form) otherwise. See src/Puck.World.Transpiler/README.md's
 // syntax-contract section for the exact eligibility rule this mirrors from the emitter.
 public static partial class WorldDecompiler {
-    private static readonly HashSet<string> TableSugarRowKeys = new(comparer: StringComparer.Ordinal) { "name", "kind", "min", "max", "capacity", "overflow", "cells", "advance", "domain" };
-    private static readonly HashSet<string> SlotSugarRowKeys = new(comparer: StringComparer.Ordinal) { "name", "kind", "min", "max", "overflow", "value", "advance" };
+    private static readonly HashSet<string> TableSugarRowKeys = new(comparer: StringComparer.Ordinal) { "name", "kind", "min", "max", "capacity", "overflow", "cells", "advance", "domain", "space", "evicts" };
+    private static readonly HashSet<string> SlotSugarRowKeys = new(comparer: StringComparer.Ordinal) { "name", "kind", "min", "max", "overflow", "value", "advance", "space" };
     private static readonly HashSet<string> CellSugarKeys = new(comparer: StringComparer.Ordinal) { "key", "value", "advance", "behavior" };
     private static readonly HashSet<string> PileSugarRowKeys = new(comparer: StringComparer.Ordinal) { "name", "kind", "domain", "cells", "capacity" };
     private static readonly HashSet<string> PileSugarDomainKeys = new(comparer: StringComparer.Ordinal) { "$type", "row", "ordered" };
@@ -18,7 +19,7 @@ public static partial class WorldDecompiler {
     private static readonly HashSet<string> GridSugarTopologyKeys = new(comparer: StringComparer.Ordinal) { "$type", "name", "origin", "cellSize", "width", "depth", "wrap", "band" };
     private static readonly HashSet<string> GridSugarWrapNames = new(comparer: StringComparer.Ordinal) { "None", "X", "Y", "Both" };
 
-    private static void DecompileStateBlock(StringBuilder sb, JsonObject state, int indentLevel) {
+    private static void DecompileStateBlock(StringBuilder sb, JsonObject state, int indentLevel, EmbeddingLock? embeddings = null) {
         var indent = new string(
             c: ' ',
             count: (indentLevel * 4)
@@ -31,6 +32,9 @@ public static partial class WorldDecompiler {
 
         var world = (state["world"] as JsonArray);
         var lattices = (state["lattices"] as JsonArray);
+        var spaces = (state["spaces"] as JsonArray);
+        var spaceCount = (spaces?.Count ?? 0);
+
         // A `grid` declaration mints its own `state.lattices` entry, so a topology it will reproduce is left out of
         // the plain `lattices [ ]` field printed alongside — printing both would author the same topology twice.
         var consumedTopologies = ComputeGridSugarConsumedTopologies(
@@ -39,7 +43,35 @@ public static partial class WorldDecompiler {
         );
         var first = true;
 
+        if (spaces is not null && spaces.Count > 0) {
+            sb.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"{indent}    spaces {{"
+            );
+            foreach (var spaceNode in spaces) {
+                if (spaceNode is JsonObject spaceObj) {
+                    var spaceName = (spaceObj["name"]?.ToString() ?? "default");
+                    var model = (spaceObj["model"]?.ToString() ?? "");
+                    var revision = (spaceObj["revision"]?.ToString() ?? "");
+                    var dims = (spaceObj["dimensions"]?.GetValue<int>() ?? 0);
+                    sb.AppendLine(
+                        CultureInfo.InvariantCulture,
+                        $"{indent}        space {spaceName} {{ model: \"{EscapeString(s: model)}\"  revision: \"{EscapeString(s: revision)}\"  dimensions: {dims} }}"
+                    );
+                }
+            }
+            sb.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"{indent}    }}"
+            );
+            first = false;
+        }
+
         foreach (var (k, v) in state) {
+            if (string.Equals(a: k, b: "spaces", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                continue;
+            }
+
             if (
                 string.Equals(
                 a: k,
@@ -96,9 +128,11 @@ public static partial class WorldDecompiler {
                 (v is JsonArray worldArr)
             ) {
                 DecompileStateWorldBlock(
+                    embeddings: embeddings,
                     indentLevel: (indentLevel + 1),
                     lattices: lattices,
                     sb: sb,
+                    spaceCount: spaceCount,
                     world: worldArr
                 );
             } else {
@@ -116,7 +150,8 @@ public static partial class WorldDecompiler {
             $"{indent}}}"
         );
     }
-    private static void DecompileStateWorldBlock(StringBuilder sb, JsonArray world, JsonArray? lattices, int indentLevel) {
+
+    private static void DecompileStateWorldBlock(StringBuilder sb, JsonArray world, JsonArray? lattices, int indentLevel, int spaceCount = 0, EmbeddingLock? embeddings = null) {
         var indent = new string(
             c: ' ',
             count: (indentLevel * 4)
@@ -127,22 +162,34 @@ public static partial class WorldDecompiler {
             $"{indent}world {{"
         );
 
+        var embedsPairs = DetectEmbedsPairs(world: world, embeddings: embeddings);
+        var consumedVectorRows = new HashSet<string>(embedsPairs.Values.Select(p => p.VectorRowName), comparer: StringComparer.Ordinal);
         var first = true;
 
         foreach (var rowNode in world) {
             if (rowNode is not JsonObject rowObj) {
                 continue;
             }
+            var rowName = rowObj["name"]?.ToString();
+            if (rowName is not null && consumedVectorRows.Contains(item: rowName)) {
+                continue;
+            }
+
             if (!first) {
                 sb.AppendLine();
             }
             first = false;
 
+            embedsPairs.TryGetValue(key: (rowName ?? ""), value: out var pair);
+
             DecompileStateRow(
+                embedsPair: pair,
+                embeddings: embeddings,
                 indentLevel: (indentLevel + 1),
                 lattices: lattices,
                 row: rowObj,
                 sb: sb,
+                spaceCount: spaceCount,
                 world: world
             );
         }
@@ -152,7 +199,17 @@ public static partial class WorldDecompiler {
             $"{indent}}}"
         );
     }
-    private static void DecompileStateRow(StringBuilder sb, JsonObject row, JsonArray world, JsonArray? lattices, int indentLevel) {
+
+    private static void DecompileStateRow(
+        StringBuilder sb,
+        JsonObject row,
+        JsonArray world,
+        JsonArray? lattices,
+        int indentLevel,
+        (string? VectorRowName, string? SpaceName) embedsPair = default,
+        EmbeddingLock? embeddings = null,
+        int spaceCount = 0
+    ) {
         if (CanSugarPileRow(
             row: row,
             tokenRow: out var tokenRow
@@ -204,15 +261,25 @@ public static partial class WorldDecompiler {
         );
         var name = (row["name"]!.ToString());
         var kind = (row["kind"]!.ToString());
+        var rowSpace = row["space"]?.ToString();
 
         if (isTable) {
             var header = new StringBuilder(value: $"{indent}table {name} : {kind}");
+
+            if (!string.IsNullOrEmpty(embedsPair.VectorRowName)) {
+                if ((spaceCount > 1) && !string.IsNullOrEmpty(embedsPair.SpaceName)) {
+                    header.Append(value: $" embeds({embedsPair.VectorRowName}, space: {embedsPair.SpaceName})");
+                } else {
+                    header.Append(value: $" embeds({embedsPair.VectorRowName})");
+                }
+            }
 
             AppendStateRowModifiers(
                 header: header,
                 includeCapacity: true,
                 kind: kind,
-                row: row
+                row: row,
+                spaceCount: spaceCount
             );
 
             var cells = ((row["cells"] as JsonArray) ?? []);
@@ -240,8 +307,10 @@ public static partial class WorldDecompiler {
                 var cellObj = ((JsonObject)cellNode!);
                 var key = (cellObj["key"]!.ToString());
                 var line = new StringBuilder(value: $"{cellIndent}{FormatStateCellKey(key: key)} = {FormatStateScalarLiteral(
+                    embeddings: embeddings,
                     kind: kind,
-                    node: cellObj["value"]
+                    node: cellObj["value"],
+                    space: rowSpace
                 )}");
 
                 if (cellObj["advance"] is JsonObject cellAdvance) {
@@ -267,8 +336,10 @@ public static partial class WorldDecompiler {
 
             if (row["value"] is { } valueNode) {
                 header.Append(value: $" = {FormatStateScalarLiteral(
+                    embeddings: embeddings,
                     kind: kind,
-                    node: valueNode
+                    node: valueNode,
+                    space: rowSpace
                 )}");
             }
 
@@ -276,19 +347,39 @@ public static partial class WorldDecompiler {
                 header: header,
                 includeCapacity: false,
                 kind: kind,
-                row: row
+                row: row,
+                spaceCount: spaceCount
             );
 
             sb.AppendLine(value: header.ToString());
         }
     }
-    private static void AppendStateRowModifiers(StringBuilder header, JsonObject row, string kind, bool includeCapacity) {
+
+    private static void AppendStateRowModifiers(StringBuilder header, JsonObject row, string kind, bool includeCapacity, int spaceCount = 0) {
         if (
             includeCapacity &&
             (row["capacity"] is JsonValue capVal) &&
             capVal.TryGetValue<int>(value: out var capacity)
         ) {
             header.Append(value: $" capacity({capacity})");
+        }
+
+        if (
+            (row["evicts"] is JsonValue evictsVal) &&
+            evictsVal.TryGetValue<bool>(value: out var evicts) &&
+            evicts
+        ) {
+            header.Append(value: " evicts");
+        }
+
+        if (
+            (kind == "Vector") &&
+            (row["space"] is JsonValue spaceVal) &&
+            spaceVal.TryGetValue<string>(value: out var space) &&
+            !string.IsNullOrWhiteSpace(value: space) &&
+            (spaceCount != 1)
+        ) {
+            header.Append(value: $" space({space})");
         }
 
         if (
@@ -327,12 +418,19 @@ public static partial class WorldDecompiler {
             header.Append(value: $" advance(perSecond: {FormatStateRate(advance: rowAdvance)})");
         }
     }
-    private static string FormatStateScalarLiteral(JsonNode? node, string kind) {
+
+    private static string FormatStateScalarLiteral(JsonNode? node, string kind, string? space = null, EmbeddingLock? embeddings = null) {
         if (node is null) {
             return "null";
         }
 
         switch (kind) {
+            case "Vector":
+                var vecStr = node.ToString();
+                if ((embeddings is not null) && embeddings.TryFindText(spaceName: space, text: out var text, vectorBase64Url: vecStr)) {
+                    return $"embed(\"{EscapeString(s: text)}\")";
+                }
+                return $"vector(\"{EscapeString(s: vecStr)}\")";
             case "Fixed":
                 // Already a decimal-text JSON string (see the emitter's LowerStateFixedValue) — printed verbatim.
                 return node.ToString();
@@ -350,6 +448,90 @@ public static partial class WorldDecompiler {
                 );
         }
     }
+
+    private static Dictionary<string, (string VectorRowName, string SpaceName)> DetectEmbedsPairs(JsonArray world, EmbeddingLock? embeddings) {
+        var result = new Dictionary<string, (string VectorRowName, string SpaceName)>(comparer: StringComparer.Ordinal);
+
+        if (embeddings is null) {
+            return result;
+        }
+
+        var textTables = new List<JsonObject>();
+        var vectorTables = new Dictionary<string, JsonObject>(comparer: StringComparer.Ordinal);
+
+        foreach (var rowNode in world) {
+            if (
+                (rowNode is JsonObject rowObj) &&
+                (rowObj["name"]?.ToString() is { } name) &&
+                (rowObj["kind"]?.ToString() is { } kind)
+            ) {
+                if ((kind == "Text") && (rowObj["cells"] is JsonArray)) {
+                    textTables.Add(item: rowObj);
+                } else if ((kind == "Vector") && (rowObj["cells"] is JsonArray)) {
+                    vectorTables[name] = rowObj;
+                }
+            }
+        }
+
+        foreach (var textTable in textTables) {
+            var textName = textTable["name"]!.ToString();
+            var textCells = ((textTable["cells"] as JsonArray) ?? []);
+            var textCap = textTable["capacity"]?.ToString();
+            var textEvicts = textTable["evicts"]?.ToString();
+            var textVis = textTable["visibility"]?.ToString();
+
+            foreach (var (vecName, vecTable) in vectorTables) {
+                var vecSpace = vecTable["space"]?.ToString();
+
+                if (string.IsNullOrEmpty(value: vecSpace)) {
+                    continue;
+                }
+
+                if (
+                    (vecTable["capacity"]?.ToString() != textCap) ||
+                    (vecTable["evicts"]?.ToString() != textEvicts) ||
+                    (vecTable["visibility"]?.ToString() != textVis)
+                ) {
+                    continue;
+                }
+
+                var vecCells = ((vecTable["cells"] as JsonArray) ?? []);
+
+                if ((vecCells.Count != textCells.Count) || (textCells.Count == 0)) {
+                    continue;
+                }
+
+                var matches = true;
+
+                for (var i = 0; i < textCells.Count; i++) {
+                    if ((textCells[i] is not JsonObject tCell) || (vecCells[i] is not JsonObject vCell)) {
+                        matches = false;
+                        break;
+                    }
+                    if (tCell["key"]?.ToString() != vCell["key"]?.ToString()) {
+                        matches = false;
+                        break;
+                    }
+
+                    var textVal = (tCell["value"]?.ToString() ?? "");
+                    var vecVal = (vCell["value"]?.ToString() ?? "");
+
+                    if (!embeddings.TryFindText(spaceName: vecSpace, text: out var lockedText, vectorBase64Url: vecVal) || (lockedText != textVal)) {
+                        matches = false;
+                        break;
+                    }
+                }
+
+                if (matches) {
+                    result[textName] = (VectorRowName: vecName, SpaceName: vecSpace);
+                    break;
+                }
+            }
+        }
+
+        return result;
+    }
+
     private static string FormatStateRate(JsonObject advance) {
         var numerator = (((advance["perSecondNumerator"] is JsonValue nv) && nv.TryGetValue<long>(value: out var n))
             ? n
@@ -439,6 +621,7 @@ public static partial class WorldDecompiler {
         "Int" => ((node is JsonValue intValue) && intValue.TryGetValue<long>(value: out _)),
         "Bool" => ((node is JsonValue boolValue) && boolValue.TryGetValue<bool>(value: out _)),
         "Text" => ((node is JsonValue textValue) && textValue.TryGetValue<string>(value: out _)),
+        "Vector" => ((node is JsonValue vecValue) && vecValue.TryGetValue<string>(value: out _)),
         _ => ((node is JsonValue fixedValue) && fixedValue.TryGetValue<string>(value: out var text) && Puck.Maths.FixedQ4816.TryParse(
             provider: CultureInfo.InvariantCulture,
             result: out var parsed,
@@ -458,7 +641,7 @@ public static partial class WorldDecompiler {
         if (
             (row["kind"] is not JsonValue kindVal) ||
             !kindVal.TryGetValue<string>(value: out var kind) ||
-            (kind is not ("Int" or "Fixed" or "Bool" or "Text"))
+            (kind is not ("Int" or "Fixed" or "Bool" or "Text" or "Vector"))
         ) {
             return false;
         }

@@ -42,6 +42,32 @@ without touching this project. `Puck.World.Transpiler` is `puck.world.definition
 see its [README](../../src/Puck.World.Transpiler/README.md#state-declarations) for `state.world`'s exact lowering,
 defaults, and refusals.
 
+### Vector spaces, `embeds(...)`, and vector literals
+
+The state section supports declared embedding spaces and vector rows:
+
+```puck
+state {
+    spaces {
+        space lore { model: "puck-fixture" revision: "1" dimensions: 256 }
+    }
+    world {
+        table events : Vector {
+            ambush = "Bandits ambushed the caravan on the north road"
+        }
+        table lines : Text embeds(lineVectors) {
+            warn = "Stay close to the wagons tonight."
+        }
+        slot situation : Vector = "Travellers approach the gate at dusk"
+    }
+}
+```
+
+- **`spaces` block**: declares one or more named vector embedding spaces with `model`, `revision`, and `dimensions`.
+- **`Vector` kind**: creates rows of unit-normalized signed 8-bit vectors. In source, values are written as plain text literals.
+- **`embeds(vectorRow)` modifier**: links a `Text` table to an auto-generated or explicitly paired `Vector` table, automatically embedding each text entry into vector state.
+- **Embedding literals**: `embed("text")` produces a vector operand inside rule gates and effects, resolved during transpilation against the companion `.embeddings.json` lock file produced by `puck embed`.
+
 ## `for`, over an array known at compile time
 
 ```puck

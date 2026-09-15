@@ -12,18 +12,11 @@ public sealed class CliWorldVocabularyTests {
     private const string ScreenJsonTemplate = """
         {
           "schema": "puck.world.definition.v1",
-          "screens": [
+          "machines": [
             {
-              "index": 0,
-              "origin": [0, 0, 0],
-              "right": [1, 0, 0],
-              "up": [0, 1, 0],
-              "halfWidth": 0.3,
-              "halfHeight": 0.3,
-              "halfDepth": 0.03,
-              "round": 0,
-              "source": { "$type": "machine", "engine": "{ENGINE}", "contentPath": "", "options": null },
-              "route": { "engageable": false, "engageRadius": 0 }
+              "name": "brick1",
+              "engine": "{ENGINE}",
+              "configuration": { "schema": "{SCHEMA}" }
             }
           ]
         }
@@ -36,11 +29,10 @@ public sealed class CliWorldVocabularyTests {
         Assert.False(condition: catalog.IsRegistered(engineId: "no-such-brick"));
 
         var diagnostics = new DiagnosticBag();
-        var root = JsonNode.Parse(ScreenJsonTemplate.Replace(
-            comparisonType: StringComparison.Ordinal,
-            newValue: "no-such-brick",
-            oldValue: "{ENGINE}"
-        ))!.AsObject();
+        var root = JsonNode.Parse(ScreenJsonTemplate
+            .Replace(comparisonType: StringComparison.Ordinal, newValue: "no-such-brick", oldValue: "{ENGINE}")
+            .Replace(comparisonType: StringComparison.Ordinal, newValue: "puck.no-such-brick.configuration.v1", oldValue: "{SCHEMA}")
+        )!.AsObject();
 
         var validated = WorldSemanticValidator.ValidateWorld(
             root,
@@ -54,7 +46,7 @@ public sealed class CliWorldVocabularyTests {
             collection: diagnostics,
             filter: d => d.Message.Contains(
                 comparisonType: StringComparison.Ordinal,
-                value: "'no-such-brick' names no registered screen-machine engine"
+                value: "provider 'no-such-brick' is unavailable in the selected machine catalog"
             )
         );
     }
@@ -66,12 +58,14 @@ public sealed class CliWorldVocabularyTests {
 
         Assert.True(condition: catalog.IsRegistered(engineId: engine));
 
+        var schema = (engine == "advanced-gaming-brick"
+            ? "puck.advanced-gaming-brick.config.v1"
+            : $"puck.{engine}.configuration.v1");
         var diagnostics = new DiagnosticBag();
-        var root = JsonNode.Parse(ScreenJsonTemplate.Replace(
-            comparisonType: StringComparison.Ordinal,
-            newValue: engine,
-            oldValue: "{ENGINE}"
-        ))!.AsObject();
+        var root = JsonNode.Parse(ScreenJsonTemplate
+            .Replace(comparisonType: StringComparison.Ordinal, newValue: engine, oldValue: "{ENGINE}")
+            .Replace(comparisonType: StringComparison.Ordinal, newValue: schema, oldValue: "{SCHEMA}")
+        )!.AsObject();
 
         var validated = WorldSemanticValidator.ValidateWorld(
             root,
@@ -94,11 +88,10 @@ public sealed class CliWorldVocabularyTests {
     public void SemanticValidationReportsAnUnavailableProviderCatalog() {
         _ = CliWorldVocabulary.EnsureInstalled();
         var diagnostics = new DiagnosticBag();
-        var root = JsonNode.Parse(ScreenJsonTemplate.Replace(
-            comparisonType: StringComparison.Ordinal,
-            newValue: "gaming-brick",
-            oldValue: "{ENGINE}"
-        ))!.AsObject();
+        var root = JsonNode.Parse(ScreenJsonTemplate
+            .Replace(comparisonType: StringComparison.Ordinal, newValue: "gaming-brick", oldValue: "{ENGINE}")
+            .Replace(comparisonType: StringComparison.Ordinal, newValue: "puck.gaming-brick.configuration.v1", oldValue: "{SCHEMA}")
+        )!.AsObject();
 
         Assert.False(condition: WorldSemanticValidator.ValidateWorld(
             root,

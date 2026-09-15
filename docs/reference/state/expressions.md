@@ -129,6 +129,30 @@ Every listed function is Int-only except `sqrt`, `sin`, and `cos`.
 An invalid domain, such as a negative index, a component beyond its cell, or
 a Hilbert order outside 1..31, fails the expression rather than wrapping.
 
+## Vector expressions
+
+Rules can evaluate vector similarity, dot product, and identity between Vector cells
+belonging to the same embedding space:
+
+| Function | Signature | Return kind | Meaning |
+|---|---|---|---|
+| `similarity(a, b)` | `(Vector, Vector)` | Fixed (Q48.16) | Quantized cosine similarity in `[-1.0, 1.0]`. |
+| `dot(a, b)` | `(Vector, Vector)` | Int | Raw integer sum of component products `∑(a_i * b_i)`. |
+| `identical(a, b)` | `(Vector, Vector)` | Bool (0 or 1) | Bit-exact component equality across all dimensions. |
+
+Authored vector operands can also compare against embedding literals:
+`embed("danger and betrayal")`, which resolve through companion lock files.
+
+### The cosine distinction
+
+Because `StateVector` components are quantized to signed 8-bit integers normalized on radius 127:
+- `similarity` uses `SignedByteVectorFunctions.CosineQ16` to produce a true cosine metric
+  scaled into standard fixed-point (Q48.16), compensating for slight quantization error.
+  A similarity of `1.0` means parallel unit vectors; `0.0` means orthogonal; `-1.0` means antiparallel.
+- `dot` evaluates the unscaled integer accumulator `Dot(left, right)`. For two unit-normalized vectors
+  of radius 127, the maximum dot product is approximately `127 * 127 = 16,129`. `dot` is preferred
+  when comparing relative rankings without fixed-point division overhead.
+
 ## Reductions
 
 `$reduce:<max|min|sum|count>:<row>` aggregates a row's cells.

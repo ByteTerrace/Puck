@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Azure.Core;
 using Puck.Embeddings;
 using Xunit;
 
@@ -9,7 +10,7 @@ namespace Puck.Cli.Tests;
 
 public sealed class OpenAiEmbeddingGeneratorTests {
     [Fact]
-    public async Task RequestShapeAndAuthorizationHeaderMatchSpecificationAsync() {
+    public async Task RequestShapeAndIdentityBearerTokenMatchSpecificationAsync() {
         var port = GetFreePort();
         var prefix = $"http://127.0.0.1:{port}/";
         using var listener = new HttpListener();
@@ -51,8 +52,7 @@ public sealed class OpenAiEmbeddingGeneratorTests {
         });
 
         var options = new OpenAiEmbeddingOptions {
-            ApiKey = "sk-secret-test-key",
-            ApiKeyHeader = "Authorization",
+            Credential = new MockTokenCredential(token: "test-identity-token"),
             Dimensions = 3,
             Endpoint = new Uri(uriString: prefix),
             Model = "test-model",
@@ -65,66 +65,9 @@ public sealed class OpenAiEmbeddingGeneratorTests {
         await serverTask;
 
         Assert.Single(collection: result);
-        Assert.Equal(expected: "Bearer sk-secret-test-key", actual: receivedHeader);
+        Assert.Equal(expected: "Bearer test-identity-token", actual: receivedHeader);
         Assert.NotNull(@object: receivedBody);
-        Assert.Equal(expected: "test-model", actual: receivedBody["model"]?.ToString());
         Assert.Equal(expected: 3, actual: receivedBody["dimensions"]?.GetValue<int>());
-    }
-
-    [Fact]
-    public async Task CustomApiKeyHeaderSendsRawKeyAsync() {
-        var port = GetFreePort();
-        var prefix = $"http://127.0.0.1:{port}/";
-        using var listener = new HttpListener();
-        listener.Prefixes.Add(uriPrefix: prefix);
-        listener.Start();
-
-        var receivedCustomHeader = "";
-        var authHeaderPresent = true;
-
-        var serverTask = Task.Run(
-            cancellationToken: TestContext.Current.CancellationToken,
-            function: async () => {
-            var context = await listener.GetContextAsync();
-            receivedCustomHeader = context.Request.Headers["api-key"] ?? "";
-            authHeaderPresent = (context.Request.Headers["Authorization"] is not null);
-
-            var responseJson = """
-            {
-              "object": "list",
-              "data": [
-                {
-                  "object": "embedding",
-                  "index": 0,
-                  "embedding": [0.5, -0.5]
-                }
-              ],
-              "model": "test-model"
-            }
-            """;
-            var bytes = Encoding.UTF8.GetBytes(s: responseJson);
-            context.Response.ContentType = "application/json";
-            context.Response.ContentLength64 = bytes.Length;
-            await context.Response.OutputStream.WriteAsync(buffer: bytes.AsMemory(), cancellationToken: TestContext.Current.CancellationToken);
-            context.Response.Close();
-        });
-
-        var options = new OpenAiEmbeddingOptions {
-            ApiKey = "raw-api-key-xyz",
-            ApiKeyHeader = "api-key",
-            Dimensions = 2,
-            Endpoint = new Uri(uriString: prefix),
-            Model = "test-model",
-        };
-
-        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
-        var result = await generator.GenerateAsync(values: ["query"], cancellationToken: TestContext.Current.CancellationToken);
-
-        await serverTask;
-
-        Assert.Single(collection: result);
-        Assert.Equal(expected: "raw-api-key-xyz", actual: receivedCustomHeader);
-        Assert.False(condition: authHeaderPresent);
     }
 
     [Fact]
@@ -162,7 +105,7 @@ public sealed class OpenAiEmbeddingGeneratorTests {
         });
 
         var options = new OpenAiEmbeddingOptions {
-            ApiKey = "key",
+            Credential = new MockTokenCredential(token: "mock-token"),
             Dimensions = 2,
             Endpoint = new Uri(uriString: prefix),
             Model = "test-model",
@@ -179,7 +122,19 @@ public sealed class OpenAiEmbeddingGeneratorTests {
     }
 
     [Fact]
-    public async Task ProviderFailureRedactsApiKeyAndTruncatesMessageAsync() {
+    public void FactoryCreatesGeneratorWithDefaultAzureCredentialWhenNoneProvided() {
+        var options = new OpenAiEmbeddingOptions {
+            Dimensions = 128,
+            Endpoint = new Uri(uriString: "https://example-resource.openai.azure.com/"),
+            Model = "text-embedding-3-small",
+        };
+
+        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        Assert.NotNull(@object: generator);
+    }
+
+    [Fact]
+    public async Task GeneratorThrowsOnCountMismatchAsync() {
         var port = GetFreePort();
         var prefix = $"http://127.0.0.1:{port}/";
         using var listener = new HttpListener();
@@ -190,9 +145,16 @@ public sealed class OpenAiEmbeddingGeneratorTests {
             cancellationToken: TestContext.Current.CancellationToken,
             function: async () => {
             var context = await listener.GetContextAsync();
-            context.Response.StatusCode = 400;
-            var errorBody = new string(c: 'E', count: 1000);
-            var bytes = Encoding.UTF8.GetBytes(s: $"{{\"error\": \"super-secret-key-12345 {errorBody}\"}}");
+            var responseJson = """
+            {
+              "object": "list",
+              "data": [
+                { "object": "embedding", "index": 0, "embedding": [0.1, 0.2] }
+              ],
+              "model": "test-model"
+            }
+            """;
+            var bytes = Encoding.UTF8.GetBytes(s: responseJson);
             context.Response.ContentType = "application/json";
             context.Response.ContentLength64 = bytes.Length;
             await context.Response.OutputStream.WriteAsync(buffer: bytes.AsMemory(), cancellationToken: TestContext.Current.CancellationToken);
@@ -200,22 +162,176 @@ public sealed class OpenAiEmbeddingGeneratorTests {
         });
 
         var options = new OpenAiEmbeddingOptions {
-            ApiKey = "super-secret-key-12345",
+            Credential = new MockTokenCredential(token: "test-token"),
             Dimensions = 2,
             Endpoint = new Uri(uriString: prefix),
             Model = "test-model",
         };
 
         using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
-
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            testCode: async () => await generator.GenerateAsync(values: ["test"], cancellationToken: TestContext.Current.CancellationToken)
+            testCode: () => generator.GenerateAsync(values: ["first", "second"], cancellationToken: TestContext.Current.CancellationToken)
         );
-
         await serverTask;
 
-        Assert.DoesNotContain(expectedSubstring: "super-secret-key-12345", actualString: ex.Message);
-        Assert.True(condition: ex.Message.Length <= 512);
+        Assert.Contains(expectedSubstring: "Answer count mismatch", actualString: ex.Message);
+    }
+
+    [Fact]
+    public async Task GeneratorThrowsOnLengthMismatchAsync() {
+        var port = GetFreePort();
+        var prefix = $"http://127.0.0.1:{port}/";
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(uriPrefix: prefix);
+        listener.Start();
+
+        var serverTask = Task.Run(
+            cancellationToken: TestContext.Current.CancellationToken,
+            function: async () => {
+            var context = await listener.GetContextAsync();
+            var responseJson = """
+            {
+              "object": "list",
+              "data": [
+                { "object": "embedding", "index": 0, "embedding": [0.1, 0.2, 0.3] }
+              ],
+              "model": "test-model"
+            }
+            """;
+            var bytes = Encoding.UTF8.GetBytes(s: responseJson);
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(buffer: bytes.AsMemory(), cancellationToken: TestContext.Current.CancellationToken);
+            context.Response.Close();
+        });
+
+        var options = new OpenAiEmbeddingOptions {
+            Credential = new MockTokenCredential(token: "test-token"),
+            Dimensions = 2,
+            Endpoint = new Uri(uriString: prefix),
+            Model = "test-model",
+        };
+
+        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            testCode: () => generator.GenerateAsync(values: ["test"], cancellationToken: TestContext.Current.CancellationToken)
+        );
+        await serverTask;
+
+        Assert.Contains(expectedSubstring: "Embedding vector length mismatch", actualString: ex.Message);
+    }
+
+    [Fact]
+    public async Task GeneratorOrdersOutOfOrderIndexesAsync() {
+        var port = GetFreePort();
+        var prefix = $"http://127.0.0.1:{port}/";
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(uriPrefix: prefix);
+        listener.Start();
+
+        var serverTask = Task.Run(
+            cancellationToken: TestContext.Current.CancellationToken,
+            function: async () => {
+            var context = await listener.GetContextAsync();
+            var responseJson = """
+            {
+              "object": "list",
+              "data": [
+                { "object": "embedding", "index": 1, "embedding": [0.3, 0.4] },
+                { "object": "embedding", "index": 0, "embedding": [0.1, 0.2] }
+              ],
+              "model": "test-model"
+            }
+            """;
+            var bytes = Encoding.UTF8.GetBytes(s: responseJson);
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(buffer: bytes.AsMemory(), cancellationToken: TestContext.Current.CancellationToken);
+            context.Response.Close();
+        });
+
+        var options = new OpenAiEmbeddingOptions {
+            Credential = new MockTokenCredential(token: "test-token"),
+            Dimensions = 2,
+            Endpoint = new Uri(uriString: prefix),
+            Model = "test-model",
+        };
+
+        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        var result = await generator.GenerateAsync(values: ["first", "second"], cancellationToken: TestContext.Current.CancellationToken);
+        await serverTask;
+
+        var list = result.ToList();
+        Assert.Equal(expected: 2, actual: list.Count);
+        Assert.Equal(expected: 0.1f, actual: list[0].Vector.Span[0], precision: 4);
+        Assert.Equal(expected: 0.3f, actual: list[1].Vector.Span[0], precision: 4);
+    }
+
+    [Fact]
+    public async Task Generator500ResponseHoldsStatusAndBodyWithoutTokenAsync() {
+        var port = GetFreePort();
+        var prefix = $"http://127.0.0.1:{port}/";
+        using var listener = new HttpListener();
+        listener.Prefixes.Add(uriPrefix: prefix);
+        listener.Start();
+
+        var secretToken = "super-secret-azure-token-xyz123";
+
+        var serverTask = Task.Run(
+            cancellationToken: TestContext.Current.CancellationToken,
+            function: async () => {
+            var context = await listener.GetContextAsync();
+            var errorBody = "Internal server error occurred while processing model weights.";
+            var bytes = Encoding.UTF8.GetBytes(s: errorBody);
+            context.Response.StatusCode = 500;
+            context.Response.ContentType = "text/plain";
+            context.Response.ContentLength64 = bytes.Length;
+            await context.Response.OutputStream.WriteAsync(buffer: bytes.AsMemory(), cancellationToken: TestContext.Current.CancellationToken);
+            context.Response.Close();
+        });
+
+        var options = new OpenAiEmbeddingOptions {
+            Credential = new MockTokenCredential(token: secretToken),
+            Dimensions = 2,
+            Endpoint = new Uri(uriString: prefix),
+            MaxRetries = 0,
+            Model = "test-model",
+        };
+
+        using var generator = OpenAiEmbeddingGeneratorFactory.Create(options: options);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            testCode: () => generator.GenerateAsync(values: ["hello"], cancellationToken: TestContext.Current.CancellationToken)
+        );
+        await serverTask;
+
+        Assert.Contains(expectedSubstring: "500", actualString: ex.Message);
+        Assert.Contains(expectedSubstring: "Internal server error", actualString: ex.Message);
+        Assert.DoesNotContain(expectedSubstring: secretToken, actualString: ex.Message);
+    }
+
+    [Fact]
+    public void BatchSplittingProducesCorrectChunks() {
+        var items = new[] { "item1", "item2", "item3", "item4", "item5" };
+        var batches = EmbeddingBatcher.Batch(batchSize: 2, items: items).ToList();
+
+        Assert.Equal(expected: 3, actual: batches.Count);
+        Assert.Equal(expected: 2, actual: batches[0].Count);
+        Assert.Equal(expected: 2, actual: batches[1].Count);
+        Assert.Single(collection: batches[2]);
+    }
+
+    private sealed class MockTokenCredential : TokenCredential {
+        private readonly string m_token;
+
+        public MockTokenCredential(string token) {
+            m_token = token;
+        }
+
+        public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken) =>
+            new(m_token, DateTimeOffset.UtcNow.AddHours(hours: 1));
+
+        public override ValueTask<AccessToken> GetTokenAsync(TokenRequestContext requestContext, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(result: new AccessToken(m_token, DateTimeOffset.UtcNow.AddHours(hours: 1)));
     }
 
     private static int GetFreePort() {

@@ -40,6 +40,7 @@ internal static class WorldSiloExtensions {
     };
     private static readonly Dictionary<string, WorldSiloRetirementProvider> Retirement = new(comparer: StringComparer.Ordinal);
     private static readonly Dictionary<string, WorldExtensionProviderType> Operations = new(comparer: StringComparer.Ordinal);
+    private static readonly Dictionary<string, WorldExtensionEmbeddingProviderType> Embeddings = new(comparer: StringComparer.Ordinal);
     private static readonly Dictionary<string, Func<bool, (string ContentType, string Body)>> HealthChecks = new(comparer: StringComparer.OrdinalIgnoreCase);
     private static readonly Lock Gate = new();
 
@@ -129,6 +130,12 @@ internal static class WorldSiloExtensions {
             Operations[provider.Type] = provider;
         }
     }
+    internal static void RegisterEmbedding(WorldExtensionEmbeddingProviderType provider) {
+        ArgumentNullException.ThrowIfNull(argument: provider);
+        lock (Gate) {
+            Embeddings[provider.Type] = provider;
+        }
+    }
     internal static void RegisterRetirement(WorldSiloRetirementProvider provider) {
         ArgumentNullException.ThrowIfNull(argument: provider);
         lock (Gate) {
@@ -157,6 +164,7 @@ internal static class WorldSiloExtensions {
             path: path
         );
         public void RegisterOperation(WorldExtensionProviderType provider) => WorldSiloExtensions.RegisterOperation(provider: provider);
+        public void RegisterEmbedding(WorldExtensionEmbeddingProviderType provider) => WorldSiloExtensions.RegisterEmbedding(provider: provider);
         public void RegisterRetirement(WorldSiloRetirementProvider provider) => WorldSiloExtensions.RegisterRetirement(provider: provider);
         public void RegisterStorage(WorldSiloStorageProvider provider) => WorldSiloExtensions.RegisterStorage(provider: provider);
     }

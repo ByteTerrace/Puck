@@ -443,6 +443,7 @@ public abstract record ValueToken {
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(VectorOperandToken.Cell), typeDiscriminator: "cell")]
 [JsonDerivedType(typeof(VectorOperandToken.Literal), typeDiscriminator: "literal")]
+[JsonDerivedType(typeof(VectorOperandToken.Embed), typeDiscriminator: "embed")]
 public abstract record VectorOperandToken {
     /// <summary>A vector state cell operand.</summary>
     /// <param name="Name">The state row name.</param>
@@ -455,6 +456,14 @@ public abstract record VectorOperandToken {
     /// <summary>A base64url encoded vector literal operand.</summary>
     /// <param name="Value">The base64url encoded component bytes.</param>
     public sealed record Literal(string Value) : VectorOperandToken;
+
+    /// <summary>An unlowered authored text embedding literal operand.</summary>
+    /// <param name="Text">The text to embed.</param>
+    /// <param name="Space">The optional space name.</param>
+    public sealed record Embed(
+        string Text,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Space = null
+    ) : VectorOperandToken;
 }
 /// <summary>Converts an exact authored decimal literal into the Q48.16 fixed-point carrier a state cell holds — the one
 /// conversion every <see cref="ValueToken.Constant"/>, table value, and authored fixed literal crosses, so the

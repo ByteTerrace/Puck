@@ -25,7 +25,8 @@ Two generators are provided:
    Component `i` is signed byte `i mod 32` of
    `SHA-256(model ‖ 0 ‖ revision ‖ 0 ‖ dimensions ‖ 0 ‖ text ‖ 0 ‖ ⌊i/32⌋)`, with `-128 → -127`, then normalized.
 2. `OpenAiEmbeddingGeneratorFactory`: factory constructing `IEmbeddingGenerator<string, Embedding<float>>`
-   backed by `Microsoft.Extensions.AI.OpenAI` for OpenAI-compatible REST endpoints.
+   backed by `Azure.AI.OpenAI` and `Microsoft.Extensions.AI.OpenAI` using passwordless identity
+   authentication via `TokenCredential` (`DefaultAzureCredential`).
 
 ## Quantization
 

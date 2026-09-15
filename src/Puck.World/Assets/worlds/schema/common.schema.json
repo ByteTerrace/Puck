@@ -4554,6 +4554,31 @@
       "additionalProperties": false,
       "title": "VectorOperandTokenLiteral"
     },
+    "VectorOperandTokenEmbed": {
+      "description": "An unlowered authored text embedding literal operand.",
+      "properties": {
+        "$type": {
+          "const": "embed"
+        },
+        "text": {
+          "description": "The text to embed.",
+          "type": "string"
+        },
+        "space": {
+          "description": "The optional space name.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "title": "VectorOperandTokenEmbed"
+    },
     "VectorOperandToken": {
       "description": "One operand to a vector expression call (dot, similarity, identical).",
       "type": "object",
@@ -4566,6 +4591,9 @@
         },
         {
           "$ref": "#/$defs/VectorOperandTokenLiteral"
+        },
+        {
+          "$ref": "#/$defs/VectorOperandTokenEmbed"
         }
       ],
       "title": "VectorOperandToken"

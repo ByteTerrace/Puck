@@ -1,4 +1,5 @@
 using Puck.Transpiler.Diagnostics;
+using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Modules;
 using Puck.Transpiler.Parsing;
@@ -61,6 +62,7 @@ public class SamplesCompileTests {
             parseResult.Value,
             basePath: Path.GetDirectoryName(path: path),
             diagnostics: diagnostics,
+            embeddings: EmbeddingLock.TryLoad(rootSourcePath: path),
             cancellationToken: TestContext.Current.CancellationToken
         );
 

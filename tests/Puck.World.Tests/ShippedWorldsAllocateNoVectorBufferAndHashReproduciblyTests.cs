@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-public sealed class ShippedWorldHashStabilityTests {
+public sealed class ShippedWorldsAllocateNoVectorBufferAndHashReproduciblyTests {
     [Theory]
     [InlineData("src/Puck.World/Assets/worlds/puck.world.json")]
     [InlineData("src/Puck.World/Assets/worlds/pipeline.world.json")]

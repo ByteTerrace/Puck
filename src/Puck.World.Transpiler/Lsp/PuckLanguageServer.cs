@@ -6,6 +6,7 @@ using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Lowering;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
+using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Validation;
 
 namespace Puck.World.Transpiler.Lsp;
@@ -287,7 +288,7 @@ public sealed class PuckLanguageServer {
     // Best-effort: lowers the open document and looks `word` up as a declared `state` row's name, reporting its
     // kind. Swallows parse/lowering failures — a document mid-edit need not lower cleanly for hover to still work
     // on the parts that do.
-    private string? GetStateRowHoverCard(string text, string word) {
+    private string? GetStateRowHoverCard(string text, string word, string? sourcePath = null) {
         try {
             var parseResult = PuckParser.ParseDocumentWithDiagnostics(
                 source: text,
@@ -297,7 +298,10 @@ public sealed class PuckLanguageServer {
             if (parseResult.Value is not { } document) {
                 return null;
             }
-            if (WorldDocumentEmitter.LowerWithDiagnostics(document).Value?["state"] is not JsonObject stateSection) {
+            if (WorldDocumentEmitter.LowerWithDiagnostics(
+                document: document,
+                embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
+            ).Value?["state"] is not JsonObject stateSection) {
                 return null;
             }
             foreach (var (_, section) in stateSection) {
@@ -590,7 +594,7 @@ public sealed class PuckLanguageServer {
     // completion items — the dot-access counterpart to `GetStateRowHoverCard`'s row lookup. Returns null rather
     // than an empty array when the row can't be found or carries no cells, so the caller falls back to the
     // generic keyword list instead of offering zero completions for what might just be an unresolved recovery.
-    private JsonArray? GetStateRowKeyCompletions(string text, string rowName, int cursorOffset) {
+    private JsonArray? GetStateRowKeyCompletions(string text, string rowName, int cursorOffset, string? sourcePath = null) {
         try {
             if (TryParseDocumentBestEffort(
                 cursorOffset: cursorOffset,
@@ -598,7 +602,10 @@ public sealed class PuckLanguageServer {
             ) is not { } document) {
                 return null;
             }
-            if (WorldDocumentEmitter.LowerWithDiagnostics(document).Value?["state"] is not JsonObject stateSection) {
+            if (WorldDocumentEmitter.LowerWithDiagnostics(
+                document: document,
+                embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
+            ).Value?["state"] is not JsonObject stateSection) {
                 return null;
             }
             foreach (var (_, section) in stateSection) {
@@ -678,10 +685,16 @@ public sealed class PuckLanguageServer {
         )
         ) {
             var cursorOffset = (text.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
+            string? completionSourcePath = null;
+            if (TryGetLocalPath(uri: uri, path: out var localCompPath)) {
+                completionSourcePath = localCompPath;
+            }
+
             var keyItems = (GetStateRowKeyCompletions(
                 cursorOffset: cursorOffset,
                 rowName: dotRowName,
-                text: text
+                text: text,
+                sourcePath: completionSourcePath
             ) ?? PuckSqlLsp.GetSqlTableColumnCompletions(
                 tableName: dotRowName,
                 text: text,
@@ -721,6 +734,7 @@ public sealed class PuckLanguageServer {
         }
 
         var items = new JsonArray();
+        PuckEmbeddingLsp.AddCompletions(items: items);
 
         // 1. Directives & Keywords
         AddCompletion(
@@ -1411,6 +1425,18 @@ public sealed class PuckLanguageServer {
                             array: children,
                             node: CreateStateWorldSymbol(world: worldBlock)
                         );
+                    } else if (
+                        (child is BlockNode { Identifier: "spaces", Name: null, Target: null } spacesBlock) &&
+                        string.Equals(
+                        a: block.Identifier,
+                        b: "state",
+                        comparisonType: StringComparison.OrdinalIgnoreCase
+                    )
+                    ) {
+                        AddNode(
+                            array: children,
+                            node: PuckEmbeddingLsp.CreateSpacesSymbol(spaces: spacesBlock)
+                        );
                     } else if (child is BlockNode childBlock) {
                         var cName = ((childBlock.Name is not null)
                             ? $"{childBlock.Identifier} \"{childBlock.Name}\""
@@ -1565,6 +1591,32 @@ public sealed class PuckLanguageServer {
             text: text
         );
 
+        var offset = (text.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
+        string? hoverSourcePath = null;
+        if (TryGetLocalPath(uri: uri, path: out var localHoverPath)) {
+            hoverSourcePath = localHoverPath;
+        }
+
+        var embeddingCard = PuckEmbeddingLsp.GetEmbeddingHoverCard(
+            offset: offset,
+            sourcePath: hoverSourcePath,
+            text: text,
+            word: word
+        );
+
+        if (embeddingCard is not null) {
+            await SendResponseAsync(
+                id: id,
+                result: new JsonObject {
+                    ["contents"] = new JsonObject {
+                        ["kind"] = "markdown",
+                        ["value"] = embeddingCard,
+                    },
+                }
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            return;
+        }
+
         if (string.IsNullOrEmpty(value: word)) {
             await SendResponseAsync(
                 id: id,
@@ -1573,7 +1625,6 @@ public sealed class PuckLanguageServer {
             return;
         }
 
-        var offset = (text.Split('\n').Take(count: line).Sum(selector: part => (part.Length + 1)) + col);
         var docCard = (PuckSqlLsp.GetSqlHoverCard(
             offset: offset,
             text: text,
@@ -1586,7 +1637,8 @@ public sealed class PuckLanguageServer {
             resolver: m_vocabularyResolver
         ) ?? (PuckHoverInfo.Builtin(word: word) ?? (GetDocumentationForWord(word: word) ?? GetStateRowHoverCard(
             text: text,
-            word: word
+            word: word,
+            sourcePath: hoverSourcePath
         )))));
 
         if (docCard is null) {
@@ -1804,7 +1856,8 @@ public sealed class PuckLanguageServer {
                     document: parseResult.Value,
                     basePath: Path.GetDirectoryName(path: sourcePath),
                     sourceMap: sourceMap,
-                    diagnostics: loweringDiags
+                    diagnostics: loweringDiags,
+                    embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
                 );
 
                 diagnosticsBag.AddRange(diagnostics: loweringDiags);

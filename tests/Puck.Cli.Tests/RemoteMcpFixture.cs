@@ -222,6 +222,17 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
                         IsError: true
                     );
                 }
+                var tokens = request.Command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (tokens.Length >= 4 && (tokens[1] is "embedding" or "slot_embedding")) {
+                    if (!Puck.State.StateVector.TryParseBase64Url(text: tokens[3], vector: out _, error: out var vectorError)) {
+                        return new(
+                            request.Id,
+                            "refused",
+                            Output: $"[world.state.cell.set: invalid vector '{tokens[3]}': {vectorError}]",
+                            IsError: true
+                        );
+                    }
+                }
                 return new(
                     request.Id,
                     "completed",

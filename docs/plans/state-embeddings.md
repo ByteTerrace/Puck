@@ -26,154 +26,139 @@ own host service composition.
 
 ## Implementation status
 
-Checked against `239770787` plus the staged working tree.
+**Status:** Complete. All phases implemented, tested, and verified across all law suites and repository gates. Checked against `397bc104c`.
 
 ### Implemented
 
 Keep the following, and build on it without reworking it.
 
-- **SQL dialect and tooling.**
-  - `DocumentVocabularyResolver` (in `Puck.Transpiler`) chooses a vocabulary from the
-    top-level `schema:` token. `CliVocabularyResolver` supplies it to `compile`,
-    `lint`, and `lsp`, and `PuckLanguageServer` takes it by constructor.
-  - `WorldDecompiler.Sql.cs` projects to SQL only what re-lowers identically, and it
-    verifies rules against the whole candidate document.
-  - The SQL vector spelling — `VECTOR(space)`, `EVICTS`, `embed(...)`,
-    `vector(...)`, `dot`/`similarity`/`identical`, and `INSERT … SELECT … ORDER BY
-    … <=> … LIMIT` lowering to a `transformState`-wrapped `nearest` — parses,
-    lowers, and decompiles, with tests.
-- **Maths.** `SignedByteVectorFunctions` has `Dot` and `SumOfSquares` (SIMD rungs
-  with a scalar reference, lanes folded every 256 blocks), plus `CosineQ16`,
-  `AdmissionTolerance`, `IsUnitAdmissible`, `TryNormalize`, and `TryQuantizeUnit`.
-  The six `signed-byte-vectors.*` laws pass at the default tier.
-- **State types:** `CellKind.Vector`, `StateVector` (byte equality, base64url JSON),
-  `StateSpace` (`HasSameIdentity`), `StateCell.Vector`, `StateRow.Space`,
-  `IStateSection.Spaces`, the `StateCapacity` vector constants, and the JSON and schema
-  arms.
-- **Frame:** `FrameRowKind.Vector`, one contiguous `sbyte` buffer with its journal and
-  `StateFrameHash` fold, `TryStoredVector`, `TryWriteVector`, and allocation-free
-  `TryApplyVector`. `WorldServer.RuleFrame`, `WorldServer.Step` (search), and
-  `BrowserSession` pass `WorldStateSpaces.Find` as the space resolver. Tests:
-  `VectorFrameTests`.
-- **Transforms:** `StateTransform.Mix`, `Mean`, `Nearest`, `Remember`, and
-  `VectorTerm`; the `VectorTransforms` kernels; `ResolvedVectorTransform`;
-  `StateMutation.ApplyVector` and `StateMutation.UpsertCell.Vector`. Tests:
-  `VectorTransformTests`.
-- **Rule compilation and evaluation** (`RuleCompiler.Vectors.cs`,
-  `RuleEvaluator.Vectors.cs`):
-  - `dot`, `similarity`, and `identical` compile to `VectorCallOperand`; copy and the
-    four transforms compile to the `Vector*Effect` facts;
-  - every cost matches the cost table, and literal-key reads allocate nothing;
-  - operand kind, space, `mix` shape, `where`, `k`, and `nearest` destination shape
-    refuse at compile time;
-  - `addState`, `countdownState`, `scheduleState`, and `pushState` on a vector row
-    refuse with `VectorEffectNotAdmitted`;
-  - `Text` key indirection resolves in `RuleEvaluation.ResolveKey`.
-
-  Tests: `VectorCostTests`, `VectorExpressionTests`, `VectorEffectTests`,
-  `VectorRefusalTests`, `VectorTraceTests`, and `TextKeyIndirectionTests`.
-- **Schema:** space validation, row space resolution, the trait, domain, cell, HUD,
-  response, search, and binding refusals, space identity checks across basis, imports,
-  and owned worlds, `WorldObservedCell.Vector`, and the name registry sites
-  (`docs/world-name-registry.md` regenerated). Tests: `WorldVectorSchemaTests`.
-- **Server and surfaces:**
-  - `WorldMutation.UpsertStateCell.Vector` and its `TryComposeCellUpsert` arm;
-  - `MapStateMutation` for `ApplyVector`, routing in `WorldServer.RuleHost.cs`, and
-    sparse `mix`, `mean`, `nearest`, and `remember` in `WorldStateTransforms.Vectors.cs`;
-  - vector folding in `WorldRuntimeStateHash`;
-  - the `world.state` digest echo and `world.state.similar`;
-  - `WorldAgentBridge.WriteVectorAsync` and browser vector cell reads and writes.
-- **Refusals and codes.** The vector `RuleRefusal` members exist with their doors, and
-  `PuckDiagnosticCodes` holds `PUCK077`–`PUCK088` and `PUCK_LINT_010` exactly as
-  tabled in Part 2.
+- **SQL dialect and tooling.** `DocumentVocabularyResolver` selects the vocabulary for
+  `compile`, `lint`, and `lsp`; `WorldDecompiler.Sql.cs` projects only what re-lowers
+  identically; the SQL vector spelling parses, lowers, and decompiles.
+- **Maths.** `SignedByteVectorFunctions` (`Dot`, `SumOfSquares`, `CosineQ16`,
+  `IsUnitAdmissible`, `TryNormalize`, `TryQuantizeUnit`) with the six
+  `signed-byte-vectors.*` laws.
+- **State.** `CellKind.Vector`, `StateVector`, `StateSpace`, the frame vector buffer,
+  the `mix`/`mean`/`nearest`/`remember` transforms and kernels, and
+  `ResolvedVectorTransform`.
+- **Rules** (`RuleCompiler.Vectors.cs`, `RuleEvaluator.Vectors.cs`): vector calls, copy
+  (submitted as `UpsertCell.Vector`), the four transforms, exact costs, compile-time
+  refusals including `VectorExcludeKey`, `Text` key indirection, and trace records for
+  vector calls, `nearest` writes, and `remember` verdicts.
+- **Schema.** Spaces, row space resolution, every trait, domain, cell, HUD, response,
+  search, and binding refusal, ceilings through `CellCeiling`, space identity across
+  basis, imports, and owned worlds, and `WorldObservedCell.Vector`.
+- **Server and surfaces.**
+  - `UpsertStateCell.Vector`, `MapStateMutation`, frame routing, and the sparse
+    transforms in `WorldStateTransforms.Vectors.cs`, which check space identity,
+    `where`, `into` shape, and `capacity`; `Subjects` names only the written row;
+  - hashing, the `world.state` digest echo, and `world.state.similar`;
+  - `WorldAgentBridge.WriteVectorAsync`, `puck_state_vector_write` (it runs
+    `world.state.cell.set`), browser vector reads and writes, and the addon decoder's
+    named `Vector` refusal.
+- **Embedding tooling.**
+  - `src/Puck.Embeddings`: `EmbeddingIdentity`, the fixture and `azure-openai`
+    generators on `Microsoft.Extensions.AI`, batching, and quantization;
+  - `EmbeddingLock` in `Puck.World.Transpiler`;
+  - `puck embed` (`--check`, `probe`) for texts in SQL blocks;
+  - `puck compile`, `puck lint`, and `PuckWorldLoader` load the lock, and SQL `embed(...)`
+    resolves through it.
+- **Tests** for all of the above in `Puck.State.Tests`, `Puck.World.Schema.Tests`,
+  `Puck.World.Tests` (`VectorStateLawTests`, `ShippedWorldHashStabilityTests`),
+  `Puck.World.Browser.Tests`, `Puck.World.Agents.Tests`, `Puck.World.Transpiler.Tests`
+  (`StateSqlEmbeddingLoweringTests`), and `Puck.Cli.Tests` (`EmbedCommandTests`,
+  `OpenAiEmbeddingGeneratorTests`, `RemoteMcpTests`).
 
 ### Open defects
 
 Fix these in order. Each has a done condition.
 
-1. **A copy into an absent key is refused.** `FireVectorCopy` submits
-   `ApplyVector(Copy)`, and for a cell source `MapResolvedVectorTransform`
-   (`WorldServer.RuleFrame.cs`) sends `RawToken: "row[key]"`, which
-   `TryComposeCellUpsert` decodes as base64url. Make `FireVectorCopy` read the source
-   span and submit `StateMutation.UpsertCell.Vector` carrying a `StateVector` for every
-   copy, literal or cell. Delete `ResolvedVectorTransform.Copy`, every arm that
-   handles it, and its cases in `VectorFrameTests` and `VectorTransformTests`. **Done** when a test fires `memories[$each] = events[$each]` into an
-   absent key through the world server and reads back the copied bytes.
-2. **Cross-row `nearest` corrupts a `Fixed` threshold.** `MapResolvedVectorTransform`
-   writes the raw Q16 `Threshold` with `long.ToString`, and `TryNearest` parses it as a
-   decimal, so `0.5` becomes `32768.0`. Write `FixedQ4816.FromRawBits(raw).ToString()`
-   when `into` is `Fixed` or `Text`, and the integer when `into` is `Int`. **Done** when
-   a cross-row `nearest` into `Fixed` with `threshold: 0.5` writes exactly the
-   candidates scoring at least `0.5`.
-3. **Vector row ceilings mis-size rows without `capacity`.** Both `effectiveCapacity`
-   computations in `WorldDefinitionValidator.State.cs` fall back to `MaxCellsPerRow`.
-   Use `row.CellCeiling`. **Done** when `table events : Vector { ambush = … gift = … }`
-   in a 256-dimension space validates.
-4. **Console transforms skip checks the rule compiler makes.** In
-   `WorldStateTransforms.Vectors.cs`:
-   - compare spaces with `HasSameIdentity`, not `Dimensions`, for every operand pair;
-   - refuse a `where` row that is not a keyed `Bool` row;
-   - refuse a keyed `nearest` `into` without a declared `capacity` instead of falling
-     back to `CellCeiling`;
-   - refuse a `Text` `into` that is not a slot, or has `k` other than `1`.
+1. **Server fixes lack their tests.** Add to `VectorStateLawTests`:
+   - a compiled rule `memories[$each] = events[$each]` fired into an absent key, reading
+     back the copied bytes;
+   - `world.state.transform` refusing, by name, a cross-space operand, a `where` that is
+     not a keyed `Bool` row, a keyed `nearest` `into` without `capacity`, and a `Text`
+     `into` that is not a slot or has `k` other than `1`;
+   - a principal holding Edit only on `into` applying `mix`, `mean`, `nearest`, and
+     `remember` through `world.state.transform`.
+2. **Weak tests.** Each must fail if the behavior it names breaks.
+   - `WorldAgentBridgeTests`: drive `WriteVectorAsync` through a real `WorldServer` and
+     assert the granted write lands and the ungranted one does not.
+   - `RemoteMcpTests`: send a real base64url vector (no prefix) through
+     `puck_state_vector_write` into a session that runs the real `world.state.cell.set`,
+     for a granted and an ungranted principal.
+   - `Vector_EvictingTableReplayDeterminism`: record the run with `WorldReplayTape` and
+     verify the replay's `stateHash`.
+   - `VectorRemember_SkipsNearDuplicate_AndIgnoresOwnKey`: `k1` holds `A`; remember `k1`
+     from `A′`, which is within `unlessWithin` of `A` but has different bytes; assert
+     `k1` now holds `A′`.
+   - `VectorNearest_MalformedExclude_FailsEvaluation`: compile a rule whose `exclude` is
+     `$cell:<row>:<key>` over a `Text` cell holding a non-`CellName`, and assert the
+     effect fails.
+   - Rename `ShippedWorldHashStabilityTests` to state what it proves: shipped worlds
+     allocate no vector buffer and hash reproducibly.
+3. **Unresolved SQL `embed(...)` still emits a value.** `FormatQueryOperand` and the other
+   `TryResolveEmbeddedText` callers in `WorldDocumentEmitter.Sql.cs` return `""` when the
+   lock has no entry. Report `PUCK079` and emit no operand. **Done** when lowering a
+   missing entry produces `PUCK079` and a JSON document is never written.
+4. **`puck embed` can erase a lock.** `EmbedCommand.TryDiscoverSpacesAndTexts` reads the
+   lowered document without checking `HasErrors`, and it collects texts only from SQL
+   blocks, so a native document yields no texts and pruning deletes every entry.
+   - Have lowering report every embedded text per space, from both dialects, and make
+     `puck embed` use that report. Delete the SQL-only AST walk.
+   - Exit 2 without writing when lowering has errors, including a parse failure.
 
-   Delete `WorldDefinitionValidator.TryValidateTransform`: nothing calls it, and the
-   rule compiler and `WorldStateTransforms` own these checks. Move its tests onto
-   `world.state.transform`. **Done** when `world.state.transform` refuses each shape
-   above by name.
-5. **Transform grants demand Edit on rows they only read.**
-   `WorldStateTransforms.Subjects` returns sources for `mix`, `mean`, `nearest`, and
-   `remember`. Return only the written row, as `Arrange` and `BoardCombine` do.
-   **Done** when a principal holding Edit only on `into` applies each transform through
-   `world.state.transform`.
-6. **A malformed `exclude` is ignored.** `ResolveVectorNearestTransform`
-   (`RuleCompiler.Vectors.cs`) and `FireVectorNearest` (`RuleEvaluator.Vectors.cs`)
-   drop an `exclude` that is neither a dynamic key nor a `CellName`. Refuse with
-   `VectorExcludeKey` at compile time, and fail the effect at evaluation. **Done** when
-   `VectorRefusalTests` covers both.
-7. **No vector trace records.** `RuleEvaluator.Vectors.cs` records nothing. Record each
-   vector call's value, what `nearest` wrote, and `remember`'s verdict with its
-   matching key. **Done** when `VectorTraceTests` asserts all three in
-   `DescribeTrace` output.
-8. **`puck_state_vector_write` is not dispatched.** `RemoteMcpHost.StateVectorWriteTool`
-   is defined but absent from the tool name lists in `RemoteMcpTools.cs` and
-   `OperatorMcpServer.cs`. List it and route it to `WorldAgentBridge.WriteVectorAsync`.
-   **Done** when an MCP call writes a vector through a granted principal and refuses an
-   ungranted one.
-9. **The HUD resolver renders a vector.** `WorldHudBindingResolver.cs` handles
-   `CellKind.Vector` by returning empty text. Validation already refuses the binding,
-   so throw as the `default` arm does.
-10. **Addon guests are not refused by name.** `WorldAddonMutationDecoder.DecodeStateCell`
-    sends a `Vector` cell to the numeric reader. Add a `Vector` arm that refuses by
-    name. **Done** when a test shows an addon vector write refused with a message
-    naming the vector kind.
-11. **SQL `embed(...)` is a stub.** `WorldDocumentEmitter.Sql.cs` writes `""` into
-    `vector` and `embed("…")` into `query` when no lock entry resolves. Resolve through
-    `EmbeddingLock` (work step 3), and write only `vector("<base64url>")` or raw
-    base64url into JSON. **Done** when a SQL `embed` literal lowers to the same bytes as
-    the native literal.
+   **Done** when `puck embed` on a document with lowering errors leaves its lock
+   byte-identical and exits 2.
+5. **The language server ignores the lock.** Every `LowerWithDiagnostics` call in
+   `PuckLanguageServer.cs` passes `embeddings: EmbeddingLock.TryLoad(sourcePath)`.
+   **Done** when an LSP diagnostics test reports `PUCK079` for an unlocked `embed`.
+6. **`Puck.World.Transpiler` references `Puck.Embeddings`.** `EmbeddingLock` uses only
+   `EmbeddingIdentity`. Key lock spaces by `StateSpace` identity (`HasSameIdentity`) and
+   remove the project reference, so the transpiler and `Puck.World` carry no provider
+   packages. **Done** when neither project's `packages.lock.json` lists `OpenAI`,
+   `Microsoft.Extensions.AI`, or an `Azure.*` package that `Puck.Embeddings` brings.
+7. **The generators don't meet the provider contract** in Part 1 (Authoring and
+   `puck embed`, Providers):
+   - every API key path is gone: no key option, environment variable, header, or
+     `ApiKeyCredential`, in `Puck.Embeddings`, `EmbedCommand`, and their tests;
+   - `OpenAiEmbeddingGeneratorFactory` authenticates only with a `TokenCredential`,
+     defaulting to `DefaultAzureCredential`;
+   - the generator checks the answer count and every answer's length against the
+     request, and refuses a non-finite component;
+   - a non-success response reports its status code and at most 512 characters of
+     body, read from the response;
+   - no message or exception, inner exceptions included, carries a token;
+   - `FixtureEmbeddingGenerator` normalizes its signed bytes with
+     `SignedByteVectorFunctions.TryNormalize`, with no floating point.
+
+   **Done** when `OpenAiEmbeddingGeneratorTests`, using a stub `TokenCredential`, covers
+   the bearer token on the request, a count mismatch, a length mismatch, an out-of-order
+   `index`, `--batch-size` splitting, and a 500 response whose message holds the status
+   and body but not the token.
+8. **`EmbeddingLock.PruneEntries` and `PruneSpaces` are unused.** `EmbedCommand` prunes
+   inline. Make `EmbedCommand` call them.
+9. **`EmbedCommandTests` gaps.** Add a fixture lock compared byte-for-byte against a
+   committed expected file, and assert the `PUCK079` code, not only the exit status.
 
 ### Not started
 
-- the vector tests in `Puck.World.Tests`, `Puck.World.Browser.Tests`, and
-  `Puck.World.Agents.Tests` (Part 3);
-- the `Puck.Embeddings` and `Puck.World.Embeddings` projects;
-- `puck embed` and the lock file;
-- native `.puck` lowering, decompiler, language server, and linter for vectors;
-- runtime embedding connections;
-- samples and docs.
+- native `.puck` lowering, decompiler (`puck decompile --embeddings`), language server
+  vocabulary, and `PUCK_LINT_010`;
+- runtime embedding connections and `src/Puck.World.Embeddings`;
+- samples, docs, and the performance measurements.
 
 ## Work order
 
-1. Fix open defects 1–10.
-2. Add the missing tests listed in Part 3 for `Puck.State`, `Puck.World.Schema`,
-   `Puck.World.Tests`, `Puck.World.Browser.Tests`, and `Puck.World.Agents.Tests`, and
-   fix whatever they expose.
-3. **`Puck.Embeddings`, `EmbeddingLock`, and `puck embed`** (`--check`, `probe`).
-   This also fixes defect 11.
-4. **Native `.puck`:** lowering, decompiler, language server, and linter.
-5. **Runtime embedding connections** and `Puck.World.Embeddings`.
-6. **Finish:** samples, docs, and the full command list in Part 3.
+1. Fix open defects 1–9.
+2. **Native `.puck`:** lowering, decompiler, language server, and linter, with the
+   `EmbeddingDeclaration*` tests. The decompiler prints a form only once lowering
+   accepts it, and `puck decompile --embeddings` passes the lock to it.
+   `ShippedWorldsParityTests`, `FormatterRoundTripTests`, and
+   `StateSqlDeclarationDecompilerTests` pass at every commit.
+3. **Runtime embedding connections** and `Puck.World.Embeddings`.
+4. **Finish:** samples, docs, performance measurements, and the full command list in
+   Part 3.
 
 Run each step's tests before starting the next.
 
@@ -198,7 +183,8 @@ similarity a rule computed.
 ## Out of scope
 
 - Model inference in the tick, compiler, linter, formatter, or language server.
-- An in-process model (ONNX and similar); only the fixture and HTTP providers ship.
+- An in-process model (ONNX and similar); only the fixture and `azure-openai` providers ship.
+- API keys. Every provider authenticates with identity.
 - Generated text; providers return vectors only.
 - Approximate nearest-neighbour indexes.
 - Vector values in general expressions (bindings, component reads, arithmetic), and
@@ -467,14 +453,19 @@ transform recall = nearest(from: memories, query: "situation", into: recalled, k
   a trailing newline, and ordinal order:
 
   ```json
-  { "format": 1, "spaces": { "lore": { "model": "text-embedding-3-small", "revision": "1", "dimensions": 256,
-    "entries": { "<lowercase hex SHA-256 of UTF-8 text>": { "text": "…", "vector": "<base64url>" } } } } }
+  { "format": 1, "spaces": { "lore": { "dimensions": 256,
+    "entries": { "<lowercase hex SHA-256 of UTF-8 text>": { "text": "…", "vector": "<base64url>" } },
+    "model": "text-embedding-3-small", "revision": "1" } } }
   ```
 - **Hermetic compilation.**
   - `puck compile`, `puck lint`, the language server, and `PuckWorldLoader` call
     `EmbeddingLock.TryLoad(rootSourcePath)` and pass the result to
     `WorldDocumentEmitter.LowerWithDiagnostics(embeddings: …)`. The emitter does no I/O
     for it.
+  - `EmbeddingLock` identifies a space by `StateSpace`. `Puck.World.Transpiler` does not
+    reference `Puck.Embeddings`.
+  - Lowering reports every embedded text it resolved or missed, per space, from both
+    dialects. `puck embed` works from that report.
   - A missing entry is `PUCK079` and a stale space is `PUCK080`; both name the text and
     `puck embed`.
   - Compiled JSON holds bytes, so boot never reads the lock and `puck fmt` never does.
@@ -486,39 +477,44 @@ transform recall = nearest(from: memories, query: "situation", into: recalled, k
     visibility, and every vector is its text's entry;
   - it omits `space(...)` for a single-space document.
 - **`puck embed <path>`** takes a root file, or a directory of roots. It:
-  1. collects embedded texts per space;
-  2. prunes unused entries and spaces;
-  3. requests missing or stale texts in batches;
-  4. quantizes them;
-  5. writes the lock only when its bytes change.
+  1. lowers the root and exits 2, writing nothing, if lowering has errors;
+  2. collects the embedded texts lowering reports per space;
+  3. prunes unused entries and spaces;
+  4. requests missing or stale texts in batches;
+  5. quantizes them;
+  6. writes the lock only when its bytes change.
 - **`--check`** reports missing, stale, and unused entries, and exits 1 on any without
   contacting a provider.
 - **`probe <path> "text" [--space n] [--against table] [--top n]`** ranks similarity
   against a table's vectors or the space's locked texts. It needs a provider only when
   the text itself is not locked.
 - **Options:**
-  - `--provider fixture|openai-compatible`;
-  - `--endpoint <url>`;
-  - `--api-key-env <NAME>`;
-  - `--api-key-header <name>`: default `Authorization` with `Bearer`; `api-key` sends
-    the raw key;
+  - `--provider fixture|azure-openai`;
+  - `--endpoint <url>`, the Azure OpenAI resource;
+  - `--deployment <name>`, default the space's `model`;
   - `--omit-dimensions`;
   - `--batch-size <1..2048>`, default 64;
   - `--timeout-seconds <n>`, default 60.
 
   Exit codes: 0 success, 1 failed check or provider refusal, 2 usage or I/O.
-- **Providers** live in `src/Puck.Embeddings` and are built on Microsoft's provider-agnostic
-  `IEmbeddingGenerator<string, Embedding<float>>` (`Microsoft.Extensions.AI`).
-  `EmbeddingIdentity` is `(Model, Revision, Dimensions)`.
-  - **`fixture`** answers only model `puck-fixture` via `FixtureEmbeddingGenerator`.
+- **Providers** live in `src/Puck.Embeddings` as
+  `IEmbeddingGenerator<string, Embedding<float>>` implementations
+  (`Microsoft.Extensions.AI`). `EmbeddingIdentity` is `(Model, Revision, Dimensions)`.
+  - **`fixture`** (`FixtureEmbeddingGenerator`) answers only model `puck-fixture`.
     Component `i` is signed byte `i mod 32` of
     `SHA-256(model ‖ 0 ‖ revision ‖ 0 ‖ dimensions ‖ 0 ‖ text ‖ 0 ‖ ⌊i/32⌋)`, with
-    `-128 → -127`, then normalized.
-  - **`openai-compatible`** uses `Microsoft.Extensions.AI.OpenAI` (`OpenAIClient.AsEmbeddingGenerator()`)
-    targeting `<endpoint>`, configuring `--api-key-header` and `--omit-dimensions`.
-    - Generates embeddings via `IEmbeddingGenerator.GenerateAsync()`.
-    - The key is read only from the named environment variable and never printed.
-  - Embeddings are quantized to signed byte components via `SignedByteVectorFunctions.TryQuantizeUnit` (`Puck.Maths`).
+    `-128 → -127`, normalized by `SignedByteVectorFunctions.TryNormalize`. It uses no
+    floating point.
+  - **`azure-openai`** (`Azure.AI.OpenAI` with `Microsoft.Extensions.AI.OpenAI`) calls
+    the deployment's embeddings endpoint, honouring `--omit-dimensions`, and orders
+    answers by `index`.
+    - It authenticates with a `TokenCredential`, `DefaultAzureCredential` unless one is
+      supplied. No provider accepts an API key.
+    - An answer count or length mismatch, or a non-finite component, fails.
+    - A non-success response fails with its status code and at most 512 characters of
+      its body.
+    - No message or exception, inner exceptions included, carries a token.
+  - Provider answers are quantized with `SignedByteVectorFunctions.TryQuantizeUnit`.
 
 ## Writing and inspecting at runtime
 
@@ -530,7 +526,8 @@ transform recall = nearest(from: memories, query: "situation", into: recalled, k
 - **Writers:**
   - `world.state.cell.set <row> <key> <base64url>` for a live `Vector` row;
   - `WorldAgentBridge.WriteVectorAsync(string row, string? key, ReadOnlyMemory<sbyte> components, CancellationToken)`;
-  - `RemoteMcpHost` tool `puck_state_vector_write` (`row`, `key`, `vector`).
+  - the MCP tool `puck_state_vector_write` (`row`, `key`, `vector` as base64url), which
+    runs `world.state.cell.set`.
 
   Agents quantize with `TryQuantizeUnit`.
 - **Inspection:**
@@ -555,8 +552,9 @@ the existing configuration:
 ```
 
 - **Provider types.**
-  - `embedding.openai-compatible` takes `endpoint`, `model`, `revision`, `dimensions`,
-    `apiKeyEnvironment`, `apiKeyHeader`, and `omitDimensions`.
+  - `embedding.azure-openai` takes `endpoint`, `deployment`, `model`, `revision`,
+    `dimensions`, and `omitDimensions`, and authenticates with
+    `DefaultAzureCredential`.
   - `embedding.fixture` takes `model: "puck-fixture"`, `revision`, and `dimensions`.
 - **Identity check.** Composition refuses unless the provider identity equals the
   space's.
@@ -613,7 +611,7 @@ the existing configuration:
 - **Worlds without vector rows** do no new per-tick work, allocate no vector buffer, and
   keep their `stateHash`, parity hashes, and `puck landing` output.
 - **Reads and writes.** Vector reads allocate nothing. A vector write or transform
-  allocates only the queued `StateVector`.
+  allocates only its queued mutation and `StateVector`.
 - **Measurement.** Report, with the change:
   - flagship tick timing, with no regression beyond noise;
   - `nearest` over 256 × 256 costing under 100 µs in Release, including the cross-row
@@ -627,9 +625,9 @@ the existing configuration:
 
 ## New projects
 
-- **`src/Puck.Embeddings`** references `Puck.Maths` and Microsoft AI libraries
-  (`Microsoft.Extensions.AI`, `Microsoft.Extensions.AI.OpenAI`). It holds the generators,
-  `EmbeddingIdentity`, batching, and quantization.
+- **`src/Puck.Embeddings`** references `Puck.Maths`, `Microsoft.Extensions.AI`,
+  `Microsoft.Extensions.AI.OpenAI`, `Azure.AI.OpenAI`, and `Azure.Identity`. It holds the generators, `EmbeddingIdentity`,
+  batching, and quantization. Only `Puck.Cli` and `Puck.World.Embeddings` reference it.
 - **`src/Puck.World.Embeddings`** references `Puck.World.Server` and `Puck.Embeddings`,
   in the layer of `Puck.World.Azure`. Install it wherever `Puck.World.Azure` is
   installed.
@@ -783,38 +781,10 @@ its JSON, and the decompiler prints it back when the lock is present.
 
 ## Tests to add
 
-Existing suites stay green, including the vector tests already in `Puck.State.Tests`
-and `Puck.World.Schema.Tests`. Add to them:
+Every existing suite stays green, including the vector tests listed under Implemented
+and the tests the open defects add. Add:
 
-- **`tests/Puck.State.Tests`:**
-  - `StateVectorTests` and `StateVectorJsonTests`;
-  - `VectorExpressionTests`: `cosine(x)` evaluating as trig in the same rule as
-    `similarity`; each vector call in a binding and a `Score` program;
-  - `VectorEffectTests`: `nearest` into `Int`, `Fixed`, and `Text` (ties, both threshold
-    directions, `where`, `exclude`, `farthest`, fewer than `k`, an empty source) and
-    `remember` (skips a near-duplicate, ignores its own key), fired through a test host
-    whose `TryApply` applies `ApplyVector` cross-row;
-  - `VectorRefusalTests`: `VectorExcludeKey`, `VectorMixZero`, and `VectorMeanEmpty`
-    through compiled rules;
-  - `VectorTraceTests`: defect 7.
-- **`tests/Puck.World.Schema.Tests`:**
-  - `WorldVectorSchemaTests`: the cell-level `advance`, `dynamics`, and `cycle`
-    refusals, the HUD, response, search, and binding refusals, and defect 3;
-  - `WorldStateDisclosureVectorTests`.
 - **`tests/Puck.World.Tests`:**
-  - `VectorStateLawTests`:
-    - granted and ungranted writes;
-    - undo;
-    - checkpoint round trip;
-    - `world.save` and reload;
-    - an evicting table replayed twice with identical `stateHash`;
-    - frame `mix` equal to the cross-row path;
-    - `nearest` and `remember` cross-row;
-    - a 65536-byte row through a Presentation-tier projection;
-    - digest echo;
-    - `world.state.similar` and its visibility.
-  - `ShippedWorldHashStabilityTests`: shipped worlds have empty vector buffers and
-    unchanged authoritative hashes.
   - `EmbeddingConnectionLawTests` (`embedding.fixture`):
     - composition refusals;
     - request to vector with status 3 in one batch;
@@ -825,28 +795,21 @@ and `Puck.World.Schema.Tests`. Add to them:
     - replay reproduces bytes without the provider, with identical `stateHash`;
     - live replay revokes the client;
     - a `ChatCommandModule` line is embedded.
-- **`tests/Puck.World.Browser.Tests`:** `StateHash` covers vector bytes; `nearest` and
-  `remember` are refused.
-- **`tests/Puck.World.Agents.Tests`:** `WriteVectorAsync` with granted and ungranted
-  principals.
 - **`tests/Puck.World.Transpiler.Tests`:**
   - `EmbeddingDeclaration{Parser,Emitter,Decompiler,Lsp,Formatter}Tests`: every
     declaration, literal, operand, transform, and function; every diagnostic with its
     span; lock-aware round trips;
-  - a SQL `embed` literal lowering to the same bytes as the native literal;
+  - a native `embed` literal lowering to the same bytes as the SQL literal;
   - `SamplesCompileTests` picks up both samples.
-- **`tests/Puck.Cli.Tests`:**
-  - `EmbedCommandTests`: byte-identical fixture locks; pruning; offline `--check` and
-    `probe`; offline compile; `PUCK079`; decompile with and without the lock;
-  - `OpenAiEmbeddingGeneratorTests` against an in-process `HttpListener`:
-    request shape, `index` order, both key headers, `--omit-dimensions`, failure exits,
-    and the key never printed.
+- **`tests/Puck.Cli.Tests`:** `EmbedCommandTests` for a native document (texts from
+  `embed`, plain-string `Vector` values, and `embeds`), and `puck decompile` with and
+  without the lock.
 
 ## Commands
 
-Run these in order. Each must exit 0, except `Puck.World.Tests`, which already fails
-tests unrelated to embeddings: record its failing set before starting, and finish with
-nothing failing outside that set.
+Run these in order. Each must exit 0, except `Puck.World.Tests` and `Puck.Cli.Tests`,
+which already fail tests unrelated to embeddings: record each suite's failing set before
+starting, and finish with nothing failing outside it.
 
 ```bash
 dotnet build -c Release

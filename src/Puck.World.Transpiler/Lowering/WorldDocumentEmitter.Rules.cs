@@ -384,6 +384,9 @@ public static partial class WorldDocumentEmitter {
             scope: scope
         );
 
+        leftText = ResolveEmbeddedLiteralsInText(text: leftText, expectedSpace: null, scope: scope, span: cmp.Span);
+        rightText = ResolveEmbeddedLiteralsInText(text: rightText, expectedSpace: null, scope: scope, span: cmp.Span);
+
         if (!PuckDslVocabulary.TryParseComparator(
             cmp.Comparator,
             out var parsedComparison
@@ -524,31 +527,30 @@ public static partial class WorldDocumentEmitter {
     // an effects array.
     private static JsonNode? LowerEffectStatement(StatementNode stmt, DocumentScope scope) => stmt switch {
         SetCellStatementNode s => LowerCellEffect(
-        "setState",
-        s.Target,
-        s.Rhs,
-        allowText: true
-    ),
+            discriminator: "setState",
+            target: s.Target,
+            rhs: s.Rhs,
+            allowText: true,
+            scope: scope
+        ),
         AddCellStatementNode a => LowerCellEffect(
-        "addState",
-        a.Target,
-        a.Rhs,
-        allowText: false
-    ),
+            discriminator: "addState",
+            target: a.Target,
+            rhs: a.Rhs,
+            allowText: false,
+            scope: scope
+        ),
         PushStatementNode push => LowerPush(push: push),
         CountdownStatementNode countdown => LowerRowOnlyEffect(
-        discriminator: "countdownState",
-        target: countdown.Target
-    ),
+            discriminator: "countdownState",
+            target: countdown.Target
+        ),
         RemoveCellStatementNode remove => LowerRowOnlyEffect(
-        discriminator: "removeStateCell",
-        target: remove.Target
-    ),
+            discriminator: "removeStateCell",
+            target: remove.Target
+        ),
         ScheduleStatementNode schedule => LowerSchedule(schedule: schedule),
-        TransformStatementNode transform => new JsonObject { ["$type"] = "transformState", ["transform"] = LowerExpression(
-        transform.Transform,
-        scope
-    ) },
+        TransformStatementNode transform => LowerTransformStatement(transform, scope),
         TransactionStatementNode transaction => LowerTransaction(
         scope: scope,
         transaction: transaction
@@ -647,35 +649,67 @@ public static partial class WorldDocumentEmitter {
 
         return null;
     }
-    private static JsonObject LowerCellEffect(string discriminator, RowRefNode target, RhsNode rhs, bool allowText) {
+    private static JsonObject LowerCellEffect(string discriminator, RowRefNode target, RhsNode rhs, bool allowText, DocumentScope scope) {
         var obj = new JsonObject { ["$type"] = discriminator, ["state"] = target.Name };
 
         if (target.Key is not null) {
             obj["key"] = target.Key;
         }
+
+        var rootObj = scope.Annotations.TryGetValue("WorldDocumentRoot", out var rObj) && rObj is JsonObject ro ? ro : null;
+        var targetRowSpace = FindRowSpace(rootObj, target.Name);
+        var isVectorRow = targetRowSpace is not null;
+
+        if (isVectorRow && discriminator != "setState") {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationModifierNotAdmitted,
+                message: $"Vector row '{target.Name}' admits only assignment ('=' / setState), not '{discriminator}'.",
+                span: target.Span
+            );
+        }
+
         ApplyRhs(
             allowText: allowText,
+            isVectorRow: isVectorRow,
             obj: obj,
-            rhs: rhs
+            rhs: rhs,
+            scope: scope,
+            targetRowSpace: targetRowSpace
         );
         return obj;
     }
     // `allowText` gates whether an RhsTextNode's Text lands on the object — AddState carries no Text field at all;
     // a string RHS reaching it is already PUCK009 from the parser, and best-effort lowering here emits nothing for
     // the field the destination cannot carry rather than shaping JSON that violates the target's own record.
-    private static void ApplyRhs(JsonObject obj, RhsNode rhs, bool allowText) {
+    private static void ApplyRhs(JsonObject obj, RhsNode rhs, bool allowText, bool isVectorRow, string? targetRowSpace, DocumentScope scope) {
         switch (rhs) {
             case RhsTextNode text:
-                if (allowText) {
+                if (isVectorRow) {
+                    if (TryResolveEmbeddedText(text.Text, targetRowSpace, scope, text.Span, out var b64)) {
+                        obj["vector"] = b64;
+                    }
+                } else if (allowText) {
                     obj["text"] = text.Text;
                 }
                 break;
             case RhsSecondsNode seconds:
-                obj["valueSeconds"] = seconds.Seconds;
+                if (isVectorRow) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.VectorLiteralMisplaced,
+                        message: "Seconds literal is not admitted on Vector row.",
+                        span: seconds.Span
+                    );
+                } else {
+                    obj["valueSeconds"] = seconds.Seconds;
+                }
                 break;
             case RhsOperandNode operand:
                 ApplyOperandRhs(
+                    isVectorRow: isVectorRow,
                     obj: obj,
+                    scope: scope,
+                    span: operand.Span,
+                    targetRowSpace: targetRowSpace,
                     text: operand.Text
                 );
                 break;
@@ -687,7 +721,59 @@ public static partial class WorldDocumentEmitter {
     // ships `{"$type":"setState","expression":"houndIdentity[$each]",...}` for exactly this RHS shape (§2.3).
     // `fromState`+`fromKey` together stay reachable through call-form for an author who wants that exact wire
     // shape.
-    private static void ApplyOperandRhs(JsonObject obj, string text) {
+    private static void ApplyOperandRhs(JsonObject obj, string text, bool isVectorRow = false, string? targetRowSpace = null, DocumentScope? scope = null, SourceSpan span = default) {
+        if (isVectorRow && scope is not null) {
+            if (ExpressionSpelling.TryParseVector(text: text, token: out var vecOp, error: out var parseErr)) {
+                if (vecOp is VectorOperandToken.Embed emb) {
+                    var sp = emb.Space ?? targetRowSpace;
+                    if (TryResolveEmbeddedText(emb.Text, sp, scope, span, out var b64)) {
+                        obj["vector"] = b64;
+                        return;
+                    }
+                    return;
+                }
+                if (vecOp is VectorOperandToken.Literal lit) {
+                    var rootObj = scope.Annotations.TryGetValue("WorldDocumentRoot", out var rObj) && rObj is JsonObject ro ? ro : null;
+                    var spaceInfo = FindSpaceInfo(rootObj, targetRowSpace);
+                    if (spaceInfo is not null) {
+                        if (!StateVector.TryParseBase64Url(lit.Value, spaceInfo.Value.Dimensions, out _, out var vErr)) {
+                            scope.Diagnostics.ReportError(
+                                code: PuckDiagnosticCodes.VectorLiteralInvalid,
+                                message: $"vector(...) literal is invalid: {vErr}",
+                                span: span
+                            );
+                            return;
+                        }
+                    } else if (!StateVector.TryParseBase64Url(lit.Value, out _, out var vErr)) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.VectorLiteralInvalid,
+                            message: $"vector(...) literal is invalid: {vErr}",
+                            span: span
+                        );
+                        return;
+                    }
+                    obj["vector"] = lit.Value;
+                    return;
+                }
+            } else if (text.StartsWith("vector(", StringComparison.OrdinalIgnoreCase) || text.StartsWith("embed(", StringComparison.OrdinalIgnoreCase)) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.VectorLiteralInvalid,
+                    message: $"vector or embed literal is invalid: {parseErr}",
+                    span: span
+                );
+                return;
+            }
+        } else if (!isVectorRow && scope is not null) {
+            if (text.StartsWith("embed(", StringComparison.OrdinalIgnoreCase) || text.StartsWith("vector(", StringComparison.OrdinalIgnoreCase)) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.VectorLiteralMisplaced,
+                    message: "embed or vector literal appears where no vector operand or value is admitted.",
+                    span: span
+                );
+                return;
+            }
+        }
+
         ExpressionSpelling.TryParse(
             error: out _,
             text: text,
@@ -697,7 +783,15 @@ public static partial class WorldDocumentEmitter {
             (tokens.Count == 1) &&
             (tokens[0] is ValueToken.Constant constant)
         ) {
-            obj["value"] = constant.Value;
+            if (isVectorRow && scope is not null) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.VectorLiteralMisplaced,
+                    message: "Constant value is not admitted on Vector row.",
+                    span: span
+                );
+            } else {
+                obj["value"] = constant.Value;
+            }
         } else if (
             (tokens.Count == 1) &&
             (tokens[0] is ValueToken.State { Key: null } state)

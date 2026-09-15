@@ -29,6 +29,9 @@ public interface IWorldExtensionRegistry {
     /// <summary>Registers a configured external operation provider type.</summary>
     /// <param name="provider">The operation provider type.</param>
     void RegisterOperation(WorldExtensionProviderType provider);
+    /// <summary>Registers a configured embedding provider type.</summary>
+    /// <param name="provider">The embedding provider type.</param>
+    void RegisterEmbedding(WorldExtensionEmbeddingProviderType provider);
     /// <summary>Registers a custom HTTP health endpoint handler.</summary>
     /// <param name="path">The exact HTTP request path (e.g. "/livez/azure").</param>
     /// <param name="handler">Callback taking silo liveness and returning content-type and body.</param>

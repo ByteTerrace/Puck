@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Puck.World.Transpiler.Decompiler;
+using Puck.World.Transpiler.Embeddings;
 
 namespace Puck.Cli.Transpiler;
 
@@ -11,7 +12,8 @@ internal static class DecompileCommand {
         string path,
         string? output,
         bool overwrite,
-        bool sql = false
+        bool sql = false,
+        string? embeddings = null
     ) {
         var fullPath = Path.GetFullPath(path: path);
 
@@ -33,6 +35,26 @@ internal static class DecompileCommand {
             return 1;
         }
 
+        EmbeddingLock? lockFile = null;
+
+        if (!string.IsNullOrEmpty(value: embeddings)) {
+            var lockPath = Path.GetFullPath(path: embeddings);
+
+            if (!File.Exists(path: lockPath)) {
+                Console.Error.WriteLine(value: $"error: Embedding lock file not found: '{lockPath}'");
+                return 2;
+            }
+
+            try {
+                lockFile = EmbeddingLock.Parse(json: File.ReadAllText(path: lockPath));
+            } catch (Exception ex) {
+                Console.Error.WriteLine(value: $"error: Failed to parse embedding lock file '{lockPath}': {ex.Message}");
+                return 2;
+            }
+        } else {
+            lockFile = (EmbeddingLock.TryLoad(rootSourcePath: outputPath) ?? EmbeddingLock.TryLoad(rootSourcePath: fullPath));
+        }
+
         string json;
 
         try {
@@ -48,7 +70,7 @@ internal static class DecompileCommand {
             // The document's own schema picks the vocabulary, the same way compiling does.
             puckSource = (((System.Text.Json.Nodes.JsonNode.Parse(json: json) is System.Text.Json.Nodes.JsonObject document) && DecompileCartridge.Handles(document: document))
                 ? DecompileCartridge.Run(document: document)
-                : WorldDecompiler.Decompile(jsonText: json, sql: sql)
+                : WorldDecompiler.Decompile(embeddings: lockFile, jsonText: json, sql: sql)
             );
             puckSource = Puck.Transpiler.Formatting.PuckFormatter.Format(puckSource);
         } catch (Exception ex) {
@@ -122,6 +144,7 @@ internal static class DecompileCommand {
         ) { Description = "Destination output .puck path (defaults to <path>.puck)." };
         var overwriteOption = new Option<bool>(name: "--overwrite") { Description = "Overwrite destination file if it already exists." };
         var sqlOption = new Option<bool>(name: "--sql") { Description = "Project representable state tables, slots, and rules into an embedded SQL block." };
+        var embeddingsOption = new Option<string?>(name: "--embeddings") { Description = "Optional companion embedding lock file (.embeddings.json) for resolving vector literals." };
 
         var command = new Command(
             description: "Decompile a JSON world definition into idiomatic .puck DSL source.",
@@ -131,9 +154,11 @@ internal static class DecompileCommand {
             outputOption,
             overwriteOption,
             sqlOption,
+            embeddingsOption,
         };
 
         command.SetAction(action: parseResult => Run(
+            embeddings: parseResult.GetValue(option: embeddingsOption),
             output: parseResult.GetValue(option: outputOption),
             overwrite: parseResult.GetValue(option: overwriteOption),
             path: parseResult.GetRequiredValue(argument: pathArgument),

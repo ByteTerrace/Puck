@@ -1,0 +1,40 @@
+{
+  "format": 1,
+  "spaces": {
+    "lore": {
+      "dimensions": 256,
+      "entries": {
+        "0157827a764d372e88d03fcc5bdc942af39b9bb92dbfb9c06f5151b72c78f20b": {
+          "text": "Wary but fair",
+          "vector": "Af359gQI-AAE_vgFCgP2_Q328wb2APj0BQAH_fkKBgn39AME8_oI9wUCC_wCAf_6_gX1Af0GCPQKCPMK8wIN_AYB-Pr09gv1A_X9-foKCQMA9wH4-Q0H-foF_wQGBQAIC_X89fwE__8GCfgNAArz8gIK9QkDCPwACf4O_voHAgrz-fT6BPcB9wsKC_PzBwANBwkG-QcB-QULAQAA9PQACfX3CgAGCgwJDPX7-Az39AgABgMIBv74AQwH_Pv9CQAL9vQNBw3-Bv3z-wX9Awn6_v0BCgANBAEA9wj-9g35DQsDA_wB9_cICPT4_vQCBPX2-_YIAwP38gv98v_9AwkIBA"
+        },
+        "286f8dd2ad13f85e267ad5c2a7636ab4c849d8105804c6c4b61dcffb175b6f94": {
+          "text": "Travellers approach the gate at dusk",
+          "vector": "Bv4FBQv89f4FBfgFBAj79v8MDPf09QwJ9Qb0AwECAQQF9gb5-wLzA_YA_vYD_Pf8-vz4CAH3Bfb9-AMG9gX9BPsI9P0K9Qj_AQP6_Av49AwD_wAD9wz1AQD08wAK9QYC_f0ICwMIBfr4-QkL9PUHDQj99gv0-_b1Cw0L_fgH_PgCAQgLB_8F-wEH9gz6__UKAPoF9wL2CfT_AwMNC_MA-QUNBQAB8wIIBAP-AwP6CPX_-vX0BAUDBAoBCvT-_Pv08_P6DQII_PsNCvgB__cBCvPz_QPz9Av8AAf_8_Pz8_UH-gwABgv2Cv74DQMK9AQBDf8FA_cI-AoJBfr1-w0A9w"
+        },
+        "29cf4859992611e34196dc8c3cf335e7c9ebe0de5b686b0622a8ed9bb0251c3d": {
+          "text": "Bandits ambushed the caravan on the north road",
+          "vector": "-Pr69AUK_Qn5BPYGCAH9BAACBPf7AwEKAvr0BQwECw0G9f4B-vcJCAf5CfX4Dff5CPz2Bgv_BgDz-_v0_AgIAgAF9PYJCvL3Bfnz-P4BBAj3BQ0ADP8NBgD__v8OBgkD-fkG-gUHDvb-_PgA-wIHAgj9_wz4-QP6DQENAfT29Q75B_32-wQFDP0DAQMJ-QT9B_j5DgIIAwD-Cg0JCgMMBfv-8_8I8_32CgoJ9QDy9v_--_f_CvUC_AUADAn8-vT6A_T6A_0D_g0HDgb39PoHAA32-vn7AA7yAvb8CPUKB_T28vIABQz7A_YN-vr69voKAwsG_f4KAwsC-fML9QwBCg"
+        },
+        "78059d3c2467448fd671d1f58a63127ad795d0097789ca963289d4b316ce7fcf": {
+          "text": "Stay close to the wagons tonight.",
+          "vector": "-Ar3B_v0CAYBBw0FBfsKAgMN9wf88wEABAcL9fMKBQwJ__0HDPj--_v7AQAEAvsB-PsGCAT8B_MDBQTy_AvzAQMH_fUHCgkM9_sN8_X-_ADzC_YKAf_-Cf4A-vwH8w35DQn99PP8-_YMBwsG_gb9-gH99gAM___7BQoC_gcJDQEG9_v2_PQKDQUN9QgMCwgK_AD4Bw3__AAH__wH-Qz5_vQA-AX0-fwKBAn8AQ0LAgkACQUL_QT8_AgJAA7zBf8B_wr4DPv2-_wKBAX-9QsMCAgM9wf4_PcMCQEBBA0B-___9fX2CAsICvv68_zz_Aj9_Pb5DQUMCfsNBvwACwYH8w"
+        },
+        "d4ebb3a2939221879a3d648ca995ee2ea512f630a9ef07787537a63811d77183": {
+          "text": "Your kindness will not be forgotten.",
+          "vector": "CgYEAQwL8_n-AwX5_f_2_fTyBgwL8_oBBAH5-Qz49Ar8Bf36BQcC_P8O9A37AQD8-voC-_f39PkCAgH3AvT_-PICDfb5Bfv_A_wIDfsE9QYA9v8KCfYG_Aj8-v3-DgoB8_r8_AEI_AL1DPX_CwAE-ggH-fX1DQv-DvsGAv4H_A0NB_MMC_kN8wkEBQr69_IH8_8HAQ0D_Af3BwX_BwD0_P35BPjz8gn59Qn9CgT48_b6_w0HBv36AP8J9w0OBA0G_PX3AwEIA_wEC__z9vwB__kH-Prz-fkJBQH9_Ar5CwMACP729woHAPQM9QoF8_73AAoK-PQD9_8D-_UFBfsI9w"
+        },
+        "d6cf682f9192f5151fda409d6462df1c7c5758a4c57e005ae22b5a2948b142ee": {
+          "text": "A stranger shared bread and water with the guards",
+          "vector": "9wYMBfbz_QT19AL0-gP9Cfr3AgQA8wUK8wwAAPf3BfwE-QkE-gH58wMF-wsLC_nzBwoHBv4GBAUH-f31-P8KDAkKAfYBBQYL-QcG9QMCAQgD9wAM_Qz-AAgL9vQGCf8LAQT49fgJAP8JCvX7-AMLBQoJBwT0-vT6B_YADfYE-g0KDAz5_QL19Pb_BgQG_PkM-wT19wMHCwr09fsMAQn_CQoMAv309Ab3_Qn9CAn6BfkF-AP3_AAH-vwNCPkICvgLBvQEAwgKB_rzCQf5Cfj6-f75BQsA_Qj59w0F-Ar-BQf4BAoKAwUHAPUAAvQKBAMJCwgI9fj6AQwADfv_-g0K9A"
+        },
+        "f78b90a19b8fb42b105d32942507ba93aa76e819c71bb37f434bc0a0a4340a21": {
+          "text": "danger and betrayal",
+          "vector": "-AgC9_j5AAwG-QEKCgcGCQD8-PsJDfr1DQUEAgf7_woLAAcJCAT8-QUI8wIK9AECAPUN-vP9Df4G-QAMBvUHA_4L9_8H-wb1Avb-DAv0-Ar_BfX69Ab1CfQK_v30CP33__j4BvUDCf0FAQgCAvT5BQkI_vcI9fcMDfb6_wELB_n3BvoKDQX8BAIC-_gKBvbz_PQJDfj2_wMA_wAGBAQI8wn5BvYMBQoB9wb-DPULCAX8AwsDCwgH-wsHBwwEDfUMBgPz-_sAAQX49wALBgP1DPf18_kCBvvzBwb4DPsJCAgG_wkL_Q30Cw3-Cf778wH4_QUF9AsFAv37BvYE-QH5_Q"
+        }
+      },
+      "model": "puck-fixture",
+      "revision": "1"
+    }
+  }
+}

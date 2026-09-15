@@ -27,6 +27,26 @@ public static partial class WorldDocumentEmitter {
         DiagnosticBag? diagnostics = null,
         CancellationToken cancellationToken = default,
         EmbeddingLock? embeddings = null
+    ) =>
+        LowerWithDiagnostics(
+            basePath: basePath,
+            cancellationToken: cancellationToken,
+            diagnostics: diagnostics,
+            discoveredEmbeddings: out _,
+            document: document,
+            embeddings: embeddings,
+            sourceMap: sourceMap
+        );
+
+    /// <summary>Lowers a DocumentNode with diagnostics and reports all discovered embedded texts per space.</summary>
+    public static CompilationResult<JsonObject> LowerWithDiagnostics(
+        DocumentNode document,
+        string? basePath,
+        SourceMap? sourceMap,
+        DiagnosticBag? diagnostics,
+        CancellationToken cancellationToken,
+        EmbeddingLock? embeddings,
+        out IReadOnlyDictionary<string, HashSet<string>> discoveredEmbeddings
     ) {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -61,9 +81,14 @@ public static partial class WorldDocumentEmitter {
             Budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken },
         };
 
+        var textsMap = new Dictionary<string, HashSet<string>>(comparer: StringComparer.Ordinal);
+        scope.Annotations["DiscoveredEmbeddings"] = textsMap;
+
         if (embeddings is not null) {
             scope.Annotations["EmbeddingLock"] = embeddings;
         }
+
+        scope.Annotations["WorldDocumentRoot"] = root;
 
         scope.IndexDeclarations(statements: document.Statements);
         try {
@@ -82,12 +107,29 @@ public static partial class WorldDocumentEmitter {
             );
         }
 
+        discoveredEmbeddings = textsMap;
         var canonicalRoot = ((JsonObject)Canonicalize(node: root)!);
 
         return new CompilationResult<JsonObject>(
             Diagnostics: diagnostics,
             Value: canonicalRoot
         );
+    }
+
+    /// <summary>Records an embedded text discovered during lowering for a space.</summary>
+    public static void RecordDiscoveredEmbeddingText(DocumentScope scope, string spaceName, string text) {
+        ArgumentNullException.ThrowIfNull(scope);
+        ArgumentNullException.ThrowIfNull(spaceName);
+        ArgumentNullException.ThrowIfNull(text);
+
+        if (scope.Annotations.TryGetValue("DiscoveredEmbeddings", out var obj) &&
+            obj is Dictionary<string, HashSet<string>> map) {
+            if (!map.TryGetValue(key: spaceName, value: out var set)) {
+                set = new HashSet<string>(comparer: StringComparer.Ordinal);
+                map[spaceName] = set;
+            }
+            set.Add(item: text);
+        }
     }
     /// <summary>Recursively canonicalizes a JSON node by sorting every object's properties ordinally.</summary>
     /// <param name="node">The node to canonicalize.</param>

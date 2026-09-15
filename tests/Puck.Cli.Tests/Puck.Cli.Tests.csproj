@@ -17,4 +17,9 @@
         <ProjectReference Include="..\..\src\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\..\src\Puck.Cli\Puck.Cli.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <None Update="Assets\**">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
 </Project>

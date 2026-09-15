@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.AI;
+using Puck.Maths;
 
 namespace Puck.Embeddings;
 
@@ -60,7 +61,28 @@ public sealed class FixtureEmbeddingGenerator : IEmbeddingGenerator<string, Embe
     /// <returns>A normalized unit vector of floats.</returns>
     public static float[] ComputeFixtureVector(EmbeddingIdentity identity, string text) {
         var dims = identity.Dimensions;
+        var sbytes = new sbyte[dims];
+        ComputeFixtureSbytes(destination: sbytes, identity: identity, text: text);
+
         var vector = new float[dims];
+        for (var i = 0; i < dims; i++) {
+            vector[i] = (float)sbytes[i] / 127.0f;
+        }
+
+        return vector;
+    }
+
+    /// <summary>Computes the normalized signed-byte components for a single text using the fixture algorithm without floating-point arithmetic.</summary>
+    /// <param name="identity">The embedding identity.</param>
+    /// <param name="text">The text to embed.</param>
+    /// <param name="destination">Destination span of length equal to identity dimensions.</param>
+    public static void ComputeFixtureSbytes(EmbeddingIdentity identity, string text, Span<sbyte> destination) {
+        var dims = identity.Dimensions;
+        if (destination.Length != dims) {
+            throw new ArgumentException(message: "Destination length must match dimensions.", paramName: nameof(destination));
+        }
+
+        var components = new long[dims];
         var modelBytes = Encoding.UTF8.GetBytes(s: identity.Model);
         var revisionBytes = Encoding.UTF8.GetBytes(s: identity.Revision);
         var dimsBytes = Encoding.UTF8.GetBytes(s: dims.ToString(provider: CultureInfo.InvariantCulture));
@@ -68,7 +90,6 @@ public sealed class FixtureEmbeddingGenerator : IEmbeddingGenerator<string, Embe
 
         var prefixLength = (modelBytes.Length + 1 + revisionBytes.Length + 1 + dimsBytes.Length + 1 + textBytes.Length + 1);
         var blockCount = ((dims + 31) / 32);
-        var sumSquares = 0.0;
 
         for (var b = 0; b < blockCount; b++) {
             var blockStrBytes = Encoding.UTF8.GetBytes(s: b.ToString(provider: CultureInfo.InvariantCulture));
@@ -109,22 +130,13 @@ public sealed class FixtureEmbeddingGenerator : IEmbeddingGenerator<string, Embe
                     sbyteVal = -127;
                 }
 
-                var valDouble = (double)sbyteVal;
-
-                vector[componentIndex] = (float)valDouble;
-                sumSquares += (valDouble * valDouble);
+                components[componentIndex] = sbyteVal;
             }
         }
 
-        if (sumSquares > 0.0) {
-            var norm = Math.Sqrt(d: sumSquares);
-
-            for (var i = 0; i < dims; i++) {
-                vector[i] = (float)(vector[i] / norm);
-            }
+        if (!SignedByteVectorFunctions.TryNormalize(components: components, destination: destination)) {
+            throw new InvalidOperationException(message: "Failed to normalize fixture vector.");
         }
-
-        return vector;
     }
 
     /// <inheritdoc />

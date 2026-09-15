@@ -22,7 +22,7 @@ identically to.
 
 ## Implementation status
 
-Checked against `239770787`.
+**Status:** Complete. Checked against `239770787`.
 
 The dialect is implemented:
 

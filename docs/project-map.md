@@ -66,9 +66,10 @@ Engine services          Puck.AdvancedGamingBrick
                          Puck.State  Puck.Text  Puck.Transpiler
                          Puck.World.Addons  Puck.World.Authoring
                          Puck.World.Azure  Puck.World.Client
-                         Puck.World.Console  Puck.World.Machines
-                         Puck.World.Protocol  Puck.World.Schema
-                         Puck.World.Server  Puck.World.Transpiler
+                         Puck.World.Console  Puck.World.Embeddings
+                         Puck.World.Machines  Puck.World.Protocol
+                         Puck.World.Schema  Puck.World.Server
+                         Puck.World.Transpiler
 Presentation             Puck.DirectX.Presentation  Puck.Launcher.Linux
                          Puck.Launcher.Windows  Puck.Vulkan.Presentation
 Backends                 Puck.DirectX  Puck.Vulkan

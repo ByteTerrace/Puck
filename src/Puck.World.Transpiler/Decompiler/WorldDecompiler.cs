@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.World.Transpiler.Embeddings;
 
 namespace Puck.World.Transpiler.Decompiler;
 
@@ -8,8 +9,9 @@ namespace Puck.World.Transpiler.Decompiler;
 public static partial class WorldDecompiler {
     /// <summary>Decompiles a JSON text string into formatted Puck source code.</summary>
     /// <param name="jsonText">The raw or canonical JSON text.</param>
+    /// <param name="embeddings">Optional companion embedding lock file for resolving vector literals.</param>
     /// <returns>Clean, idiomatic Puck DSL source code.</returns>
-    public static string Decompile(string jsonText) {
+    public static string Decompile(string jsonText, EmbeddingLock? embeddings = null) {
         ArgumentNullException.ThrowIfNull(jsonText);
 
         var node = JsonNode.Parse(jsonText);
@@ -21,12 +23,13 @@ public static partial class WorldDecompiler {
             );
         }
 
-        return Decompile(root: rootObj);
+        return Decompile(root: rootObj, embeddings: embeddings);
     }
     /// <summary>Decompiles a root <see cref="JsonObject"/> into formatted Puck source code.</summary>
     /// <param name="root">The root JSON object representing the world definition.</param>
+    /// <param name="embeddings">Optional companion embedding lock file for resolving vector literals.</param>
     /// <returns>Clean, idiomatic Puck DSL source code.</returns>
-    public static string Decompile(JsonObject root) {
+    public static string Decompile(JsonObject root, EmbeddingLock? embeddings = null) {
         ArgumentNullException.ThrowIfNull(root);
 
         var sb = new StringBuilder();
@@ -215,6 +218,7 @@ public static partial class WorldDecompiler {
                 (value is JsonObject stateObj)
             ) {
                 DecompileStateBlock(
+                    embeddings: embeddings,
                     indentLevel: 0,
                     sb: sb,
                     state: stateObj

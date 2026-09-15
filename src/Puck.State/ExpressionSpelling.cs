@@ -501,6 +501,32 @@ public static class ExpressionSpelling {
             return false;
         }
     }
+    /// <summary>Parses an authored vector operand (state cell, vector literal, or embed literal).</summary>
+    /// <param name="text">The spelling.</param>
+    /// <param name="token">The vector operand token, on success.</param>
+    /// <param name="error">Why it did not, naming the character position, or empty.</param>
+    public static bool TryParseVector(string? text, out VectorOperandToken token, out string error) {
+        token = default!;
+        if (string.IsNullOrWhiteSpace(value: text)) {
+            error = "is empty";
+            return false;
+        }
+        if (text.Length > MaxLength) {
+            error = $"is {text.Length} characters long; at most {MaxLength} are admitted";
+            return false;
+        }
+        var parser = new Parser(text: text);
+        try {
+            var root = parser.ParseExpression();
+            parser.ExpectEnd();
+            token = ConvertToVectorOperand(node: root);
+            error = string.Empty;
+            return true;
+        } catch (SyntaxException failure) {
+            error = failure.Message;
+            return false;
+        }
+    }
     /// <summary>Renders a postfix token list in the infix spelling <see cref="TryParse"/> reads back to the same
     /// tokens, with only the parentheses precedence requires.</summary>
     /// <param name="tokens">The postfix tokens.</param>
@@ -638,6 +664,20 @@ public static class ExpressionSpelling {
             into.Append(value: "vector(\"").Append(value: Value).Append(value: "\")");
         }
     }
+    private sealed record EmbedLiteral(string Text, string? Space = null) : Node {
+        public override int Level => PrimaryLevel;
+
+        public override void Emit(List<ValueToken> into) =>
+            throw new SyntaxException(message: "an embed literal cannot appear as a scalar expression operand");
+
+        public override void PrintBare(StringBuilder into) {
+            into.Append(value: "embed(\"").Append(value: Text.Replace("\"", "\\\"")).Append(value: '"');
+            if (Space is not null) {
+                into.Append(value: ", space: ").Append(value: QuoteName(name: Space));
+            }
+            into.Append(value: ')');
+        }
+    }
     private sealed record Unary(string Operator, Node Operand) : Node {
         public override int Level => UnaryLevel;
 
@@ -770,11 +810,13 @@ public static class ExpressionSpelling {
     private static VectorOperandToken ConvertToVectorOperand(Node node) => node switch {
         StateRead state => new VectorOperandToken.Cell(Name: state.Name, Key: state.Key),
         VectorLiteral vec => new VectorOperandToken.Literal(Value: vec.Value),
-        _ => throw new SyntaxException(message: $"argument to vector function must be a state read or vector literal, found '{node.GetType().Name}'")
+        EmbedLiteral embed => new VectorOperandToken.Embed(Text: embed.Text, Space: embed.Space),
+        _ => throw new SyntaxException(message: $"argument to vector function must be a state read, vector literal, or embed literal, found '{node.GetType().Name}'")
     };
     private static Node LowerVectorOperand(VectorOperandToken operand) => operand switch {
         VectorOperandToken.Cell cell => new StateRead(Name: cell.Name, Key: cell.Key),
         VectorOperandToken.Literal lit => new VectorLiteral(Value: lit.Value),
+        VectorOperandToken.Embed embed => new EmbedLiteral(Text: embed.Text, Space: embed.Space),
         _ => throw new InvalidOperationException()
     };
     private sealed class SyntaxException(string message) : Exception(message: message);
@@ -1070,6 +1112,35 @@ public static class ExpressionSpelling {
                                 Advance();
                                 Expect(punctuation: ")");
                                 return new VectorLiteral(Value: vecBase64);
+                            }
+                        }
+                        if (!quoted && (name == "embed")) {
+                            if (Accept(punctuation: "(")) {
+                                Prime();
+                                if (m_kind != Lexeme.String) {
+                                    throw Fail(message: "embed literal expects a double-quoted string");
+                                }
+                                var embedText = m_value;
+                                Advance();
+                                string? embedSpace = null;
+                                if (Accept(punctuation: ",")) {
+                                    Prime();
+                                    if ((m_kind == Lexeme.Name) && (m_value == "space")) {
+                                        Advance();
+                                        Expect(punctuation: ":");
+                                        Prime();
+                                        if ((m_kind == Lexeme.Name) || (m_kind == Lexeme.String)) {
+                                            embedSpace = m_value;
+                                            Advance();
+                                        } else {
+                                            throw Fail(message: "embed literal space expects an identifier or string");
+                                        }
+                                    } else {
+                                        throw Fail(message: "expected 'space:' in embed literal");
+                                    }
+                                }
+                                Expect(punctuation: ")");
+                                return new EmbedLiteral(Text: embedText, Space: embedSpace);
                             }
                         }
                         if (!quoted && (name is "dot" or "similarity" or "identical")) {

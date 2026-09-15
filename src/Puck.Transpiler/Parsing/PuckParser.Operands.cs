@@ -189,6 +189,10 @@ public static partial class PuckParser {
             error: out var error,
             text: text,
             tokens: out _
+        ) || ExpressionSpelling.TryParseVector(
+            error: out _,
+            text: text,
+            token: out _
         )) {
             return true;
         }

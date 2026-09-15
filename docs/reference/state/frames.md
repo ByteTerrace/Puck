@@ -88,6 +88,7 @@ rather than another rule execution policy.
 | Row shape | Framed representation |
 |---|---|
 | Slot or keyed row | Numeric cells at fixed layout positions. |
+| Vector row | Contiguous signed 8-bit vector buffer indexed by dimension stride. |
 | Board | Values indexed by topology cell ordinal. |
 | Ring | History values and cursor. |
 | Ordered zone | Count, member ordinals in pile order, and member values up to capacity. |
@@ -118,6 +119,14 @@ capacity for lazy rebuilding. A rebuilt dictionary needs more storage only when
 its domain outgrows that capacity. These dictionaries belong to the frame's
 current binding, because a shared layout can still fit rows with different keys
 or a different domain order.
+
+### Vector buffer and candidate routing
+
+Vector cells in a frame allocate a single contiguous `sbyte` buffer segmented by dimension stride.
+Candidate vector mutations (`StateVector`) copy directly into this buffer without heap allocation.
+Undo journals preserve modified vector slots by recording previous slice snapshots, guaranteeing that
+speculative candidate searches explore alternative semantic trajectories without leaking state or
+allocating GC memory per evaluation.
 
 ### Keep compiled addresses aligned with replay
 

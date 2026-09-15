@@ -123,42 +123,42 @@ public sealed class VectorRefusalTests {
     [Fact]
     public void VectorNearest_MalformedExclude_FailsEvaluation() {
         var space = TestSpace();
-        var vecRow = new StateRow(Name: Name("vRow"), Kind: CellKind.Vector, Space: "testSpace", Capacity: 4, Cells: []);
-        var destRow = new StateRow(Name: Name("ranks"), Kind: CellKind.Int, Capacity: 4, Cells: []);
-        var section = new StateSection(Spaces: [space], Rows: [vecRow, destRow]);
-        var catalog = StateCatalog.Compile(section: section);
-
-        Assert.True(StateVector.TryCreate(components: [127, 0, 0, 0, 0, 0, 0, 0], vector: out var queryVec, error: out var err), err);
-        var effect = new VectorNearestEffect(
-            intoRowOrdinal: 1,
-            intoRowName: "ranks",
-            intoHandle: default,
-            intoKind: CellKind.Int,
-            isIntoSlot: false,
-            fromRowOrdinal: 0,
-            fromRowName: "vRow",
-            fromHandle: default,
-            dimensions: 8,
-            fromCapacity: 4,
-            query: new CompiledVectorOperand(constant: queryVec!, space: space),
-            k: 1,
-            threshold: null,
-            farthest: false,
-            whereRowOrdinal: null,
-            whereRowName: null,
-            whereHandle: default,
-            excludeKey: "malformed:key",
-            excludeKeyFrom: null,
-            excludeCellKey: default,
-            describe: "nearest vRow -> ranks"
+        Assert.True(StateVector.TryCreate(components: [127, 0, 0, 0, 0, 0, 0, 0], vector: out var vec, error: out var err), err);
+        var vecRow = new StateRow(
+            Name: Name("vRow"),
+            Kind: CellKind.Vector,
+            Space: "testSpace",
+            Capacity: 4,
+            Cells: [new StateCell(Key: Name("k1"), Vector: vec)]
         );
+        var destRow = new StateRow(Name: Name("ranks"), Kind: CellKind.Int, Capacity: 4, Cells: []);
+        var badRow = new StateRow(
+            Name: Name("badRow"),
+            Kind: CellKind.Text,
+            Capacity: 4,
+            Cells: [new StateCell(Key: Name("k"), Text: "not a valid cell name!")]
+        );
+        var section = new StateSection(Spaces: [space], Rows: [vecRow, destRow, badRow]);
+        var catalog = StateCatalog.Compile(section: section);
+        var context = new RuleCompileContext(section, catalog, null, null, null, 240, RuleVocabulary.Core);
 
-        var rows = new[] { vecRow, destRow };
+        var transform = new StateTransform.Nearest(
+            From: "vRow",
+            Query: "vRow[k1]",
+            Into: "ranks",
+            K: 1,
+            Exclude: "$cell:badRow:k"
+        );
+        var effect = new ActionEffect.TransformState(Transform: transform);
+        var compiled = RuleCompiler.CompileEffects(effects: [effect], ruleName: "rNearestExclude", context: context, subject: "rule");
+
+        var rows = new[] { vecRow, destRow, badRow };
         var layout = new FrameLayout(rows, static _ => null, name => (name == "testSpace") ? space : null);
         var host = new FrameHost(layout, rows, catalog, CompiledPatterns.Empty, []);
-        var evaluator = new RuleEvaluator(host: host);
+        host.Frame.Load(new RowStore(rows));
 
-        var fired = evaluator.FireEffects([effect], "testRule", 1UL, 1UL);
+        var evaluator = new RuleEvaluator(host: host);
+        var fired = evaluator.FireEffects(compiled, "rNearestExclude", 1UL, 1UL);
         Assert.False(fired);
     }
 
