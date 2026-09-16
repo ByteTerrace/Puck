@@ -622,6 +622,15 @@ public static class StateReader {
             return;
         }
 
+        if (
+            (rowOrdinal >= 0) &&
+            (store is StateFrame frame) &&
+            !frame.Layout[rowOrdinal].HasTraits
+        ) {
+            rawValue = stored;
+            return;
+        }
+
         rawValue = Live(
             baseValue: stored,
             cell: cell,

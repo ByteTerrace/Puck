@@ -551,6 +551,33 @@ public static partial class WorldDocumentEmitter {
         ),
         ScheduleStatementNode schedule => LowerSchedule(schedule: schedule),
         TransformStatementNode transform => LowerTransformStatement(transform, scope),
+        DrawStatementNode draw => new JsonObject {
+            ["$type"] = "transformState",
+            ["transform"] = new JsonObject {
+                ["$type"] = "transfer",
+                ["from"] = draw.From,
+                ["to"] = draw.To,
+                ["selector"] = "First",
+            },
+        },
+        DealStatementNode deal => new JsonObject {
+            ["$type"] = "transformState",
+            ["transform"] = new JsonObject {
+                ["$type"] = "transfer",
+                ["from"] = deal.From,
+                ["to"] = deal.To,
+                ["selector"] = "First",
+                ["count"] = deal.Count,
+            },
+        },
+        ShuffleStatementNode shuffle => new JsonObject {
+            ["$type"] = "transformState",
+            ["transform"] = new JsonObject {
+                ["$type"] = "shuffle",
+                ["row"] = shuffle.Row,
+                ["draw"] = shuffle.Draw,
+            },
+        },
         TransactionStatementNode transaction => LowerTransaction(
         scope: scope,
         transaction: transaction

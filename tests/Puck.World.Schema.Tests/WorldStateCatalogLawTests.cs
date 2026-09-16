@@ -359,6 +359,29 @@ public sealed class WorldStateCatalogLawTests {
         );
     }
     [Fact]
+    public void MatchesShape_WithVectorRow_ReturnsTrue() {
+        var section = new WorldStateSection(
+            World: [
+                new WorldStateRow(
+                    Name: CellName.Parse(candidate: "embeddings"),
+                    Kind: CellKind.Vector,
+                    Space: "lore"
+                )
+            ],
+            Spaces: [
+                new StateSpace(
+                    Name: CellName.Parse(candidate: "lore"),
+                    Model: "puck-fixture",
+                    Revision: "1",
+                    Dimensions: 16
+                )
+            ]
+        );
+        var catalog = StateCatalog.Compile(section: section);
+
+        Assert.True(condition: catalog.MatchesShape(section: section));
+    }
+    [Fact]
     public void Compile_NullSection_ProducesAnEmptyCatalog() {
         var catalog = StateCatalog.Compile(section: null);
 

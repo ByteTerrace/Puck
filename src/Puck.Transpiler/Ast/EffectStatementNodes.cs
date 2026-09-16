@@ -314,3 +314,47 @@ public sealed record BreakStatementNode(
     Line,
     Column
 );
+/// <summary><c>draw from [to] to</c> — syntactic sugar lowering to <c>StateTransform.Transfer</c> with <c>Selector = First</c> and count 1.</summary>
+public sealed record DrawStatementNode(
+    string From,
+    string To,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary><c>deal Count [from] from [to] to</c> — syntactic sugar lowering to <c>StateTransform.Transfer</c> with <c>Selector = First</c> and count <paramref name="Count"/>.</summary>
+public sealed record DealStatementNode(
+    int Count,
+    string From,
+    string To,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+/// <summary><c>shuffle pile [with] draw</c> — syntactic sugar lowering to <c>StateTransform.Shuffle</c>.</summary>
+public sealed record ShuffleStatementNode(
+    string Row,
+    string Draw,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
+

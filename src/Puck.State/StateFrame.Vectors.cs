@@ -43,7 +43,7 @@ public sealed partial class StateFrame {
             .CopyTo(destination: m_vectors.AsSpan(start: offset, length: dimensions));
 
         var rowOrdinal = Layout.RowOfVectorOffset(offset: offset);
-        m_rowVersions[rowOrdinal]++;
+        BumpRowOrdinal(rowOrdinal: rowOrdinal);
     }
 
     private void LoadVectorRow(FrameRowLayout layout, StateRow row, int rowOrdinal, StateStore source) {
@@ -219,7 +219,7 @@ public sealed partial class StateFrame {
         }
 
         components.CopyTo(destination: targetSpan);
-        m_rowVersions[rowOrdinal]++;
+        BumpRowOrdinal(rowOrdinal: rowOrdinal);
         reason = string.Empty;
 
         return true;

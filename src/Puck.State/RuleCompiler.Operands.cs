@@ -276,17 +276,24 @@ public static partial class RuleCompiler {
             : default
         );
 
+        var stateHandle = ResolveHandle(
+            context: context,
+            name: name
+        );
+        var cellHandle = context.CellTableBuilder.Intern(
+            rowHandle: stateHandle,
+            key: cellKey
+        );
+
         return new ResolvedOperand(
             operand: new StateCellOperand(
                 row: name,
                 key: resolvedKey,
                 keyFrom: null,
-                stateHandle: ResolveHandle(
-                    context: context,
-                    name: name
-                ),
+                stateHandle: stateHandle,
                 valueKind: row.Kind,
-                cellKey: cellKey
+                cellKey: cellKey,
+                cellHandle: cellHandle
             ),
             describe: describe
         );

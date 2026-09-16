@@ -850,4 +850,29 @@ public class ParserSugarTests {
             set.Target.Key
         );
     }
+    [Fact]
+    public void DrawDealShuffleStatements_ParseSuccessfully() {
+        var doc = ParseClean(body: """
+            rule "r" {
+                draw deck to hand
+                deal 5 from deck to hand
+                shuffle deck with rng
+            }
+            """);
+        var rule = FirstRule(doc: doc);
+        Assert.Equal(3, rule.Statements.Count);
+
+        var draw = Assert.IsType<DrawStatementNode>(rule.Statements[0]);
+        Assert.Equal("deck", draw.From);
+        Assert.Equal("hand", draw.To);
+
+        var deal = Assert.IsType<DealStatementNode>(rule.Statements[1]);
+        Assert.Equal(5, deal.Count);
+        Assert.Equal("deck", deal.From);
+        Assert.Equal("hand", deal.To);
+
+        var shuffle = Assert.IsType<ShuffleStatementNode>(rule.Statements[2]);
+        Assert.Equal("deck", shuffle.Row);
+        Assert.Equal("rng", shuffle.Draw);
+    }
 }

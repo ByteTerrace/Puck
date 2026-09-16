@@ -1118,4 +1118,41 @@ public class EmitterSugarTests {
             filter: d => (d.Code == "PUCK024")
         );
     }
+    [Fact]
+    public void DrawDealShuffle_LowerToTransformState() {
+        var rule = FirstRule(body: """
+            rule "r" {
+                draw deck to hand
+                deal 5 from deck to hand
+                shuffle deck with rng
+            }
+            """);
+        var effects = Assert.IsType<JsonArray>(@object: rule["effects"]);
+        Assert.Equal(3, effects.Count);
+
+        var draw = Assert.IsType<JsonObject>(effects[0]);
+        Assert.Equal("transformState", draw["$type"]?.ToString());
+        var drawTransform = Assert.IsType<JsonObject>(draw["transform"]);
+        Assert.Equal("transfer", drawTransform["$type"]?.ToString());
+        Assert.Equal("deck", drawTransform["from"]?.ToString());
+        Assert.Equal("hand", drawTransform["to"]?.ToString());
+        Assert.Equal("First", drawTransform["selector"]?.ToString());
+        Assert.False(drawTransform.ContainsKey("count"));
+
+        var deal = Assert.IsType<JsonObject>(effects[1]);
+        Assert.Equal("transformState", deal["$type"]?.ToString());
+        var dealTransform = Assert.IsType<JsonObject>(deal["transform"]);
+        Assert.Equal("transfer", dealTransform["$type"]?.ToString());
+        Assert.Equal("deck", dealTransform["from"]?.ToString());
+        Assert.Equal("hand", dealTransform["to"]?.ToString());
+        Assert.Equal("First", dealTransform["selector"]?.ToString());
+        Assert.Equal(5, dealTransform["count"]?.GetValue<int>());
+
+        var shuffle = Assert.IsType<JsonObject>(effects[2]);
+        Assert.Equal("transformState", shuffle["$type"]?.ToString());
+        var shuffleTransform = Assert.IsType<JsonObject>(shuffle["transform"]);
+        Assert.Equal("shuffle", shuffleTransform["$type"]?.ToString());
+        Assert.Equal("deck", shuffleTransform["row"]?.ToString());
+        Assert.Equal("rng", shuffleTransform["draw"]?.ToString());
+    }
 }

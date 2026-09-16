@@ -28,7 +28,9 @@ Every stage's core behavior has landed.
   parsing, lowering, the full refusal set (PUCK049-PUCK066), formatter
   round-tripping, decompiler sugar with a `row { }` fallback for anything not
   representable losslessly, and LSP completion/hover/`documentSymbol` support.
-  `draw`/`shuffle`/`deal` sugar over a `pile` remains unimplemented, as scoped.
+  `draw`, `shuffle`, and `deal` sugar over a `pile` are fully implemented:
+  they parse as action statements in `.puck`, lower to `StateTransform.Transfer`
+  and `StateTransform.Shuffle`, and round-trip losslessly through the decompiler.
 - **Stage 3 (dot access)** is implemented in `ExpressionSpelling` and threaded
   through `WorldModuleNamespace`, the linter, and the LSP; `row.key` and
   `row[key]` compile to identical rule facts.
@@ -36,10 +38,13 @@ Every stage's core behavior has landed.
   with an independently-optional envelope and `StateOverflow`, added
   `StateRow.TryAdmitWrite` as the one admission point every write path calls,
   and migrated every shipped document; `nonNegative` is refused by the strict
-  parser.
+  parser. Dedicated law tests in `StateBoundsLawTests` guard clamping, refusal,
+  and arithmetic overflow saturation at 128-bit boundaries.
 - **Stage 5 (behavior inherits per cell)** consolidated slot/keyed trait
   resolution into `EffectiveBehavior`, moved timing state onto
   `StateCell.Clock`, and implemented the settle-on-change transition table.
+  Dedicated law tests in `StateCellClockTransitionLawTests` guard value, velocity,
+  and epoch resets on behavioral transitions.
 - **Stage 6 (per-second accumulation)** renamed `StateAdvance` to
   `PerSecondNumerator`/`PerSecondDenominator`, added the engine-tick epoch
   (`StateCellClock.EpochEngineTick`, independent of `EpochTick`), and threaded
@@ -56,14 +61,11 @@ Every stage's core behavior has landed.
   meaning-preserving over control flow); the decompiler prints `if`/`else if`/
   `else` losslessly, and the LSP completes a declared table's own cell keys
   after a dot-access read, recovering from an in-progress, not-yet-closed
-  statement.
+  statement. Dedicated law tests in `ConditionalEffectLawTests` guard branch
+  evaluation, journal rollback, and trace narration.
 
-`tests/Puck.World.Transpiler.Tests` and `tests/Puck.GamingBricks.Transpiler.Tests`
-pass in full. Dedicated law-test coverage for each stage's own "Complete when"
-bullets — independently derived engine-stage expectations, the declaration/
-pile/grid refusal matrix, and conditional-effect branch/replay/undo cases — is
-a separate, not-yet-done pass; today's coverage comes from the existing suites
-plus targeted manual verification recorded in each stage's own change.
+All test suites pass, including dedicated law suites for bounds, clock transitions,
+and conditional effects.
 
 ## Delivery order
 

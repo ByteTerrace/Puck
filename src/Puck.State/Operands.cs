@@ -13,13 +13,15 @@ public sealed class StateCellOperand : OperandFact, IStateAddressedOperand {
     /// <param name="valueKind">The row's own cell kind.</param>
     /// <param name="rowFrom">The live zone, or <see langword="null"/> for a fixed row.</param>
     /// <param name="cellKey">The pre-parsed cell key for a literal key, or default.</param>
-    public StateCellOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, CellKind valueKind, LiveZone? rowFrom = null, CellName cellKey = default)
+    /// <param name="cellHandle">The interned static cell handle, or default.</param>
+    public StateCellOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, CellKind valueKind, LiveZone? rowFrom = null, CellName cellKey = default, StateCellHandle cellHandle = default)
         : base(valueKind) {
         Row = row;
         Key = key;
         KeyFrom = keyFrom;
         StateHandle = stateHandle;
         RowFrom = rowFrom;
+        CellHandle = cellHandle;
         CellKey = ((cellKey != default)
             ? cellKey
             : ((key is null)
@@ -34,6 +36,8 @@ public sealed class StateCellOperand : OperandFact, IStateAddressedOperand {
         )));
     }
 
+    /// <summary>Gets the interned static cell handle, or default.</summary>
+    public StateCellHandle CellHandle { get; }
     /// <summary>Gets the pre-parsed literal cell key, the slot key for a null key, or default when the key cannot be parsed.</summary>
     public CellName CellKey { get; }
     /// <inheritdoc/>

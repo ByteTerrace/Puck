@@ -49,6 +49,10 @@ public class RuleCompileContext {
     public BoundKey[]? BindingScope { get; set; }
     /// <summary>Gets the section's compiled catalog.</summary>
     public StateCatalog Catalog { get; }
+    /// <summary>Gets the builder of interned static cell addresses encountered during compilation.</summary>
+    public StateCellTableBuilder CellTableBuilder { get; } = new();
+    /// <summary>Builds an immutable static cell table representing all interned addresses.</summary>
+    public StateCellTable BuildCellTable() => CellTableBuilder.Build();
     /// <summary>Gets or sets the enclosing rule's declared <see cref="Rule.ForEach"/> row name, for the duration of
     /// one compile.</summary>
     public string? ForEachRow { get; set; }

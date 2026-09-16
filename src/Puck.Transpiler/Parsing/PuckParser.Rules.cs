@@ -1062,6 +1062,69 @@ public static partial class PuckParser {
             );
         }
 
+        if (TryMatchKeyword(context: context, keyword: "draw")) {
+            if (!TryReadPileOperand(context: context, text: out var from)) {
+                throw CreateException(context: context, message: "Expected a source pile name after 'draw'");
+            }
+            SkipWhiteSpace(context: context);
+            _ = TryMatchKeyword(context: context, keyword: "to");
+            if (!TryReadPileOperand(context: context, text: out var to)) {
+                throw CreateException(context: context, message: "Expected a destination pile name after 'draw'");
+            }
+            return new DrawStatementNode(
+                Column: col,
+                From: from,
+                Length: (cursor.Offset - startOffset),
+                Line: line,
+                Offset: startOffset,
+                To: to
+            );
+        }
+
+        if (TryMatchKeyword(context: context, keyword: "deal")) {
+            SkipWhiteSpace(context: context);
+            var numLiteral = ParseNumberWithOptionalUnit(context: context);
+            var count = Convert.ToInt32(value: numLiteral.Value);
+            SkipWhiteSpace(context: context);
+            _ = TryMatchKeyword(context: context, keyword: "from");
+            if (!TryReadPileOperand(context: context, text: out var from)) {
+                throw CreateException(context: context, message: "Expected a source pile name after 'deal'");
+            }
+            SkipWhiteSpace(context: context);
+            _ = TryMatchKeyword(context: context, keyword: "to");
+            if (!TryReadPileOperand(context: context, text: out var to)) {
+                throw CreateException(context: context, message: "Expected a destination pile name after 'deal'");
+            }
+            return new DealStatementNode(
+                Column: col,
+                Count: count,
+                From: from,
+                Length: (cursor.Offset - startOffset),
+                Line: line,
+                Offset: startOffset,
+                To: to
+            );
+        }
+
+        if (TryMatchKeyword(context: context, keyword: "shuffle")) {
+            if (!TryReadPileOperand(context: context, text: out var pile)) {
+                throw CreateException(context: context, message: "Expected a pile name after 'shuffle'");
+            }
+            SkipWhiteSpace(context: context);
+            _ = TryMatchKeyword(context: context, keyword: "with");
+            if (!TryReadPileOperand(context: context, text: out var draw)) {
+                throw CreateException(context: context, message: "Expected a draw stream name after 'shuffle'");
+            }
+            return new ShuffleStatementNode(
+                Column: col,
+                Draw: draw,
+                Length: (cursor.Offset - startOffset),
+                Line: line,
+                Offset: startOffset,
+                Row: pile
+            );
+        }
+
         var savedPosition = cursor.Position;
 
         if (TryReadRowRefSpanRaw(
@@ -1726,5 +1789,16 @@ public static partial class PuckParser {
 
         cursor.ResetPosition(position: saved);
         return null;
+    }
+
+    private static bool TryReadPileOperand(ParseContext context, out string text) {
+        SkipWhiteSpace(context: context);
+        if (TryReadRowRefSpanRaw(context: context, span: out _, text: out text)) {
+            return true;
+        }
+        if (TryReadString(context: context, out text)) {
+            return true;
+        }
+        return TryReadIdentifier(context: context, identifier: out text);
     }
 }

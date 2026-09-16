@@ -901,6 +901,27 @@ public static partial class WorldDecompiler {
                 obj: obj
             );
         }
+        var type = inner["$type"]?.ToString();
+        if (string.Equals(type, "transfer", StringComparison.OrdinalIgnoreCase)) {
+            var from = inner["from"]?.ToString();
+            var to = inner["to"]?.ToString();
+            var selector = inner["selector"]?.ToString();
+            var count = ((inner["count"] is JsonNode c && int.TryParse(c.ToString(), out var cv)) ? cv : 1);
+            var key = inner["key"]?.ToString();
+            var insertFirst = (inner["insertFirst"] is JsonNode inf && bool.TryParse(inf.ToString(), out var ib) && ib);
+            if (string.Equals(selector, "First", StringComparison.OrdinalIgnoreCase) && (key is null) && !insertFirst) {
+                if (inner.ContainsKey("count")) {
+                    return $"deal {count} from {from} to {to}";
+                }
+                return $"draw {from} to {to}";
+            }
+        } else if (string.Equals(type, "shuffle", StringComparison.OrdinalIgnoreCase)) {
+            var row = inner["row"]?.ToString();
+            var draw = inner["draw"]?.ToString();
+            if (!string.IsNullOrEmpty(row) && !string.IsNullOrEmpty(draw)) {
+                return $"shuffle {row} with {draw}";
+            }
+        }
         // The local name carries no wire representation (ActionEffect.TransformState has no `state`/name field at
         // all) — any placeholder round-trips identically, since the emitter discards it.
         return $"transform t = {FormatCallForm(

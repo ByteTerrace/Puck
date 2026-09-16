@@ -260,6 +260,7 @@ public sealed class StateCatalog {
             case CellKind.Fixed:
             case CellKind.Bool:
             case CellKind.Text:
+            case CellKind.Vector:
                 valueKind = ((StateValueKind)kind);
 
                 return true;

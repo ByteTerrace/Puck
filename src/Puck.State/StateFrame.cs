@@ -53,6 +53,7 @@ public sealed class FrameLayout {
     // array read rather than a binary search over row offsets.
     private readonly int[] m_rowOfIndex;
     private readonly int[] m_rowOfVectorOffset;
+    private readonly int[] m_cellOffsets;
     private readonly FrameRowLayout[] m_rows;
     private readonly Func<string, CompiledTopology?> m_topology;
     private readonly Func<string, StateSpace?>? m_spaces;
@@ -68,7 +69,8 @@ public sealed class FrameLayout {
     /// <param name="rows">The rows.</param>
     /// <param name="topology">Resolves a board row's topology by name; a board whose topology does not resolve is unframed.</param>
     /// <param name="spaces">Resolves a vector row's space by name; a vector whose space does not resolve is unframed.</param>
-    public FrameLayout(IReadOnlyList<StateRow> rows, Func<string, CompiledTopology?> topology, Func<string, StateSpace?>? spaces = null) {
+    /// <param name="cellTable">Optional interned static cell table.</param>
+    public FrameLayout(IReadOnlyList<StateRow> rows, Func<string, CompiledTopology?> topology, Func<string, StateSpace?>? spaces = null, StateCellTable? cellTable = null) {
         ArgumentNullException.ThrowIfNull(argument: rows);
         ArgumentNullException.ThrowIfNull(argument: topology);
         m_rows = new FrameRowLayout[rows.Count];
@@ -165,6 +167,48 @@ public sealed class FrameLayout {
                 }
             }
         }
+
+        if ((cellTable is not null) && (cellTable.Count > 0)) {
+            m_cellOffsets = new int[cellTable.Count];
+            for (var i = 0; (i < cellTable.Count); i++) {
+                var desc = cellTable[new StateCellHandle(i)];
+                var rowOrdinal = desc.RowHandle.Ordinal;
+                if ((rowOrdinal >= 0) && (rowOrdinal < m_rows.Length)) {
+                    var rowLayout = m_rows[rowOrdinal];
+                    var row = rows[rowOrdinal];
+                    if (row.IsSlot) {
+                        m_cellOffsets[i] = rowLayout.Offset;
+                    } else if ((rowLayout.Kind == FrameRowKind.Board) && (rowLayout.Topology is { } top)) {
+                        m_cellOffsets[i] = (top.TryCell(key: desc.Key.Value, cell: out var cellId)
+                            ? (rowLayout.Offset + cellId)
+                            : -1);
+                    } else {
+                        var cellIdx = FindCellIndex(cells: row.Cells, key: desc.Key);
+                        m_cellOffsets[i] = (((cellIdx >= 0) && (cellIdx < rowLayout.Length))
+                            ? (rowLayout.Offset + cellIdx)
+                            : -1);
+                    }
+                } else {
+                    m_cellOffsets[i] = -1;
+                }
+            }
+        } else {
+            m_cellOffsets = [];
+        }
+    }
+
+    private static int FindCellIndex(IReadOnlyList<StateCell>? cells, CellName key) {
+        if (cells is null) {
+            return -1;
+        }
+
+        for (var index = 0; (index < cells.Count); index++) {
+            if (cells[index].Key == key) {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private static bool HasTraits(StateRow row) {
@@ -475,6 +519,11 @@ public sealed class FrameLayout {
     /// <summary>Gets a row's layout by ordinal.</summary>
     /// <param name="ordinal">The row's position in the laid-out rows.</param>
     public FrameRowLayout this[int ordinal] => m_rows[ordinal];
+    /// <summary>Gets the frame value offset for the interned static cell handle, or -1 if not held in frame.</summary>
+    public int CellOffset(StateCellHandle handle) =>
+        (((handle.Ordinal >= 0) && (handle.Ordinal < m_cellOffsets.Length))
+            ? m_cellOffsets[handle.Ordinal]
+            : -1);
 }
 /// <summary>A value frame over a section's rows: every integer cell laid out once by a <see cref="FrameLayout"/>, so
 /// a hypothetical evaluation reads and writes an array while the rows keep supplying keys, domains, and traits. A
@@ -494,6 +543,8 @@ public sealed partial class StateFrame : StateStore {
     private int m_journalScopes;
     private long m_journalTouches;
     private IReadOnlyList<StateRow> m_rows;
+    private StateStore? m_loadedSource;
+    private StateRow?[] m_loadedRows;
 
     private JournalEntry[] m_journal = new JournalEntry[64];
     private long[] m_snapshot = [];
@@ -509,11 +560,16 @@ public sealed partial class StateFrame : StateStore {
         m_rows = rows;
         m_values = new long[layout.Length];
         m_rowVersions = new ulong[layout.RowCount];
+        m_loadedRows = new StateRow?[layout.RowCount];
         InitializeVectors(layout: layout, rows: rows);
     }
 
     // Bumps the version of the row owning a frame index — one array read via the layout's precomputed inverse map.
-    private void BumpRow(int index) => m_rowVersions[Layout.RowOfIndex(index: index)]++;
+    private void BumpRow(int index) => BumpRowOrdinal(rowOrdinal: Layout.RowOfIndex(index: index));
+    private void BumpRowOrdinal(int rowOrdinal) {
+        m_rowVersions[rowOrdinal]++;
+        m_loadedRows[rowOrdinal] = null;
+    }
     private Dictionary<CellName, int> DomainOrdinals(int rowOrdinal) {
         if (!m_domainOrdinals.TryGetValue(key: rowOrdinal, value: out var ordinals)) {
             ordinals = [];
@@ -988,6 +1044,8 @@ public sealed partial class StateFrame : StateStore {
         for (var ordinal = 0; (ordinal < m_rowVersions.Length); ordinal++) {
             m_rowVersions[ordinal]++;
         }
+        Array.Clear(m_loadedRows);
+        m_loadedSource = null;
     }
     /// <inheritdoc/>
     public override long HistoryCursor(StateRow row) =>
@@ -998,15 +1056,69 @@ public sealed partial class StateFrame : StateStore {
             ? m_values[((layout.Offset + layout.Length) - 1)]
             : row.HistoryCursor
         );
+    private bool IsRowUnchanged(int ordinal, FrameRowLayout layout, StateRow row) {
+        if (!ReferenceEquals(
+            objA: row,
+            objB: m_loadedRows[ordinal]
+        )) {
+            return false;
+        }
+
+        if (layout.Kind == FrameRowKind.Zone) {
+            if (
+                (layout.DomainOrdinal >= 0) &&
+                !ReferenceEquals(
+                    objA: m_rows[layout.DomainOrdinal],
+                    objB: m_loadedRows[layout.DomainOrdinal]
+                )
+            ) {
+                return false;
+            }
+        } else if (layout.IsDerivedBoard) {
+            if (
+                !ReferenceEquals(
+                    objA: m_rows[layout.InverseTokensOrdinal],
+                    objB: m_loadedRows[layout.InverseTokensOrdinal]
+                ) ||
+                !ReferenceEquals(
+                    objA: m_rows[layout.InverseCodesOrdinal],
+                    objB: m_loadedRows[layout.InverseCodesOrdinal]
+                )
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
     /// <summary>Copies another store's values into this frame: every framed row is read through the source.</summary>
     /// <param name="source">The store to read; its rows must share this frame's structure.</param>
     public void Load(StateStore source) {
         ArgumentNullException.ThrowIfNull(argument: source);
         RequireNoJournalScope();
 
+        var sourceChanged = !ReferenceEquals(
+            objA: source,
+            objB: m_loadedSource
+        ) || (source is StateFrame);
+
+        if (sourceChanged) {
+            Array.Clear(m_loadedRows);
+            m_loadedSource = (source is StateFrame ? null : source);
+        }
+
         for (var ordinal = 0; (ordinal < Layout.RowCount); ordinal++) {
             var layout = Layout[ordinal];
             var row = Rows[ordinal];
+
+            if (!sourceChanged && IsRowUnchanged(
+                layout: layout,
+                ordinal: ordinal,
+                row: row
+            )) {
+                continue;
+            }
+
             var values = m_values.AsSpan(
                 start: layout.Offset,
                 length: layout.Length
@@ -1114,6 +1226,8 @@ public sealed partial class StateFrame : StateStore {
             if (!before.SequenceEqual(other: values)) {
                 m_rowVersions[ordinal]++;
             }
+
+            m_loadedRows[ordinal] = row;
         }
     }
     /// <inheritdoc/>
@@ -1174,6 +1288,9 @@ public sealed partial class StateFrame : StateStore {
     public void Rebind(IReadOnlyList<StateRow> rows) {
         ArgumentNullException.ThrowIfNull(argument: rows);
         m_rows = rows;
+        if (m_loadedRows.Length != rows.Count) {
+            m_loadedRows = new StateRow?[rows.Count];
+        }
         foreach (var ordinals in m_domainOrdinals.Values) {
             ordinals.Clear();
         }
@@ -1344,7 +1461,7 @@ public sealed partial class StateFrame : StateStore {
             );
         }
 
-        m_rowVersions[ordinal]++;
+        BumpRowOrdinal(rowOrdinal: ordinal);
         reason = string.Empty;
 
         return true;
@@ -1423,7 +1540,7 @@ public sealed partial class StateFrame : StateStore {
             );
         }
 
-        m_rowVersions[ordinal]++;
+        BumpRowOrdinal(rowOrdinal: ordinal);
         reason = string.Empty;
 
         return true;
@@ -1907,6 +2024,54 @@ public sealed partial class StateFrame : StateStore {
             write: write,
             out reason
         );
+    }
+    /// <summary>Reads a cell value directly through an interned static cell handle.</summary>
+    /// <param name="handle">The interned static cell handle.</param>
+    /// <param name="value">The read value, or 0 if absent or not framed.</param>
+    public bool TryReadCellHandle(StateCellHandle handle, out long value) {
+        var offset = Layout.CellOffset(handle: handle);
+
+        if (offset >= 0) {
+            value = m_values[offset];
+            return true;
+        }
+
+        value = 0L;
+        return false;
+    }
+    /// <summary>Writes a cell value directly through an interned static cell handle.</summary>
+    /// <param name="handle">The interned static cell handle.</param>
+    /// <param name="value">The operand to write.</param>
+    /// <param name="write">Set or add.</param>
+    /// <param name="reason">Why the write refused, or empty.</param>
+    public bool TryWriteCellHandle(StateCellHandle handle, long value, StateWriteKind write, out string reason) {
+        var offset = Layout.CellOffset(handle: handle);
+
+        if (offset < 0) {
+            reason = "cell handle is not framed";
+            return false;
+        }
+
+        var rowOrdinal = Layout.RowOfIndex(index: offset);
+        var row = m_rows[rowOrdinal];
+        var current = m_values[offset];
+
+        if (!row.TryAdmitWrite(
+            current: current,
+            operand: value,
+            write: write,
+            stored: out var next,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        Write(
+            index: offset,
+            value: next
+        );
+        reason = string.Empty;
+        return true;
     }
     /// <inheritdoc/>
     public override bool TryWrite(int rowOrdinal, CellName key, long value, StateWriteKind write, out string reason) {

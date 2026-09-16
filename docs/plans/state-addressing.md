@@ -290,11 +290,15 @@ live gates are:
 - A cache keyed on layout identity held anywhere outside the layout.
 - Any change to what a state hash covers.
 
-## Open decisions
+## Open decisions (Resolved)
 
-- Whether `TryReadHandle`'s two entrances (rows and store) collapse into one
-  once the store carries an ordinal entrance. The rows form serves
-  `WorldStateReader` off-tick and can likely become a `RowStore` call.
-- Whether Stage 2's table is worth carrying for `RowStore` reads at all, or
-  whether an operand with a cell handle should fall back to its row handle and
-  key string when the store is not a frame.
+- **Collapsed `TryReadHandle` entrances**: `TryReadHandle(IReadOnlyList<StateRow> rows, ...)`
+  now collapses directly into `TryReadHandle(store: new RowStore(rows), ...)`.
+- **Stage 2 static cell handles**: `StateCellHandle`, `StateCellDescriptor`,
+  `StateCellTable`, and `StateCellTableBuilder` intern `(rowHandle, key)` pairs.
+  `FrameLayout` computes direct value-span offsets, enabling `StateFrame.TryReadCellHandle`
+  and `TryWriteCellHandle` without per-read key parsing or name hashing.
+- **Stage 3 partial frame reload**: `StateFrame.Load` tracks `m_loadedRows` references,
+  short-circuiting unchanged rows (with domain row check for zones and inverse
+  token/code checks for derived boards), eliminating span copying and `SequenceEqual`
+  comparisons on stable tick paths.
