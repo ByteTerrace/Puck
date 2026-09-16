@@ -1,0 +1,669 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+export action solitaireSpider
+export binding solitaireSpider
+export read solitaireSpider, solitaireSpiderCards, solitaireSpiderFace, solitaireSpiderRank, solitaireSpiderSuit
+
+state {
+  world {
+    table solitaireSpiderCards : Int capacity(104) {
+      "0" = 0
+      "1" = 1
+      "2" = 2
+      "3" = 3
+      "4" = 4
+      "5" = 5
+      "6" = 6
+      "7" = 7
+      "8" = 8
+      "9" = 9
+      "10" = 10
+      "11" = 11
+      "12" = 12
+      "13" = 13
+      "14" = 14
+      "15" = 15
+      "16" = 16
+      "17" = 17
+      "18" = 18
+      "19" = 19
+      "20" = 20
+      "21" = 21
+      "22" = 22
+      "23" = 23
+      "24" = 24
+      "25" = 25
+      "26" = 26
+      "27" = 27
+      "28" = 28
+      "29" = 29
+      "30" = 30
+      "31" = 31
+      "32" = 32
+      "33" = 33
+      "34" = 34
+      "35" = 35
+      "36" = 36
+      "37" = 37
+      "38" = 38
+      "39" = 39
+      "40" = 40
+      "41" = 41
+      "42" = 42
+      "43" = 43
+      "44" = 44
+      "45" = 45
+      "46" = 46
+      "47" = 47
+      "48" = 48
+      "49" = 49
+      "50" = 50
+      "51" = 51
+      "52" = 52
+      "53" = 53
+      "54" = 54
+      "55" = 55
+      "56" = 56
+      "57" = 57
+      "58" = 58
+      "59" = 59
+      "60" = 60
+      "61" = 61
+      "62" = 62
+      "63" = 63
+      "64" = 64
+      "65" = 65
+      "66" = 66
+      "67" = 67
+      "68" = 68
+      "69" = 69
+      "70" = 70
+      "71" = 71
+      "72" = 72
+      "73" = 73
+      "74" = 74
+      "75" = 75
+      "76" = 76
+      "77" = 77
+      "78" = 78
+      "79" = 79
+      "80" = 80
+      "81" = 81
+      "82" = 82
+      "83" = 83
+      "84" = 84
+      "85" = 85
+      "86" = 86
+      "87" = 87
+      "88" = 88
+      "89" = 89
+      "90" = 90
+      "91" = 91
+      "92" = 92
+      "93" = 93
+      "94" = 94
+      "95" = 95
+      "96" = 96
+      "97" = 97
+      "98" = 98
+      "99" = 99
+      "100" = 100
+      "101" = 101
+      "102" = 102
+      "103" = 103
+    }
+
+    row {
+      name: "solitaireSpiderRank"
+      kind: "Int"
+      domain: keysOf(row: "solitaireSpiderCards")
+      capacity: 104
+      cells: map(range(0, 104), i => { key: $"{i}", value: (i % 13) + 1 })
+    }
+
+    row {
+      name: "solitaireSpiderSuit"
+      kind: "Int"
+      domain: keysOf(row: "solitaireSpiderCards")
+      capacity: 104
+      cells: map(range(0, 104), i => { key: $"{i}", value: floor((i % 52) / 13) })
+    }
+
+    row {
+      name: "solitaireSpiderFace"
+      kind: "Int"
+      domain: keysOf(row: "solitaireSpiderCards")
+      capacity: 104
+      cells: map(range(0, 104), i => { key: $"{i}", value: 0 })
+    }
+    pile solitaireSpiderPile0 of solitaireSpiderCards capacity(104) {
+      "0"
+      "1"
+      "2"
+      "3"
+      "4"
+      "5"
+      "6"
+      "7"
+      "8"
+      "9"
+      "10"
+      "11"
+      "12"
+      "13"
+      "14"
+      "15"
+      "16"
+      "17"
+      "18"
+      "19"
+      "20"
+      "21"
+      "22"
+      "23"
+      "24"
+      "25"
+      "26"
+      "27"
+      "28"
+      "29"
+      "30"
+      "31"
+      "32"
+      "33"
+      "34"
+      "35"
+      "36"
+      "37"
+      "38"
+      "39"
+      "40"
+      "41"
+      "42"
+      "43"
+      "44"
+      "45"
+      "46"
+      "47"
+      "48"
+      "49"
+      "50"
+      "51"
+      "52"
+      "53"
+      "54"
+      "55"
+      "56"
+      "57"
+      "58"
+      "59"
+      "60"
+      "61"
+      "62"
+      "63"
+      "64"
+      "65"
+      "66"
+      "67"
+      "68"
+      "69"
+      "70"
+      "71"
+      "72"
+      "73"
+      "74"
+      "75"
+      "76"
+      "77"
+      "78"
+      "79"
+      "80"
+      "81"
+      "82"
+      "83"
+      "84"
+      "85"
+      "86"
+      "87"
+      "88"
+      "89"
+      "90"
+      "91"
+      "92"
+      "93"
+      "94"
+      "95"
+      "96"
+      "97"
+      "98"
+      "99"
+      "100"
+      "101"
+      "102"
+      "103"
+    }
+
+    pile solitaireSpiderPile2 of solitaireSpiderCards capacity(104) { }
+
+    pile solitaireSpiderPile3 of solitaireSpiderCards capacity(104) { }
+
+    pile solitaireSpiderPile4 of solitaireSpiderCards capacity(104) { }
+
+    pile solitaireSpiderPile5 of solitaireSpiderCards capacity(104) { }
+
+    pile solitaireSpiderPile6 of solitaireSpiderCards capacity(104) { }
+
+    pile solitaireSpiderPile7 of solitaireSpiderCards capacity(104) { }
+
+    pile solitaireSpiderPile8 of solitaireSpiderCards capacity(104) { }
+
+    pile solitaireSpiderPile9 of solitaireSpiderCards capacity(104) { }
+
+    pile solitaireSpiderPile10 of solitaireSpiderCards capacity(104) { }
+
+    pile solitaireSpiderPile11 of solitaireSpiderCards capacity(104) { }
+
+    pile solitaireSpiderPile12 of solitaireSpiderCards capacity(104) { }
+
+    table solitaireSpider : Int capacity(27) {
+      request = 0
+      applied = 0
+      action = 0
+      from = -1
+      to = -1
+      card = -1
+      option = 1
+      activeOption = 1
+      stage = 0
+      busy = 0
+      status = 0
+      result = 0
+      moves = 0
+      score = 0
+      passes = 0
+      sourceOk = 0
+      targetOk = 0
+      runLength = 0
+      emptyCells = 0
+      emptyColumns = 0
+      deals = 0
+      dealStep = 0
+      gatherStep = 0
+      scan = 0
+      changed = 0
+      attributeStep = 0
+      drawLeft = 0
+    }
+
+    row {
+      name: "solitaireSpiderStream"
+      kind: "Int"
+      draw {
+        generator {
+          source: "StreamDraw"
+        }
+        timing: "Event"
+      }
+    }
+  }
+}
+
+patterns [
+  {
+    name: "solitaireSpiderLength"
+    kind: "Int"
+    value: "1"
+    symbols [
+      {
+        name: "any"
+        min: 1
+        max: 1
+      }
+    ]
+    pattern: star(item: any())
+  }
+  {
+    name: "solitaireSpiderSingle"
+    kind: "Int"
+    value: "1"
+    symbols [
+      {
+        name: "any"
+        min: 1
+        max: 1
+      }
+    ]
+    pattern: any()
+  }
+  {
+    name: "solitaireSpiderRun"
+    kind: "Int"
+    value: "solitaireSpiderFace[$token] * (1 + (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))"
+    symbols [
+      {
+        name: "face"
+        min: 1
+        max: 2
+      }
+      {
+        name: "next"
+        min: 2
+        max: 2
+      }
+    ]
+    pattern: sequence(items: [
+      symbol(name: "face")
+      star(item: symbol(name: "next"))
+    ])
+  }
+  {
+    name: "solitaireSpiderLanding"
+    kind: "Int"
+    value: "(solitaireSpiderRank[$token] == solitaireSpiderRank[solitaireSpider[card]] + 1)"
+    symbols [
+      {
+        name: "yes"
+        min: 1
+        max: 1
+      }
+    ]
+    pattern: sequence(items: [
+      star(item: any())
+      symbol(name: "yes")
+    ])
+  }
+  {
+    name: "solitaireSpiderComplete"
+    kind: "Int"
+    value: "solitaireSpiderFace[$token] * ((solitaireSpiderRank[$token] == 13) + 2 * (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))"
+    symbols [
+      {
+        name: "king"
+        min: 1
+        max: 1
+      }
+      {
+        name: "next"
+        min: 2
+        max: 2
+      }
+    ]
+    pattern: sequence(items: [
+      star(item: any())
+      symbol(name: "king")
+      repeat(item: symbol(name: "next"), min: 12, max: 12)
+    ])
+  }
+]
+
+rule "solitaireSpider-new-deal" {
+  when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == 0 and solitaireSpider[busy] == 0 and solitaireSpider[action] == 1 and (solitaireSpider[option] == 1 or solitaireSpider[option] == 2 or solitaireSpider[option] == 4)
+  solitaireSpider[activeOption] = solitaireSpider[option]
+  solitaireSpider[stage] = 1
+  solitaireSpider[status] = 0
+  solitaireSpider[result] = 0
+  solitaireSpider[busy] = 1
+}
+
+rule "solitaireSpider-gather" {
+  when solitaire[table] == 2 and solitaireSpider[stage] == 1 and $reduce:count:$zones[solitaireSpider[gatherStep]] > 0
+  zones [
+    "solitaireSpiderPile2"
+    "solitaireSpiderPile3"
+    "solitaireSpiderPile4"
+    "solitaireSpiderPile5"
+    "solitaireSpiderPile6"
+    "solitaireSpiderPile7"
+    "solitaireSpiderPile8"
+    "solitaireSpiderPile9"
+    "solitaireSpiderPile10"
+    "solitaireSpiderPile11"
+    "solitaireSpiderPile12"
+  ]
+  transform t = transfer(from: "$zones[solitaireSpider[gatherStep]]", to: "solitaireSpiderPile0", selector: "Slice", key: "$zone:$zones[solitaireSpider[gatherStep]]:first")
+}
+
+rule "solitaireSpider-attributes-start" {
+  when solitaire[table] == 2 and solitaireSpider[stage] == 1 and solitaireSpider[gatherStep] == 10 and $reduce:count:solitaireSpiderPile0 == 104
+  solitaireSpider[stage] = 5
+}
+
+rule "solitaireSpider-reset-attributes" {
+  when solitaire[table] == 2 and solitaireSpider[stage] == 5
+  solitaireSpiderFace[solitaireSpider[attributeStep]] = 0
+  solitaireSpiderSuit[solitaireSpider[attributeStep]] = (solitaireSpider[attributeStep] / 13) % solitaireSpider[activeOption]
+}
+
+rule "solitaireSpider-shuffle" {
+  when solitaire[table] == 2 and solitaireSpider[stage] == 5 and solitaireSpider[attributeStep] == 103
+  transaction {
+    shuffle solitaireSpiderPile0 with solitaireSpiderStream
+    solitaireSpider[stage] = 3
+  }
+}
+
+rule "solitaireSpider-deal" {
+  when solitaire[table] == 2 and solitaireSpider[stage] == 3 and solitaireSpider[dealStep] <= 53
+  zones [
+    "solitaireSpiderPile0"
+    ""
+    "solitaireSpiderPile2"
+    "solitaireSpiderPile3"
+    "solitaireSpiderPile4"
+    "solitaireSpiderPile5"
+    "solitaireSpiderPile6"
+    "solitaireSpiderPile7"
+    "solitaireSpiderPile8"
+    "solitaireSpiderPile9"
+    "solitaireSpiderPile10"
+    "solitaireSpiderPile11"
+    "solitaireSpiderPile12"
+  ]
+  draw solitaireSpiderPile0 to $zones[2 + (solitaireSpider[dealStep] % 10)]
+}
+
+rule "solitaireSpider-deal-finish" {
+  when solitaire[table] == 2 and solitaireSpider[stage] == 3 and solitaireSpider[dealStep] == 53
+  transaction {
+    solitaireSpider[stage] = 0
+    solitaireSpider[status] = 1
+    solitaireSpider[moves] = 0
+    solitaireSpider[score] = 500
+    solitaireSpider[passes] = 0
+    solitaireSpider[deals] = solitaireSpider[deals] + 1
+    solitaireSpider[result] = 1
+    solitaireSpider[applied] = solitaireSpider[request]
+  }
+}
+
+rule "solitaireSpider-prepare-move" {
+  when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == 0 and solitaireSpider[busy] == 0 and solitaireSpider[status] == 1 and solitaireSpider[action] == 2
+  solitaireSpider[sourceOk] = 0
+  solitaireSpider[targetOk] = 0
+  solitaireSpider[runLength] = 0
+}
+
+rule "solitaireSpider-source" {
+  when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == 0 and solitaireSpider[busy] == 0 and solitaireSpider[status] == 1 and solitaireSpider[action] == 2 and $zones[solitaireSpider[from]][solitaireSpider[card]] == 1
+  zones [
+    ""
+    ""
+    "solitaireSpiderPile2"
+    "solitaireSpiderPile3"
+    "solitaireSpiderPile4"
+    "solitaireSpiderPile5"
+    "solitaireSpiderPile6"
+    "solitaireSpiderPile7"
+    "solitaireSpiderPile8"
+    "solitaireSpiderPile9"
+    "solitaireSpiderPile10"
+    "solitaireSpiderPile11"
+  ]
+  solitaireSpider[sourceOk] = $match:solitaireSpiderRun:$zones[solitaireSpider[from]][solitaireSpider[card]]
+  solitaireSpider[runLength] = $match:solitaireSpiderLength:$zones[solitaireSpider[from]]:prefix[solitaireSpider[card]]
+}
+
+rule "solitaireSpider-target" {
+  when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == 0 and solitaireSpider[busy] == 0 and solitaireSpider[status] == 1 and solitaireSpider[action] == 2 and solitaireSpider[sourceOk] == 1
+  zones [
+    ""
+    ""
+    "solitaireSpiderPile2"
+    "solitaireSpiderPile3"
+    "solitaireSpiderPile4"
+    "solitaireSpiderPile5"
+    "solitaireSpiderPile6"
+    "solitaireSpiderPile7"
+    "solitaireSpiderPile8"
+    "solitaireSpiderPile9"
+    "solitaireSpiderPile10"
+    "solitaireSpiderPile11"
+  ]
+  solitaireSpider[targetOk] = $reduce:count:$zones[solitaireSpider[to]] == 0 ? 1 : $match:solitaireSpiderLanding:$zones[solitaireSpider[to]]
+}
+
+rule "solitaireSpider-move" {
+  when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == 0 and solitaireSpider[busy] == 0 and solitaireSpider[status] == 1 and solitaireSpider[action] == 2 and solitaireSpider[sourceOk] == 1 and solitaireSpider[targetOk] == 1 and (solitaireSpider[from] != solitaireSpider[to] : Int)
+  zones [
+    "solitaireSpiderPile0"
+    ""
+    "solitaireSpiderPile2"
+    "solitaireSpiderPile3"
+    "solitaireSpiderPile4"
+    "solitaireSpiderPile5"
+    "solitaireSpiderPile6"
+    "solitaireSpiderPile7"
+    "solitaireSpiderPile8"
+    "solitaireSpiderPile9"
+    "solitaireSpiderPile10"
+    "solitaireSpiderPile11"
+    "solitaireSpiderPile12"
+  ]
+  transaction {
+    transform t = transfer(from: "$zones[solitaireSpider[from]]", to: "$zones[solitaireSpider[to]]", selector: "Slice", key: "$cell:solitaireSpider:card")
+    solitaireSpider[moves] = solitaireSpider[moves] + 1
+    solitaireSpider[busy] = 1
+    solitaireSpider[score] = solitaireSpider[score] - 1
+    solitaireSpider[result] = 1
+    solitaireSpider[applied] = solitaireSpider[request]
+  }
+}
+
+rule "solitaireSpider-draw-start" {
+  when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == 0 and solitaireSpider[busy] == 0 and solitaireSpider[status] == 1 and solitaireSpider[action] == 3 and $reduce:count:solitaireSpiderPile0 >= 10 and $reduce:count:solitaireSpiderPile2 > 0 and $reduce:count:solitaireSpiderPile3 > 0 and $reduce:count:solitaireSpiderPile4 > 0 and $reduce:count:solitaireSpiderPile5 > 0 and $reduce:count:solitaireSpiderPile6 > 0 and $reduce:count:solitaireSpiderPile7 > 0 and $reduce:count:solitaireSpiderPile8 > 0 and $reduce:count:solitaireSpiderPile9 > 0 and $reduce:count:solitaireSpiderPile10 > 0 and $reduce:count:solitaireSpiderPile11 > 0
+  transaction {
+    solitaireSpider[stage] = 4
+    solitaireSpider[busy] = 1
+  }
+}
+
+rule "solitaireSpider-draw" {
+  when solitaire[table] == 2 and solitaireSpider[stage] == 4 and solitaireSpider[dealStep] <= 9
+  zones [
+    "solitaireSpiderPile0"
+    ""
+    "solitaireSpiderPile2"
+    "solitaireSpiderPile3"
+    "solitaireSpiderPile4"
+    "solitaireSpiderPile5"
+    "solitaireSpiderPile6"
+    "solitaireSpiderPile7"
+    "solitaireSpiderPile8"
+    "solitaireSpiderPile9"
+    "solitaireSpiderPile10"
+    "solitaireSpiderPile11"
+    "solitaireSpiderPile12"
+  ]
+  draw solitaireSpiderPile0 to $zones[2 + solitaireSpider[dealStep]]
+}
+
+rule "solitaireSpider-draw-finish" {
+  when solitaire[table] == 2 and solitaireSpider[stage] == 4 and solitaireSpider[dealStep] == 9
+  transaction {
+    solitaireSpider[stage] = 0
+    solitaireSpider[moves] = solitaireSpider[moves] + 1
+    solitaireSpider[score] = solitaireSpider[score] - 1
+    solitaireSpider[result] = 1
+    solitaireSpider[applied] = solitaireSpider[request]
+  }
+}
+
+rule "solitaireSpider-deal-advance" {
+  when solitaire[table] == 2 and (solitaireSpider[stage] == 0 or solitaireSpider[stage] == 3 or solitaireSpider[stage] == 4)
+  solitaireSpider[dealStep] = solitaireSpider[stage] == 0 ? 0 : solitaireSpider[dealStep] + 1
+}
+
+rule "solitaireSpider-reject" {
+  when solitaire[table] == 2 and solitaireSpider[request] != solitaireSpider[applied] and solitaireSpider[stage] == 0 and solitaireSpider[busy] == 0
+  transaction {
+    solitaireSpider[result] = -1
+    solitaireSpider[applied] = solitaireSpider[request]
+  }
+}
+
+rule "solitaireSpider-reveal" {
+  when solitaire[table] == 2 and solitaireSpider[status] == 1 and solitaireSpider[stage] == 0 and $reduce:count:$zones[$each] > 0 and solitaireSpiderFace[$zone:$zones[$each]:last] == 0
+  forEach: "$zones"
+  zones [
+    "solitaireSpiderPile2"
+    "solitaireSpiderPile3"
+    "solitaireSpiderPile4"
+    "solitaireSpiderPile5"
+    "solitaireSpiderPile6"
+    "solitaireSpiderPile7"
+    "solitaireSpiderPile8"
+    "solitaireSpiderPile9"
+    "solitaireSpiderPile10"
+    "solitaireSpiderPile11"
+  ]
+  solitaireSpiderFace[$zone:$zones[$each]:last] = 1
+  solitaireSpider[busy] = 1
+  solitaireSpider[changed] = 1
+}
+
+rule "solitaireSpider-complete" {
+  when solitaire[table] == 2 and solitaireSpider[status] == 1 and solitaireSpider[stage] == 0 and solitaireSpider[busy] == 1 and $match:solitaireSpiderComplete:$zones[solitaireSpider[scan]] == 1
+  zones [
+    "solitaireSpiderPile2"
+    "solitaireSpiderPile3"
+    "solitaireSpiderPile4"
+    "solitaireSpiderPile5"
+    "solitaireSpiderPile6"
+    "solitaireSpiderPile7"
+    "solitaireSpiderPile8"
+    "solitaireSpiderPile9"
+    "solitaireSpiderPile10"
+    "solitaireSpiderPile11"
+  ]
+  transaction {
+    transform t = transfer(from: "$zones[solitaireSpider[scan]]", to: "solitaireSpiderPile12", selector: "Last", count: 13)
+    solitaireSpider[score] = solitaireSpider[score] + 100
+    solitaireSpider[changed] = 1
+  }
+}
+
+rule "solitaireSpider-scan-advance" {
+  when solitaire[table] == 2 and solitaireSpider[status] == 1 and solitaireSpider[stage] == 0 and solitaireSpider[busy] == 1
+  solitaireSpider[scan] = (solitaireSpider[scan] + 1) % 10
+  solitaireSpider[busy] = solitaireSpider[scan] == 0 ? solitaireSpider[changed] : 1
+  solitaireSpider[changed] = solitaireSpider[scan] == 0 ? 0 : solitaireSpider[changed]
+}
+
+rule "solitaireSpider-gather-advance" {
+  when solitaire[table] == 2 and (solitaireSpider[stage] == 0 or solitaireSpider[stage] == 1)
+  solitaireSpider[gatherStep] = solitaireSpider[stage] == 0 ? 0 : minimum(10, solitaireSpider[gatherStep] + 1)
+}
+
+rule "solitaireSpider-attribute-advance" {
+  when solitaire[table] == 2 and (solitaireSpider[stage] == 0 or solitaireSpider[stage] == 5)
+  solitaireSpider[attributeStep] = solitaireSpider[stage] == 0 ? 0 : solitaireSpider[attributeStep] + 1
+}
+
+rule "solitaireSpider-win" {
+  when solitaire[table] == 2 and solitaireSpider[status] == 1 and solitaireSpider[busy] == 0
+  solitaireSpider[status] = ($reduce:count:solitaireSpiderPile12) == 104 ? 2 : 1
+}

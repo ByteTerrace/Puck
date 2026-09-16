@@ -35,10 +35,10 @@
             0.045
           ],
           "rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
+            0,
+            0,
+            0,
+            1
           ]
         },
         "motion": {
@@ -1846,9 +1846,9 @@
             ],
             "rotation": "state.transforms.identity",
             "scale": [
-              1.0,
+              1,
               0.05,
-              1.0
+              1
             ],
             "smooth": 0,
             "type": "Box"
@@ -2556,8 +2556,8 @@
       "effects": [
         {
           "$type": "setState",
-          "state": "boardCollisions",
-          "expression": "$reduce:count:pieceCell:between:0:63 + setBitCount($board:mask:board:0:0) - 64"
+          "expression": "$reduce:count:pieceCell:between:0:63 + setBitCount($board:mask:board:0:0) - 64",
+          "state": "boardCollisions"
         }
       ],
       "gate": {
@@ -3194,14 +3194,26 @@
       "name": "tabletop-promotion-pending"
     },
     {
+      "bindings": [
+        {
+          "expression": "(($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))",
+          "kind": "Int",
+          "name": "lostRooks"
+        },
+        {
+          "expression": "(($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))",
+          "kind": "Int",
+          "name": "lostKings"
+        }
+      ],
       "effects": [
         {
           "$type": "transaction",
           "effects": [
             {
               "$type": "setState",
-              "state": "castleRights",
-              "expression": "castleRights | parallelBitExtract($bind:lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract($bind:lostKings, (1 << 4) | (1 << 60)), 5) * 3)"
+              "expression": "castleRights | parallelBitExtract($bind:lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract($bind:lostKings, (1 << 4) | (1 << 60)), 5) * 3)",
+              "state": "castleRights"
             },
             {
               "$type": "transformState",
@@ -3274,19 +3286,7 @@
         ]
       },
       "mode": "Edge",
-      "name": "tabletop-advance-turn",
-      "bindings": [
-        {
-          "expression": "(($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))",
-          "kind": "Int",
-          "name": "lostRooks"
-        },
-        {
-          "expression": "(($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))",
-          "kind": "Int",
-          "name": "lostKings"
-        }
-      ]
+      "name": "tabletop-advance-turn"
     },
     {
       "effects": [
@@ -3458,14 +3458,14 @@
           "$type": "cellsOf",
           "topology": "chessBoard"
         },
+        "inverse": {
+          "codes": "pieceCode",
+          "tokens": "pieceCell"
+        },
         "kind": "Int",
         "max": 6,
         "min": -6,
-        "name": "board",
-        "inverse": {
-          "tokens": "pieceCell",
-          "codes": "pieceCode"
-        }
+        "name": "board"
       },
       {
         "capacity": 64,

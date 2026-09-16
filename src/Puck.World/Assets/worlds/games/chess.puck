@@ -1,0 +1,985 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+export action board, gameStarted, move
+export binding illegalCount, inCheck, turn, verdict
+export read board, chessBoard, gameStarted, inCheck, move, plan, turn, verdict
+
+let boardCoords = [-0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7]
+let backRankTypes = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"]
+let squareTypes = ["boardSquareLight", "boardSquareDark"]
+
+template piecePlacement(name, prototypeName, x, z) {
+  placement name {
+    prototype: prototypeName
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "piece"
+      look: prototypeName
+      source: "Idle"
+    }
+    parent: "tabletop"
+    position [x, 1.8, z]
+  }
+}
+
+template pieceProto(color, name, sx, sy, sz) {
+  prototype $"piece_{color}_{name}" {
+    document {
+      name: $"piece_{color}_{name}"
+      palette [
+        {
+          color: $"state.pieceSetColors.{color}"
+          roughness: 0.64
+          specular: 0.25
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Capsule "body" {
+        material: 0
+        position [0, 0, 0]
+        rotation: "state.transforms.identity"
+        scale [sx, sy, sz]
+      }
+    }
+  }
+}
+
+template crownedPieceProto(color, name, sx, sy, sz, csx, csy, csz, crownY) {
+  prototype $"piece_{color}_{name}" {
+    document {
+      name: $"piece_{color}_{name}"
+      palette [
+        {
+          color: $"state.pieceSetColors.{color}"
+          roughness: 0.64
+          specular: 0.25
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Capsule "body" {
+        material: 0
+        position [0, 0, 0]
+        rotation: "state.transforms.identity"
+        scale [sx, sy, sz]
+      }
+      shape Sphere "crown" {
+        blend: "SmoothUnion"
+        material: 0
+        position [0, crownY, 0]
+        rotation: "state.transforms.identity"
+        scale [csx, csy, csz]
+        smooth: 0.01
+      }
+    }
+  }
+}
+
+template squareProto(name, colorKey) {
+  prototype name {
+    document {
+      name: name
+      palette [
+        {
+          color: $"state.boardColors.{colorKey}"
+          roughness: 0.846
+          specular: 0.05
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "square" {
+        material: 0
+        position [0, 0, 0]
+        rotation: "state.transforms.identity"
+        scale [0.095, 0.004, 0.095]
+      }
+    }
+  }
+}
+
+// Extract kits and patterns from header_section
+kits {
+  rows [
+    {
+      bodyContact: "Solid"
+      bodyMotionProgram: "walk"
+      collider: box(halfExtents: [0.045, 0.12, 0.045], rotation: [0, 0, 0, 1])
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: "Free"
+            envelope {
+              sinkSpeed: 40
+            }
+            gravity {
+              fall: 46
+              rise: 28
+            }
+            hold: "Gravity"
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.001
+        }
+        turn {
+          rate: 0.001
+        }
+      }
+      name: "piece"
+      rigid {
+        angularDamping: 0.05
+        friction: 0.5
+        linearDamping: 0.05
+        mass: 0.12
+        restitution: 0.1
+        rollingFriction: 0.15
+      }
+    }
+  ]
+}
+
+patterns [
+  {
+    kind: "Int"
+    name: "chessRayEmpty"
+    pattern: star(item: symbol(name: "empty"))
+    symbols [
+      {
+        max: 0
+        min: 0
+        name: "empty"
+      }
+    ]
+  }
+]
+
+placements {
+  placement "tabletop" {
+    prototype: "tabletop"
+    board {
+      move: "move"
+      occupancy: "board"
+      plan: "plan"
+      topology: "chessBoard"
+      turn: "turn"
+      verdict: "verdict"
+    }
+    position [-8, -0.5, 12]
+    solid
+  }
+
+  for i in range(0, 8) {
+    piecePlacement($"piece{i}", $"piece_white_{backRankTypes[i]}", boardCoords[i], -0.7)
+  }
+
+  for i in range(0, 8) {
+    piecePlacement($"piece{8 + i}", "piece_white_pawn", boardCoords[i], -0.5)
+  }
+
+  for i in range(0, 8) {
+    piecePlacement($"piece{16 + i}", "piece_black_pawn", boardCoords[i], 0.5)
+  }
+
+  for i in range(0, 8) {
+    piecePlacement($"piece{24 + i}", $"piece_black_{backRankTypes[i]}", boardCoords[i], 0.7)
+  }
+
+  for r in range(0, 8) {
+    for c in range(0, 8) {
+      placement $"boardSquare-{r * 8 + c}" {
+        prototype: squareTypes[(r + c) % 2]
+        parent: "tabletop"
+        position [boardCoords[c], 1.305, boardCoords[r]]
+      }
+    }
+  }
+}
+
+prototypes {
+  prototype "tabletop" {
+    document {
+      name: "tabletop"
+      palette [
+        {
+          color: "#8A6A45"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "top" {
+        material: 0
+        position [0, 1.25, 0]
+        rotation: "state.transforms.identity"
+        scale [1, 0.05, 1]
+      }
+
+      shape Cylinder "leg" {
+        material: 0
+        position [0, 0.6, 0]
+        rotation: "state.transforms.identity"
+        scale [0.08, 0.6, 0.08]
+      }
+    }
+  }
+
+  for color in ["white", "black"] {
+    pieceProto(color, "pawn", 0.035, 0.09, 0.035)
+    pieceProto(color, "knight", 0.04, 0.12, 0.04)
+    pieceProto(color, "bishop", 0.04, 0.15, 0.04)
+    pieceProto(color, "rook", 0.05, 0.11, 0.05)
+    crownedPieceProto(color, "queen", 0.045, 0.17, 0.045, 0.055, 0.055, 0.055, 0.203)
+    crownedPieceProto(color, "king", 0.045, 0.19, 0.045, 0.06, 0.06, 0.06, 0.226)
+  }
+
+  squareProto("boardSquareLight", "light")
+  squareProto("boardSquareDark", "dark")
+}
+
+rule "tabletop-settle-hold-advance" {
+  when $physics:quiescent == 1 and settleHold < 60
+  mode: "Level"
+  settleHold += 1
+}
+
+rule "tabletop-settle-hold-reset" {
+  when $physics:quiescent != 1
+  mode: "Level"
+  settleHold = 0
+}
+
+rule "tabletop-derive-cell-upright" {
+  when settleHold == 60 and $upright:placement:$each >= 0.5
+  mode: "Edge"
+  forEach: "pieceCode"
+  pieceCell[$each] = $board:cellOf:board:placement:$each
+}
+
+rule "tabletop-derive-cell-tilted" {
+  when settleHold == 60 and not $upright:placement:$each >= 0.5
+  mode: "Edge"
+  forEach: "pieceCode"
+  pieceCell[$each] = -1
+}
+
+rule "tabletop-board-collisions" {
+  when settleHold == 60
+  mode: "Edge"
+  boardCollisions = $reduce:count:pieceCell:between:0:63 + setBitCount($board:mask:board:0:0) - 64
+}
+
+rule "tabletop-game-start-snapshot" {
+  when settleHold == 60 and gameStarted == 0 and boardCollisions == 0
+  mode: "Edge"
+  transform t = boardCombine(left: "board", operation: "Copy", row: "lastLegal")
+}
+
+rule "tabletop-candidate-cells" {
+  when settleHold == 60
+  bind ownBefore : Int = turn == 0 ? $board:mask:lastLegal:1:6 : $board:mask:lastLegal:-6:-1
+  bind ownAfter : Int = turn == 0 ? $board:mask:board:1:6 : $board:mask:board:-6:-1
+  bind sources : Int = $bind:ownBefore & ~($board:mask:board:1:6 | $board:mask:board:-6:-1)
+  bind destinations : Int = $bind:ownAfter & ~$bind:ownBefore
+  bind kingBefore : Int = turn == 0 ? $board:mask:lastLegal:6:6 : $board:mask:lastLegal:-6:-6
+  bind kingAfter : Int = turn == 0 ? $board:mask:board:6:6 : $board:mask:board:-6:-6
+  bind target : Int = ($bind:sources & $bind:kingBefore) != 0 ? $bind:destinations & $bind:kingAfter : $bind:destinations
+  mode: "Edge"
+  move[from] = $bind:sources == 0 ? -1 : trailingZeroCount(($bind:sources & $bind:kingBefore) != 0 ? $bind:sources & $bind:kingBefore : $bind:sources)
+  move[to] = $bind:target == 0 ? -1 : trailingZeroCount($bind:target)
+}
+
+rule "tabletop-candidate-move" {
+  when settleHold == 60
+  bind mover : Int = lastLegal[move[from]]
+  bind kind : Int = (move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? 0 : (absolute($bind:mover) == 6) & (absolute(move[to] - move[from]) == 2) ? 4 : (absolute($bind:mover) == 1) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? 3 : lastLegal[move[to]] != 0 ? 2 : 1
+  mode: "Edge"
+  setState(expression: "$bind:mover", key: "mover", state: "move")
+  setState(expression: "$bind:kind", key: "kind", state: "move")
+  move[captured] = $bind:kind == 3 ? lastLegal[(move[to] - 8 * (1 - 2 * turn))] : lastLegal[move[to]]
+}
+
+rule "tabletop-candidate-match" {
+  when settleHold == 60
+  bind changed : Int = (($board:mask:board:-3:-2 | $board:mask:board:1:2 | $board:mask:board:5:6) ^ ($board:mask:lastLegal:-3:-2 | $board:mask:lastLegal:1:2 | $board:mask:lastLegal:5:6)) | (($board:mask:board:-5:-3 | $board:mask:board:2:5) ^ ($board:mask:lastLegal:-5:-3 | $board:mask:lastLegal:2:5)) | (($board:mask:board:-4:3) ^ ($board:mask:lastLegal:-4:3)) | (($board:mask:board:0:7) ^ ($board:mask:lastLegal:0:7))
+  bind from : Int = move[from]
+  bind to : Int = move[to]
+  bind sign : Int = 1 - 2 * turn
+  bind clear : Int = move[kind] == 4 ? ($bind:from & 56) + ($bind:to > $bind:from ? 7 : 0) : move[kind] == 3 ? $bind:to - 8 * $bind:sign : -1
+  bind rook : Int = move[kind] == 4 ? (($bind:from + $bind:to) >> 1) : -1
+  bind clearUnique : Int = ($bind:clear >= 0) & ($bind:clear < 64) & ($bind:clear != $bind:from) & ($bind:clear != $bind:to)
+  bind rookUnique : Int = ($bind:rook >= 0) & ($bind:rook < 64) & ($bind:rook != $bind:from) & ($bind:rook != $bind:to) & ($bind:rook != $bind:clear)
+  bind footprint : Int = (($bind:from >= 0) * (1 << maximum($bind:from, 0))) | (($bind:to >= 0) * (1 << maximum($bind:to, 0))) | ($bind:clearUnique * (1 << clamp($bind:clear, 0, 63))) | ($bind:rookUnique * (1 << clamp($bind:rook, 0, 63)))
+  bind landed : Int = (absolute(move[mover]) == 1) & ($bind:to / 8 == (turn == 0 ? 7 : 0)) ? board[move[to]] : move[mover]
+  mode: "Edge"
+  boardMismatch = setBitCount($bind:changed & ~$bind:footprint) + ($bind:from >= 0) * (board[move[from]] != 0) + ($bind:to >= 0) * (board[move[to]] != $bind:landed) + $bind:clearUnique * (board[($bind:clear)] != 0) + $bind:rookUnique * (board[($bind:rook)] != 4 * $bind:sign)
+  boardChanged = setBitCount($bind:changed)
+}
+
+rule "tabletop-castle-transit-attacked" {
+  when settleHold == 60 and move[kind] == 4
+  mode: "Edge"
+  castleTransitAttacked[wk] = (($board:mask:lastLegal:-1:-1 & 0x5000) != 0) | (($board:mask:lastLegal:-2:-2 & 0x508800) != 0) | (($board:mask:lastLegal:-6:-6 & 0x7050) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[5] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[5] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[5]
+  castleTransitAttacked[wq] = (($board:mask:lastLegal:-1:-1 & 0x1400) != 0) | (($board:mask:lastLegal:-2:-2 & 0x142200) != 0) | (($board:mask:lastLegal:-6:-6 & 0x1C14) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[3] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[3] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[3]
+  castleTransitAttacked[bk] = (($board:mask:lastLegal:1:1 & byteSwap(0x5000)) != 0) | (($board:mask:lastLegal:2:2 & byteSwap(0x508800)) != 0) | (($board:mask:lastLegal:6:6 & byteSwap(0x7050)) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[61] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[61] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[61]
+  castleTransitAttacked[bq] = (($board:mask:lastLegal:1:1 & byteSwap(0x1400)) != 0) | (($board:mask:lastLegal:2:2 & byteSwap(0x142200)) != 0) | (($board:mask:lastLegal:6:6 & byteSwap(0x1C14)) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[59] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[59] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[59]
+}
+
+rule "tabletop-castle-legal" {
+  when settleHold == 60
+  bind sign : Int = 1 - 2 * turn
+  bind home : Int = 4 + 56 * turn
+  bind direction : Int = move[to] > move[from] ? 1 : -1
+  bind rook : Int = $bind:home + ($bind:direction == 1 ? 3 : -4)
+  bind right : Int = ($bind:direction == 1 ? 2 : 1) << (2 * turn)
+  bind path : Int = $bind:direction == 1 ? $match:chessRayEmpty:lastLegal:E:cell[move[from]] : $match:chessRayEmpty:lastLegal:W:cell[move[from]]
+  bind attacked : Int = turn == 0 ? ($bind:direction == 1 ? castleTransitAttacked[wk] : castleTransitAttacked[wq]) : ($bind:direction == 1 ? castleTransitAttacked[bk] : castleTransitAttacked[bq])
+  mode: "Edge"
+  castleLegal = (move[kind] == 4) & (move[from] == $bind:home) & (move[to] == $bind:home + 2 * $bind:direction) & ((castleRights & $bind:right) == 0) & (lastLegal[($bind:rook)] == 4 * $bind:sign) & ($bind:path == $bind:rook) & (previousInCheck[turn[$value]] == 0) & ($bind:attacked == 0)
+}
+
+rule "tabletop-shape-final" {
+  when settleHold == 60
+  bind piece : Int = absolute(move[mover])
+  bind dx : Int = absolute(move[to] % 8 - move[from] % 8)
+  bind dy : Int = (move[to] / 8 - move[from] / 8) * (1 - 2 * turn)
+  bind straight : Int = maximum(maximum(maximum($match:chessRayEmpty:lastLegal:N:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:S:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:E:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:W:cell[move[to]] == move[from])
+  bind diagonal : Int = maximum(maximum(maximum($match:chessRayEmpty:lastLegal:NE:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:SE:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:SW:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:NW:cell[move[to]] == move[from])
+  bind middle : Int = move[from] + 8 * (1 - 2 * turn)
+  bind pawn : Int = ($bind:dx == 0) & (lastLegal[move[to]] == 0) & maximum($bind:dy == 1, ($bind:dy == 2) & (move[from] / 8 == (turn == 0 ? 1 : 6)) & (lastLegal[($bind:middle)] == 0)) | ($bind:dx == 1) & ($bind:dy == 1) & maximum(move[kind] == 2, (move[kind] == 3) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1))
+  mode: "Edge"
+  shapeLegal = $bind:piece == 1 ? $bind:pawn : $bind:piece == 2 ? $bind:dx * absolute($bind:dy) == 2 : $bind:piece == 3 ? $bind:diagonal : $bind:piece == 4 ? $bind:straight : $bind:piece == 5 ? maximum($bind:diagonal, $bind:straight) : $bind:piece == 6 ? maximum((maximum($bind:dx, absolute($bind:dy)) == 1) & (move[kind] != 4), castleLegal) : 0
+}
+
+rule "tabletop-check-white" {
+  when settleHold == 60
+  bind kingMask : Int = lowestSetBit($board:mask:board:6:6)
+  bind kingSquare : Int = $bind:kingMask == 0 ? -1 : trailingZeroCount($bind:kingMask)
+  bind nearFiles : Int = boardShift($bind:kingMask, chessBoard, E) | boardShift($bind:kingMask, chessBoard, W)
+  bind farFiles : Int = (boardShift($bind:nearFiles, chessBoard, E) | boardShift($bind:nearFiles, chessBoard, W)) & ~$bind:kingMask
+  bind kingBand : Int = $bind:kingMask | $bind:nearFiles
+  bind closeHit : Int = ((boardShift($bind:nearFiles, chessBoard, S) & $board:mask:board:-1:-1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, S) | boardShift($bind:kingBand, chessBoard, N)) & $board:mask:board:-6:-6)) != 0
+  bind knightHit : Int = ((boardShift(boardShift($bind:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($bind:nearFiles, chessBoard, N), chessBoard, N) | boardShift($bind:farFiles, chessBoard, S) | boardShift($bind:farFiles, chessBoard, N)) & $board:mask:board:-2:-2) != 0
+  bind slideHit : Int = ($bind:kingMask != 0) & (`$board:attacks:board:-5:-4:N,S,E,W`[($bind:kingSquare)] | `$board:attacks:board:-3:-3:NE,SE,SW,NW`[($bind:kingSquare)] | `$board:attacks:board:-5:-5:NE,SE,SW,NW`[($bind:kingSquare)])
+  mode: "Edge"
+  inCheck[0] = $bind:closeHit | $bind:knightHit | $bind:slideHit
+}
+
+rule "tabletop-check-black" {
+  when settleHold == 60
+  bind kingMask : Int = lowestSetBit($board:mask:board:-6:-6)
+  bind kingSquare : Int = $bind:kingMask == 0 ? -1 : trailingZeroCount($bind:kingMask)
+  bind nearFiles : Int = boardShift($bind:kingMask, chessBoard, E) | boardShift($bind:kingMask, chessBoard, W)
+  bind farFiles : Int = (boardShift($bind:nearFiles, chessBoard, E) | boardShift($bind:nearFiles, chessBoard, W)) & ~$bind:kingMask
+  bind kingBand : Int = $bind:kingMask | $bind:nearFiles
+  bind closeHit : Int = ((boardShift($bind:nearFiles, chessBoard, N) & $board:mask:board:1:1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, S) | boardShift($bind:kingBand, chessBoard, N)) & $board:mask:board:6:6)) != 0
+  bind knightHit : Int = ((boardShift(boardShift($bind:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($bind:nearFiles, chessBoard, N), chessBoard, N) | boardShift($bind:farFiles, chessBoard, S) | boardShift($bind:farFiles, chessBoard, N)) & $board:mask:board:2:2) != 0
+  bind slideHit : Int = ($bind:kingMask != 0) & (`$board:attacks:board:4:5:N,S,E,W`[($bind:kingSquare)] | `$board:attacks:board:3:3:NE,SE,SW,NW`[($bind:kingSquare)] | `$board:attacks:board:5:5:NE,SE,SW,NW`[($bind:kingSquare)])
+  mode: "Edge"
+  inCheck[1] = $bind:closeHit | $bind:knightHit | $bind:slideHit
+}
+
+rule "tabletop-game-start-check" {
+  when settleHold == 60 and gameStarted == 0 and boardCollisions == 0
+  mode: "Edge"
+  previousInCheck[0] = inCheck[0]
+  previousInCheck[1] = inCheck[1]
+  gameStarted = 1
+}
+
+rule "tabletop-verdict" {
+  when settleHold == 60
+  bind sign : Int = 1 - 2 * turn
+  bind promotes : Int = (absolute(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0))
+  bind replacement : Int = $bind:promotes ? (board[move[to]] * $bind:sign >= 2) & (board[move[to]] * $bind:sign <= 5) : board[move[to]] == move[mover]
+  bind kings : Int = (setBitCount($board:mask:board:6:6) == 1) & (setBitCount($board:mask:board:-6:-6) == 1)
+  mode: "Edge"
+  verdict = (move[kind] >= 1) & (move[kind] <= 4) & (boardMismatch == 0) & (boardCollisions == 0) & shapeLegal & $bind:replacement & (move[mover] * $bind:sign > 0) & (move[captured] * $bind:sign <= 0) & (inCheck[turn[$value]] == 0) & $bind:kings
+  promotionPending[0] = boardChanged == 0 ? -1 : promotionPending[0]
+  promotionPending[1] = boardChanged == 0 ? -1 : promotionPending[1]
+}
+
+rule "tabletop-promotion-pending" {
+  gate: all(predicates: [
+    compareState(comparison: "Equal", state: "settleHold", value: 60)
+    compareState(comparison: "Equal", state: "verdict", value: 0)
+    compareValue(comparison: "Equal", kind: "Int", left: "(absolute(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0)) & (board[move[to]] == move[mover]) & shapeLegal & (boardMismatch == 0) & (boardCollisions == 0) & (inCheck[turn[$value]] == 0) & (setBitCount($board:mask:board:6:6) == 1) & (setBitCount($board:mask:board:-6:-6) == 1)", right: "1")
+  ])
+  mode: "Edge"
+  promotionPending[turn[$value]] = move[to]
+}
+
+rule "tabletop-advance-turn" {
+  when settleHold == 60 and verdict == 1 and move[kind] != 0
+  bind lostRooks : Int = (($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))
+  bind lostKings : Int = (($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))
+  mode: "Edge"
+  transaction {
+    castleRights = castleRights | parallelBitExtract($bind:lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract($bind:lostKings, (1 << 4) | (1 << 60)), 5) * 3)
+    transform t = boardCombine(left: "board", operation: "Copy", row: "lastLegal")
+    previousInCheck[0] = inCheck[0]
+    previousInCheck[1] = inCheck[1]
+    enPassantTarget = (absolute(move[mover]) == 1) & (absolute(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1
+    turn = 1 - turn
+    promotionPending[0] = -1
+    promotionPending[1] = -1
+  }
+}
+
+rule "tabletop-board-history" {
+  when settleHold == 60 and verdict == 1 and move[kind] != 0
+  mode: "Edge"
+  push boardHistory = $board:canonical:board
+  repetitionCount = 1 + ($history:boardHistory:0 == $history:boardHistory:2) + ($history:boardHistory:0 == $history:boardHistory:4) + ($history:boardHistory:0 == $history:boardHistory:6) + ($history:boardHistory:0 == $history:boardHistory:8) + ($history:boardHistory:0 == $history:boardHistory:10)
+}
+
+rule "tabletop-apply-illegal" {
+  when settleHold == 60 and verdict == 0 and move[kind] != 0 and boardMismatch == 0 and promotionPending[0] == -1 and promotionPending[1] == -1
+  mode: "Edge"
+  illegalCount += 1
+}
+
+state {
+  lattices [
+    grid(band: 0.3, cellSize: 0.2, depth: 8, directions: [
+      {
+        name: "N"
+        x: 0
+        y: -1
+        z: 0
+      }
+      {
+        name: "NE"
+        x: 1
+        y: -1
+        z: 0
+      }
+      {
+        name: "E"
+        x: 1
+        y: 0
+        z: 0
+      }
+      {
+        name: "SE"
+        x: 1
+        y: 1
+        z: 0
+      }
+      {
+        name: "S"
+        x: 0
+        y: 1
+        z: 0
+      }
+      {
+        name: "SW"
+        x: -1
+        y: 1
+        z: 0
+      }
+      {
+        name: "W"
+        x: -1
+        y: 0
+        z: 0
+      }
+      {
+        name: "NW"
+        x: -1
+        y: -1
+        z: 0
+      }
+    ], name: "chessBoard", origin: [-0.8, 1.25, -0.8], width: 8, wrap: "None")
+  ]
+
+  world {
+    row {
+      capacity: 64
+      domain: cellsOf(topology: "chessBoard")
+      kind: "Int"
+      max: 6
+      min: -6
+      name: "board"
+      inverse {
+        tokens: "pieceCell"
+        codes: "pieceCode"
+      }
+    }
+
+    row {
+      capacity: 64
+      cells [
+        {
+          key: "0"
+          value: 4
+        }
+        {
+          key: "1"
+          value: 2
+        }
+        {
+          key: "2"
+          value: 3
+        }
+        {
+          key: "3"
+          value: 5
+        }
+        {
+          key: "4"
+          value: 6
+        }
+        {
+          key: "5"
+          value: 3
+        }
+        {
+          key: "6"
+          value: 2
+        }
+        {
+          key: "7"
+          value: 4
+        }
+        {
+          key: "8"
+          value: 1
+        }
+        {
+          key: "9"
+          value: 1
+        }
+        {
+          key: "10"
+          value: 1
+        }
+        {
+          key: "11"
+          value: 1
+        }
+        {
+          key: "12"
+          value: 1
+        }
+        {
+          key: "13"
+          value: 1
+        }
+        {
+          key: "14"
+          value: 1
+        }
+        {
+          key: "15"
+          value: 1
+        }
+        {
+          key: "16"
+          value: 0
+        }
+        {
+          key: "17"
+          value: 0
+        }
+        {
+          key: "18"
+          value: 0
+        }
+        {
+          key: "19"
+          value: 0
+        }
+        {
+          key: "20"
+          value: 0
+        }
+        {
+          key: "21"
+          value: 0
+        }
+        {
+          key: "22"
+          value: 0
+        }
+        {
+          key: "23"
+          value: 0
+        }
+        {
+          key: "24"
+          value: 0
+        }
+        {
+          key: "25"
+          value: 0
+        }
+        {
+          key: "26"
+          value: 0
+        }
+        {
+          key: "27"
+          value: 0
+        }
+        {
+          key: "28"
+          value: 0
+        }
+        {
+          key: "29"
+          value: 0
+        }
+        {
+          key: "30"
+          value: 0
+        }
+        {
+          key: "31"
+          value: 0
+        }
+        {
+          key: "32"
+          value: 0
+        }
+        {
+          key: "33"
+          value: 0
+        }
+        {
+          key: "34"
+          value: 0
+        }
+        {
+          key: "35"
+          value: 0
+        }
+        {
+          key: "36"
+          value: 0
+        }
+        {
+          key: "37"
+          value: 0
+        }
+        {
+          key: "38"
+          value: 0
+        }
+        {
+          key: "39"
+          value: 0
+        }
+        {
+          key: "40"
+          value: 0
+        }
+        {
+          key: "41"
+          value: 0
+        }
+        {
+          key: "42"
+          value: 0
+        }
+        {
+          key: "43"
+          value: 0
+        }
+        {
+          key: "44"
+          value: 0
+        }
+        {
+          key: "45"
+          value: 0
+        }
+        {
+          key: "46"
+          value: 0
+        }
+        {
+          key: "47"
+          value: 0
+        }
+        {
+          key: "48"
+          value: -1
+        }
+        {
+          key: "49"
+          value: -1
+        }
+        {
+          key: "50"
+          value: -1
+        }
+        {
+          key: "51"
+          value: -1
+        }
+        {
+          key: "52"
+          value: -1
+        }
+        {
+          key: "53"
+          value: -1
+        }
+        {
+          key: "54"
+          value: -1
+        }
+        {
+          key: "55"
+          value: -1
+        }
+        {
+          key: "56"
+          value: -4
+        }
+        {
+          key: "57"
+          value: -2
+        }
+        {
+          key: "58"
+          value: -3
+        }
+        {
+          key: "59"
+          value: -5
+        }
+        {
+          key: "60"
+          value: -6
+        }
+        {
+          key: "61"
+          value: -3
+        }
+        {
+          key: "62"
+          value: -2
+        }
+        {
+          key: "63"
+          value: -4
+        }
+      ]
+      domain: cellsOf(topology: "chessBoard")
+      kind: "Int"
+      max: 6
+      min: -6
+      name: "lastLegal"
+    }
+
+    row {
+      capacity: 64
+      domain: cellsOf(topology: "chessBoard")
+      kind: "Int"
+      name: "plan"
+    }
+
+    slot turn : Int = 0 bounds(minimum: 0, maximum: 1)
+
+    slot verdict : Int = 1 bounds(minimum: 0, maximum: 1)
+
+    slot illegalCount : Int = 0 bounds(minimum: 0, maximum: 50400)
+
+    slot settleHold : Int = 0 bounds(minimum: 0, maximum: 60)
+
+    slot gameStarted : Int = 0 bounds(minimum: 0, maximum: 1)
+
+    table pieceSetColors : Text {
+      white = "#F2E9D8"
+      black = "#2B2420"
+    }
+
+    table move : Int capacity(5) bounds(minimum: -6, maximum: 63) {
+      captured = 0
+      from = -1
+      kind = 0
+      mover = 0
+      to = -1
+    }
+
+    table pieceCode : Int capacity(32) bounds(minimum: -6, maximum: 6) {
+      piece0 = 4
+      piece1 = 2
+      piece2 = 3
+      piece3 = 5
+      piece4 = 6
+      piece5 = 3
+      piece6 = 2
+      piece7 = 4
+      piece8 = 1
+      piece9 = 1
+      piece10 = 1
+      piece11 = 1
+      piece12 = 1
+      piece13 = 1
+      piece14 = 1
+      piece15 = 1
+      piece16 = -1
+      piece17 = -1
+      piece18 = -1
+      piece19 = -1
+      piece20 = -1
+      piece21 = -1
+      piece22 = -1
+      piece23 = -1
+      piece24 = -4
+      piece25 = -2
+      piece26 = -3
+      piece27 = -5
+      piece28 = -6
+      piece29 = -3
+      piece30 = -2
+      piece31 = -4
+    }
+
+    table pieceCell : Int capacity(32) bounds(minimum: -1, maximum: 63) {
+      piece0 = -1
+      piece1 = -1
+      piece2 = -1
+      piece3 = -1
+      piece4 = -1
+      piece5 = -1
+      piece6 = -1
+      piece7 = -1
+      piece8 = -1
+      piece9 = -1
+      piece10 = -1
+      piece11 = -1
+      piece12 = -1
+      piece13 = -1
+      piece14 = -1
+      piece15 = -1
+      piece16 = -1
+      piece17 = -1
+      piece18 = -1
+      piece19 = -1
+      piece20 = -1
+      piece21 = -1
+      piece22 = -1
+      piece23 = -1
+      piece24 = -1
+      piece25 = -1
+      piece26 = -1
+      piece27 = -1
+      piece28 = -1
+      piece29 = -1
+      piece30 = -1
+      piece31 = -1
+    }
+
+    table promotionPending : Int capacity(2) bounds(minimum: -1, maximum: 63) {
+      "0" = -1
+      "1" = -1
+    }
+
+    row {
+      cells [
+        {
+          key: "$value"
+          value: -1
+        }
+      ]
+      kind: "Int"
+      max: 63
+      min: -1
+      name: "enPassantTarget"
+    }
+
+    table inCheck : Int capacity(2) bounds(minimum: 0, maximum: 1) {
+      "0" = 0
+      "1" = 0
+    }
+
+    row {
+      domain: ring(capacity: 12, empty: -1)
+      kind: "Int"
+      name: "boardHistory"
+    }
+
+    row {
+      cells [
+        {
+          key: "$value"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      max: 12
+      min: 0
+      name: "repetitionCount"
+    }
+
+    row {
+      cells [
+        {
+          key: "$value"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      max: 1
+      min: 0
+      name: "shapeLegal"
+    }
+
+    row {
+      cells [
+        {
+          key: "$value"
+          value: 0
+        }
+      ]
+      kind: "Int"
+      max: 1
+      min: 0
+      name: "castleLegal"
+    }
+
+    table boardColors : Text {
+      light = "#F0D9B5"
+      dark = "#8B5A2B"
+    }
+
+    slot castleRights : Int = 0 bounds(minimum: 0, maximum: 15)
+
+    table previousInCheck : Int capacity(2) bounds(minimum: 0, maximum: 1) {
+      "0" = 0
+      "1" = 0
+    }
+
+    table castleTransitAttacked : Int capacity(4) bounds(minimum: 0, maximum: 1) {
+      wk = 0
+      wq = 0
+      bk = 0
+      bq = 0
+    }
+
+    slot boardMismatch : Int = 0 bounds(minimum: 0, maximum: 64)
+
+    slot boardChanged : Int = 0 bounds(minimum: 0, maximum: 64)
+
+    slot boardCollisions : Int = 0 bounds(minimum: 0, maximum: 64)
+  }
+}

@@ -1,0 +1,568 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+export action solitaireFreecell
+export binding solitaireFreecell
+export read solitaireFreecell, solitaireFreecellCards, solitaireFreecellFace, solitaireFreecellRank, solitaireFreecellSuit
+
+state {
+  world {
+    table solitaireFreecellCards : Int capacity(52) {
+      "0" = 0
+      "1" = 1
+      "2" = 2
+      "3" = 3
+      "4" = 4
+      "5" = 5
+      "6" = 6
+      "7" = 7
+      "8" = 8
+      "9" = 9
+      "10" = 10
+      "11" = 11
+      "12" = 12
+      "13" = 13
+      "14" = 14
+      "15" = 15
+      "16" = 16
+      "17" = 17
+      "18" = 18
+      "19" = 19
+      "20" = 20
+      "21" = 21
+      "22" = 22
+      "23" = 23
+      "24" = 24
+      "25" = 25
+      "26" = 26
+      "27" = 27
+      "28" = 28
+      "29" = 29
+      "30" = 30
+      "31" = 31
+      "32" = 32
+      "33" = 33
+      "34" = 34
+      "35" = 35
+      "36" = 36
+      "37" = 37
+      "38" = 38
+      "39" = 39
+      "40" = 40
+      "41" = 41
+      "42" = 42
+      "43" = 43
+      "44" = 44
+      "45" = 45
+      "46" = 46
+      "47" = 47
+      "48" = 48
+      "49" = 49
+      "50" = 50
+      "51" = 51
+    }
+
+    row {
+      name: "solitaireFreecellRank"
+      kind: "Int"
+      domain: keysOf(row: "solitaireFreecellCards")
+      capacity: 52
+      cells: map(range(0, 52), i => { key: $"{i}", value: (i % 13) + 1 })
+    }
+
+    row {
+      name: "solitaireFreecellSuit"
+      kind: "Int"
+      domain: keysOf(row: "solitaireFreecellCards")
+      capacity: 52
+      cells: map(range(0, 52), i => { key: $"{i}", value: floor(i / 13) })
+    }
+
+    row {
+      name: "solitaireFreecellFace"
+      kind: "Int"
+      domain: keysOf(row: "solitaireFreecellCards")
+      capacity: 52
+      cells: map(range(0, 52), i => { key: $"{i}", value: 0 })
+    }
+    pile solitaireFreecellPile0 of solitaireFreecellCards capacity(52) {
+      "0"
+      "1"
+      "2"
+      "3"
+      "4"
+      "5"
+      "6"
+      "7"
+      "8"
+      "9"
+      "10"
+      "11"
+      "12"
+      "13"
+      "14"
+      "15"
+      "16"
+      "17"
+      "18"
+      "19"
+      "20"
+      "21"
+      "22"
+      "23"
+      "24"
+      "25"
+      "26"
+      "27"
+      "28"
+      "29"
+      "30"
+      "31"
+      "32"
+      "33"
+      "34"
+      "35"
+      "36"
+      "37"
+      "38"
+      "39"
+      "40"
+      "41"
+      "42"
+      "43"
+      "44"
+      "45"
+      "46"
+      "47"
+      "48"
+      "49"
+      "50"
+      "51"
+    }
+
+    pile solitaireFreecellPile2 of solitaireFreecellCards capacity(52) { }
+
+    pile solitaireFreecellPile3 of solitaireFreecellCards capacity(52) { }
+
+    pile solitaireFreecellPile4 of solitaireFreecellCards capacity(52) { }
+
+    pile solitaireFreecellPile5 of solitaireFreecellCards capacity(52) { }
+
+    pile solitaireFreecellPile6 of solitaireFreecellCards capacity(52) { }
+
+    pile solitaireFreecellPile7 of solitaireFreecellCards capacity(52) { }
+
+    pile solitaireFreecellPile8 of solitaireFreecellCards capacity(52) { }
+
+    pile solitaireFreecellPile9 of solitaireFreecellCards capacity(52) { }
+
+    pile solitaireFreecellPile10 of solitaireFreecellCards capacity(13) { }
+
+    pile solitaireFreecellPile11 of solitaireFreecellCards capacity(13) { }
+
+    pile solitaireFreecellPile12 of solitaireFreecellCards capacity(13) { }
+
+    pile solitaireFreecellPile13 of solitaireFreecellCards capacity(13) { }
+
+    pile solitaireFreecellPile14 of solitaireFreecellCards capacity(1) { }
+
+    pile solitaireFreecellPile15 of solitaireFreecellCards capacity(1) { }
+
+    pile solitaireFreecellPile16 of solitaireFreecellCards capacity(1) { }
+
+    pile solitaireFreecellPile17 of solitaireFreecellCards capacity(1) { }
+
+    table solitaireFreecell : Int capacity(27) {
+      request = 0
+      applied = 0
+      action = 0
+      from = -1
+      to = -1
+      card = -1
+      option = 1
+      activeOption = 1
+      stage = 0
+      busy = 0
+      status = 0
+      result = 0
+      moves = 0
+      score = 0
+      passes = 0
+      sourceOk = 0
+      targetOk = 0
+      runLength = 0
+      emptyCells = 0
+      emptyColumns = 0
+      deals = 0
+      dealStep = 0
+      gatherStep = 0
+      scan = 0
+      changed = 0
+      attributeStep = 0
+      drawLeft = 0
+    }
+
+    row {
+      name: "solitaireFreecellStream"
+      kind: "Int"
+      draw {
+        generator {
+          source: "StreamDraw"
+        }
+        timing: "Event"
+      }
+    }
+  }
+}
+
+patterns [
+  {
+    name: "solitaireFreecellLength"
+    kind: "Int"
+    value: "1"
+    symbols [
+      {
+        name: "any"
+        min: 1
+        max: 1
+      }
+    ]
+    pattern: star(item: any())
+  }
+  {
+    name: "solitaireFreecellSingle"
+    kind: "Int"
+    value: "1"
+    symbols [
+      {
+        name: "any"
+        min: 1
+        max: 1
+      }
+    ]
+    pattern: any()
+  }
+  {
+    name: "solitaireFreecellRun"
+    kind: "Int"
+    value: "solitaireFreecellFace[$token] * (1 + (solitaireFreecellRank[$token] == solitaireFreecellRank[$previous] - 1) * (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[$previous] % 2))"
+    symbols [
+      {
+        name: "face"
+        min: 1
+        max: 2
+      }
+      {
+        name: "next"
+        min: 2
+        max: 2
+      }
+    ]
+    pattern: sequence(items: [
+      symbol(name: "face")
+      star(item: symbol(name: "next"))
+    ])
+  }
+  {
+    name: "solitaireFreecellLanding"
+    kind: "Int"
+    value: "(solitaireFreecellRank[$token] == solitaireFreecellRank[solitaireFreecell[card]] + 1) * (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[solitaireFreecell[card]] % 2)"
+    symbols [
+      {
+        name: "yes"
+        min: 1
+        max: 1
+      }
+    ]
+    pattern: sequence(items: [
+      star(item: any())
+      symbol(name: "yes")
+    ])
+  }
+]
+
+rule "solitaireFreecell-new-deal" {
+  gate: all(predicates: [
+    compareState(state: "solitaire", key: "table", comparison: "Equal", value: 3)
+    compareState(state: "solitaireFreecell", key: "request", comparison: "NotEqual", comparandState: "solitaireFreecell", comparandKey: "applied")
+    compareState(state: "solitaireFreecell", key: "stage", comparison: "Equal", value: 0)
+    compareState(state: "solitaireFreecell", key: "busy", comparison: "Equal", value: 0)
+    compareState(state: "solitaireFreecell", key: "action", comparison: "Equal", value: 1)
+    any(predicates: [
+      compareState(state: "solitaireFreecell", key: "option", comparison: "Equal", value: 1)
+    ])
+  ])
+  solitaireFreecell[activeOption] = solitaireFreecell[option]
+  solitaireFreecell[stage] = 1
+  solitaireFreecell[status] = 0
+  solitaireFreecell[result] = 0
+  solitaireFreecell[busy] = 1
+}
+
+rule "solitaireFreecell-gather" {
+  when solitaire[table] == 3 and solitaireFreecell[stage] == 1 and $reduce:count:$zones[solitaireFreecell[gatherStep]] > 0
+  zones [
+    "solitaireFreecellPile2"
+    "solitaireFreecellPile3"
+    "solitaireFreecellPile4"
+    "solitaireFreecellPile5"
+    "solitaireFreecellPile6"
+    "solitaireFreecellPile7"
+    "solitaireFreecellPile8"
+    "solitaireFreecellPile9"
+    "solitaireFreecellPile10"
+    "solitaireFreecellPile11"
+    "solitaireFreecellPile12"
+    "solitaireFreecellPile13"
+    "solitaireFreecellPile14"
+    "solitaireFreecellPile15"
+    "solitaireFreecellPile16"
+    "solitaireFreecellPile17"
+  ]
+  transform t = transfer(from: "$zones[solitaireFreecell[gatherStep]]", to: "solitaireFreecellPile0", selector: "Slice", key: "$zone:$zones[solitaireFreecell[gatherStep]]:first")
+}
+
+rule "solitaireFreecell-attributes-start" {
+  when solitaire[table] == 3 and solitaireFreecell[stage] == 1 and solitaireFreecell[gatherStep] == 15 and $reduce:count:solitaireFreecellPile0 == 52
+  solitaireFreecell[stage] = 5
+}
+
+rule "solitaireFreecell-reset-attributes" {
+  when solitaire[table] == 3 and solitaireFreecell[stage] == 5
+  solitaireFreecellFace[solitaireFreecell[attributeStep]] = 1
+}
+
+rule "solitaireFreecell-shuffle" {
+  when solitaire[table] == 3 and solitaireFreecell[stage] == 5 and solitaireFreecell[attributeStep] == 51
+  transaction {
+    shuffle solitaireFreecellPile0 with solitaireFreecellStream
+    solitaireFreecell[stage] = 3
+  }
+}
+
+rule "solitaireFreecell-deal" {
+  when solitaire[table] == 3 and solitaireFreecell[stage] == 3 and solitaireFreecell[dealStep] <= 51
+  zones [
+    "solitaireFreecellPile0"
+    ""
+    "solitaireFreecellPile2"
+    "solitaireFreecellPile3"
+    "solitaireFreecellPile4"
+    "solitaireFreecellPile5"
+    "solitaireFreecellPile6"
+    "solitaireFreecellPile7"
+    "solitaireFreecellPile8"
+    "solitaireFreecellPile9"
+    "solitaireFreecellPile10"
+    "solitaireFreecellPile11"
+    "solitaireFreecellPile12"
+    "solitaireFreecellPile13"
+    "solitaireFreecellPile14"
+    "solitaireFreecellPile15"
+    "solitaireFreecellPile16"
+    "solitaireFreecellPile17"
+  ]
+  draw solitaireFreecellPile0 to $zones[2 + (solitaireFreecell[dealStep] % 8)]
+}
+
+rule "solitaireFreecell-deal-finish" {
+  when solitaire[table] == 3 and solitaireFreecell[stage] == 3 and solitaireFreecell[dealStep] == 51
+  transaction {
+    solitaireFreecell[stage] = 0
+    solitaireFreecell[status] = 1
+    solitaireFreecell[moves] = 0
+    solitaireFreecell[score] = 0
+    solitaireFreecell[passes] = 0
+    solitaireFreecell[deals] = solitaireFreecell[deals] + 1
+    solitaireFreecell[result] = 1
+    solitaireFreecell[applied] = solitaireFreecell[request]
+  }
+}
+
+rule "solitaireFreecell-prepare-move" {
+  when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 0 and solitaireFreecell[status] == 1 and solitaireFreecell[action] == 2
+  solitaireFreecell[sourceOk] = 0
+  solitaireFreecell[targetOk] = 0
+  solitaireFreecell[runLength] = 0
+}
+
+rule "solitaireFreecell-count-workspace" {
+  when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 0 and solitaireFreecell[status] == 1 and solitaireFreecell[action] == 2
+  solitaireFreecell[emptyCells] = ($reduce:count:solitaireFreecellPile14 == 0) + ($reduce:count:solitaireFreecellPile15 == 0) + ($reduce:count:solitaireFreecellPile16 == 0) + ($reduce:count:solitaireFreecellPile17 == 0)
+  solitaireFreecell[emptyColumns] = ($reduce:count:solitaireFreecellPile2 == 0) + ($reduce:count:solitaireFreecellPile3 == 0) + ($reduce:count:solitaireFreecellPile4 == 0) + ($reduce:count:solitaireFreecellPile5 == 0) + ($reduce:count:solitaireFreecellPile6 == 0) + ($reduce:count:solitaireFreecellPile7 == 0) + ($reduce:count:solitaireFreecellPile8 == 0) + ($reduce:count:solitaireFreecellPile9 == 0)
+}
+
+rule "solitaireFreecell-source" {
+  when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 0 and solitaireFreecell[status] == 1 and solitaireFreecell[action] == 2 and $zones[solitaireFreecell[from]][solitaireFreecell[card]] == 1
+  zones [
+    ""
+    ""
+    "solitaireFreecellPile2"
+    "solitaireFreecellPile3"
+    "solitaireFreecellPile4"
+    "solitaireFreecellPile5"
+    "solitaireFreecellPile6"
+    "solitaireFreecellPile7"
+    "solitaireFreecellPile8"
+    "solitaireFreecellPile9"
+  ]
+  solitaireFreecell[sourceOk] = $match:solitaireFreecellRun:$zones[solitaireFreecell[from]][solitaireFreecell[card]]
+  solitaireFreecell[runLength] = $match:solitaireFreecellLength:$zones[solitaireFreecell[from]]:prefix[solitaireFreecell[card]]
+}
+
+rule "solitaireFreecell-source-14" {
+  when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 0 and solitaireFreecell[status] == 1 and solitaireFreecell[action] == 2 and $zones[solitaireFreecell[from]][solitaireFreecell[card]] == 1
+  zones [
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    "solitaireFreecellPile14"
+    "solitaireFreecellPile15"
+    "solitaireFreecellPile16"
+    "solitaireFreecellPile17"
+  ]
+  solitaireFreecell[sourceOk] = $match:solitaireFreecellSingle:$zones[solitaireFreecell[from]][solitaireFreecell[card]]
+  solitaireFreecell[runLength] = $match:solitaireFreecellLength:$zones[solitaireFreecell[from]]:prefix[solitaireFreecell[card]]
+}
+
+rule "solitaireFreecell-target" {
+  when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 0 and solitaireFreecell[status] == 1 and solitaireFreecell[action] == 2 and solitaireFreecell[sourceOk] == 1
+  zones [
+    ""
+    ""
+    "solitaireFreecellPile2"
+    "solitaireFreecellPile3"
+    "solitaireFreecellPile4"
+    "solitaireFreecellPile5"
+    "solitaireFreecellPile6"
+    "solitaireFreecellPile7"
+    "solitaireFreecellPile8"
+    "solitaireFreecellPile9"
+  ]
+  solitaireFreecell[targetOk] = ($reduce:count:$zones[solitaireFreecell[to]] == 0 ? 1 : $match:solitaireFreecellLanding:$zones[solitaireFreecell[to]]) * (solitaireFreecell[runLength] <= ((solitaireFreecell[emptyCells] + 1) << maximum(0, solitaireFreecell[emptyColumns] - ($reduce:count:$zones[solitaireFreecell[to]] == 0))))
+}
+
+rule "solitaireFreecell-target-10" {
+  when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 0 and solitaireFreecell[status] == 1 and solitaireFreecell[action] == 2 and solitaireFreecell[sourceOk] == 1
+  zones [
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    "solitaireFreecellPile10"
+    "solitaireFreecellPile11"
+    "solitaireFreecellPile12"
+    "solitaireFreecellPile13"
+  ]
+  solitaireFreecell[targetOk] = (solitaireFreecell[runLength] == 1) * (solitaireFreecellSuit[solitaireFreecell[card]] == solitaireFreecell[to] - 10) * (solitaireFreecellRank[solitaireFreecell[card]] == $reduce:count:$zones[solitaireFreecell[to]] + 1)
+}
+
+rule "solitaireFreecell-target-14" {
+  when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 0 and solitaireFreecell[status] == 1 and solitaireFreecell[action] == 2 and solitaireFreecell[sourceOk] == 1
+  zones [
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    "solitaireFreecellPile14"
+    "solitaireFreecellPile15"
+    "solitaireFreecellPile16"
+    "solitaireFreecellPile17"
+  ]
+  solitaireFreecell[targetOk] = ($reduce:count:$zones[solitaireFreecell[to]] == 0) * (solitaireFreecell[runLength] == 1)
+}
+
+rule "solitaireFreecell-move" {
+  when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 0 and solitaireFreecell[status] == 1 and solitaireFreecell[action] == 2 and solitaireFreecell[sourceOk] == 1 and solitaireFreecell[targetOk] == 1 and (solitaireFreecell[from] != solitaireFreecell[to] : Int)
+  zones [
+    "solitaireFreecellPile0"
+    ""
+    "solitaireFreecellPile2"
+    "solitaireFreecellPile3"
+    "solitaireFreecellPile4"
+    "solitaireFreecellPile5"
+    "solitaireFreecellPile6"
+    "solitaireFreecellPile7"
+    "solitaireFreecellPile8"
+    "solitaireFreecellPile9"
+    "solitaireFreecellPile10"
+    "solitaireFreecellPile11"
+    "solitaireFreecellPile12"
+    "solitaireFreecellPile13"
+    "solitaireFreecellPile14"
+    "solitaireFreecellPile15"
+    "solitaireFreecellPile16"
+    "solitaireFreecellPile17"
+  ]
+  transaction {
+    transform t = transfer(from: "$zones[solitaireFreecell[from]]", to: "$zones[solitaireFreecell[to]]", selector: "Slice", key: "$cell:solitaireFreecell:card")
+    solitaireFreecell[moves] = solitaireFreecell[moves] + 1
+    solitaireFreecell[busy] = 1
+    solitaireFreecell[score] = maximum(0, solitaireFreecell[score] + (((solitaireFreecell[to] >= 10) & (solitaireFreecell[to] <= 13)) ? 10 : 0))
+    solitaireFreecell[result] = 1
+    solitaireFreecell[applied] = solitaireFreecell[request]
+  }
+}
+
+rule "solitaireFreecell-deal-advance" {
+  when solitaire[table] == 3 and (solitaireFreecell[stage] == 0 or solitaireFreecell[stage] == 3 or solitaireFreecell[stage] == 4)
+  solitaireFreecell[dealStep] = solitaireFreecell[stage] == 0 ? 0 : solitaireFreecell[dealStep] + 1
+}
+
+rule "solitaireFreecell-reject" {
+  when solitaire[table] == 3 and solitaireFreecell[request] != solitaireFreecell[applied] and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 0
+  transaction {
+    solitaireFreecell[result] = -1
+    solitaireFreecell[applied] = solitaireFreecell[request]
+  }
+}
+
+rule "solitaireFreecell-maintenance-start" {
+  when solitaire[table] == 3 and solitaireFreecell[stage] == 0 and solitaireFreecell[busy] == 1
+  solitaireFreecell[busy] = 0
+}
+
+rule "solitaireFreecell-gather-advance" {
+  when solitaire[table] == 3 and (solitaireFreecell[stage] == 0 or solitaireFreecell[stage] == 1)
+  solitaireFreecell[gatherStep] = solitaireFreecell[stage] == 0 ? 0 : minimum(15, solitaireFreecell[gatherStep] + 1)
+}
+
+rule "solitaireFreecell-attribute-advance" {
+  when solitaire[table] == 3 and (solitaireFreecell[stage] == 0 or solitaireFreecell[stage] == 5)
+  solitaireFreecell[attributeStep] = solitaireFreecell[stage] == 0 ? 0 : solitaireFreecell[attributeStep] + 1
+}
+
+rule "solitaireFreecell-win" {
+  when solitaire[table] == 3 and solitaireFreecell[status] == 1 and solitaireFreecell[busy] == 0
+  solitaireFreecell[status] = ($reduce:count:solitaireFreecellPile10 + $reduce:count:solitaireFreecellPile11 + $reduce:count:solitaireFreecellPile12 + $reduce:count:solitaireFreecellPile13) == 52 ? 2 : 1
+}

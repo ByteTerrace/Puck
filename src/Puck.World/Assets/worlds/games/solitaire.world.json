@@ -33,15 +33,15 @@
   "state": {
     "world": [
       {
-        "name": "solitaire",
-        "kind": "Int",
         "capacity": 1,
         "cells": [
           {
             "key": "table",
             "value": 0
           }
-        ]
+        ],
+        "kind": "Int",
+        "name": "solitaire"
       }
     ]
   }
