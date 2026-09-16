@@ -37,8 +37,19 @@ public sealed class StateCellTable {
             : default);
 
     /// <summary>Attempts to resolve a static cell handle for the given row handle and key.</summary>
-    public bool TryResolve(StateHandle rowHandle, CellName key, out StateCellHandle handle) =>
-        m_byKey.TryGetValue((rowHandle.Ordinal, key), out handle);
+    public bool TryResolve(StateHandle rowHandle, CellName key, out StateCellHandle handle) {
+        if (
+            rowHandle.IsValid &&
+            m_byKey.TryGetValue((rowHandle.Ordinal, key), out var found) &&
+            (m_descriptors[found.Ordinal].RowHandle == rowHandle)
+        ) {
+            handle = found;
+            return true;
+        }
+
+        handle = StateCellHandle.Invalid;
+        return false;
+    }
 }
 
 /// <summary>Builds an interned table of static cell addresses during rule compilation.</summary>

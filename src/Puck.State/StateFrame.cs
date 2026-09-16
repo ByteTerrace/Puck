@@ -54,6 +54,7 @@ public sealed class FrameLayout {
     private readonly int[] m_rowOfIndex;
     private readonly int[] m_rowOfVectorOffset;
     private readonly int[] m_cellOffsets;
+    private readonly StateCellTable? m_cellTable;
     private readonly FrameRowLayout[] m_rows;
     private readonly Func<string, CompiledTopology?> m_topology;
     private readonly Func<string, StateSpace?>? m_spaces;
@@ -76,6 +77,7 @@ public sealed class FrameLayout {
         m_rows = new FrameRowLayout[rows.Count];
         m_topology = topology;
         m_spaces = spaces;
+        m_cellTable = cellTable;
 
         for (var index = 0; (index < rows.Count); index++) {
             m_ordinals[rows[index].Name.Value] = index;
@@ -176,17 +178,19 @@ public sealed class FrameLayout {
                 if ((rowOrdinal >= 0) && (rowOrdinal < m_rows.Length)) {
                     var rowLayout = m_rows[rowOrdinal];
                     var row = rows[rowOrdinal];
-                    if (row.IsSlot) {
-                        m_cellOffsets[i] = rowLayout.Offset;
+                    if (rowLayout.Kind == FrameRowKind.Slot) {
+                        m_cellOffsets[i] = (desc.Key == StateRow.SlotKey ? rowLayout.Offset : -1);
+                    } else if (rowLayout.Kind == FrameRowKind.Keyed) {
+                        var cellIdx = FindCellIndex(cells: row.Cells, key: desc.Key);
+                        m_cellOffsets[i] = (((cellIdx >= 0) && (cellIdx < rowLayout.Length))
+                            ? (rowLayout.Offset + cellIdx)
+                            : -1);
                     } else if ((rowLayout.Kind == FrameRowKind.Board) && (rowLayout.Topology is { } top)) {
                         m_cellOffsets[i] = (top.TryCell(key: desc.Key.Value, cell: out var cellId)
                             ? (rowLayout.Offset + cellId)
                             : -1);
                     } else {
-                        var cellIdx = FindCellIndex(cells: row.Cells, key: desc.Key);
-                        m_cellOffsets[i] = (((cellIdx >= 0) && (cellIdx < rowLayout.Length))
-                            ? (rowLayout.Offset + cellIdx)
-                            : -1);
+                        m_cellOffsets[i] = -1;
                     }
                 } else {
                     m_cellOffsets[i] = -1;
@@ -524,6 +528,8 @@ public sealed class FrameLayout {
         (((handle.Ordinal >= 0) && (handle.Ordinal < m_cellOffsets.Length))
             ? m_cellOffsets[handle.Ordinal]
             : -1);
+    /// <summary>Gets the optional static cell table interned for this layout.</summary>
+    public StateCellTable? CellTable => m_cellTable;
 }
 /// <summary>A value frame over a section's rows: every integer cell laid out once by a <see cref="FrameLayout"/>, so
 /// a hypothetical evaluation reads and writes an array while the rows keep supplying keys, domains, and traits. A
@@ -1056,9 +1062,9 @@ public sealed partial class StateFrame : StateStore {
             ? m_values[((layout.Offset + layout.Length) - 1)]
             : row.HistoryCursor
         );
-    private bool IsRowUnchanged(int ordinal, FrameRowLayout layout, StateRow row) {
+    private bool IsRowUnchanged(int ordinal, FrameRowLayout layout, IReadOnlyList<StateRow> rows) {
         if (!ReferenceEquals(
-            objA: row,
+            objA: rows[ordinal],
             objB: m_loadedRows[ordinal]
         )) {
             return false;
@@ -1068,7 +1074,7 @@ public sealed partial class StateFrame : StateStore {
             if (
                 (layout.DomainOrdinal >= 0) &&
                 !ReferenceEquals(
-                    objA: m_rows[layout.DomainOrdinal],
+                    objA: rows[layout.DomainOrdinal],
                     objB: m_loadedRows[layout.DomainOrdinal]
                 )
             ) {
@@ -1077,11 +1083,11 @@ public sealed partial class StateFrame : StateStore {
         } else if (layout.IsDerivedBoard) {
             if (
                 !ReferenceEquals(
-                    objA: m_rows[layout.InverseTokensOrdinal],
+                    objA: rows[layout.InverseTokensOrdinal],
                     objB: m_loadedRows[layout.InverseTokensOrdinal]
                 ) ||
                 !ReferenceEquals(
-                    objA: m_rows[layout.InverseCodesOrdinal],
+                    objA: rows[layout.InverseCodesOrdinal],
                     objB: m_loadedRows[layout.InverseCodesOrdinal]
                 )
             ) {
@@ -1107,14 +1113,18 @@ public sealed partial class StateFrame : StateStore {
             m_loadedSource = (source is StateFrame ? null : source);
         }
 
+        var sourceRows = ((source.Rows is { Count: var sourceRowCount } sRows && (sourceRowCount == Layout.RowCount))
+            ? sRows
+            : Rows);
+
         for (var ordinal = 0; (ordinal < Layout.RowCount); ordinal++) {
             var layout = Layout[ordinal];
-            var row = Rows[ordinal];
+            var row = sourceRows[ordinal];
 
             if (!sourceChanged && IsRowUnchanged(
                 layout: layout,
                 ordinal: ordinal,
-                row: row
+                rows: sourceRows
             )) {
                 continue;
             }
@@ -1290,6 +1300,8 @@ public sealed partial class StateFrame : StateStore {
         m_rows = rows;
         if (m_loadedRows.Length != rows.Count) {
             m_loadedRows = new StateRow?[rows.Count];
+        } else {
+            Array.Clear(m_loadedRows);
         }
         foreach (var ordinals in m_domainOrdinals.Values) {
             ordinals.Clear();
@@ -2032,7 +2044,20 @@ public sealed partial class StateFrame : StateStore {
         var offset = Layout.CellOffset(handle: handle);
 
         if (offset >= 0) {
+            var rowOrdinal = Layout.RowOfIndex(index: offset);
+            var layout = Layout[rowOrdinal];
             value = m_values[offset];
+
+            if (layout.Kind == FrameRowKind.Board) {
+                if (value != layout.Empty) {
+                    return true;
+                }
+
+                var row = m_rows[rowOrdinal];
+                var desc = Layout.CellTable?[handle];
+                return (desc.HasValue && (IndexOf(cells: row.Cells, key: desc.Value.Key) >= 0));
+            }
+
             return true;
         }
 
@@ -2053,6 +2078,14 @@ public sealed partial class StateFrame : StateStore {
         }
 
         var rowOrdinal = Layout.RowOfIndex(index: offset);
+        var layout = Layout[rowOrdinal];
+
+        if (layout.IsDerivedBoard) {
+            var rowName = m_rows[rowOrdinal].Name;
+            reason = $"row '{rowName}' is a derived board (inverse) — write its token row instead";
+            return false;
+        }
+
         var row = m_rows[rowOrdinal];
         var current = m_values[offset];
 
@@ -2063,6 +2096,14 @@ public sealed partial class StateFrame : StateStore {
             stored: out var next,
             reason: out reason
         )) {
+            return false;
+        }
+
+        if (
+            (row.Kind == CellKind.Bool) &&
+            (next is not (0L or 1L))
+        ) {
+            reason = $"row '{row.Name}' cell would leave the row's envelope";
             return false;
         }
 

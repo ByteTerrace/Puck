@@ -4613,7 +4613,7 @@ rule "blink-open" {
   forEach: "blink"
   blink[$each] = 0
   generate(row: "blinkRest")
-  blinkAt[$each] = "$tick + blinkRest"
+  blinkAt[$each] = $tick + blinkRest
 }
 
 simulation {
