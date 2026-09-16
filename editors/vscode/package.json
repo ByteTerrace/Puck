@@ -1,103 +1,22 @@
 {
-    "name": "vscode-puck",
-    "displayName": "Puck Authoring Language",
-    "description": "IntelliSense, diagnostics, hover, formatting, and syntax highlighting for the Puck DSL (.puck).",
-    "version": "1.0.0",
-    "icon": "icon.png",
-    "publisher": "ByteTerrace",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/ByteTerrace/Puck.git"
-    },
-    "engines": {
-        "vscode": "^1.90.0"
+    "activationEvents": [],
+    "capabilities": {
+        "untrustedWorkspaces": {
+            "supported": false
+        }
     },
     "categories": [
         "Programming Languages",
         "Snippets"
     ],
-    "keywords": [
-        "puck",
-        "world",
-        "dsl",
-        "authoring",
-        "simulation"
-    ],
     "contributes": {
-        "languages": [
-            {
-                "id": "puck",
-                "aliases": [
-                    "Puck",
-                    "puck"
-                ],
-                "extensions": [
-                    ".puck",
-                    ".world.puck"
-                ],
-                "configuration": "./language-configuration.json"
-            }
-        ],
-        "grammars": [
-            {
-                "language": "puck",
-                "scopeName": "source.puck",
-                "path": "./syntaxes/puck.tmLanguage.json"
-            }
-        ],
-        "snippets": [
-            {
-                "language": "puck",
-                "path": "./snippets/puck.json"
-            }
-        ],
-        "commands": [
-            {
-                "title": "Puck: Restart Language Server",
-                "command": "puck.restartLanguageServer"
-            }
-        ],
-        "configuration": {
-            "title": "Puck",
-            "properties": {
-                "puck.server.args": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "default": [
-                        "lsp"
-                    ],
-                    "description": "Arguments passed directly without a shell. For dotnet, use an absolute Puck.Cli.dll path followed by lsp.",
-                    "scope": "machine-overridable"
-                },
-                "puck.server.command": {
-                    "type": "string",
-                    "default": "puck",
-                    "description": "Executable used to launch the language server. Use dotnet to launch a Puck.Cli.dll assembly.",
-                    "scope": "machine-overridable"
-                },
-                "puck.highlighting.containerColors": {
-                    "type": "boolean",
-                    "description": "Use fixed, theme-aware colors for array [] and object {} delimiters instead of nesting-depth colors.",
-                    "scope": "resource",
-                    "default": true
-                },
-                "puck.highlighting.consistentColors": {
-                    "type": "boolean",
-                    "default": false,
-                    "scope": "resource",
-                    "description": "Opt into Puck’s fixed syntax palette. By default, syntax uses your selected theme. Container colors are controlled separately."
-                }
-            }
-        },
         "colors": [
             {
                 "defaults": {
                     "dark": "editorBracketHighlight.foreground3",
-                    "light": "editorBracketHighlight.foreground3",
                     "highContrast": "editorBracketHighlight.foreground3",
-                    "highContrastLight": "editorBracketHighlight.foreground3"
+                    "highContrastLight": "editorBracketHighlight.foreground3",
+                    "light": "editorBracketHighlight.foreground3"
                 },
                 "description": "Puck array delimiters [].",
                 "id": "puck.arrayDelimiter"
@@ -105,147 +24,226 @@
             {
                 "defaults": {
                     "dark": "editorBracketHighlight.foreground2",
-                    "light": "editorBracketHighlight.foreground2",
                     "highContrast": "editorBracketHighlight.foreground2",
-                    "highContrastLight": "editorBracketHighlight.foreground2"
+                    "highContrastLight": "editorBracketHighlight.foreground2",
+                    "light": "editorBracketHighlight.foreground2"
                 },
                 "description": "Puck object delimiters {}.",
                 "id": "puck.objectDelimiter"
             },
             {
-                "id": "puck.property",
-                "description": "Puck property syntax.",
                 "defaults": {
                     "dark": "#9CDCFE",
-                    "light": "#005A86",
                     "highContrast": "#9CDCFE",
-                    "highContrastLight": "#005A86"
-                }
+                    "highContrastLight": "#005A86",
+                    "light": "#005A86"
+                },
+                "description": "Puck property syntax.",
+                "id": "puck.property"
             },
             {
-                "id": "puck.variable",
-                "description": "Puck variable syntax.",
                 "defaults": {
                     "dark": "#D4D4D4",
-                    "light": "#292929",
                     "highContrast": "#D4D4D4",
-                    "highContrastLight": "#292929"
-                }
+                    "highContrastLight": "#292929",
+                    "light": "#292929"
+                },
+                "description": "Puck variable syntax.",
+                "id": "puck.variable"
             },
             {
-                "id": "puck.keyword",
-                "description": "Puck keyword syntax.",
                 "defaults": {
                     "dark": "#C586C0",
-                    "light": "#7B2686",
                     "highContrast": "#C586C0",
-                    "highContrastLight": "#7B2686"
-                }
+                    "highContrastLight": "#7B2686",
+                    "light": "#7B2686"
+                },
+                "description": "Puck keyword syntax.",
+                "id": "puck.keyword"
             },
             {
-                "id": "puck.function",
-                "description": "Puck function syntax.",
                 "defaults": {
                     "dark": "#DCDCAA",
-                    "light": "#715400",
                     "highContrast": "#DCDCAA",
-                    "highContrastLight": "#715400"
-                }
+                    "highContrastLight": "#715400",
+                    "light": "#715400"
+                },
+                "description": "Puck function syntax.",
+                "id": "puck.function"
             },
             {
-                "id": "puck.type",
-                "description": "Puck type syntax.",
                 "defaults": {
                     "dark": "#4EC9B0",
-                    "light": "#006E60",
                     "highContrast": "#4EC9B0",
-                    "highContrastLight": "#006E60"
-                }
+                    "highContrastLight": "#006E60",
+                    "light": "#006E60"
+                },
+                "description": "Puck type syntax.",
+                "id": "puck.type"
             },
             {
-                "id": "puck.string",
-                "description": "Puck string syntax.",
                 "defaults": {
                     "dark": "#CE9178",
-                    "light": "#9B3D1C",
                     "highContrast": "#CE9178",
-                    "highContrastLight": "#9B3D1C"
-                }
+                    "highContrastLight": "#9B3D1C",
+                    "light": "#9B3D1C"
+                },
+                "description": "Puck string syntax.",
+                "id": "puck.string"
             },
             {
-                "id": "puck.number",
-                "description": "Puck number syntax.",
                 "defaults": {
                     "dark": "#B5CEA8",
-                    "light": "#386521",
                     "highContrast": "#B5CEA8",
-                    "highContrastLight": "#386521"
-                }
+                    "highContrastLight": "#386521",
+                    "light": "#386521"
+                },
+                "description": "Puck number syntax.",
+                "id": "puck.number"
             },
             {
-                "id": "puck.literal",
-                "description": "Puck literal syntax.",
                 "defaults": {
                     "dark": "#4FC1FF",
-                    "light": "#005D91",
                     "highContrast": "#4FC1FF",
-                    "highContrastLight": "#005D91"
-                }
+                    "highContrastLight": "#005D91",
+                    "light": "#005D91"
+                },
+                "description": "Puck literal syntax.",
+                "id": "puck.literal"
             },
             {
-                "id": "puck.operator",
-                "description": "Puck operator syntax.",
                 "defaults": {
                     "dark": "#BFC7D5",
-                    "light": "#454B56",
                     "highContrast": "#BFC7D5",
-                    "highContrastLight": "#454B56"
-                }
+                    "highContrastLight": "#454B56",
+                    "light": "#454B56"
+                },
+                "description": "Puck operator syntax.",
+                "id": "puck.operator"
             },
             {
-                "id": "puck.comment",
-                "description": "Puck comment syntax.",
                 "defaults": {
                     "dark": "#879B82",
-                    "light": "#526C47",
                     "highContrast": "#879B82",
-                    "highContrastLight": "#526C47"
-                }
+                    "highContrastLight": "#526C47",
+                    "light": "#526C47"
+                },
+                "description": "Puck comment syntax.",
+                "id": "puck.comment"
             }
         ],
+        "commands": [
+            {
+                "command": "puck.restartLanguageServer",
+                "title": "Puck: Restart Language Server"
+            }
+        ],
+        "configuration": {
+            "properties": {
+                "puck.highlighting.consistentColors": {
+                    "default": false,
+                    "description": "Opt into Puck’s fixed syntax palette. By default, syntax uses your selected theme. Container colors are controlled separately.",
+                    "scope": "resource",
+                    "type": "boolean"
+                },
+                "puck.highlighting.containerColors": {
+                    "default": true,
+                    "description": "Use fixed, theme-aware colors for array [] and object {} delimiters instead of nesting-depth colors.",
+                    "scope": "resource",
+                    "type": "boolean"
+                },
+                "puck.server.args": {
+                    "default": [
+                        "lsp"
+                    ],
+                    "description": "Arguments passed directly without a shell. For dotnet, use an absolute Puck.Cli.dll path followed by lsp.",
+                    "items": {
+                        "type": "string"
+                    },
+                    "scope": "machine-overridable",
+                    "type": "array"
+                },
+                "puck.server.command": {
+                    "default": "puck",
+                    "description": "Executable used to launch the language server. Use dotnet to launch a Puck.Cli.dll assembly.",
+                    "scope": "machine-overridable",
+                    "type": "string"
+                }
+            },
+            "title": "Puck"
+        },
         "configurationDefaults": {
             "[puck]": {
-                "editor.tabSize": 2,
+                "editor.detectIndentation": false,
                 "editor.insertSpaces": true,
-                "editor.detectIndentation": false
+                "editor.tabSize": 2
             }
-        }
+        },
+        "grammars": [
+            {
+                "language": "puck",
+                "path": "./syntaxes/puck.tmLanguage.json",
+                "scopeName": "source.puck"
+            }
+        ],
+        "languages": [
+            {
+                "aliases": [
+                    "Puck",
+                    "puck"
+                ],
+                "configuration": "./language-configuration.json",
+                "extensions": [
+                    ".puck",
+                    ".world.puck"
+                ],
+                "id": "puck"
+            }
+        ],
+        "snippets": [
+            {
+                "language": "puck",
+                "path": "./snippets/puck.json"
+            }
+        ]
     },
-    "main": "./dist/extension.js",
-    "activationEvents": [
-        "onLanguage:puck"
-    ],
+    "dependencies": {
+        "vscode-languageclient": "9.0.1",
+        "vscode-oniguruma": "^2.0.1",
+        "vscode-textmate": "^9.3.2"
+    },
+    "description": "IntelliSense, diagnostics, hover, formatting, and syntax highlighting for the Puck DSL (.puck).",
+    "devDependencies": {
+        "@vscode/vsce": "3.9.2",
+        "esbuild": "0.28.2"
+    },
+    "displayName": "Puck Authoring Language",
+    "engines": {
+        "vscode": "^1.90.0"
+    },
     "extensionKind": [
         "workspace"
     ],
-    "capabilities": {
-        "untrustedWorkspaces": {
-            "supported": false
-        }
+    "icon": "icon.png",
+    "keywords": [
+        "puck",
+        "world",
+        "dsl",
+        "authoring",
+        "simulation"
+    ],
+    "main": "./dist/extension.js",
+    "name": "vscode-puck",
+    "publisher": "ByteTerrace",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ByteTerrace/Puck.git"
     },
     "scripts": {
         "build": "esbuild extension.js --bundle --platform=node --external:vscode --outfile=dist/extension.js && node -e \"require('fs').copyFileSync(require.resolve('vscode-oniguruma/release/onig.wasm'), 'dist/onig.wasm')\"",
         "package": "vsce package --no-dependencies",
-        "vscode:prepublish": "npm run build",
-        "test": "node --test test/*.test.js"
+        "test": "node --test test/*.test.js",
+        "vscode:prepublish": "npm run build"
     },
-    "dependencies": {
-        "vscode-languageclient": "9.0.1",
-        "vscode-textmate": "^9.3.2",
-        "vscode-oniguruma": "^2.0.1"
-    },
-    "devDependencies": {
-        "@vscode/vsce": "3.9.2",
-        "esbuild": "0.28.2"
-    }
+    "version": "1.0.0"
 }
