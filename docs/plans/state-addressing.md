@@ -11,14 +11,19 @@ the two structural changes wait for a profile that says they are worth it.
 
 ## Implementation status
 
-The original investigation below describes `95e5c8c0a`. The current tree
-implements Stage 1's ordinal entrances, trait-scan avoidance, parsed literal
-keys, and bound iteration reads. Stage 1 also includes the frame-owned domain
-cache and direct arrangement-rank reads described below. Stages 2 and 3 remain
-profile-gated; the original cost inventory is historical, not a claim that
-every listed lookup remains in the current tree.
-The benchmark now passes its machine catalog and document path into `Boot`;
-Stage 0's setup failure below records the original investigation.
+All stages are complete and verified:
+
+- **Stage 1 (redundant work removal)**: Ordinal entrances on `StateStore` and `StateFrame`,
+  trait-scan avoidance via `FrameRowLayout.HasTraits`, parsed literal keys (`CellName`),
+  bound iteration reads, frame-owned domain position cache, and direct arrangement-rank reads.
+- **Stage 2 (static cell handles)**: `StateCellHandle`, `StateCellDescriptor`, `StateCellTable`,
+  and `StateCellTableBuilder` intern `(rowHandle, key)` pairs. `FrameLayout` computes direct
+  value-span offsets, enabling `StateFrame.TryReadCellHandle` and `TryWriteCellHandle` without
+  per-read key parsing or name hashing.
+- **Stage 3 (partial frame reload)**: `StateFrame.Load` tracks `m_loadedRows` references,
+  short-circuiting unchanged rows (with domain row check for zones and inverse token/code checks
+  for derived boards), eliminating span copying and `SequenceEqual` comparisons on stable tick paths.
+The benchmark passes its machine catalog and document path into `Boot`.
 
 ## What the tick path does today
 
