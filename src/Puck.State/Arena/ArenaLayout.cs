@@ -170,8 +170,9 @@ public sealed class ArenaLayout {
         ChangeSlotCount = next;
     }
 
-    /// <summary>Gets the bytes an arena over this layout occupies with every column allocated, which is what
-    /// <see cref="ArenaCapacity.MaxBytes"/> bounds.</summary>
+    /// <summary>Gets the bytes an arena over this layout reserves for its columns, indexes, and fixed-ceiling text
+    /// and provenance payloads. <see cref="StateArena.Bytes"/> adds the bounded visibility payload currently in
+    /// use.</summary>
     public long Bytes { get; }
     /// <summary>Gets how many cell slots the layout reserves across every column.</summary>
     public int CellSlotCount { get; }

@@ -1,12 +1,12 @@
 {
   "schema": "puck.world.state-export.v1",
   "tick": 600,
-  "engineTick": 1008000,
+  "engineTick": 504000,
   "hashes": {
-    "authoritative": "69b8b68b30a4bdad",
-    "capture": "5431996f2b3bcf39",
-    "pose": "cae81dceb2293680",
-    "world": "603c3a64aa69b7e4"
+    "authoritative": "eca2e004224a4742",
+    "capture": "312dc1b92fbcde07",
+    "pose": "558cf1c8b5342340",
+    "world": "54987f9e844b8586"
   },
   "state": {
     "world": [
@@ -503,6 +503,346 @@
         }
       },
       {
+        "name": "ai",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "evaluation",
+            "value": 0
+          },
+          {
+            "key": "metadata",
+            "value": 1048576
+          },
+          {
+            "key": "pending",
+            "value": 0
+          },
+          {
+            "key": "from",
+            "value": -1
+          },
+          {
+            "key": "to",
+            "value": -1
+          },
+          {
+            "key": "mover",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "aiSide",
+        "kind": "Int",
+        "min": -1,
+        "max": 1,
+        "value": -1
+      },
+      {
+        "name": "aiEnabled",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "aiRevision",
+        "kind": "Int",
+        "value": 32
+      },
+      {
+        "name": "aiBest",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "token",
+            "value": -1
+          },
+          {
+            "key": "to",
+            "value": -1
+          },
+          {
+            "key": "score",
+            "value": 0
+          },
+          {
+            "key": "revision",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "pieceOrdinal",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "piece0",
+            "value": 0
+          },
+          {
+            "key": "piece1",
+            "value": 1
+          },
+          {
+            "key": "piece2",
+            "value": 2
+          },
+          {
+            "key": "piece3",
+            "value": 3
+          },
+          {
+            "key": "piece4",
+            "value": 4
+          },
+          {
+            "key": "piece5",
+            "value": 5
+          },
+          {
+            "key": "piece6",
+            "value": 6
+          },
+          {
+            "key": "piece7",
+            "value": 7
+          },
+          {
+            "key": "piece8",
+            "value": 8
+          },
+          {
+            "key": "piece9",
+            "value": 9
+          },
+          {
+            "key": "piece10",
+            "value": 10
+          },
+          {
+            "key": "piece11",
+            "value": 11
+          },
+          {
+            "key": "piece12",
+            "value": 12
+          },
+          {
+            "key": "piece13",
+            "value": 13
+          },
+          {
+            "key": "piece14",
+            "value": 14
+          },
+          {
+            "key": "piece15",
+            "value": 15
+          },
+          {
+            "key": "piece16",
+            "value": 16
+          },
+          {
+            "key": "piece17",
+            "value": 17
+          },
+          {
+            "key": "piece18",
+            "value": 18
+          },
+          {
+            "key": "piece19",
+            "value": 19
+          },
+          {
+            "key": "piece20",
+            "value": 20
+          },
+          {
+            "key": "piece21",
+            "value": 21
+          },
+          {
+            "key": "piece22",
+            "value": 22
+          },
+          {
+            "key": "piece23",
+            "value": 23
+          },
+          {
+            "key": "piece24",
+            "value": 24
+          },
+          {
+            "key": "piece25",
+            "value": 25
+          },
+          {
+            "key": "piece26",
+            "value": 26
+          },
+          {
+            "key": "piece27",
+            "value": 27
+          },
+          {
+            "key": "piece28",
+            "value": 28
+          },
+          {
+            "key": "piece29",
+            "value": 29
+          },
+          {
+            "key": "piece30",
+            "value": 30
+          },
+          {
+            "key": "piece31",
+            "value": 31
+          }
+        ]
+      },
+      {
+        "name": "aiBefore",
+        "kind": "Int",
+        "capacity": 32,
+        "cells": [
+          {
+            "key": "piece0",
+            "value": 1281
+          },
+          {
+            "key": "piece1",
+            "value": 1026
+          },
+          {
+            "key": "piece2",
+            "value": 1155
+          },
+          {
+            "key": "piece3",
+            "value": 1412
+          },
+          {
+            "key": "piece4",
+            "value": 1541
+          },
+          {
+            "key": "piece5",
+            "value": 1158
+          },
+          {
+            "key": "piece6",
+            "value": 1031
+          },
+          {
+            "key": "piece7",
+            "value": 1288
+          },
+          {
+            "key": "piece8",
+            "value": 905
+          },
+          {
+            "key": "piece9",
+            "value": 906
+          },
+          {
+            "key": "piece10",
+            "value": 907
+          },
+          {
+            "key": "piece11",
+            "value": 908
+          },
+          {
+            "key": "piece12",
+            "value": 925
+          },
+          {
+            "key": "piece13",
+            "value": 910
+          },
+          {
+            "key": "piece14",
+            "value": 911
+          },
+          {
+            "key": "piece15",
+            "value": 912
+          },
+          {
+            "key": "piece16",
+            "value": 689
+          },
+          {
+            "key": "piece17",
+            "value": 690
+          },
+          {
+            "key": "piece18",
+            "value": 691
+          },
+          {
+            "key": "piece19",
+            "value": 692
+          },
+          {
+            "key": "piece20",
+            "value": 693
+          },
+          {
+            "key": "piece21",
+            "value": 694
+          },
+          {
+            "key": "piece22",
+            "value": 695
+          },
+          {
+            "key": "piece23",
+            "value": 696
+          },
+          {
+            "key": "piece24",
+            "value": 313
+          },
+          {
+            "key": "piece25",
+            "value": 570
+          },
+          {
+            "key": "piece26",
+            "value": 443
+          },
+          {
+            "key": "piece27",
+            "value": 188
+          },
+          {
+            "key": "piece28",
+            "value": 61
+          },
+          {
+            "key": "piece29",
+            "value": 446
+          },
+          {
+            "key": "piece30",
+            "value": 575
+          },
+          {
+            "key": "piece31",
+            "value": 320
+          }
+        ]
+      },
+      {
         "name": "turn",
         "kind": "Int",
         "min": 0,
@@ -896,21 +1236,446 @@
         ]
       },
       {
-        "name": "boardHistory",
+        "name": "boardHistory0",
         "kind": "Int",
-        "cells": [],
+        "cells": [
+          {
+            "key": "0",
+            "value": 7349874592137146202
+          }
+        ],
+        "historyCursor": 1,
         "domain": {
           "$type": "ring",
-          "capacity": 12,
-          "empty": -1
+          "capacity": 151
         }
+      },
+      {
+        "name": "boardHistory1",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": -5980780305148018449
+          }
+        ],
+        "historyCursor": 1,
+        "domain": {
+          "$type": "ring",
+          "capacity": 151
+        }
+      },
+      {
+        "name": "boardHistory2",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": -1729382256910270618
+          }
+        ],
+        "historyCursor": 1,
+        "domain": {
+          "$type": "ring",
+          "capacity": 151
+        }
+      },
+      {
+        "name": "boardHistory3",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 281474976710655
+          }
+        ],
+        "historyCursor": 1,
+        "domain": {
+          "$type": "ring",
+          "capacity": 151
+        }
+      },
+      {
+        "name": "boardHistoryRights",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "historyCursor": 1,
+        "domain": {
+          "$type": "ring",
+          "capacity": 151
+        }
+      },
+      {
+        "name": "historyAges",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 2
+          },
+          {
+            "key": "1",
+            "value": 4
+          },
+          {
+            "key": "2",
+            "value": 6
+          },
+          {
+            "key": "3",
+            "value": 8
+          },
+          {
+            "key": "4",
+            "value": 10
+          },
+          {
+            "key": "5",
+            "value": 12
+          },
+          {
+            "key": "6",
+            "value": 14
+          },
+          {
+            "key": "7",
+            "value": 16
+          },
+          {
+            "key": "8",
+            "value": 18
+          },
+          {
+            "key": "9",
+            "value": 20
+          },
+          {
+            "key": "10",
+            "value": 22
+          },
+          {
+            "key": "11",
+            "value": 24
+          },
+          {
+            "key": "12",
+            "value": 26
+          },
+          {
+            "key": "13",
+            "value": 28
+          },
+          {
+            "key": "14",
+            "value": 30
+          },
+          {
+            "key": "15",
+            "value": 32
+          },
+          {
+            "key": "16",
+            "value": 34
+          },
+          {
+            "key": "17",
+            "value": 36
+          },
+          {
+            "key": "18",
+            "value": 38
+          },
+          {
+            "key": "19",
+            "value": 40
+          },
+          {
+            "key": "20",
+            "value": 42
+          },
+          {
+            "key": "21",
+            "value": 44
+          },
+          {
+            "key": "22",
+            "value": 46
+          },
+          {
+            "key": "23",
+            "value": 48
+          },
+          {
+            "key": "24",
+            "value": 50
+          },
+          {
+            "key": "25",
+            "value": 52
+          },
+          {
+            "key": "26",
+            "value": 54
+          },
+          {
+            "key": "27",
+            "value": 56
+          },
+          {
+            "key": "28",
+            "value": 58
+          },
+          {
+            "key": "29",
+            "value": 60
+          },
+          {
+            "key": "30",
+            "value": 62
+          },
+          {
+            "key": "31",
+            "value": 64
+          },
+          {
+            "key": "32",
+            "value": 66
+          },
+          {
+            "key": "33",
+            "value": 68
+          },
+          {
+            "key": "34",
+            "value": 70
+          },
+          {
+            "key": "35",
+            "value": 72
+          },
+          {
+            "key": "36",
+            "value": 74
+          },
+          {
+            "key": "37",
+            "value": 76
+          },
+          {
+            "key": "38",
+            "value": 78
+          },
+          {
+            "key": "39",
+            "value": 80
+          },
+          {
+            "key": "40",
+            "value": 82
+          },
+          {
+            "key": "41",
+            "value": 84
+          },
+          {
+            "key": "42",
+            "value": 86
+          },
+          {
+            "key": "43",
+            "value": 88
+          },
+          {
+            "key": "44",
+            "value": 90
+          },
+          {
+            "key": "45",
+            "value": 92
+          },
+          {
+            "key": "46",
+            "value": 94
+          },
+          {
+            "key": "47",
+            "value": 96
+          },
+          {
+            "key": "48",
+            "value": 98
+          },
+          {
+            "key": "49",
+            "value": 100
+          },
+          {
+            "key": "50",
+            "value": 102
+          },
+          {
+            "key": "51",
+            "value": 104
+          },
+          {
+            "key": "52",
+            "value": 106
+          },
+          {
+            "key": "53",
+            "value": 108
+          },
+          {
+            "key": "54",
+            "value": 110
+          },
+          {
+            "key": "55",
+            "value": 112
+          },
+          {
+            "key": "56",
+            "value": 114
+          },
+          {
+            "key": "57",
+            "value": 116
+          },
+          {
+            "key": "58",
+            "value": 118
+          },
+          {
+            "key": "59",
+            "value": 120
+          },
+          {
+            "key": "60",
+            "value": 122
+          },
+          {
+            "key": "61",
+            "value": 124
+          },
+          {
+            "key": "62",
+            "value": 126
+          },
+          {
+            "key": "63",
+            "value": 128
+          },
+          {
+            "key": "64",
+            "value": 130
+          },
+          {
+            "key": "65",
+            "value": 132
+          },
+          {
+            "key": "66",
+            "value": 134
+          },
+          {
+            "key": "67",
+            "value": 136
+          },
+          {
+            "key": "68",
+            "value": 138
+          },
+          {
+            "key": "69",
+            "value": 140
+          },
+          {
+            "key": "70",
+            "value": 142
+          },
+          {
+            "key": "71",
+            "value": 144
+          },
+          {
+            "key": "72",
+            "value": 146
+          },
+          {
+            "key": "73",
+            "value": 148
+          },
+          {
+            "key": "74",
+            "value": 150
+          }
+        ]
+      },
+      {
+        "name": "enPassantProbe",
+        "kind": "Int",
+        "min": -6,
+        "max": 6,
+        "capacity": 64,
+        "cells": [],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "chessBoard"
+        }
+      },
+      {
+        "name": "enPassantProbeCheck",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "repetitionEnPassant",
+        "kind": "Int",
+        "min": -1,
+        "max": 63,
+        "value": -1
+      },
+      {
+        "name": "historyPending",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 0
+      },
+      {
+        "name": "historyReset",
+        "kind": "Int",
+        "min": 0,
+        "max": 1,
+        "value": 1
+      },
+      {
+        "name": "historyLength",
+        "kind": "Int",
+        "min": 0,
+        "max": 151,
+        "value": 1
+      },
+      {
+        "name": "halfmoveClock",
+        "kind": "Int",
+        "min": 0,
+        "max": 150,
+        "value": 0
       },
       {
         "name": "repetitionCount",
         "kind": "Int",
         "min": 0,
-        "max": 12,
-        "value": 0
+        "max": 76,
+        "value": 1
       },
       {
         "name": "shapeLegal",
@@ -1654,6 +2419,426 @@
       "cells": []
     },
     {
+      "row": "ai",
+      "cells": [
+        {
+          "key": "evaluation",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "metadata",
+          "value": 1048576,
+          "text": null
+        },
+        {
+          "key": "pending",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "from",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "to",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "mover",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "aiSide",
+      "cells": [
+        {
+          "key": "$value",
+          "value": -1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "aiEnabled",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "aiRevision",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 32,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "aiBest",
+      "cells": [
+        {
+          "key": "token",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "to",
+          "value": -1,
+          "text": null
+        },
+        {
+          "key": "score",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "revision",
+          "value": -1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "pieceOrdinal",
+      "cells": [
+        {
+          "key": "piece0",
+          "value": 0,
+          "text": null
+        },
+        {
+          "key": "piece1",
+          "value": 1,
+          "text": null
+        },
+        {
+          "key": "piece2",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "piece3",
+          "value": 3,
+          "text": null
+        },
+        {
+          "key": "piece4",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "piece5",
+          "value": 5,
+          "text": null
+        },
+        {
+          "key": "piece6",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "piece7",
+          "value": 7,
+          "text": null
+        },
+        {
+          "key": "piece8",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "piece9",
+          "value": 9,
+          "text": null
+        },
+        {
+          "key": "piece10",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "piece11",
+          "value": 11,
+          "text": null
+        },
+        {
+          "key": "piece12",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "piece13",
+          "value": 13,
+          "text": null
+        },
+        {
+          "key": "piece14",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "piece15",
+          "value": 15,
+          "text": null
+        },
+        {
+          "key": "piece16",
+          "value": 16,
+          "text": null
+        },
+        {
+          "key": "piece17",
+          "value": 17,
+          "text": null
+        },
+        {
+          "key": "piece18",
+          "value": 18,
+          "text": null
+        },
+        {
+          "key": "piece19",
+          "value": 19,
+          "text": null
+        },
+        {
+          "key": "piece20",
+          "value": 20,
+          "text": null
+        },
+        {
+          "key": "piece21",
+          "value": 21,
+          "text": null
+        },
+        {
+          "key": "piece22",
+          "value": 22,
+          "text": null
+        },
+        {
+          "key": "piece23",
+          "value": 23,
+          "text": null
+        },
+        {
+          "key": "piece24",
+          "value": 24,
+          "text": null
+        },
+        {
+          "key": "piece25",
+          "value": 25,
+          "text": null
+        },
+        {
+          "key": "piece26",
+          "value": 26,
+          "text": null
+        },
+        {
+          "key": "piece27",
+          "value": 27,
+          "text": null
+        },
+        {
+          "key": "piece28",
+          "value": 28,
+          "text": null
+        },
+        {
+          "key": "piece29",
+          "value": 29,
+          "text": null
+        },
+        {
+          "key": "piece30",
+          "value": 30,
+          "text": null
+        },
+        {
+          "key": "piece31",
+          "value": 31,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "aiBefore",
+      "cells": [
+        {
+          "key": "piece0",
+          "value": 1281,
+          "text": null
+        },
+        {
+          "key": "piece1",
+          "value": 1026,
+          "text": null
+        },
+        {
+          "key": "piece2",
+          "value": 1155,
+          "text": null
+        },
+        {
+          "key": "piece3",
+          "value": 1412,
+          "text": null
+        },
+        {
+          "key": "piece4",
+          "value": 1541,
+          "text": null
+        },
+        {
+          "key": "piece5",
+          "value": 1158,
+          "text": null
+        },
+        {
+          "key": "piece6",
+          "value": 1031,
+          "text": null
+        },
+        {
+          "key": "piece7",
+          "value": 1288,
+          "text": null
+        },
+        {
+          "key": "piece8",
+          "value": 905,
+          "text": null
+        },
+        {
+          "key": "piece9",
+          "value": 906,
+          "text": null
+        },
+        {
+          "key": "piece10",
+          "value": 907,
+          "text": null
+        },
+        {
+          "key": "piece11",
+          "value": 908,
+          "text": null
+        },
+        {
+          "key": "piece12",
+          "value": 925,
+          "text": null
+        },
+        {
+          "key": "piece13",
+          "value": 910,
+          "text": null
+        },
+        {
+          "key": "piece14",
+          "value": 911,
+          "text": null
+        },
+        {
+          "key": "piece15",
+          "value": 912,
+          "text": null
+        },
+        {
+          "key": "piece16",
+          "value": 689,
+          "text": null
+        },
+        {
+          "key": "piece17",
+          "value": 690,
+          "text": null
+        },
+        {
+          "key": "piece18",
+          "value": 691,
+          "text": null
+        },
+        {
+          "key": "piece19",
+          "value": 692,
+          "text": null
+        },
+        {
+          "key": "piece20",
+          "value": 693,
+          "text": null
+        },
+        {
+          "key": "piece21",
+          "value": 694,
+          "text": null
+        },
+        {
+          "key": "piece22",
+          "value": 695,
+          "text": null
+        },
+        {
+          "key": "piece23",
+          "value": 696,
+          "text": null
+        },
+        {
+          "key": "piece24",
+          "value": 313,
+          "text": null
+        },
+        {
+          "key": "piece25",
+          "value": 570,
+          "text": null
+        },
+        {
+          "key": "piece26",
+          "value": 443,
+          "text": null
+        },
+        {
+          "key": "piece27",
+          "value": 188,
+          "text": null
+        },
+        {
+          "key": "piece28",
+          "value": 61,
+          "text": null
+        },
+        {
+          "key": "piece29",
+          "value": 446,
+          "text": null
+        },
+        {
+          "key": "piece30",
+          "value": 575,
+          "text": null
+        },
+        {
+          "key": "piece31",
+          "value": 320,
+          "text": null
+        }
+      ]
+    },
+    {
       "row": "turn",
       "cells": [
         {
@@ -2119,15 +3304,505 @@
       ]
     },
     {
-      "row": "boardHistory",
+      "row": "boardHistory0",
+      "cells": [
+        {
+          "key": "0",
+          "value": 7349874592137146202,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "boardHistory1",
+      "cells": [
+        {
+          "key": "0",
+          "value": -5980780305148018449,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "boardHistory2",
+      "cells": [
+        {
+          "key": "0",
+          "value": -1729382256910270618,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "boardHistory3",
+      "cells": [
+        {
+          "key": "0",
+          "value": 281474976710655,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "boardHistoryRights",
+      "cells": [
+        {
+          "key": "0",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "historyAges",
+      "cells": [
+        {
+          "key": "0",
+          "value": 2,
+          "text": null
+        },
+        {
+          "key": "1",
+          "value": 4,
+          "text": null
+        },
+        {
+          "key": "2",
+          "value": 6,
+          "text": null
+        },
+        {
+          "key": "3",
+          "value": 8,
+          "text": null
+        },
+        {
+          "key": "4",
+          "value": 10,
+          "text": null
+        },
+        {
+          "key": "5",
+          "value": 12,
+          "text": null
+        },
+        {
+          "key": "6",
+          "value": 14,
+          "text": null
+        },
+        {
+          "key": "7",
+          "value": 16,
+          "text": null
+        },
+        {
+          "key": "8",
+          "value": 18,
+          "text": null
+        },
+        {
+          "key": "9",
+          "value": 20,
+          "text": null
+        },
+        {
+          "key": "10",
+          "value": 22,
+          "text": null
+        },
+        {
+          "key": "11",
+          "value": 24,
+          "text": null
+        },
+        {
+          "key": "12",
+          "value": 26,
+          "text": null
+        },
+        {
+          "key": "13",
+          "value": 28,
+          "text": null
+        },
+        {
+          "key": "14",
+          "value": 30,
+          "text": null
+        },
+        {
+          "key": "15",
+          "value": 32,
+          "text": null
+        },
+        {
+          "key": "16",
+          "value": 34,
+          "text": null
+        },
+        {
+          "key": "17",
+          "value": 36,
+          "text": null
+        },
+        {
+          "key": "18",
+          "value": 38,
+          "text": null
+        },
+        {
+          "key": "19",
+          "value": 40,
+          "text": null
+        },
+        {
+          "key": "20",
+          "value": 42,
+          "text": null
+        },
+        {
+          "key": "21",
+          "value": 44,
+          "text": null
+        },
+        {
+          "key": "22",
+          "value": 46,
+          "text": null
+        },
+        {
+          "key": "23",
+          "value": 48,
+          "text": null
+        },
+        {
+          "key": "24",
+          "value": 50,
+          "text": null
+        },
+        {
+          "key": "25",
+          "value": 52,
+          "text": null
+        },
+        {
+          "key": "26",
+          "value": 54,
+          "text": null
+        },
+        {
+          "key": "27",
+          "value": 56,
+          "text": null
+        },
+        {
+          "key": "28",
+          "value": 58,
+          "text": null
+        },
+        {
+          "key": "29",
+          "value": 60,
+          "text": null
+        },
+        {
+          "key": "30",
+          "value": 62,
+          "text": null
+        },
+        {
+          "key": "31",
+          "value": 64,
+          "text": null
+        },
+        {
+          "key": "32",
+          "value": 66,
+          "text": null
+        },
+        {
+          "key": "33",
+          "value": 68,
+          "text": null
+        },
+        {
+          "key": "34",
+          "value": 70,
+          "text": null
+        },
+        {
+          "key": "35",
+          "value": 72,
+          "text": null
+        },
+        {
+          "key": "36",
+          "value": 74,
+          "text": null
+        },
+        {
+          "key": "37",
+          "value": 76,
+          "text": null
+        },
+        {
+          "key": "38",
+          "value": 78,
+          "text": null
+        },
+        {
+          "key": "39",
+          "value": 80,
+          "text": null
+        },
+        {
+          "key": "40",
+          "value": 82,
+          "text": null
+        },
+        {
+          "key": "41",
+          "value": 84,
+          "text": null
+        },
+        {
+          "key": "42",
+          "value": 86,
+          "text": null
+        },
+        {
+          "key": "43",
+          "value": 88,
+          "text": null
+        },
+        {
+          "key": "44",
+          "value": 90,
+          "text": null
+        },
+        {
+          "key": "45",
+          "value": 92,
+          "text": null
+        },
+        {
+          "key": "46",
+          "value": 94,
+          "text": null
+        },
+        {
+          "key": "47",
+          "value": 96,
+          "text": null
+        },
+        {
+          "key": "48",
+          "value": 98,
+          "text": null
+        },
+        {
+          "key": "49",
+          "value": 100,
+          "text": null
+        },
+        {
+          "key": "50",
+          "value": 102,
+          "text": null
+        },
+        {
+          "key": "51",
+          "value": 104,
+          "text": null
+        },
+        {
+          "key": "52",
+          "value": 106,
+          "text": null
+        },
+        {
+          "key": "53",
+          "value": 108,
+          "text": null
+        },
+        {
+          "key": "54",
+          "value": 110,
+          "text": null
+        },
+        {
+          "key": "55",
+          "value": 112,
+          "text": null
+        },
+        {
+          "key": "56",
+          "value": 114,
+          "text": null
+        },
+        {
+          "key": "57",
+          "value": 116,
+          "text": null
+        },
+        {
+          "key": "58",
+          "value": 118,
+          "text": null
+        },
+        {
+          "key": "59",
+          "value": 120,
+          "text": null
+        },
+        {
+          "key": "60",
+          "value": 122,
+          "text": null
+        },
+        {
+          "key": "61",
+          "value": 124,
+          "text": null
+        },
+        {
+          "key": "62",
+          "value": 126,
+          "text": null
+        },
+        {
+          "key": "63",
+          "value": 128,
+          "text": null
+        },
+        {
+          "key": "64",
+          "value": 130,
+          "text": null
+        },
+        {
+          "key": "65",
+          "value": 132,
+          "text": null
+        },
+        {
+          "key": "66",
+          "value": 134,
+          "text": null
+        },
+        {
+          "key": "67",
+          "value": 136,
+          "text": null
+        },
+        {
+          "key": "68",
+          "value": 138,
+          "text": null
+        },
+        {
+          "key": "69",
+          "value": 140,
+          "text": null
+        },
+        {
+          "key": "70",
+          "value": 142,
+          "text": null
+        },
+        {
+          "key": "71",
+          "value": 144,
+          "text": null
+        },
+        {
+          "key": "72",
+          "value": 146,
+          "text": null
+        },
+        {
+          "key": "73",
+          "value": 148,
+          "text": null
+        },
+        {
+          "key": "74",
+          "value": 150,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "enPassantProbe",
       "cells": []
+    },
+    {
+      "row": "enPassantProbeCheck",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "repetitionEnPassant",
+      "cells": [
+        {
+          "key": "$value",
+          "value": -1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "historyPending",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "historyReset",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "historyLength",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 1,
+          "text": null
+        }
+      ]
+    },
+    {
+      "row": "halfmoveClock",
+      "cells": [
+        {
+          "key": "$value",
+          "value": 0,
+          "text": null
+        }
+      ]
     },
     {
       "row": "repetitionCount",
       "cells": [
         {
           "key": "$value",
-          "value": 0,
+          "value": 1,
           "text": null
         }
       ]

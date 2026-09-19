@@ -3,7 +3,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Exercises the shipped forward judge with complete observations, independently constructed moves,
-/// and adversarial changes outside their footprints. Physical sampling is covered by ChessModuleImportLawTests.</summary>
+/// and adversarial changes outside their footprints. Physical sampling is covered by <c>games/chess.puck</c>.</summary>
 public sealed class WorldTabletopMatcherLawTests {
     private static readonly WorldDefinition Garden = Load();
 
@@ -146,7 +146,7 @@ public sealed class WorldTabletopMatcherLawTests {
             Lattices: Garden.StateRaw!.Lattices
         ),
             PatternsRaw = Garden.Patterns,
-            Rules = [.. Garden.Rules!.Where(predicate: r => !sampled.Contains(value: r.Name.Value))],
+            Rules = [.. Garden.Rules!.Where(predicate: r => r.Name.Value.StartsWith("tabletop-", StringComparison.Ordinal) && !sampled.Contains(value: r.Name.Value))],
         };
     }
     private static WorldDefinition Load() {
@@ -164,7 +164,7 @@ public sealed class WorldTabletopMatcherLawTests {
             condition: WorldDefinitionLoader.TryLoadFile(
                 Path.Combine(
                     path1: root!.FullName,
-                    path2: "tests/Puck.World.Tests/Fixtures/minimal-chess-host.world.json"
+                    path2: "src/Puck.World/Assets/worlds/games/chess.world.json"
                 ),
                 out var result,
                 out var reason
@@ -242,6 +242,50 @@ public sealed class WorldTabletopMatcherLawTests {
             );
         }
         return (cells, codes);
+    }
+
+    [Fact]
+    public void SeventyFiveMoveLimitRefusesFurtherPlayAndPawnMovesAndCapturesResetTheClock() {
+        void CheckClock(long[] before, long[] after, int clock, bool legal, int expectedClock) {
+            var source = Judge(before: before, after: after);
+            var position = source with {
+                StateRaw = source.StateRaw! with {
+                    World = [.. source.State.Select(selector: row => (row.Name.Value == "halfmoveClock")
+                        ? Slot(row: row, value: clock)
+                        : row)],
+                },
+            };
+            var fixture = new RuleArenaFixture(definition: position);
+
+            fixture.Judge();
+            Assert.Equal(expected: (legal ? 1 : 0), actual: fixture.Read(row: "verdict"));
+            Assert.Equal(expected: expectedClock, actual: fixture.Read(row: "halfmoveClock"));
+        }
+
+        var knight = Position((6, 2));
+        var pawn = Position((12, 1));
+        var capture = Position((6, 2), (21, -1));
+
+        CheckClock(before: knight, after: Move(board: knight, from: 6, to: 21), clock: 149, legal: true, expectedClock: 150);
+        CheckClock(before: knight, after: Move(board: knight, from: 6, to: 21), clock: 150, legal: false, expectedClock: 150);
+        CheckClock(before: pawn, after: Move(board: pawn, from: 12, to: 20), clock: 149, legal: true, expectedClock: 0);
+        CheckClock(before: capture, after: Move(board: capture, from: 6, to: 21), clock: 149, legal: true, expectedClock: 0);
+    }
+
+    [InlineData(0, 1L)]
+    [InlineData(2, 0L)]
+    [Theory]
+    public void RookHomeDepartureResetsHistoryOnlyWhenItConsumesANewRight(int rights, long reset) {
+        var before = Position((7, 4));
+        var fixture = new RuleArenaFixture(definition: Judge(
+            before: before,
+            after: Move(board: before, from: 7, to: 15),
+            rights: rights
+        ));
+
+        fixture.Judge();
+        Assert.Equal(expected: 1, actual: fixture.Read(row: "verdict"));
+        Assert.Equal(expected: reset, actual: fixture.Read(row: "historyReset"));
     }
 
     [Fact]

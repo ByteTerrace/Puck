@@ -174,13 +174,21 @@ the evidence needed before cycle-based admission.
 
 A document meets two real limits. `RuleCapacity.MaxWorkUnitsPerTick` bounds the
 static work one tick may do. `ArenaCapacity.MaxBytes` (64 MiB) bounds what the
-document's state may occupy: `ArenaLayout.Bytes` measures every column at its
+document's state may occupy. `ArenaLayout.Bytes` reserves every column at its
 full width, with the change stamps and indexes beside them and the strings a
-text or provenance cell may hold counted at their length ceilings, and a
-section that lays out past the ceiling is refused at the row that crossed. `world.state`
-prints the measure beside the ceiling. While scopes are open, the undo record
+text or provenance cell may hold counted at their length ceilings.
+`StateArena.Bytes` adds the visibility payload retained by the declaration
+snapshot and live cells. Visibility allows at most 32 readers, each at most
+256 characters, and a `readersFrom` name at most `SafeName.MaxLength`
+characters. The arena copies reader lists into immutable, tightly sized
+storage; later caller edits cannot change the admitted policy or its charge.
+It charges actual bounded payloads instead of reserving the largest policy
+for every cell. Construction, imports, and visibility writes refuse a total
+past the ceiling; an import is checked as a whole before any row changes.
+`world.state` prints the total beside the ceiling. While scopes are open, the undo record
 they hold is bounded too (`ArenaCapacity.MaxJournalBytes`, 16 MiB), the strings
-it retains for a rewind included: a firing
+it retains for a rewind included, along with visibility readers and
+`readersFrom` strings: a firing
 whose writes pass it is refused as `JournalCeiling` and rewound. The counts
 beside these, `StateCapacity.MaxRows` (1,024) and the rest, bound what one
 declaration may ask for, and each names the storage it sizes. None is a

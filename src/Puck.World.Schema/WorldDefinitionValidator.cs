@@ -1595,12 +1595,20 @@ public static partial class WorldDefinitionValidator {
             // The other real limit: what the document's state occupies, laid out exactly as the server lays it out.
             if (!ArenaLayout.TryBuild(
                 catalog: definition.StateCatalog,
-                layout: out _,
+                layout: out var arenaLayout,
                 options: WorldSlotLanes.Options(definition: definition),
                 reason: out var layoutRefusal,
                 section: definition.StateRaw
             )) {
                 errors.Add(item: $"state: {layoutRefusal}");
+            } else if (!StateArena.TryMeasureVisibility(
+                bytes: out var visibilityBytes,
+                reason: out var visibilityRefusal,
+                section: definition.StateRaw
+            )) {
+                errors.Add(item: $"state: {visibilityRefusal}");
+            } else if ((arenaLayout.Bytes + visibilityBytes) > ArenaCapacity.MaxBytes) {
+                errors.Add(item: $"state: visibility brings the arena to {arenaLayout.Bytes + visibilityBytes} bytes, past the {ArenaCapacity.MaxBytes}-byte ceiling.");
             }
         }
         if (errors.Count == 0) {

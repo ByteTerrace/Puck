@@ -254,10 +254,8 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
                 return;
             }
 
-            Assert.NotNull(@object: Unloadable(
-                imported: ImportTargets(),
-                path: path
-            ));
+            _ = WorldDefinitionFileSource.TryLoadLocally(path: path, definition: out _, contentHash: out _, reason: out var loadReason);
+            Assert.True(Unloadable(imported: ImportTargets(), path: path) is not null, $"{path}: {loadReason}");
 
             return;
         }

@@ -57,6 +57,8 @@ public sealed partial class StateArena {
     private byte[]? m_behaviors;
     private StateObservation?[]? m_observations;
     private StateVisibility?[]? m_visibilities;
+    private long m_declarationVisibilityBytes;
+    private long m_visibilityBytes;
     private string?[]? m_provenance;
     private string?[]? m_texts;
     private bool[] m_changeDiffers = [];
@@ -139,9 +141,17 @@ public sealed partial class StateArena {
         m_rowChangeStamp = new long[layout.RowCount];
         m_rowGenerations = new ulong[layout.RowCount];
         m_rowVersions = new ulong[layout.RowCount];
-        m_rows = (section?.Rows ?? []);
+        m_rows = NormalizeRows(
+            bytes: out m_declarationVisibilityBytes,
+            reason: out reason,
+            rows: section?.Rows
+        );
         m_slotOfKey = new ArenaSlotMap[layout.RowCount];
         m_vectors = new sbyte[layout.VectorByteCount];
+
+        if (reason.Length != 0) {
+            return;
+        }
 
         Array.Fill(
             array: m_memberKeys,
@@ -198,6 +208,52 @@ public sealed partial class StateArena {
 
         return (arena is not null);
     }
+    /// <summary>Measures the bounded visibility payload an arena seeded from a section retains in its immutable
+    /// declaration snapshot and live cell columns, without constructing the arena.</summary>
+    /// <param name="section">The section to measure.</param>
+    /// <param name="bytes">The retained visibility bytes on success.</param>
+    /// <param name="reason">Why a row or cell visibility exceeds its count or length limit, or empty on success.</param>
+    /// <returns><see langword="true"/> when every visibility is bounded.</returns>
+    /// <remarks>A cell visibility is charged twice because the declaration snapshot and live column each retain it.
+    /// A row visibility is declaration metadata and is charged once.</remarks>
+    public static bool TryMeasureVisibility(IStateSection? section, out long bytes, out string reason) {
+        bytes = 0L;
+
+        foreach (var row in (section?.Rows ?? [])) {
+            if (row is null) {
+                continue;
+            }
+            if (!StateVisibilityStorage.TryMeasure(
+                bytes: out var rowBytes,
+                reason: out reason,
+                value: row.Visibility
+            )) {
+                reason = $"row '{row.Name.Value}' {reason}";
+                return false;
+            }
+
+            bytes += rowBytes;
+
+            foreach (var cell in (row.Cells ?? [])) {
+                if (cell is null) {
+                    continue;
+                }
+                if (!StateVisibilityStorage.TryMeasure(
+                    bytes: out var cellBytes,
+                    reason: out reason,
+                    value: cell.Visibility
+                )) {
+                    reason = $"row '{row.Name.Value}' cell '{cell.Key.Value}' {reason}";
+                    return false;
+                }
+
+                bytes += (2L * cellBytes);
+            }
+        }
+
+        reason = string.Empty;
+        return true;
+    }
 
     /// <summary>Gets the catalog whose descriptors this arena stores.</summary>
     public StateCatalog Catalog => m_catalog;
@@ -208,8 +264,82 @@ public sealed partial class StateArena {
     public ArenaJournal Journal => m_journal;
     /// <summary>Gets the column plan this arena stores into.</summary>
     public ArenaLayout Layout => m_layout;
-    /// <summary>Gets the authored rows the document lane was seeded from.</summary>
+    /// <summary>Gets the bytes reserved by the layout plus the bounded visibility payload the arena currently
+    /// retains.</summary>
+    public long Bytes => (m_layout.Bytes + m_declarationVisibilityBytes + m_visibilityBytes);
+    /// <summary>Gets the authored rows the document lane was seeded from, with detached cell collections and
+    /// normalized visibility policies.</summary>
     public IReadOnlyList<StateRow> Rows => m_rows;
+
+    private static IReadOnlyList<StateRow> NormalizeRows(IReadOnlyList<StateRow>? rows, out long bytes, out string reason) {
+        var source = (rows ?? []);
+        var normalized = new StateRow[source.Count];
+
+        bytes = 0L;
+
+        for (var rowIndex = 0; rowIndex < source.Count; rowIndex++) {
+            var row = source[rowIndex];
+
+            if (row is null) {
+                normalized[rowIndex] = null!;
+                continue;
+            }
+            if (!StateVisibilityStorage.TryNormalize(
+                bytes: out var rowBytes,
+                normalized: out var rowVisibility,
+                reason: out reason,
+                value: row.Visibility
+            )) {
+                reason = $"row '{row.Name.Value}' {reason}";
+                return [];
+            }
+
+            bytes += rowBytes;
+
+            var cells = row.Cells;
+            var copiedCells = (cells is null ? null : new StateCell[cells.Count]);
+            // A caller may hand the record any IReadOnlyList implementation. Detach every non-null cell collection
+            // even when its current visibility values need no normalization, so later list mutation cannot change
+            // what the arena's declaration snapshot retains.
+            var changed = ((cells is not null) || !ReferenceEquals(row.Visibility, rowVisibility));
+
+            for (var cellIndex = 0; cellIndex < (cells?.Count ?? 0); cellIndex++) {
+                var cell = cells![cellIndex];
+
+                if (cell is null) {
+                    copiedCells![cellIndex] = null!;
+                    continue;
+                }
+                if (!StateVisibilityStorage.TryNormalize(
+                    bytes: out var cellBytes,
+                    normalized: out var cellVisibility,
+                    reason: out reason,
+                    value: cell.Visibility
+                )) {
+                    reason = $"row '{row.Name.Value}' cell '{cell.Key.Value}' {reason}";
+                    return [];
+                }
+
+                bytes += cellBytes;
+                changed |= !ReferenceEquals(cell.Visibility, cellVisibility);
+                copiedCells![cellIndex] = (ReferenceEquals(cell.Visibility, cellVisibility)
+                    ? cell
+                    : (cell with { Visibility = cellVisibility })
+                );
+            }
+
+            normalized[rowIndex] = (changed
+                ? (row with {
+                    Cells = ((copiedCells is null) ? null : Array.AsReadOnly(array: copiedCells)),
+                    Visibility = rowVisibility,
+                })
+                : row
+            );
+        }
+
+        reason = string.Empty;
+        return Array.AsReadOnly(array: normalized);
+    }
 
     /// <summary>Returns an ordered row's append generation: a counter that moves on every mutation of the row
     /// except a push at its tail, so a walk memoized over the row's prefix is valid exactly while it has not

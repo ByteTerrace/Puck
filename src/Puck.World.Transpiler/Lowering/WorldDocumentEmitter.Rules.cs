@@ -94,7 +94,7 @@ public static partial class WorldDocumentEmitter {
                         jsonPointer: $"{rulePointer}/locals/{locals.Count}",
                         span: local.Span
                     );
-                    locals.AppendNode(item: LowerLocal(local: local));
+                    locals.AppendNode(item: LowerLocal(local: local, scope: scope));
                     break;
                 case DecisionBlockNode decision:
                     scope.SourceMap?.Register(
@@ -176,11 +176,22 @@ public static partial class WorldDocumentEmitter {
         scope.CurrentPointer = oldPointer;
         rulesArr.AppendNode(item: obj);
     }
-    private static JsonObject LowerLocal(LocalStatementNode local) => new() {
-        ["name"] = local.Name,
-        ["kind"] = local.Kind,
-        ["expression"] = local.ExpressionText,
-    };
+    private static JsonObject LowerLocal(LocalStatementNode local, DocumentScope scope) {
+        var text = local.ExpressionText;
+
+        text = ResolveDerivedStateInText(text: text, scope: scope);
+        text = ResolveCollectionOperationsInText(scope: scope, text: text);
+        text = ResolveRecordFieldAccessesInText(scope: scope, text: text);
+        text = ResolveEnumsInText(scope: scope, text: text);
+        text = ResolveOperandConstants(scope: scope, text: text);
+        text = ResolveFamilyReferencesInText(scope: scope, text: text);
+
+        return new JsonObject {
+            ["name"] = local.Name,
+            ["kind"] = local.Kind,
+            ["expression"] = text,
+        };
+    }
     private static JsonObject LowerDecisionBlock(DecisionBlockNode decision, DocumentScope scope) {
         var decisionPointer = $"{scope.CurrentPointer}/decision";
         var obj = new JsonObject();

@@ -182,6 +182,8 @@ public sealed partial class StateArena {
         m_texts = source.m_texts;
         m_vectors = source.m_vectors;
         m_visibilities = source.m_visibilities;
+        m_declarationVisibilityBytes = source.m_declarationVisibilityBytes;
+        m_visibilityBytes = source.m_visibilityBytes;
 
         m_changeDiffers = [];
         m_changeStamp = [];

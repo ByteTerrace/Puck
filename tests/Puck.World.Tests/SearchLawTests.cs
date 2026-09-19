@@ -24,7 +24,7 @@ public sealed class SearchLawTests {
     }
 
     private static WorldDefinition ChessWithSearch() {
-        var path = Path.Combine(RepoRoot(), "tests", "Puck.World.Tests", "Fixtures", "minimal-chess-host.world.json");
+        var path = Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "worlds", "games", "chess.world.json");
 
         Assert.True(WorldDefinitionLoader.TryLoadFile(path, out var loaded, out var reason), reason);
 
@@ -187,7 +187,7 @@ public sealed class SearchLawTests {
             Assert.True(
                 condition: WorldSearchCompilation.TryPlanAll(
                     definition: definition,
-                    judge: out _,
+                    judges: out _,
                     plans: out var plans,
                     reason: out var reason,
                     rules: WorldFactsCompiler.CompileAll(definition: definition),

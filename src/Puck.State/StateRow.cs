@@ -565,6 +565,10 @@ public static class StateCapacity {
     /// <see cref="MaxTextValueLength"/> since it is likewise a free-form issuer label, never a validated-identifier
     /// type.</summary>
     public const int MaxProvenanceLength = 256;
+    /// <summary>The most explicit readers one row or cell visibility may retain.</summary>
+    public const int MaxVisibilityReaders = 32;
+    /// <summary>The most UTF-16 code units one explicit visibility reader token may retain.</summary>
+    public const int MaxVisibilityReaderLength = 256;
     /// <summary>The section's row-count ceiling. A row is one layout record, one key-to-slot map, and one version,
     /// generation and change stamp in every arena over the catalog; its cells are counted by the arena's byte
     /// ceiling (<see cref="ArenaCapacity.MaxBytes"/>), and what a rule does across rows is priced on the work

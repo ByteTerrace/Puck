@@ -55,7 +55,7 @@ public static partial class WorldDocumentEmitter {
                     break;
 
                 case LocalStatementNode localStmt:
-                    localsList.Add(item: LowerLocal(local: localStmt));
+                    localsList.Add(item: LowerLocal(local: localStmt, scope: scope));
                     break;
 
                 case PropertyNode propNode:

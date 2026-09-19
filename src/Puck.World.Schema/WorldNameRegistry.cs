@@ -971,6 +971,11 @@ public static partial class WorldNameRegistry {
             WorldNameKind.State,
             WorldNameRole.Names
         ),
+        new(typeof(WorldSearchRow), nameof(WorldSearchRow.Enabled), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldSearchRow), nameof(WorldSearchRow.Revision), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldEffect.PoseCell), nameof(WorldEffect.PoseCell.Key), WorldNameKind.State, WorldNameRole.Key),
+        new(typeof(WorldEffect.PoseCell), nameof(WorldEffect.PoseCell.Topology), WorldNameKind.Topology, WorldNameRole.Names),
+        new(typeof(WorldEffect.PoseCell), nameof(WorldEffect.PoseCell.Expression), WorldNameKind.State, WorldNameRole.Expression),
         new(
             typeof(WorldSearchRow),
             nameof(WorldSearchRow.Best),

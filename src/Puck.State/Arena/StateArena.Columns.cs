@@ -216,7 +216,9 @@ public sealed partial class StateArena {
 
                 break;
             case ArenaColumn.Visibility:
+                m_visibilityBytes -= StateVisibilityStorage.RetainedBytes(value: m_visibilities?[index]);
                 (m_visibilities ??= new StateVisibility?[m_layout.CellSlotCount])[index] = ((StateVisibility?)value);
+                m_visibilityBytes += StateVisibilityStorage.RetainedBytes(value: ((StateVisibility?)value));
 
                 break;
             case ArenaColumn.Observation:

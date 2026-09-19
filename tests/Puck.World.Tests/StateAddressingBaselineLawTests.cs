@@ -134,11 +134,11 @@ public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
 
         Assert.Equal(
             actual: hash31,
-            expected: 0x867dd6f9dea21e87UL
+            expected: 0x05d8507c60b73487UL
         );
         Assert.Equal(
             actual: hash151,
-            expected: 0xaf51fbbf4ba1d024UL
+            expected: 0xef603db93519732eUL
         );
         Assert.True(condition: (fixedLiteralCellOps > 0));
     }

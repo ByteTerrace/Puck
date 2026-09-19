@@ -150,8 +150,8 @@ public static partial class WorldDefinitionValidator {
 
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        if (readers.Count > 32) {
-            errors.Add(item: $"state row '{name}': visibility admits at most 32 readers.");
+        if (readers.Count > StateCapacity.MaxVisibilityReaders) {
+            errors.Add(item: $"state row '{name}': visibility admits at most {StateCapacity.MaxVisibilityReaders} readers.");
         }
 
         foreach (var reader in readers) {

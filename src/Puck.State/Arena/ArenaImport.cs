@@ -29,13 +29,15 @@ public sealed partial class StateArena {
         var admitted = new List<(int RowOrdinal, StateRow Row)>(capacity: (rows?.Count ?? 0));
         var pending = new HashSet<string>(comparer: StringComparer.Ordinal);
         var seen = new bool[m_layout.RowCount];
+        var visibilityBytes = m_visibilityBytes;
 
         foreach (var row in (rows ?? [])) {
             if (!TryAdmitImport(
                 pending: pending,
                 reason: out reason,
                 row: row,
-                rowOrdinal: out var rowOrdinal
+                rowOrdinal: out var rowOrdinal,
+                visibilityBytes: out var importedVisibilityBytes
             )) {
                 return false;
             }
@@ -46,7 +48,14 @@ public sealed partial class StateArena {
             }
 
             seen[rowOrdinal] = true;
+            visibilityBytes -= VisibilityBytes(rowOrdinal: rowOrdinal);
+            visibilityBytes += importedVisibilityBytes;
             admitted.Add(item: (rowOrdinal, row!));
+        }
+
+        if ((m_layout.Bytes + m_declarationVisibilityBytes + visibilityBytes) > ArenaCapacity.MaxBytes) {
+            reason = $"the imported rows bring the arena's live visibility payload past the {ArenaCapacity.MaxBytes}-byte ceiling";
+            return false;
         }
 
         foreach (var (rowOrdinal, row) in admitted) {
@@ -285,10 +294,16 @@ public sealed partial class StateArena {
             );
         }
         if (cell.Visibility is { } visibility) {
+            _ = StateVisibilityStorage.TryNormalize(
+                bytes: out _,
+                normalized: out var normalized,
+                reason: out _,
+                value: visibility
+            );
             WriteReference(
                 column: ArenaColumn.Visibility,
                 index: slot,
-                value: visibility
+                value: normalized
             );
         }
         if (cell.Observation is { } observation) {
@@ -531,8 +546,9 @@ public sealed partial class StateArena {
 
         return true;
     }
-    private bool TryAdmitImport(StateRow? row, HashSet<string> pending, out int rowOrdinal, out string reason) {
+    private bool TryAdmitImport(StateRow? row, HashSet<string> pending, out int rowOrdinal, out long visibilityBytes, out string reason) {
         rowOrdinal = -1;
+        visibilityBytes = 0L;
 
         if (row is null) {
             reason = "an imported row carries no declaration";
@@ -555,6 +571,15 @@ public sealed partial class StateArena {
         var descriptor = m_catalog.Descriptors[rowOrdinal];
         ref readonly var layout = ref m_layout[rowOrdinal];
         var cells = (row.Cells ?? []);
+
+        if (!StateVisibilityStorage.TryMeasure(
+            bytes: out _,
+            reason: out var rowVisibilityReason,
+            value: row.Visibility
+        )) {
+            reason = $"row '{row.Name.Value}' {rowVisibilityReason}";
+            return false;
+        }
 
         if (descriptor.Kind != row.Kind) {
             reason = $"row '{row.Name.Value}' stores {descriptor.Kind}, which an imported {row.Kind} row does not carry";
@@ -656,6 +681,16 @@ public sealed partial class StateArena {
 
                 return false;
             }
+            if (!StateVisibilityStorage.TryMeasure(
+                bytes: out var cellVisibilityBytes,
+                reason: out var visibilityReason,
+                value: cell.Visibility
+            )) {
+                reason = $"row '{row.Name.Value}' cell '{cell.Key.Value}' {visibilityReason}";
+                return false;
+            }
+
+            visibilityBytes += cellVisibilityBytes;
             if (!TraitsAgree(
                 cell: cell,
                 declared: declared,
@@ -680,5 +715,16 @@ public sealed partial class StateArena {
         reason = string.Empty;
 
         return true;
+    }
+
+    private long VisibilityBytes(int rowOrdinal) {
+        ref readonly var layout = ref m_layout[rowOrdinal];
+        var bytes = 0L;
+
+        for (var position = 0; position < layout.CellCapacity; position++) {
+            bytes += StateVisibilityStorage.RetainedBytes(value: m_visibilities?[(layout.CellStart + position)]);
+        }
+
+        return bytes;
     }
 }

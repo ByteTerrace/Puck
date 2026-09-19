@@ -14,8 +14,11 @@ namespace Puck.State;
 /// far: this host advertises no facet, so a rule needing one is refused by name when the job set is
 /// installed.</para>
 /// </remarks>
-public class ArenaSearchEffectHost : ArenaEffectHost {
+public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
     private int m_queued;
+
+    /// <summary>Gets or sets the hypothetical ply supplied by the search judge.</summary>
+    public int SearchPly { get; set; }
 
     /// <summary>Initializes a host over the arena a search opens its candidate scopes on.</summary>
     /// <param name="arena">The store every read and write addresses.</param>

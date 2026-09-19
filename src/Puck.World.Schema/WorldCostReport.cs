@@ -74,7 +74,7 @@ public sealed record WorldCostReport(
             issues.Add(item: searchReservations.Reason!);
             if (!WorldSearchCompilation.TryPlanAll(
                 definition: definition,
-                judge: out _,
+                judges: out _,
                 plans: out _,
                 reason: out var searchReason,
                 rules: compiledRules,

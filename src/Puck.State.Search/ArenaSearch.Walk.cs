@@ -301,7 +301,10 @@ public sealed partial class ArenaSearch {
         level.EntryTarget = entryTarget;
         // Only a ply whose value the table will store needs the key of the position it opened on.
         level.Key = (keyed
-            ? PositionKey(job: job)
+            ? PositionKey(
+                job: job,
+                movePly: MovePly(job: job)
+            )
             : 0UL
         );
         level.Shape = 0;
@@ -488,7 +491,10 @@ public sealed partial class ArenaSearch {
             return false;
         }
 
-        var key = PositionKey(job: job);
+        var key = PositionKey(
+            job: job,
+            movePly: MovePly(job: job)
+        );
         var slot = ((int)(key & ((ulong)(keys.Length - 1))));
         var meta = job.TtMeta![slot];
 

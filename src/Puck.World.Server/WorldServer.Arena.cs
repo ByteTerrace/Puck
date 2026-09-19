@@ -505,7 +505,7 @@ public sealed partial class WorldServer {
     private void RebuildSearch(WorldDefinition definition) {
         if (!WorldSearchCompilation.TryPlanAll(
             definition: definition,
-            judge: out var judgeRules,
+            judges: out var judgeRules,
             plans: out var authored,
             reason: out var planReason,
             rules: m_ruleHost.Rules,
@@ -539,7 +539,7 @@ public sealed partial class WorldServer {
             plans[index] = resolved;
             judges[index] = new RuleArenaSearchJudge(
                 host: host,
-                rules: judgeRules,
+                rules: judgeRules[index],
                 score: scores[index]
             );
         }

@@ -237,6 +237,7 @@ public sealed partial class ArenaSearch {
     private bool m_stampFolded;
     private ulong m_stampValue;
     private ulong[] m_stampVersions = [];
+    private CellKey m_bestRevisionKey;
     private CellKey m_bestScoreKey;
     private CellKey m_bestTargetKey;
     private CellKey m_bestTokenKey;
@@ -261,6 +262,8 @@ public sealed partial class ArenaSearch {
     // catalog, so they are re-resolved on every install rather than held from construction.
     private void ResolveCatalogKeys() {
         var keys = m_arena.Catalog.Keys;
+
+        _ = keys.TryResolve(key: out m_bestRevisionKey, name: CellName.Parse(candidate: "revision"));
 
         _ = keys.TryResolve(
             key: out m_bestScoreKey,
@@ -344,7 +347,7 @@ public sealed partial class ArenaSearch {
             }
             if (
                 (plan.BestOrdinal >= 0) &&
-                (!m_bestScoreKey.IsValid || !m_bestTargetKey.IsValid || !m_bestTokenKey.IsValid)
+                (!m_bestScoreKey.IsValid || !m_bestTargetKey.IsValid || !m_bestTokenKey.IsValid || (plan.RevisionOrdinal >= 0 && !m_bestRevisionKey.IsValid))
             ) {
                 reason = $"search '{plan.Name}' writes a best-move row, and this catalog interns no 'token', 'to', and 'score' keys to address it by";
 
@@ -416,6 +419,9 @@ public sealed partial class ArenaSearch {
         var stamp = Stamp();
 
         foreach (var job in m_jobs) {
+            if (job.Plan.EnabledOrdinal >= 0 && Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L) {
+                continue;
+            }
             var work = job.Plan.Work;
             var spent = 0L;
 
@@ -483,10 +489,14 @@ public sealed partial class ArenaSearch {
     /// <summary>Returns the transposition key of the position the arena holds for one job.</summary>
     /// <param name="index">The job's index in the installed set.</param>
     /// <returns>The key.</returns>
-    /// <remarks>The key folds the rows the job's plan addresses and the rows its judge reads, so a row outside both
-    /// moves the arena's own hash and never this.</remarks>
+    /// <remarks>The root key folds the rows the job's plan addresses and the rows its judge reads, so a row outside
+    /// both moves the arena's own hash and never this. A transposition key also folds the move ply supplied to a
+    /// judge, because a search-only rule may read it.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> addresses no installed job.</exception>
-    public ulong PositionKey(int index) => PositionKey(job: JobAt(index: index));
+    public ulong PositionKey(int index) => PositionKey(
+        job: JobAt(index: index),
+        movePly: 0
+    );
     /// <summary>Returns one job's progress.</summary>
     /// <param name="index">The job's index in the installed set.</param>
     /// <returns>The status.</returns>
@@ -552,6 +562,8 @@ public sealed partial class ArenaSearch {
             plan.TokensOrdinal,
             plan.TurnOrdinal,
             plan.VerdictOrdinal,
+            plan.EnabledOrdinal >= 0 ? plan.EnabledOrdinal : plan.TurnOrdinal,
+            plan.RevisionOrdinal >= 0 ? plan.RevisionOrdinal : plan.TurnOrdinal,
             ((plan.ScoresOrdinal >= 0)
                 ? plan.ScoresOrdinal
                 : plan.TurnOrdinal),
@@ -775,9 +787,10 @@ public sealed partial class ArenaSearch {
 
         return m_stampValue;
     }
-    // The transposition key of the position the arena holds for one job: its own rows alone, folded in ordinal
-    // order.
-    private ulong PositionKey(Job job) {
+    // The transposition key of the position the arena holds for one job: its own rows and the move ply its judge
+    // reads, folded in a stable order. A chance draw does not advance that ply, so callers pass MovePly rather than
+    // their structural level.
+    private ulong PositionKey(Job job, int movePly) {
         var hash = Fnv1aHash.Create();
 
         var timed = false;
@@ -796,6 +809,8 @@ public sealed partial class ArenaSearch {
             hash.Add(value: m_tick);
             hash.Add(value: m_engineTick);
         }
+
+        hash.Add(value: movePly);
 
         return hash.Value;
     }
@@ -939,6 +954,13 @@ public sealed partial class ArenaSearch {
             }
         }
         if (plan.BestOrdinal >= 0) {
+            if (plan.RevisionOrdinal >= 0) {
+                m_outputs.Add(item: new ArenaSearchWrite.Cell(
+                    Key: m_bestRevisionKey,
+                    RowOrdinal: plan.BestOrdinal,
+                    Value: Slot(rowOrdinal: plan.RevisionOrdinal)
+                ));
+            }
             m_outputs.Add(item: new ArenaSearchWrite.Cell(
                 Key: m_bestTokenKey,
                 RowOrdinal: plan.BestOrdinal,

@@ -6,10 +6,12 @@ namespace Puck.State;
 /// whose size is a function of the document and the input sequence alone is what lets two runs of the same world
 /// lay out identically.</remarks>
 public static class ArenaCapacity {
-    /// <summary>The most bytes one arena may occupy, as <see cref="ArenaLayout.Bytes"/> measures it: every column
+    /// <summary>The most bytes one arena may occupy, as <see cref="StateArena.Bytes"/> measures it: every column
     /// at its full width, the change stamps a settle keeps per position, the row and key indexes, the vector
     /// components, and the strings its reference columns point at, each counted at its length ceiling: a provenance
-    /// for every cell slot and a text for every slot of a text row. It is a document's memory bound, the one figure
+    /// for every cell slot and a text for every slot of a text row. <see cref="StateArena.Bytes"/> adds the bounded,
+    /// normalized visibility payload retained by its declaration snapshot and live cell columns. It is a document's
+    /// memory bound, the one figure
     /// every row's capacity, every board and every lane is counted against, and a section that lays out past it is
     /// refused at the row that crossed.</summary>
     public const long MaxBytes = (64L * 1024L * 1024L);

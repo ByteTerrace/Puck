@@ -221,14 +221,18 @@ three nested 64-word leases. A single small lease is about twice the cost, and
 leases of thousands of elements cost the same either way, because clearing
 them dominates.
 
-**K2a — The memory bound is the arena's layout, in bytes.** `ArenaLayout.Bytes`
+**K2a — The memory bound is the arena's storage, in bytes.** `ArenaLayout.Bytes`
 measures every column at its full width, the change stamps a settle keeps per
 position, the row and key indexes, the vector components, and the strings its
 reference columns point at, with a reference counted as eight bytes on every
 host so a document measures the same wherever it is admitted. A string is
 counted at the length ceiling its write doors hold it to: a provenance for
-every cell slot, a text for every slot of a text row. `ArenaCapacity.MaxBytes` bounds it, and a section is refused at
-the row that crossed before anything is allocated for it. A count of cells
+every cell slot, a text for every slot of a text row. `StateArena.Bytes` adds
+the bounded visibility payload held by declaration and live state;
+`ArenaCapacity.MaxBytes` bounds that total. Layout overflow refuses before
+column allocation, and visibility admission checks construction, imports and
+writes. See [work budgets](../reference/state/hosting.md#work-budgets).
+A count of cells
 cannot stand in for it: a cell slot costs about 250 bytes once every column a
 row may use is allocated, and lanes, draw masks and vectors are not cells. The
 undo record has its own ceiling (`ArenaCapacity.MaxJournalBytes`), which counts

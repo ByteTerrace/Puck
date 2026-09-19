@@ -148,13 +148,7 @@ public sealed class ArenaJournal {
             case string text:
                 return StringBytes(text: text);
             case StateVisibility visibility:
-                var bytes = (2L * ObjectBytes);
-
-                foreach (var reader in (visibility.Readers ?? [])) {
-                    bytes += (sizeof(long) + StringBytes(text: reader));
-                }
-
-                return bytes;
+                return StateVisibilityStorage.RetainedBytes(value: visibility);
             default:
                 return ObjectBytes;
         }

@@ -394,13 +394,35 @@ public sealed partial class StateArena {
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="key">The cell key.</param>
     /// <param name="visibility">The restriction to store.</param>
-    /// <returns><see langword="true"/> when the cell address resolves.</returns>
-    public bool TryWriteVisibility(int rowOrdinal, CellKey key, StateVisibility? visibility) => TryWriteCellReference(
-        column: ArenaColumn.Visibility,
-        key: key,
-        rowOrdinal: rowOrdinal,
-        value: visibility
-    );
+    /// <returns><see langword="true"/> when the cell address resolves, the restriction fits the visibility limits,
+    /// and its retained payload fits the arena byte ceiling.</returns>
+    /// <remarks>The arena copies an arbitrary reader list into its immutable, tightly sized representation. Passing
+    /// back a visibility read from the arena reuses that representation.</remarks>
+    public bool TryWriteVisibility(int rowOrdinal, CellKey key, StateVisibility? visibility) {
+        if (!TryPresentSlot(
+            key: key,
+            rowOrdinal: rowOrdinal,
+            slot: out var slot
+        ) ||
+            !StateVisibilityStorage.TryNormalize(
+            bytes: out var bytes,
+            normalized: out var normalized,
+            reason: out _,
+            value: visibility
+        ) ||
+            ((m_layout.Bytes + m_declarationVisibilityBytes + m_visibilityBytes - StateVisibilityStorage.RetainedBytes(value: m_visibilities?[slot]) + bytes) > ArenaCapacity.MaxBytes)
+        ) {
+            return false;
+        }
+
+        WriteReference(
+            column: ArenaColumn.Visibility,
+            index: slot,
+            value: normalized
+        );
+
+        return true;
+    }
 
     // A cell's runtime state rides its value: export, import, and relayout carry a cell only while it holds one, so
     // a cell that is addressable but holds nothing takes no runtime state that those would then drop.

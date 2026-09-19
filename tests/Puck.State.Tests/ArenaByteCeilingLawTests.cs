@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Puck.State.Tests;
 
-/// <summary>CONTRACT UNDER TEST: <see cref="ArenaLayout.Bytes"/> is an upper bound on what an arena over the layout
+/// <summary>CONTRACT UNDER TEST: <see cref="StateArena.Bytes"/> is an upper bound on what an arena
 /// allocates, with every lazily allocated column forced; a section that lays out past
 /// <see cref="ArenaCapacity.MaxBytes"/> is refused at the row that crossed, before anything is allocated for it; and
 /// the journal reads over its ceiling exactly while the record it holds is past it.</summary>
@@ -101,7 +101,7 @@ public sealed class ArenaByteCeilingLawTests {
 
         GC.KeepAlive(obj: arena);
 
-        return (allocated, arena.Layout.Bytes);
+        return (allocated, arena.Bytes);
     }
 
     [Fact]
@@ -178,7 +178,7 @@ public sealed class ArenaByteCeilingLawTests {
 
         GC.KeepAlive(obj: arena);
 
-        return (allocated, arena.Layout.Bytes);
+        return (allocated, arena.Bytes);
     }
 
     [Fact]

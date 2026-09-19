@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -81,6 +82,107 @@ public sealed record StateVisibility(IReadOnlyList<string>? Readers = null, Hidd
         }
         return false;
     }
+}
+
+// The arena owns the collection it retains. Recognizing this marker makes a visibility already admitted by an
+// arena reusable without another copy, while arbitrary IReadOnlyList implementations are copied at the boundary.
+internal sealed class ArenaVisibilityReaders(string[] items) : IReadOnlyList<string> {
+    public int Count => items.Length;
+    public string this[int index] => items[index];
+    public IEnumerator<string> GetEnumerator() => ((IEnumerable<string>)items).GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => items.GetEnumerator();
+}
+
+internal static class StateVisibilityStorage {
+    private const long ObjectBytes = 32L;
+    private const long VisibilityBytes = 64L;
+
+    internal static bool TryMeasure(StateVisibility? value, out long bytes, out string reason) => TryNormalize(
+        bytes: out bytes,
+        copy: false,
+        normalized: out _,
+        reason: out reason,
+        value: value
+    );
+    internal static bool TryNormalize(StateVisibility? value, out StateVisibility? normalized, out long bytes, out string reason) => TryNormalize(
+        bytes: out bytes,
+        copy: true,
+        normalized: out normalized,
+        reason: out reason,
+        value: value
+    );
+    private static bool TryNormalize(StateVisibility? value, bool copy, out StateVisibility? normalized, out long bytes, out string reason) {
+        normalized = value;
+        bytes = 0L;
+        reason = string.Empty;
+
+        if (value is null) {
+            return true;
+        }
+        if ((value.ReadersFrom?.Length ?? 0) > SafeName.MaxLength) {
+            reason = $"visibility readersFrom is {value.ReadersFrom!.Length} characters, past the {SafeName.MaxLength}-character limit";
+            return false;
+        }
+
+        var readers = value.Readers;
+
+        if (readers is not null) {
+            if (readers.Count > StateCapacity.MaxVisibilityReaders) {
+                reason = $"visibility carries {readers.Count} readers, past the {StateCapacity.MaxVisibilityReaders}-reader limit";
+                return false;
+            }
+
+            for (var index = 0; index < readers.Count; index++) {
+                var reader = readers[index];
+
+                if (reader is null) {
+                    reason = $"visibility reader {index} is null";
+                    return false;
+                }
+                if (reader.Length > StateCapacity.MaxVisibilityReaderLength) {
+                    reason = $"visibility reader {index} is {reader.Length} characters, past the {StateCapacity.MaxVisibilityReaderLength}-character limit";
+                    return false;
+                }
+            }
+
+            if (copy && (readers is not ArenaVisibilityReaders)) {
+                var copied = new string[readers.Count];
+
+                for (var index = 0; index < copied.Length; index++) {
+                    copied[index] = readers[index];
+                }
+
+                normalized = value with { Readers = new ArenaVisibilityReaders(items: copied) };
+            }
+        }
+
+        bytes = RetainedBytes(value: normalized!);
+        return true;
+    }
+
+    internal static long RetainedBytes(StateVisibility? value) {
+        if (value is null) {
+            return 0L;
+        }
+
+        var bytes = VisibilityBytes;
+
+        if (value.ReadersFrom is { } readersFrom) {
+            bytes += StringBytes(text: readersFrom);
+        }
+        if (value.Readers is { } readers) {
+            // The normalized representation owns one wrapper and one tightly sized reference array.
+            bytes += (2L * ObjectBytes) + (((long)readers.Count) * sizeof(long));
+
+            for (var index = 0; index < readers.Count; index++) {
+                bytes += StringBytes(text: readers[index]);
+            }
+        }
+
+        return bytes;
+    }
+
+    private static long StringBytes(string text) => (ObjectBytes + (2L * text.Length));
 }
 /// <summary>A persisted knowledge layer refreshed explicitly by the authority.</summary>
 /// <param name="Source">The integer/boolean board observed.</param>

@@ -466,7 +466,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     private static string DescribeState(WorldServer server) {
         var rows = server.Definition.State;
         var lines = new List<string>(capacity: (1 + rows.Count)) {
-            $"[world.state: rows {rows.Count}/{StateCapacity.MaxRows}, arena {server.Arena.Layout.Bytes}/{ArenaCapacity.MaxBytes} bytes]",
+            $"[world.state: rows {rows.Count}/{StateCapacity.MaxRows}, arena {server.Arena.Bytes}/{ArenaCapacity.MaxBytes} bytes]",
         };
 
         foreach (var row in rows) {

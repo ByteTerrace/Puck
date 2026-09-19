@@ -163,8 +163,12 @@ a fifth kind, and the cross-document write-back channel
 rows, `MaxCellsPerRow` (4,096) cells per row (which an authored `capacity` may
 only NARROW, never widen; a slot or keys row authoring none gets `DefaultCellRoom`, 128), and
 `MaxTextValueLength` (1,024) text UTF-16 code units, refused by name past any. The rows
-together are bounded in bytes, not cells: `ArenaLayout.Bytes` against
-`ArenaCapacity.MaxBytes` (64 MiB), refused at the row that crossed; `world.state` prints both.
+together are bounded in bytes, not cells: `StateArena.Bytes` against
+`ArenaCapacity.MaxBytes` (64 MiB); `world.state` prints both. When validating a
+document without building its arena, combine `ArenaLayout.Bytes` with
+`StateArena.TryMeasureVisibility`; layout alone omits the bounded declaration
+and live visibility payload. Keep runtime writes, imports, journal retention,
+rewind and relayout on the same visibility charge, including `ReadersFrom`.
 
 A keyed row may set `evicts: true` to trade its ordinary refuse-on-overflow
 capacity ceiling for FIFO drop-oldest: an `UpsertStateCell` write that mints a
@@ -576,7 +580,12 @@ destination empty), and `promote` (`codes`: an int row keyed
 by the tokens; `to`: up to sixteen codes — relocate and change the token's code to each in turn) are the other
 arms. `relocate` with `displace: false` leaves the standing token in place rather than evicting it. A job
 with a score keeps a transposition table (`WorldSearchCapacity.TranspositionEntries`
-slots keyed by the frame hash) that rides the checkpoint and hash.
+slots keyed by relevant state and effective move ply) that rides the checkpoint
+and hash. Preserve the move-ply component when changing cache probes or stores:
+judges may read `$search:ply`, and chance scopes do not advance it. When scoping
+a world's judge, follow each reached derived board's inverse token and code
+rows as dependencies, including boards reached through score expressions or
+other judge rules.
 
 Outputs: `legal` (int row keyed by the tokens, a per-token destination mask,
 boards ≤ 64 cells). `reach`/`held`/`counts` work for a board

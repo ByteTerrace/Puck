@@ -134,6 +134,8 @@ public sealed record WorldSearchChance(string Row, int AtDepth);
 /// seat's own entry rather than negating the reply, so no seat's gain is assumed to be another's loss (max-n).
 /// Exactly one of this and <paramref name="Score"/> is authored when a score is needed; refused with
 /// <see cref="SearchMethod.Tree"/>, whose outcome backprop alternates sign along the path.</param>
+/// <param name="Enabled">Optional integer slot; zero suspends candidate work.</param>
+/// <param name="Revision">Optional integer slot copied to best.revision with the completed answer.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchRow(
     string Name,
@@ -154,7 +156,9 @@ public sealed record WorldSearchRow(
     SearchMethod Method = SearchMethod.Negamax,
     int Iterations = 256,
     WorldSearchChance? Chance = null,
-    string? Scores = null
+    string? Scores = null,
+    string? Enabled = null,
+    string? Revision = null
 ) {
     /// <summary>The one candidate shape a job with none authored enumerates: a plain relocation that evicts
     /// whatever stood on the target — this section's original, unconditional behavior.</summary>
@@ -613,6 +617,164 @@ public static class WorldSearchCompilation {
 
         return judge.ToArray();
     }
+    /// <summary>Returns the rules one job's judge evaluates: of the rules a frame could evaluate, those that can
+    /// reach a row the job reads, in their authored order.</summary>
+    /// <remarks>A judge run moves the job's tokens and reads its verdict and score. A rule matters to that exactly
+    /// when something it writes reaches a row the job names or its score reads, directly or through the reads of a
+    /// rule that does. The set is that closure, taken by row: a rule writing a row in it joins, and the rows it reads
+    /// and iterates join with it. A rule outside it writes nothing the job can observe, so dropping it changes no
+    /// answer. In a world composed of several games this is one game's rules, where the whole sheet would price
+    /// every other game's rules into each candidate.</remarks>
+    /// <param name="judge">The rules a frame could evaluate (<see cref="JudgeRules(CompiledRule[])"/>).</param>
+    /// <param name="row">The job.</param>
+    /// <param name="catalog">The catalog the rules were compiled against.</param>
+    /// <param name="context">The rule compile context, for reading what <see cref="WorldSearchRow.Score"/>
+    /// reads.</param>
+    /// <returns>The job's judge. A job whose score does not compile keeps every rule; its plan refuses it by
+    /// name.</returns>
+    public static CompiledRule[] JudgeRules(CompiledRule[] judge, WorldSearchRow row, StateCatalog catalog, WorldFactsCompileContext context) {
+        ArgumentNullException.ThrowIfNull(argument: judge);
+        ArgumentNullException.ThrowIfNull(argument: row);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+
+        var reached = new HashSet<int>();
+        var accesses = new List<CellAccess>();
+
+        void ReachOrdinal(int ordinal) {
+            if (!reached.Add(item: ordinal)) {
+                return;
+            }
+
+            if (
+                (ordinal < 0) ||
+                (ordinal >= catalog.Descriptors.Count)
+            ) {
+                return;
+            }
+
+            var descriptor = catalog.Descriptors[ordinal];
+            if (
+                (descriptor.Lane != StateLane.Document) ||
+                (WorldDefinitionRows.FindStateRow(
+                    rows: context.Definition.State,
+                    name: descriptor.Name
+                )?.Inverse is not { } inverse)
+            ) {
+                return;
+            }
+
+            Reach(name: inverse.Tokens.Value);
+            Reach(name: inverse.Codes.Value);
+        }
+
+        void Reach(string? name) {
+            if (
+                (name is not null) &&
+                catalog.TryResolve(
+                    handle: out var handle,
+                    lane: StateLane.Document,
+                    name: name
+                )
+            ) {
+                ReachOrdinal(ordinal: handle.Ordinal);
+            }
+        }
+
+        Reach(name: row.Tokens);
+        Reach(name: row.Board);
+        Reach(name: row.Turn);
+        Reach(name: row.Verdict);
+        Reach(name: row.Legal);
+        Reach(name: row.Reach);
+        Reach(name: row.Held);
+        Reach(name: row.Counts);
+        Reach(name: row.Scores);
+        Reach(name: row.Chance?.Row);
+
+        foreach (var zone in (row.Zones ?? [])) {
+            Reach(name: zone);
+        }
+
+        if (row.Score is { } scoreText) {
+            if (!ExpressionSpelling.TryParse(
+                error: out _,
+                program: out var scoreProgram,
+                text: scoreText
+            )) {
+                return judge;
+            }
+
+            try {
+                RuleDataflow.CollectExpression(
+                    into: accesses,
+                    tokens: RuleCompiler.CompileExpression(
+                        context: context,
+                        expression: scoreProgram,
+                        kind: CellKind.Int,
+                        ruleName: row.Name,
+                        verb: "search score"
+                    )
+                );
+            } catch (RuleException) {
+                return judge;
+            }
+
+            foreach (var access in accesses) {
+                ReachOrdinal(ordinal: access.RowOrdinal);
+            }
+        }
+
+        var reads = new List<CellAccess>[judge.Length];
+        var writes = new List<CellAccess>[judge.Length];
+        var kept = new bool[judge.Length];
+
+        for (var index = 0; (index < judge.Length); index++) {
+            reads[index] = [];
+            writes[index] = [];
+            judge[index].CollectReads(into: reads[index]);
+            judge[index].CollectWrites(into: writes[index]);
+        }
+
+        for (var grew = true; grew;) {
+            grew = false;
+
+            for (var index = 0; (index < judge.Length); index++) {
+                if (kept[index]) {
+                    continue;
+                }
+
+                var reaches = false;
+
+                // A write with no resolved row could land anywhere, so its rule stays.
+                foreach (var write in writes[index]) {
+                    reaches |= ((write.RowOrdinal < 0) || reached.Contains(item: write.RowOrdinal));
+                }
+                if (!reaches) {
+                    continue;
+                }
+
+                grew = true;
+                kept[index] = true;
+
+                if (judge[index].ForEachOrdinal >= 0) {
+                    ReachOrdinal(ordinal: judge[index].ForEachOrdinal);
+                }
+                foreach (var read in reads[index]) {
+                    ReachOrdinal(ordinal: read.RowOrdinal);
+                }
+            }
+        }
+
+        var scoped = new List<CompiledRule>(capacity: judge.Length);
+
+        for (var index = 0; (index < judge.Length); index++) {
+            if (kept[index]) {
+                scoped.Add(item: judge[index]);
+            }
+        }
+
+        return [.. scoped];
+    }
     /// <summary>Derives one job's plan, or names why the job cannot run.</summary>
     /// <param name="definition">The world.</param>
     /// <param name="row">The job.</param>
@@ -967,6 +1129,16 @@ public static class WorldSearchCompilation {
                 return false;
             }
         }
+        foreach (var input in new[] { row.Enabled, row.Revision }) {
+            if (input is not null && WorldDefinitionRows.FindStateRow(rows: definition.State, name: input) is not { IsKeyed: false, Kind: CellKind.Int }) {
+                reason = $"search '{row.Name}' input '{input}' must be an integer slot";
+                return false;
+            }
+        }
+        if (row.Revision is not null && row.Best is null) {
+            reason = $"search '{row.Name}' revision requires a best output";
+            return false;
+        }
         if (row.Best is { } bestName) {
             if (WorldDefinitionRows.FindStateRow(
                 rows: definition.State,
@@ -977,9 +1149,9 @@ public static class WorldSearchCompilation {
                 return false;
             }
 
-            foreach (var cell in new[] { "token", "to", "score" }) {
+            foreach (var cell in (row.Revision is null ? new[] { "token", "to", "score" } : new[] { "token", "to", "score", "revision" })) {
                 if (!bestRow.HasCell(key: cell)) {
-                    reason = $"search '{row.Name}' best '{bestName}' must declare cells 'token', 'to', and 'score'";
+                    reason = $"search '{row.Name}' best '{bestName}' must declare cell '{cell}'";
 
                     return false;
                 }
@@ -1106,6 +1278,8 @@ public static class WorldSearchCompilation {
             Method: row.Method,
             Iterations: row.Iterations,
             Chance: chance,
+            Enabled: row.Enabled,
+            Revision: row.Revision,
             Scores: row.Scores
         ) {
             Scored = (score is not null),
@@ -1118,17 +1292,17 @@ public static class WorldSearchCompilation {
     /// <param name="definition">The world.</param>
     /// <param name="rules">The compiled rules.</param>
     /// <param name="plans">The plans, in section order.</param>
-    /// <param name="judge">The rules a judge evaluates.</param>
+    /// <param name="judges">The rules each job's judge evaluates, in section order.</param>
     /// <param name="scores">Each job's compiled score program, in section order; an entry is <see langword="null"/>
     /// when the job declares none.</param>
     /// <param name="reason">Why a job cannot run, or empty.</param>
-    public static bool TryPlanAll(WorldDefinition definition, CompiledRule[] rules, out SearchPlan[] plans, out CompiledRule[] judge, out CompiledExpressionToken[]?[] scores, out string reason) {
+    public static bool TryPlanAll(WorldDefinition definition, CompiledRule[] rules, out SearchPlan[] plans, out CompiledRule[][] judges, out CompiledExpressionToken[]?[] scores, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: rules);
 
         var rows = definition.Search.Rows;
 
-        judge = JudgeRules(rules: rules);
+        judges = new CompiledRule[rows.Count][];
         plans = new SearchPlan[rows.Count];
         scores = new CompiledExpressionToken[]?[rows.Count];
 
@@ -1139,20 +1313,12 @@ public static class WorldSearchCompilation {
         }
 
         var context = WorldFactsCompiler.Context(definition: definition);
-        var judgeCost = JudgeCost(
-            context: context,
-            judge: judge
-        );
+        var frame = JudgeRules(rules: rules);
         var sheet = WorldRuleWorkBudget.Measure(definition: definition).WorkUnitsPerTick;
 
-        // A sheet or a judge no number bounds leaves no allowance to divide, and says why.
-        if (
-            !sheet.IsKnown ||
-            !judgeCost.IsKnown
-        ) {
-            reason = $"search has no work allowance: {(sheet.IsKnown
-                ? $"one judge run is {judgeCost}"
-                : $"the rules' work per tick is {sheet}")}";
+        // A sheet no number bounds leaves no allowance to divide, and says why.
+        if (!sheet.IsKnown) {
+            reason = $"search has no work allowance: the rules' work per tick is {sheet}";
 
             return false;
         }
@@ -1172,6 +1338,23 @@ public static class WorldSearchCompilation {
         ) / rows.Count);
 
         for (var index = 0; (index < rows.Count); index++) {
+            judges[index] = JudgeRules(
+                catalog: definition.StateCatalog,
+                context: context,
+                judge: frame,
+                row: rows[index]
+            );
+
+            var judgeCost = JudgeCost(
+                context: context,
+                judge: judges[index]
+            );
+
+            if (!judgeCost.IsKnown) {
+                reason = $"search '{rows[index].Name}' has no work allowance: one judge run is {judgeCost}";
+
+                return false;
+            }
             if (!TryPlan(
                 definition: definition,
                 row: rows[index],

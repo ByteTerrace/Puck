@@ -243,9 +243,10 @@ board read from every cell in every direction passes at once; it is one
 mebibyte, 16,384 walks at the 64 bytes each occupies. `sortZone` and
 `sortKeyed` lease their key buffers instead of allocating them per firing.
 `MaxTotalCells` is gone with the fourth, and so is an unnamed 262,144-cell
-budget beside it: the document's memory bound is `ArenaLayout.Bytes` against
+budget beside it: the document's memory bound is `StateArena.Bytes` against
 `ArenaCapacity.MaxBytes` (64 MiB), measured over every column at its full width
-and refused at the row that crossed. The largest shipped world lays out to
+plus the bounded visibility payload in declaration and live state, with
+admission at construction, import and write. The largest shipped world lays out to
 about 5 MiB. The undo record takes `ArenaCapacity.MaxJournalBytes` (16 MiB),
 read between effects; a firing past it is the `JournalCeiling` refusal and
 rewinds, and the positions a settle visits are a subset of the record's, so

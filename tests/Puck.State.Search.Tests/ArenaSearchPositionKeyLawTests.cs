@@ -256,6 +256,111 @@ public sealed class ArenaSearchPositionKeyLawTests {
             actual: search.PositionKey(index: 0)
         );
     }
+    // A two-cell relocate cycle reaches the same position at move plies one and three. Its judge accepts through
+    // ply three but closes at ply four: the pass-three value of the first visit is therefore not the value of the
+    // pass-four visit. Clearing the table after every suspended step supplies the independent, uncached answer.
+    [Fact]
+    public void ATranspositionDoesNotReuseAValueFromAnotherSearchPly() {
+        long Run(bool clearTable) {
+            var position = new Position(rows: Board(
+                cells: 2,
+                tokens: 1
+            ));
+            var slot = position.SlotKey;
+            var turn = position.Ordinal(name: "turn");
+            var verdict = position.Ordinal(name: "verdict");
+            var judge = new DelegateJudge(
+                arena: position.Arena,
+                judge: (in ArenaSearchView view) => {
+                    var arena = view.Arena;
+
+                    Assert.True(condition: arena.TryWrite(
+                        key: slot,
+                        operand: 0L,
+                        reason: out var resetReason,
+                        rowOrdinal: verdict,
+                        write: StateWriteKind.Set
+                    ), userMessage: resetReason);
+
+                    if (view.Ply <= 3) {
+                        Assert.True(condition: arena.TryRead(
+                            key: slot,
+                            rowOrdinal: turn,
+                            value: out var current
+                        ));
+                        Assert.True(condition: arena.TryWrite(
+                            key: slot,
+                            operand: (1L - current.AsInt),
+                            reason: out var turnReason,
+                            rowOrdinal: turn,
+                            write: StateWriteKind.Set
+                        ), userMessage: turnReason);
+                        Assert.True(condition: arena.TryWrite(
+                            key: slot,
+                            operand: 1L,
+                            reason: out var acceptReason,
+                            rowOrdinal: verdict,
+                            write: StateWriteKind.Set
+                        ), userMessage: acceptReason);
+                    }
+
+                    return true;
+                },
+                score: static (in ArenaSearchView view) => view.Ply
+            );
+            var search = SearchFixture.Build(
+                judge: judge,
+                plan: (Plan(
+                    depth: 4,
+                    scored: true
+                ) with {
+                    CellCount = 2,
+                    Nodes = 1,
+                }),
+                position: position
+            );
+            IReadOnlyList<ArenaSearchWrite>? landed = null;
+
+            for (var step = 0; ((step < 4_096) && (landed is null)); step++) {
+                _ = search.Step(
+                    apply: writes => {
+                        landed = writes;
+
+                        return true;
+                    },
+                    engineTick: 0UL,
+                    tick: 1UL
+                );
+
+                if (clearTable && !search.Status(index: 0).Done) {
+                    var checkpoint = search.Capture();
+                    var job = Assert.Single(collection: checkpoint.Jobs);
+
+                    Assert.True(condition: search.TryRestore(
+                        checkpoint: new ArenaSearchCheckpoint(Jobs: [job with {
+                            TtKey = new ulong[job.TtKey.Length],
+                            TtMeta = new long[job.TtMeta.Length],
+                            TtValue = new long[job.TtValue.Length],
+                        }]),
+                        reason: out var restoreReason
+                    ), userMessage: restoreReason);
+                }
+            }
+
+            Assert.NotNull(@object: landed);
+
+            var score = Assert.Single(collection: landed!.OfType<ArenaSearchWrite.Cell>(),
+                predicate: write => ((write.RowOrdinal == position.Ordinal(name: "best")) && (write.Key == position.Key(name: "score")))
+            );
+
+            return score.Value;
+        }
+
+        Assert.Equal(
+            expected: Run(clearTable: true),
+            actual: Run(clearTable: false)
+        );
+    }
     // The draw stream is authored, so a row outside the job's reach cannot move it.
     [Fact]
     public void ATreeJobsDrawStreamDoesNotMoveWhenARowOutsideThePlansReachDoes() {

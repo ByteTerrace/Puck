@@ -122,8 +122,13 @@ public static class WorldEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
-    /// <summary>Teleports a world-addressed body to a spawn point, or to a literal position with angles; exactly one
-    /// of <paramref name="SpawnPoint"/> and <paramref name="Position"/> is authored.</summary>
+    /// <summary>Places a body upright at a live cell of an anchored topology, plus an authored offset.</summary>
+    /// <param name="Key">A body reference, including placement:$each.</param>
+    /// <param name="Topology">The declared topology.</param>
+    /// <param name="Expression">The integer cell ordinal evaluated when the effect fires.</param>
+    /// <param name="Offset">The displacement from the cell centre, in world units.</param>
+    public sealed record PoseCell(string Key, string Topology, ExpressionProgram Expression, DocumentVector3 Offset) : ActionEffect;
+    /// <summary>Teleports a world-addressed body to a spawn point or a literal position.</summary>
     public sealed record Pose(
         string Key,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SpawnPoint = null,

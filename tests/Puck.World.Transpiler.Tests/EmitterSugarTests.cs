@@ -197,9 +197,13 @@ public class EmitterSugarTests {
                 mode: Edge
                 local lostRooks: Int = (($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))
                 local lostKings: Int = (($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))
+                local lostRights: Int = parallelBitExtract($local:lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract($local:lostKings, (1 << 4) | (1 << 60)), 5) * 3)
                 transaction {
-                    castleRights = castleRights | parallelBitExtract($local:lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract($local:lostKings, (1 << 4) | (1 << 60)), 5) * 3)
-                    transform boardCombine(left: "board", operation: Copy, row: "lastLegal")
+                    historyReset = (absolute(move[mover]) == 1) | (move[captured] != 0) | (($local:lostRights & ~castleRights) != 0)
+                    halfmoveClock = (absolute(move[mover]) == 1) | (move[captured] != 0) ? 0 : halfmoveClock + 1
+                    historyPending = 1
+                    castleRights = castleRights | $local:lostRights
+                    transform boardCombine(left: "board", operation: "Copy", row: "lastLegal")
                     previousInCheck[0] = inCheck[0]
                     previousInCheck[1] = inCheck[1]
                     enPassantTarget = (absolute(move[mover]) == 1) & (absolute(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1

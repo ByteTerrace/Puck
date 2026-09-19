@@ -6573,8 +6573,40 @@
       "additionalProperties": false,
       "title": "WorldEffectSave"
     },
+    "WorldEffectPoseCell": {
+      "description": "Places a body upright at a live cell of an anchored topology, plus an authored offset.",
+      "properties": {
+        "$type": {
+          "const": "poseCell"
+        },
+        "key": {
+          "description": "A body reference, including placement:$each.",
+          "type": "string"
+        },
+        "topology": {
+          "description": "The declared topology.",
+          "type": "string"
+        },
+        "expression": {
+          "$ref": "#/$defs/ExpressionProgram",
+          "description": "The integer cell ordinal evaluated when the effect fires."
+        },
+        "offset": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The displacement from the cell centre, in world units."
+        }
+      },
+      "required": [
+        "key",
+        "topology",
+        "expression",
+        "offset"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectPoseCell"
+    },
     "WorldEffectPose": {
-      "description": "Teleports a world-addressed body to a spawn point, or to a literal position with angles; exactly one of SpawnPoint and Position is authored.",
+      "description": "Teleports a world-addressed body to a spawn point or a literal position.",
       "properties": {
         "$type": {
           "const": "pose"
@@ -6737,6 +6769,9 @@
         },
         {
           "$ref": "#/$defs/WorldEffectSave"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectPoseCell"
         },
         {
           "$ref": "#/$defs/WorldEffectPose"

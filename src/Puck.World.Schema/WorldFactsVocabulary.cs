@@ -602,6 +602,11 @@ public static partial class WorldFactsVocabulary {
                 effectType: typeof(WorldEffect.Save)
             ),
             new WorldFactsEffectArm(
+                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolvePoseCell((WorldEffect.PoseCell)effect, ruleName, context),
+                discriminator: "poseCell",
+                effectType: typeof(WorldEffect.PoseCell)
+            ),
+            new WorldFactsEffectArm(
                 compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolvePose(
                     context: context,
                     effect: ((WorldEffect.Pose)effect),
