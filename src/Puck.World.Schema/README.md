@@ -414,8 +414,8 @@ separate primitive: it picks up a rigid body, never a placement or board. The
 bridge from rigid bodies to this row is authored, not built
 in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
 on `$physics:quiescent`'s rising edge (a settle, never every tick) and writes
-its code into the occupancy row at that resolved cell—see the garden's own
-`games/chess.world.json` tabletop rules for the worked pattern (retain the accepted
+its code into the occupancy row at that resolved cell—see the standalone
+`worlds/parlor/chess.puck` tabletop rules for the worked pattern (retain the accepted
 board while clearing and deriving fresh occupancy, detect which single piece
 moved between two occupied board cells—a piece whose cell resolves to no
 cell, before or after (captured, lifted off, knocked clear), never itself
@@ -423,7 +423,7 @@ qualifies as the mover, so its own disappearance is never ruled legal or
 illegal by its own color—then a verdict any authored predicate—occupancy, turn order,
 a `$match:…:cell`/`$board:offset` movement-geometry check—may set to 0
 without touching the mover; a legal verdict alone advances turn and adopts the
-new position into `lastLegal`). The shipped chess module authors the default
+new position into `lastLegal`). The Parlor chess world authors the default
 `record` enforcement: an illegal move is recorded and never undone by the
 engine—see `enforcement` above for the `return` alternative. Every top-level
 `setState`/`addState`/etc. effect preflights and applies on its own; only an

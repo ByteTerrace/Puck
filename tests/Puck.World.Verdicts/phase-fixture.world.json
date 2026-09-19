@@ -1,0 +1,81 @@
+{
+  "host": {
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "height": 64,
+    "presentMode": "Immediate",
+    "presentation": "None",
+    "rayQuery": false,
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 0,
+    "timing": false,
+    "width": 64
+  },
+  "schema": "puck.world.definition.v1",
+  "simulation": {
+    "rateHz": 30
+  },
+  "state": {
+    "world": [
+      {
+        "cells": [
+          { "key": "0", "value": 0 },
+          { "key": "1", "value": 1 }
+        ],
+        "kind": "Int",
+        "name": "items"
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          { "key": "0", "value": true },
+          { "key": "1", "value": true }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "items"
+        },
+        "kind": "Bool",
+        "name": "deck"
+      },
+      {
+        "capacity": 2,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "items"
+        },
+        "kind": "Bool",
+        "name": "hand"
+      },
+      {
+        "capacity": 2,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "items"
+        },
+        "kind": "Bool",
+        "name": "pass",
+        "phaseOf": "passPhase"
+      },
+      {
+        "kind": "Int",
+        "name": "passPhase",
+        "phase": {
+          "sequence": 0
+        }
+      },
+      {
+        "kind": "Int",
+        "name": "idlePhase",
+        "phase": {
+          "sequence": 0
+        }
+      }
+    ]
+  }
+}

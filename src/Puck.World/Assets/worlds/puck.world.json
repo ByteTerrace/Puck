@@ -1276,9 +1276,6 @@
   },
   "imports": [
     {
-      "document": "games/chess.world.json"
-    },
-    {
       "document": "games/poker.world.json"
     },
     {

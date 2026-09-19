@@ -2,109 +2,11 @@
 // This source is canonical; compile it to regenerate the world document.
 
 schema: "puck.world.definition.v1"
-basis: "../standard.basis.json"
+basis: "parlor.basis.puck"
 documentId: "chess"
-
-
-grants [
-  {
-    capability: "Mutate"
-    principal: "seat1"
-    subject: "section:state"
-  }
-  {
-    capability: "Edit"
-    principal: "seat1"
-    subject: "all"
-  }
-  {
-    capability: "Control"
-    principal: "seat1"
-    subject: "all"
-  }
-  {
-    capability: "Drive"
-    principal: "seat1"
-    subject: "all"
-  }
-]
-
-simulation {
-  rateHz: 60
-}
-
-channels [
-  { name: "forward", role: "MoveAdvance", shape: "Bipolar", frame: "Heading" }
-  { name: "strafe", role: "MoveStrafe", shape: "Bipolar", frame: "Heading" }
-  { name: "turn", role: "Turn", shape: "Bipolar" }
-]
-
-views {
-  layout "action" {
-    seatCount: 0
-    slots [
-      { height: 1, width: 1, x: 0, y: 0 }
-    ]
-    transitionRenderScale: 0.5
-    transitionSeconds: 0.4
-  }
-
-  seatControl {
-    maxPitch: 1.2
-    minPitch: -0.35
-    yawReference: "World"
-  }
-
-  seatRig "seatChase" {
-    version: "puck.camera.program.v1"
-    operations [
-      orbit(distance: 5.4626, pitch: 0.4145, yaw: 0)
-      lookAt(subject: reference(), targetOffset: [0, 1, 0], worldAxes: false)
-      fieldOfView(fieldOfViewRadians: 0.9599)
-    ]
-  }
-}
 
 bodies {
   capacity: 40
-  localSeats: 1
-}
-
-bodyMotionPrograms [
-  {
-    kind: "Motion"
-    name: "walk"
-    operations [
-      "ResolveYawAttitudeAndPlanarFrame"
-      "ResolveHold"
-      "ComputePlanarTargetVelocity"
-      "ShapeVelocity"
-      "SnapYawToPlanarIntent"
-      "RunActionTriggers"
-      "ApplyHold"
-      "IntegratePlanarAndVerticalVelocity"
-      "CommitPose"
-    ]
-    version: "puck.body.program.v1"
-  }
-]
-
-collision {
-  contactSkin: 0.02
-  gradientProbe: 0
-  maxIterations: 4
-  maxSlopeDegrees: 60
-  requirements [
-    "SmoothUnionContact"
-  ]
-}
-
-gravity {
-  attractors []
-  gravitationalConstant: 0
-  softeningLength: 0.5
-  solver: "Pairwise"
-  uniform [0, -46, 0]
 }
 
 let pieceTypes = ["pawn", "knight", "bishop", "rook", "queen", "king"]
@@ -761,7 +663,6 @@ rule "chess-ai-finish" {
   settleHold = 0
 }
 
-
 search {
   jobs [
     {
@@ -1247,7 +1148,6 @@ test "en passant capture records move kind en passant" {
   }
 }
 
-
 test "initial position counts in threefold repetition" {
   when {
     ticks 400
@@ -1276,7 +1176,6 @@ test "initial position counts in threefold repetition" {
     halfmoveClock == 8
   }
 }
-
 
 test "AI White makes one legal opening move and waits for Black" {
   given {

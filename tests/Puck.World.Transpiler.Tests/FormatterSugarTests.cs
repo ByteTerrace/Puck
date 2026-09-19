@@ -180,8 +180,6 @@ public class FormatterSugarTests {
         "games/backgammon.world.json",
         "games/billiards.world.json",
         "games/bowling.world.json",
-        "games/chess.world.json",
-        "games/chinese-checkers.world.json",
         "games/dominoes.world.json",
         "games/freecell.world.json",
         "games/hexlines.world.json",

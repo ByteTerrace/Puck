@@ -163,13 +163,10 @@ Universe: the 15 arms on `Puck.State.StateTransform`
 | `nearest` | 2 | 0 | 3 |
 | `remember` | 1 | 0 | 1 |
 
-`games/hearts.puck` accounts for 19 of the 40 `transfer` uses, 1 of the 4
-`shuffle` uses (its own deal), all 4 `sortZone` uses, and both `sortKeyed`
-uses; `games/snake.puck` accounts for 1 of the 3 `boardCombine` uses (its
-board reset) and `games/stratego.puck` for all 4 `observe` uses (its two
-knowledge boards). `StateTransform.Push` (the history-ring transform: 4 uses
-in `games/hearts.puck`'s trick-winner ring, 5 in `games/snake.puck`'s trail
-ring) is distinct from the `ActionEffect.PushState` effect counted above
+`games/snake.puck` accounts for one of the `boardCombine` uses (its board
+reset) and `games/stratego.puck` for all four `observe` uses (its two
+knowledge boards). `StateTransform.Push` is distinct from the
+`ActionEffect.PushState` effect counted above
 (9/3/0) — same English word, two different discriminators (`push` vs.
 `pushState`) on two different unions.
 
@@ -252,10 +249,7 @@ decompiled games). Four `visibility` uses, one `phase`, both `knowledge`,
 and one `phaseOf` use come from `games/stratego.puck`: a rank board and a
 knowledge board per side, the guarded submission stamp its public board's
 `phaseOf` names, and the two knowledge boards' own source/mask declarations.
-`games/hearts.puck` separately authors two `phase` uses and five `phaseOf`
-uses: the pass and trick submission generations, and the pass zones and the
-trick that declare `phaseOf` against them. `games/codenames.puck` accounts
-for the remaining six `visibility` uses — the key row, each team's live and
+`games/codenames.puck` accounts for the remaining six `visibility` uses — the key row, each team's live and
 avoid masks, and the hint row are visible only to their own team.
 `games/snake.puck` accounts for both new `cycle` uses — its `snakeTempo`
 row's `slow`/`fast` cells — one `evicts` use (`snakeMeals`; the other is
@@ -474,7 +468,6 @@ not a declared Int-kind state row:
 |---|---|---|
 | `games/arena.puck` (×2) | `$channel:1:attack` | `>= 0.5` |
 | `games/arena.puck` (×2) | `$channel:2:attack` | `>= 0.5` |
-| `games/chess.puck` (×2) | `$upright:placement:$each` | `>= 0.5` |
 | `games/snake.puck` | `$channel:1:strafe` | `>= 0.5` |
 | `games/snake.puck` | `$channel:1:strafe` | `<= -0.5` |
 | `games/snake.puck` | `$channel:1:forward` | `>= 0.5` |

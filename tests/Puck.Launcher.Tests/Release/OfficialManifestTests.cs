@@ -53,7 +53,7 @@ public sealed class OfficialManifestTests {
                 Hash: ContentHashA,
                 Imports: [new OfficialImportRef(
                         As: null,
-                        Document: "games/chess.world.json"
+                        Document: "games/example.world.json"
                     )],
                 Name: "puck.world.json",
                 Path: "objects/sha256/00/aaa",

@@ -18,6 +18,7 @@ becomes a running world.
 |---|---|
 | Understand runtime boundaries | [Engine architecture](docs/architecture/README.md) |
 | Author worlds, shaders, or cartridges | [Authoring content](docs/authoring/README.md) |
+| Explore standalone world packages | [Worlds](worlds/README.md) |
 | Work on graphics | [Rendering](docs/rendering/README.md) |
 | Work on handheld emulation | [Machine emulation](docs/emulation/README.md) |
 | Investigate, test, or contribute | [Development](docs/development/README.md) |

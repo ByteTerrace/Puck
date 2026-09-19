@@ -108,12 +108,9 @@ with — optionally adding rows a sibling district would have supplied
 | backgammon | `games/backgammon.world.json` | document | 630 | yes |
 | billiards | `games/billiards.world.json` | fixture `minimal-billiards-host.world.json` | 510 | yes |
 | bowling | `games/bowling.world.json` | spliced | 600 | no |
-| chess | `games/chess.world.json` | fixture `minimal-chess-host.world.json` | 600 | yes |
-| chinese-checkers | `games/chinese-checkers.world.json` | document | 1200 | yes |
 | codenames | `games/codenames.world.json` | fixture `minimal-codenames-host.world.json` | 162 | yes |
 | dominoes | `games/dominoes.world.json` | spliced | 600 | no |
 | freecell | `games/freecell.world.json` | spliced | 610 | yes |
-| hearts | `games/hearts.world.json` | document | 3000 | yes |
 | hexlines | `games/hexlines.world.json` | fixture `minimal-hexlines-host.world.json` | 600 | yes |
 | klondike | `games/klondike.world.json` | spliced | 680 | yes |
 | mancala | `games/mancala.world.json` | spliced | 590 | yes |

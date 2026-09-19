@@ -483,9 +483,12 @@ that decides each one writes the status plus the values its gate saw into that
 row's own cells. A verdict row holds ints, so a value the gate saw of a `Fixed`
 or a `Bool` row is written to a `witness` row of that kind, which names its
 verdict and is printed with it (`saw=[hp=3 speed=2.25 open=false]`). `puck test` boots each world through the real `Puck.World`
-executable, headless, and reads the verdicts back out of the canonical state
+executable, headless and unpaced, and reads the verdicts back out of the canonical state
 export the world writes at the tick its schedule derives (the last scheduled
-tick plus the declared `settleTicks` margin).
+tick plus the declared `settleTicks` margin). Unpaced means the ordinary fixed
+step loop advances exactly one simulation tick per iteration without sleeping
+for wall time; command ingress, authority, physics and rules stay on their usual
+paths.
 
 A path may name a `.puck` source instead of a document, which is how a world's
 own behaviour is normally written: the source is compiled and the worlds its
@@ -531,8 +534,11 @@ puck test <path> --host server         the real Puck.World executable, headless 
 puck test <path> --world-artifact <p>  boot this already-built Puck.World.dll instead of
                                        building src/Puck.World into the run's own output
 puck test <path> --keep <dir>          run in <dir> and keep it: every generated test world
-                                       under <dir>/generated, plus both legs' transcripts,
-                                       exports and manifests
+                                       under <dir>/generated, plus transcripts, exports
+                                       and manifests
+puck test <path> --jobs <n>            run at most n isolated test worlds concurrently
+puck test <path> --reproduce           rerun every world and require byte-identical state
+                                       exports and schedule manifests
 puck test -h / --help                  this text
 ```
 
@@ -552,19 +558,14 @@ submitted is the process's own state, never the document's — so a restored,
 re-read or rewound world submits every row again from tick 1 and measures a
 different trajectory from the one the export was asked for.
 
-Each world then runs **twice**, into sibling leg directories, and a world whose
-two exports — or two `schedule.json` manifests — differ byte for byte is refused
-rather than reported: a verdict read off a world that does not reproduce says
-nothing, and neither do the refusals a manifest reports if the manifest itself
-drifts. The manifest therefore records only facts a rerun reproduces exactly: a
-row's own authored tick, its outcome and its detail. A recorded edit verdict
-carries no tick at all — an echo reaches the runner when the host narrates it,
-which is not the tick the edit applied on. That comparison is only
-possible because the export tick is the document's rather than the runner's — a
-console fence lands on whatever tick the command pump happened to reach, and an
-export taken there carries a different tick, and hash, every run. It is also
-why the reconciliation runs per leg rather than between them: two identically
-truncated runs reproduce each other perfectly.
+Ordinary authoring runs every isolated test world once. `--reproduce` adds the
+determinism qualification pass: each world runs twice into sibling leg
+directories, and a world whose two exports or two `schedule.json` manifests
+differ byte for byte is refused rather than reported. The manifest records only
+facts a rerun reproduces exactly: a row's authored tick, outcome and detail. A
+recorded edit verdict carries no tick because an echo reaches the runner when
+the host narrates it, which is not the tick the edit applied on. The comparison
+is possible because the export tick is the document's rather than the runner's.
 
 Only a rule's own effect writes a verdict row. The rule-effect door stamps the
 firing's simulation tick into the row's reserved `$firedTick` cell — an ordinary
@@ -595,7 +596,7 @@ verdict failed or a row's recorded outcome was not the one it declared, 2 usage 
 a world declaring no `schedule` section or no verdict row, a build or boot
 refusal, a leg that did not reach its authored export tick or account for every
 declared row, a row whose outcome the host rather than the world answered, a
-world whose two runs disagreed, or `--host browser`, which is refused by name
+world whose `--reproduce` runs disagreed, or `--host browser`, which is refused by name
 because the browser engine host has no command ingress, principal or
 authoritative server to submit a scheduled command through.
 

@@ -566,8 +566,9 @@ every other door refuses the write by one text the boot loader shares. Each row
 declares the outcome it expects and any other recorded outcome fails the world by
 name, while an outcome the host rather than the world answered — a handler that
 threw, a principal with no ingress, a refusal that never reached a handler — is a
-usage refusal instead. The two legs' exports and manifests are both compared byte
-for byte, and the manifest records only facts a rerun reproduces. A scheduled run
+usage refusal instead. Ordinary authored tests run one unpaced leg;
+`--reproduce` adds a second and compares both exports and manifests byte for
+byte. The manifest records only facts a rerun reproduces. A scheduled run
 refuses `world.save`/`world.load`/`world.reload`/`world.undo` by name: a schedule
 carries no cursor, so a restored world would submit every row again from tick 1.
 
@@ -1048,7 +1049,7 @@ module parlor(game: Module exporting seats, outcome) {
 // in quilt.puck: the arch ring
 import "quilt/parlor.puck"
 import "games/reversi.puck"
-import "games/chess.puck"
+import "worlds/parlor/chess.puck"
 
 world reversiParlor = parlor(game: reversi)
 world chessParlor   = parlor(game: chess)

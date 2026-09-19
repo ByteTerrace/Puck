@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
 using Puck.World.Transpiler;
+using Puck.World.Transpiler.Composition;
 
 namespace Puck.Cli.Test;
 
@@ -123,8 +124,24 @@ internal static partial class TestCommand {
                 sourceDirectory: sourceDirectory,
                 world: world.Json
             );
+            var rootBytes = CanonicalJsonDocument.Serialize(node: world.Json);
+
+            // Test worlds are temporary JSON documents. Flatten their authored basis/import graph before writing
+            // them so the executable boots the exact composed source without depending on the temporary file's
+            // location or requiring JSON loading to understand a .puck neighbour.
+            if (!PuckDocumentComposer.TryComposeWorldDocument(
+                chainBytes: out _,
+                composed: out var composed,
+                reason: out var composeReason,
+                rootBytes: rootBytes,
+                rootResolvedPath: path
+            )) {
+                reason = $"{source} test \"{world.Test}\" does not compose: {composeReason}";
+
+                return false;
+            }
             File.WriteAllBytes(
-                bytes: CanonicalJsonDocument.Serialize(node: world.Json),
+                bytes: CanonicalJsonDocument.Serialize(node: composed ?? world.Json),
                 path: path
             );
             Console.WriteLine(value: $"test: {world.Name} <- {source} test \"{world.Test}\"");

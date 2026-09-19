@@ -2,72 +2,17 @@
 // This source is canonical; compile it to regenerate the world document.
 
 schema: "puck.world.definition.v1"
-basis: "../standard.basis.json"
+basis: "parlor.basis.puck"
 documentId: "chinese-checkers"
-
-
-grants [
-  {
-    capability: "Mutate"
-    principal: "seat1"
-    subject: "section:state"
-  }
-  {
-    capability: "Edit"
-    principal: "seat1"
-    subject: "all"
-  }
-  {
-    capability: "Control"
-    principal: "seat1"
-    subject: "all"
-  }
-  {
-    capability: "Drive"
-    principal: "seat1"
-    subject: "all"
-  }
-]
-
-simulation {
-  rateHz: 60
-}
-
-channels [
-  { name: "forward", role: "MoveAdvance", shape: "Bipolar", frame: "Heading" }
-  { name: "strafe", role: "MoveStrafe", shape: "Bipolar", frame: "Heading" }
-  { name: "turn", role: "Turn", shape: "Bipolar" }
-]
 
 views {
   layout "action" {
-    seatCount: 0
-    slots [
-      { camera: "table", height: 1, width: 1, x: 0, y: 0 }
-    ]
-    transitionRenderScale: 0.5
-    transitionSeconds: 0.4
-  }
-
-  seatControl {
-    maxPitch: 1.2
-    minPitch: -0.35
-    yawReference: "World"
-  }
-
-  seatRig "seatChase" {
-    version: "puck.camera.program.v1"
-    operations [
-      orbit(distance: 5.4626, pitch: 0.4145, yaw: 0)
-      lookAt(subject: reference(), targetOffset: [0, 1, 0], worldAxes: false)
-      fieldOfView(fieldOfViewRadians: 0.9599)
-    ]
+    slots [{ camera: "table", height: 1, width: 1, x: 0, y: 0 }]
   }
 }
 
 bodies {
   capacity: 64
-  localSeats: 1
 }
 
 cameras [{
@@ -85,43 +30,6 @@ cameras [{
     }
   }
 ]
-
-bodyMotionPrograms [
-  {
-    kind: "Motion"
-    name: "walk"
-    operations [
-      "ResolveYawAttitudeAndPlanarFrame"
-      "ResolveHold"
-      "ComputePlanarTargetVelocity"
-      "ShapeVelocity"
-      "SnapYawToPlanarIntent"
-      "RunActionTriggers"
-      "ApplyHold"
-      "IntegratePlanarAndVerticalVelocity"
-      "CommitPose"
-    ]
-    version: "puck.body.program.v1"
-  }
-]
-
-collision {
-  contactSkin: 0.02
-  gradientProbe: 0
-  maxIterations: 4
-  maxSlopeDegrees: 60
-  requirements [
-    "SmoothUnionContact"
-  ]
-}
-
-gravity {
-  attractors []
-  gravitationalConstant: 0
-  softeningLength: 0.5
-  solver: "Pairwise"
-  uniform [0, -46, 0]
-}
 
 kits {
   rows [
@@ -169,7 +77,6 @@ kits {
     }
   ]
 }
-
 
 // Camps clockwise around the star. Use [0, 3] for two players,
 // [0, 1, 3, 4] for four, or [0, 1, 2, 3, 4, 5] for six.

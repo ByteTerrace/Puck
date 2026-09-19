@@ -185,44 +185,6 @@ public class EmitterSugarTests {
         );
     }
     [Fact]
-    public void ChessAdvanceTurnTransactionMatchesTheShippedRule() {
-        var expected = LoadShippedRule(
-            relativeWorldPath: "games/chess.world.json",
-            ruleName: "tabletop-advance-turn"
-        );
-
-        var rule = FirstRule(body: """
-            rule "tabletop-advance-turn" {
-                when settleHold == 60 and verdict == 1 and move[kind] != 0
-                mode: Edge
-                local lostRooks: Int = (($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))
-                local lostKings: Int = (($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))
-                local lostRights: Int = parallelBitExtract($local:lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract($local:lostKings, (1 << 4) | (1 << 60)), 5) * 3)
-                transaction {
-                    historyReset = (absolute(move[mover]) == 1) | (move[captured] != 0) | (($local:lostRights & ~castleRights) != 0)
-                    halfmoveClock = (absolute(move[mover]) == 1) | (move[captured] != 0) ? 0 : halfmoveClock + 1
-                    historyPending = 1
-                    castleRights = castleRights | $local:lostRights
-                    transform boardCombine(left: "board", operation: "Copy", row: "lastLegal")
-                    previousInCheck[0] = inCheck[0]
-                    previousInCheck[1] = inCheck[1]
-                    enPassantTarget = (absolute(move[mover]) == 1) & (absolute(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1
-                    turn = 1 - turn
-                    promotionPending[0] = -1
-                    promotionPending[1] = -1
-                }
-            }
-            """);
-
-        var mismatch = JsonMismatch.Find(
-            actual: rule,
-            expected: expected,
-            path: "tabletop-advance-turn"
-        );
-
-        Assert.Null(@object: mismatch);
-    }
-    [Fact]
     public void ComparandStateRowNeverFlipsOperandOrder() {
         var rule = FirstRule(body: """
             rule "r" {

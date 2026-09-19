@@ -61,7 +61,11 @@ var captureDirOption = new Option<string?>(name: "--capture-dir") {
 };
 var scheduleDirOption = new Option<string?>(name: "--schedule-dir") {
     DefaultValueFactory = static _ => null,
-    Description = "Arms the world document's schedule section and overrides its schedule.directory — where the run writes its state export and submission manifest. Absent, a document carrying a schedule submits no row and writes no export, and the boot says so once: a published world travels, and a section that submits commands runs only where the operator asked for it. Also the --capture-dir pattern for output: puck test runs the same world twice and needs the two exports kept apart to compare them.",
+    Description = "Arms the world document's schedule section and overrides its schedule.directory — where the run writes its state export and submission manifest. Absent, a document carrying a schedule submits no row and writes no export, and the boot says so once: a published world travels, and a section that submits commands runs only where the operator asked for it.",
+};
+var unpacedOption = new Option<bool>(name: "--unpaced") {
+    DefaultValueFactory = static _ => false,
+    Description = "Advance a headless world on its fixed simulation tick grid without wall-clock pacing. Intended for an armed authored schedule or another offline run; refused for presented hosts.",
 };
 // A DEVELOPER REFLECTION of the document's host.presentation field, not a separate product (the unification
 // contract): absent lets the document decide; a bare --headless (or --headless true) forces host.presentation=none
@@ -111,6 +115,7 @@ var launchCommand = new RootCommand(description: "Puck World") {
     authenticationConfigFileOption,
     captureDirOption,
     scheduleDirOption,
+    unpacedOption,
     exitAfterSecondsOption,
     headlessOption,
     stateDirOption,
@@ -294,6 +299,12 @@ var hostSettings = WorldHostSettings.Resolve(
     presentationOverride: presentationOverride,
     listenOverride: parseResult.GetValue(option: listenOption)
 );
+var unpaced = parseResult.GetValue(option: unpacedOption);
+if (unpaced && !hostSettings.Headless) {
+    Console.Error.WriteLine(value: "--unpaced requires a headless host (--headless true or host.presentation none).");
+
+    return 1;
+}
 if (hostSettings.BackendUnsatisfiable) {
     Console.Error.WriteLine(value: "The Direct3D 12 backend requires Windows 10 or newer; use --backend vulkan on this platform.");
 
@@ -331,6 +342,7 @@ services.AddSingleton(implementationInstance: new LauncherOptions {
     ? TimeSpan.FromSeconds(value: hostSettings.ExitAfterSeconds)
     : null),
     TargetRenderRate = hostSettings.TargetRenderRate,
+    Unpaced = unpaced,
 });
 // The storage host-section: the world doc's endpoint + user-id + discovery endpoint, overlaid by the
 // --storage-uri / --user-id / --storage-discovery-uri CLI reflection. The identity resolver maps an explicit

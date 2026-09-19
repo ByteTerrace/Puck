@@ -8,9 +8,9 @@ using Puck.World;
 namespace Puck.Cli.Test;
 
 internal static partial class TestCommand {
-    // The wall-clock net a leg is allowed: the export tick's own duration at the document's rate, plus a fixed
-    // allowance for process start-up and the shutdown. It is a net, not the leg length — the piped script closes with
-    // quit once its wait releases past the export tick, so a healthy leg ends as soon as the export lands.
+    // The wall-clock net a stalled leg is allowed: the export tick's real-time duration at the document's rate,
+    // plus a fixed allowance for process start-up and shutdown. Healthy legs run unpaced and finish much sooner;
+    // retaining the real-time bound leaves complex worlds room to execute without making a hung host unbounded.
     private static TimeSpan LegBudget(ulong exportTick, int rateHz) => TimeSpan.FromSeconds(value: (20.0 + ((rateHz > 0)
         ? (exportTick / ((double)rateHz))
         : 0.0
@@ -72,7 +72,7 @@ internal static partial class TestCommand {
     }
     // One leg: boot the real executable headless against its own state and schedule directories, fence past the
     // export tick, quit, then read what the world wrote.
-    private static bool TryRunLeg(string world, string artifact, string legDirectory, ulong exportTick, int rateHz, out TestReading? reading) {
+    private static bool TryRunLeg(string world, string artifact, string legDirectory, ulong exportTick, int rateHz, TextWriter error, out TestReading? reading) {
         reading = null;
 
         var scheduleDirectory = Path.Combine(
@@ -96,6 +96,7 @@ internal static partial class TestCommand {
                     artifact,
                     "--world", world,
                     "--headless", "true",
+                    "--unpaced", "true",
                     "--exit-after-seconds", ((int)LegBudget(
                         exportTick: exportTick,
                         rateHz: rateHz
@@ -113,7 +114,7 @@ internal static partial class TestCommand {
                 ) + TimeSpan.FromSeconds(value: 30))
             );
         } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
-            Console.Error.WriteLine(value: $"ERROR: could not start the leg for {world}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
+            error.WriteLine(value: $"ERROR: could not start the leg for {world}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 
             return false;
         }
@@ -139,23 +140,24 @@ internal static partial class TestCommand {
             process.TimedOut ||
             (process.ExitCode != 0)
         ) {
-            Console.Error.WriteLine(value: $"ERROR: the leg for {world} {(process.TimedOut
+            error.WriteLine(value: $"ERROR: the leg for {world} {(process.TimedOut
                 ? "timed out"
                 : $"exited {process.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}")}; transcripts under {legDirectory}.");
             // The transcripts are removed with the run directory unless --keep, so the one line that says WHY has to
             // travel now rather than living in a directory the finally block is about to delete.
-            Console.Error.WriteLine(value: Tail(text: process.Stderr));
+            error.WriteLine(value: Tail(text: process.Stderr));
 
             return false;
         }
 
         return TryRead(
+            error: error,
             reading: out reading,
             scheduleDirectory: scheduleDirectory,
             world: world
         );
     }
-    private static bool TryRead(string world, string scheduleDirectory, out TestReading? reading) {
+    private static bool TryRead(string world, string scheduleDirectory, TextWriter error, out TestReading? reading) {
         reading = null;
 
         var manifestPath = Path.Combine(
@@ -171,7 +173,7 @@ internal static partial class TestCommand {
             !File.Exists(path: manifestPath) ||
             !File.Exists(path: exportPath)
         ) {
-            Console.Error.WriteLine(value: $"ERROR: the leg for {world} wrote no {WorldScheduleSection.ManifestFileName}/{WorldScheduleSection.ExportFileName} into {scheduleDirectory} — the run never reached its export tick.");
+            error.WriteLine(value: $"ERROR: the leg for {world} wrote no {WorldScheduleSection.ManifestFileName}/{WorldScheduleSection.ExportFileName} into {scheduleDirectory} — the run never reached its export tick.");
 
             return false;
         }
@@ -186,13 +188,13 @@ internal static partial class TestCommand {
             manifest = (JsonNode.Parse(utf8Json: manifestBytes) as JsonObject)!;
             export = (JsonNode.Parse(utf8Json: exportBytes) as JsonObject)!;
         } catch (JsonException exception) {
-            Console.Error.WriteLine(value: $"ERROR: the leg for {world} wrote malformed JSON into {scheduleDirectory}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
+            error.WriteLine(value: $"ERROR: the leg for {world} wrote malformed JSON into {scheduleDirectory}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 
             return false;
         }
 
         if ((manifest is null) || (export is null)) {
-            Console.Error.WriteLine(value: $"ERROR: the leg for {world} wrote a non-object document into {scheduleDirectory}.");
+            error.WriteLine(value: $"ERROR: the leg for {world} wrote a non-object document into {scheduleDirectory}.");
 
             return false;
         }
@@ -201,7 +203,7 @@ internal static partial class TestCommand {
         var declaredTick = (export[propertyName: "tick"]?.GetValue<ulong>() ?? 0UL);
 
         if (exportTick != declaredTick) {
-            Console.Error.WriteLine(value: $"ERROR: the leg for {world} recorded export tick {exportTick} but its export carries tick {declaredTick}.");
+            error.WriteLine(value: $"ERROR: the leg for {world} recorded export tick {exportTick} but its export carries tick {declaredTick}.");
 
             return false;
         }
@@ -390,30 +392,48 @@ internal static partial class TestCommand {
         };
         var keepOption = new Option<string?>(name: "--keep") {
             DefaultValueFactory = static _ => null,
-            Description = "Run in this directory instead of a scratch one and keep it: every generated test world, both legs' transcripts, and each leg's export and manifest, so a failing test is a world the ordinary tools can open.",
+            Description = "Run in this directory instead of a scratch one and keep it: every generated test world, transcript, export and manifest, so a failing test is a world the ordinary tools can open.",
+        };
+        var reproduceOption = new Option<bool>(name: "--reproduce") {
+            DefaultValueFactory = static _ => false,
+            Description = "Run every test world a second time and require byte-identical state exports and schedule manifests. Use for determinism qualification; ordinary authored tests run once.",
+        };
+        var jobsOption = new Option<int>(name: "--jobs") {
+            DefaultValueFactory = static _ => Math.Min(
+                val1: 8,
+                val2: Math.Max(
+                    val1: 1,
+                    val2: (Environment.ProcessorCount / 2)
+                )
+            ),
+            Description = "Maximum test worlds to run concurrently. Output remains in authored order.",
         };
         var command = new Command(
             description: """
-            Boots each test world through the real Puck.World executable, headless, to the tick its own schedule
-            section declares its state export at, then reads that export's verdict rows: one line per verdict
+            Boots each test world through the real Puck.World executable, headless and unpaced, to the tick its own
+            schedule section declares its state export at, then reads that export's verdict rows: one line per verdict
             naming the gate and the values it saw. A `.puck` source is compiled first and the worlds its `test`
-            blocks generate are what run. Every world runs twice and a world whose two exports differ byte for byte
-            is refused rather than reported. Exit codes are 0 for every verdict passing, 1 for a failing verdict,
-            and 2 for usage, a world declaring no schedule or no verdict row, a source that does not compile, a
-            build or boot refusal, or a world that did not reproduce.
+            blocks generate are what run. --reproduce adds a second run and requires byte-identical output. Exit
+            codes are 0 for every verdict passing, 1 for a failing verdict, and 2 for usage, a world declaring no
+            schedule or no verdict row, a source that does not compile, a build or boot refusal, or a reproduction
+            mismatch.
             """,
             name: "test"
         ) {
             hostOption,
+            jobsOption,
             keepOption,
             pathArgument,
+            reproduceOption,
             worldArtifactOption,
         };
 
         command.SetAction(action: parseResult => Run(
             host: parseResult.GetValue(option: hostOption),
+            jobs: parseResult.GetValue(option: jobsOption),
             keep: parseResult.GetValue(option: keepOption),
             path: (parseResult.GetValue(argument: pathArgument) ?? string.Empty),
+            reproduce: parseResult.GetValue(option: reproduceOption),
             worldArtifact: parseResult.GetValue(option: worldArtifactOption)
         ));
 

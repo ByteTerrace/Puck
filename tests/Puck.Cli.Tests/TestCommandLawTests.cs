@@ -7,9 +7,9 @@ namespace Puck.Cli.Tests;
 /// naming the gate and the values the gate saw, prints the refusals a run recorded, and exits 0 only when every
 /// verdict passes. The two worlds are a discriminating pair: one is green, and one carries a verdict that is meant
 /// to fail, so a runner that reported success unconditionally fails this class.</summary>
-/// <remarks>These facts boot a real process twice per world, so each takes tens of seconds. They pass
-/// <c>--world-artifact</c> at the repository's own Release output rather than letting the verb build
-/// <c>Puck.World</c> again: the test project already depends on that build.</remarks>
+/// <remarks>These facts boot the real host unpaced. They pass <c>--world-artifact</c> at the repository's own
+/// Release output rather than letting the verb build <c>Puck.World</c> again: the test project already depends on
+/// that build.</remarks>
 public sealed class TestCommandLawTests {
     private static string Artifact() => Path.Combine(
         path1: Root(),
@@ -73,7 +73,7 @@ public sealed class TestCommandLawTests {
     );
 
     // Two sources of one sweep sharing a file name generate the same world name. Writing the second would replace
-    // the first source's world and run the second one's twice, so the sweep refuses by name before anything boots.
+    // the first source's world and run only the second one, so the sweep refuses by name before anything boots.
     [Fact]
     public void TwoSourcesGeneratingOneWorldNameAreRefusedByName() {
         var directory = Directory.CreateTempSubdirectory(prefix: "puck-test-stems-").FullName;
@@ -190,25 +190,6 @@ public sealed class TestCommandLawTests {
             expected: 1
         );
     }
-    // A shipped world states its own behaviour in `test` blocks, and this sweep is what runs them: every test of
-    // every shipped source, each generated world booted twice through the real executable.
-    [Fact]
-    public void EveryTestAShippedWorldAuthorsPasses() {
-        var (exitCode, output) = RunTest(Path.Combine(
-            path1: Root(),
-            path2: "src/Puck.World/Assets/worlds"
-        ));
-
-        Assert.Contains(
-            actualString: output,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "chinese-checkers--the-win-condition-fires-when-the-last-piece-lands <-"
-        );
-        Assert.True(
-            condition: (exitCode == 0),
-            userMessage: output
-        );
-    }
     [Fact]
     public void ASourceWithNoTestBlockIsAUsageError() {
         var (exitCode, output) = RunTest(Path.Combine(
@@ -255,7 +236,7 @@ public sealed class TestCommandLawTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "wrongGuardRefused: pass gate=\"a guarded transform naming generation 7 when heartsPassPhase stands at 0 is refused, so the generation never advances\" saw=[generation=0]"
+            expectedSubstring: "wrongGuardRefused: pass gate=\"a guarded transform naming generation 7 when passPhase stands at 0 is refused, so the generation never advances\" saw=[generation=0]"
         );
         Assert.Contains(
             actualString: output,
@@ -284,12 +265,12 @@ public sealed class TestCommandLawTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "passPhaseAdvanced: pass gate=\"heartsPassPhase's generation advanced past 0 once the scheduled guarded transform landed\" saw=[generation=1]"
+            expectedSubstring: "passPhaseAdvanced: pass gate=\"passPhase's generation advanced past 0 once the scheduled guarded transform landed\" saw=[generation=1]"
         );
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "trickPhaseAdvanced: never evaluated gate=\"heartsTrickPhase's generation advanced past 0 — deliberately unproven: nothing is scheduled against it\" saw=[generation=0]"
+            expectedSubstring: "trickPhaseAdvanced: never evaluated gate=\"idlePhase's generation advanced past 0 — deliberately unproven: nothing is scheduled against it\" saw=[generation=0]"
         );
         Assert.Contains(
             actualString: output,

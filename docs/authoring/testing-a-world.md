@@ -23,15 +23,20 @@ test "all marbles settle into the star" {
 Run it:
 
 ```bash
-puck test src/Puck.World/Assets/worlds/games/chinese-checkers.puck
+puck test worlds/parlor/chinese-checkers.puck
 ```
+
+Independent test worlds run concurrently and their reports remain in authored
+order. Use `--jobs 1` when debugging a single shared resource, or `--jobs <n>`
+to choose the worker limit explicitly. The headless host advances on the
+world's fixed tick grid without waiting for wall clock.
 
 ```text
 test: chinese-checkers--all-marbles-settle-into-the-star <- .../chinese-checkers.puck test "all marbles settle into the star"
   all-marbles-settle-into-the-star-1: pass gate="missingCount == 0" saw=[missingCount=0] firedTick=501
   ...
   6/6 verdict(s) passed at export tick 501.
-PASS: every verdict in 2 test world(s) passed, and each world's two runs exported identical bytes.
+PASS: every verdict in 2 test world(s) passed.
 ```
 
 ## A test is a world
@@ -176,13 +181,14 @@ recorded in holds whole numbers.
 
 | Code | Meaning |
 |---|---|
-| 0 | every verdict passed, and each world's two runs exported identical bytes |
+| 0 | every verdict passed; with `--reproduce`, both runs also exported identical bytes |
 | 1 | a verdict failed, or a step's recorded outcome was not the one it declared |
-| 2 | usage: a source that does not compile, a source with no test, a world that did not reproduce, a build or boot refusal |
+| 2 | usage: a source that does not compile, a source with no test, a `--reproduce` mismatch, a build or boot refusal |
 
-Every world runs **twice**, into sibling directories, and a world whose two runs
-export different bytes is refused rather than reported: a verdict read off a
-world that does not reproduce says nothing.
+Ordinary authoring runs each isolated test world once. `--reproduce` is the
+determinism qualification tier: it runs every world twice into sibling
+directories and refuses a world whose state export or schedule manifest differs
+byte for byte.
 
 ---
 

@@ -11,12 +11,9 @@ Machine: Microsoft Windows 10.0.26200; X64; 16 logical processor(s); .NET 10.0.1
 | backgammon | 630 | 1.0 | 10.0 |
 | billiards | 510 | 23.8 | 27.9 |
 | bowling | 600 | 0.6 | 0.6 |
-| chess | 600 | 148.6 | 167.8 |
-| chinese-checkers | 600 | 4086.3 | 4081.0 |
 | codenames | 162 | 24.1 | 108.1 |
 | dominoes | 600 | 0.6 | 0.6 |
 | freecell | 610 | 5.4 | 25.6 |
-| hearts | 288 | 10.1 | 228.8 |
 | hexlines | 600 | 98.8 | 124.2 |
 | klondike | 680 | 10.1 | 43.8 |
 | mancala | 590 | 3.9 | 7.2 |

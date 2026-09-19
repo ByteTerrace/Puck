@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// THE LAW: <c>games/hexlines.world.json</c> is a self-contained, placement-addressed module any host can import and
-/// position with one restated placement — the same contract <c>games/chess.puck</c> proves for chess.
+/// position with one restated placement.
 /// The board is a radius-4 hexagonal disk of 61 pointy-top tiles on a hexagonal table with two stone trays; every
 /// tile, tray, and stone composes over <c>hexTable</c>, and the <c>hexLinesBoard</c> topology's origin is the board's
 /// centre on the table's top. Cell geometry follows one convention, shared with the engine: a cell is a

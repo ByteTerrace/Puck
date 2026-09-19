@@ -11,9 +11,11 @@ namespace Puck.Launcher;
 /// The headless boot shape's outermost host loop — a composition root's <c>host.presentation: none</c> /
 /// <c>--headless</c> run-time twin. No window, no GPU device, no swapchain, no audio device: it paces the SAME
 /// <see cref="FixedStepPump"/> the windowed <see cref="LauncherWindowHostedService"/> drives, off a high-resolution
-/// waitable-timer wait instead of a present cadence — wall clock paces, it never enters simulation state
-/// (<see cref="TickClock"/> converts the sampled delta to engine ticks exactly, same as windowed). The console pump
-/// (stdin → <see cref="CommandRegistry"/>) and every registered <see cref="ISnapshotInputCapture"/> contribution run
+/// waitable-timer wait instead of a present cadence — wall clock paces ordinary runs and never enters simulation
+/// state (<see cref="TickClock"/> converts the sampled delta to engine ticks exactly, same as windowed). An offline
+/// run may instead request <see cref="LauncherOptions.Unpaced"/>, which feeds one exact fixed step per loop. The
+/// console pump (stdin → <see cref="CommandRegistry"/>) and every registered
+/// <see cref="ISnapshotInputCapture"/> contribution run
 /// every iteration exactly like the windowed loop, so a headless session is scriptable over stdin/stdout identically
 /// and a frame-serviced input source (a probes host's track playback) lands in the tape.
 /// </summary>
@@ -163,10 +165,16 @@ public sealed class HeadlessTickHostedService : BackgroundService {
 
                 hostFrame++;
 
-                var deltaTicks = clock.Sample();
                 // Re-resolved every iteration — see ResolveRatePerSecond's own remarks above.
                 var ratePerSecond = ResolveRatePerSecond(simulation: m_simulation);
                 var stepTicks = EngineTicks.PerRate(ratePerSecond: ratePerSecond);
+                // An offline schedule already pins every input and observation to the simulation's integer tick
+                // grid. Feeding exactly one step here preserves the ordinary FixedStepPump/InputRouter path while
+                // removing wall time from the run; no synthetic clock or alternate simulation loop is introduced.
+                var deltaTicks = (m_options.Unpaced
+                    ? stepTicks
+                    : clock.Sample()
+                );
                 // The wall-clock pacing grid for ONE fixed step — presentation-adjacent only (paces the wait, never
                 // enters sim state); the TickClock sample above is what actually measures elapsed time for the
                 // accumulator.
@@ -181,6 +189,10 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 // Simulation-routed console handlers run while snapshots are applied above. Flush their real results
                 // in this iteration rather than leaving them buffered until the next tick.
                 m_bufferedOutput.Flush();
+
+                if (m_options.Unpaced) {
+                    continue;
+                }
 
                 nextDeadline += period;
 
