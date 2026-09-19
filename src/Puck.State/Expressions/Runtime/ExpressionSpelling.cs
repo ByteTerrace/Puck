@@ -53,6 +53,11 @@ public static class ExpressionSpelling {
     /// <summary>The longest spelling admitted, a capacity bound on the parser's input rather than on the expression
     /// (the 64-token ceiling still applies to what it parses to).</summary>
     public const int MaxLength = 4096;
+    /// <summary>The deepest a spelling may nest: parentheses, brackets and arguments, a chain of prefix operators, a
+    /// chain of ternaries, and the left spine a run of binary operators builds all spend it. The parser and every
+    /// walk over the tree it builds recurse once per level, so this is what keeps a spelling's depth off the
+    /// machine stack; it is as deep as the longest program is long, so it refuses nothing that could compile.</summary>
+    public const int MaxNesting = 256;
 
     private static readonly ExpressionProgram EmptyProgram = new(Instructions: []);
 
@@ -1048,6 +1053,7 @@ public static class ExpressionSpelling {
         private static readonly string[] Punctuations = [">>>", "<<", ">>", "==", "!=", "<=", ">=", "<", ">", "+", "->", "-", "*", "/", "%", "&", "|", "^", "~", "??", "?", ":", "(", ")", "[", "]", ","];
 
         private string? m_binder;
+        private int m_depth;
         private Lexeme m_kind;
         private int m_position;
         private bool m_primed;
@@ -1237,6 +1243,11 @@ public static class ExpressionSpelling {
                 throw Fail(message: $"expected '{punctuation}'{Found()}");
             }
         }
+        private void Descend() {
+            if (++m_depth > MaxNesting) {
+                throw Fail(message: $"the expression nests more than {MaxNesting} deep");
+            }
+        }
         private SyntaxException Fail(string message) => new(message: $"at character {(m_start + 1)}: {message}");
         private string Found() {
             Prime();
@@ -1249,6 +1260,7 @@ public static class ExpressionSpelling {
         // Precedence climbing over the binary table: every operator is left-associative.
         private Node ParseBinary(int minimumLevel) {
             var left = ParseUnary();
+            var spine = 0;
 
             while (true) {
                 Prime();
@@ -1256,14 +1268,21 @@ public static class ExpressionSpelling {
                     (m_kind != Lexeme.Punctuation) ||
                     (BinaryOperator(symbol: m_value) is not { } symbol)
                 ) {
+                    m_depth -= spine;
+
                     return left;
                 }
                 var level = Level(symbol: symbol);
 
                 if (level < minimumLevel) {
+                    m_depth -= spine;
+
                     return left;
                 }
                 Advance();
+                // Each operator of a run puts what came before it one level further down the left of the tree.
+                Descend();
+                spine++;
                 var right = ParseBinary(minimumLevel: (level + 1));
 
                 left = new Binary(
@@ -1548,15 +1567,21 @@ public static class ExpressionSpelling {
             }
         }
         private Node ParseTernary() {
+            Descend();
+
             var condition = ParseBinary(minimumLevel: 2);
 
             if (!Accept(punctuation: "?")) {
+                m_depth--;
+
                 return condition;
             }
             var whenTrue = ParseTernary();
 
             Expect(punctuation: ":");
             var whenFalse = ParseTernary();
+
+            m_depth--;
 
             return new Ternary(
                 Condition: condition,
@@ -1566,7 +1591,11 @@ public static class ExpressionSpelling {
         }
         private Node ParseUnary() {
             if (Accept(punctuation: "-")) {
+                Descend();
+
                 var operand = ParseUnary();
+
+                m_depth--;
 
                 return ((operand is Literal literal)
                     ? new Literal(Value: -literal.Value)
@@ -1577,9 +1606,15 @@ public static class ExpressionSpelling {
                 );
             }
             if (Accept(punctuation: "~")) {
+                Descend();
+
+                var inverted = ParseUnary();
+
+                m_depth--;
+
                 return new Unary(
                     Operator: "~",
-                    Operand: ParseUnary()
+                    Operand: inverted
                 );
             }
             return ParsePrimary();
@@ -1620,8 +1655,11 @@ public static class ExpressionSpelling {
                     indexable &&
                     Accept(punctuation: "[")
                 ) {
+                    Descend();
+
                     var inner = ParseKey();
 
+                    m_depth--;
                     Expect(punctuation: "]");
                     Prime();
                     if (
