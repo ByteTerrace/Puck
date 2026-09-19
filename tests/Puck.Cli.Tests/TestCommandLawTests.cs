@@ -131,8 +131,8 @@ public sealed class TestCommandLawTests {
             expectedSubstring: "is neither a world document, a .puck source, nor a directory"
         );
     }
-    // A generated verdict row is an Int row: it records what the gate read of an Int row, and a gate over a row of
-    // another kind still boots, fires and passes.
+    // A generated verdict row is an Int row: it records what the gate read of an Int row, and what the gate read of
+    // a Fixed or a Bool row is recorded by a witness of that kind and listed the way a source spells the value.
     [Fact]
     public void ATestGivesAndExpectsOnARowOfEveryKind() {
         var (exitCode, output) = RunTest(Source(name: "every-kind-is-given.puck"));
@@ -140,7 +140,7 @@ public sealed class TestCommandLawTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "a-fixed-row-is-given-and-expected-on-1: pass gate=\"speed > 2.0\" saw=[]"
+            expectedSubstring: "a-fixed-row-is-given-and-expected-on-1: pass gate=\"speed > 2.0\" saw=[speed=2.25]"
         );
         Assert.Contains(
             actualString: output,
@@ -150,7 +150,7 @@ public sealed class TestCommandLawTests {
         Assert.Contains(
             actualString: output,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "a-bool-row-is-given-and-expected-on-1: pass gate=\"open == 0\""
+            expectedSubstring: "a-bool-row-is-given-and-expected-on-1: pass gate=\"open == 0\" saw=[open=false]"
         );
         Assert.Equal(
             actual: exitCode,

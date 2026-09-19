@@ -619,7 +619,7 @@
             "additionalProperties": false
           },
           "verdict": {
-            "description": "The verdict trait on a state row: the row is a test expectation\u0027s answer. The row\u0027s own name is the verdict\u0027s name, Gate is the expectation in the author\u0027s words, the cell Status names carries NotEvaluated/Pass/ Fail, and every other cell of the row is a value the gate saw, written by the same rule effect that decided the status.",
+            "description": "The verdict trait on a state row: the row is a test expectation\u0027s answer. The row\u0027s own name is the verdict\u0027s name, Gate is the expectation in the author\u0027s words, the cell Status names carries NotEvaluated/Pass/ Fail, and every other cell of the row is a value the gate saw, written by the same rule effect that decided the status. A verdict row is an Int row, so a value the gate saw of a Fixed or a Bool row is held by a witness: a row of that kind naming this one in Witness, written by the same firing, refused at every door this row is refused at, and frozen when this row settles.",
             "type": "object",
             "properties": {
               "gate": {
@@ -637,6 +637,10 @@
               "status"
             ],
             "additionalProperties": false
+          },
+          "witness": {
+            "description": "A validated state-section row name or cell key \u2014 the base SafeName rule plus no dot anywhere, which is what makes the state.\u003Crow\u003E.\u003Ckey\u003E HUD binding grammar unambiguous by construction: splitting a bound token on \u0027.\u0027 can never mistake part of a row or cell name for a grammar separator, because neither can hold one. A row\u0027s reserved slot key (\u0022$value\u0022) is unaffected \u2014 \u0027$\u0027 is neither a reserved character nor a dot, so it is already a legal CellName like any other author-chosen key, exactly the one reserved exception the substrate mints rather than authors.",
+            "type": "string"
           }
         },
         "required": [

@@ -222,10 +222,11 @@ public class TestLoweringLawTests {
             expected: "b"
         );
     }
-    // The verdict row is an Int row, so the rule folds what its gate read of an Int row and nothing of any other:
-    // a fold out of a Fixed row is a write the validator refuses, and the world would never boot.
+    // A row holds one kind. What the gate read of an Int row is a cell of the verdict row, and what it read of a
+    // Fixed row is a cell of a Fixed witness naming that verdict: a fold across kinds is a write the validator
+    // refuses, and the world would never boot.
     [Fact]
-    public void AnExpectationFoldsOnlyWhatItReadOfAnIntRow() {
+    public void AnExpectationFoldsAnIntReadIntoItsVerdictAndAFixedReadIntoAWitnessOfThatKind() {
         var world = OneWorld(source: KindsDoc);
         var keys = Row(
             name: "kinds-1",
@@ -238,11 +239,33 @@ public class TestLoweringLawTests {
             actual: keys,
             expected: ["status", "hp"]
         );
-        Assert.DoesNotContain(
-            collection: world["rules"]!.AsArray()
-                .Single()!["effects"]!.AsArray()
-                .OfType<JsonObject>(),
-            filter: static effect => (effect["fromState"]?.GetValue<string>() == "speed")
+
+        var witness = Row(
+            name: "kinds-1-fixed",
+            world: world
+        );
+
+        Assert.Equal(
+            actual: witness["witness"]!.GetValue<string>(),
+            expected: "kinds-1"
+        );
+        Assert.Equal(
+            actual: witness["kind"]!.GetValue<string>(),
+            expected: "Fixed"
+        );
+        Assert.Equal(
+            actual: witness["cells"]!.AsArray().Single()!["key"]!.GetValue<string>(),
+            expected: "speed"
+        );
+
+        var fold = world["rules"]!.AsArray()
+            .Single()!["effects"]!.AsArray()
+            .OfType<JsonObject>()
+            .Single(predicate: static effect => (effect["fromState"]?.GetValue<string>() == "speed"));
+
+        Assert.Equal(
+            actual: fold["state"]!.GetValue<string>(),
+            expected: "kinds-1-fixed"
         );
     }
     [Fact]

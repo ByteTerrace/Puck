@@ -5,7 +5,9 @@ namespace Puck.World;
 /// the verdict's name, <paramref name="Gate"/> is the expectation in the author's words, the cell
 /// <paramref name="Status"/> names carries <see cref="WorldVerdict.NotEvaluated"/>/<see cref="WorldVerdict.Pass"/>/
 /// <see cref="WorldVerdict.Fail"/>, and every other cell of the row is a value the gate saw, written by the same
-/// rule effect that decided the status.
+/// rule effect that decided the status. A verdict row is an Int row, so a value the gate saw of a Fixed or a Bool
+/// row is held by a witness: a row of that kind naming this one in <see cref="WorldStateRow.Witness"/>, written by
+/// the same firing, refused at every door this row is refused at, and frozen when this row settles.
 /// </summary>
 /// <remarks>Only a rule's own effect writes a verdict row. The effect door stamps
 /// <see cref="WorldVerdict.FiredTickKey"/> beside the cells it writes, and every other door — a cell mutation, a
@@ -47,15 +49,39 @@ public static class WorldVerdict {
         Pass => "pass",
         _ => $"status {status}",
     };
+    /// <summary>Returns one value a verdict's gate saw as <c>key=value</c>, spelled the way a source spells a value
+    /// of that kind — the form <c>puck test</c> and <c>world.verdicts</c> both print.</summary>
+    /// <param name="key">The cell's key in the verdict row or its witness.</param>
+    /// <param name="kind">The kind of the row that holds the cell.</param>
+    /// <param name="raw">The cell's stored number: an int, a bool's 0 or 1, or raw <c>FixedQ4816</c> bits.</param>
+    /// <returns>The spelling.</returns>
+    public static string DescribeSeen(string key, CellKind kind, long raw) => kind switch {
+        CellKind.Bool => $"{key}={((raw != 0L) ? "true" : "false")}",
+        CellKind.Fixed => string.Create(
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            handler: $"{key}={(((decimal)raw) / 65536m)}"
+        ),
+        _ => string.Create(
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            handler: $"{key}={raw}"
+        ),
+    };
     /// <summary>Determines whether a status cell's value is a passing verdict.</summary>
     /// <param name="status">The status cell's value.</param>
     /// <returns><see langword="true"/> only for <see cref="Pass"/>; every other value, including a code outside
     /// the three, fails.</returns>
     public static bool IsPass(long status) => (status == Pass);
     /// <summary>Returns the refusal every door but a rule's own effect gives a write to a verdict row.</summary>
-    /// <param name="row">The verdict row's name.</param>
+    /// <param name="row">The verdict row, or the witness of one.</param>
     /// <returns>The refusal reason, in the author's own vocabulary.</returns>
     /// <remarks>One text, so the boot loader, the cell-mutation door, the submitted state operation and a scheduled
     /// command all refuse the same write the same way.</remarks>
-    public static string RefuseWrite(CellName row) => $"state row '{row}' carries the verdict trait — only a rule's own effect writes a verdict, so the firing that wrote it stays named by '{FiredTickKey}'; no mutation, submitted operation or scheduled command may write it";
+    public static string RefuseWrite(WorldStateRow row) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        return ((row.Witness is { } witnessed)
+            ? $"state row '{row.Name}' is a witness of the verdict '{witnessed}' — only the rule firing that writes the verdict writes what its gate saw; no mutation, submitted operation or scheduled command may write it"
+            : $"state row '{row.Name}' carries the verdict trait — only a rule's own effect writes a verdict, so the firing that wrote it stays named by '{FiredTickKey}'; no mutation, submitted operation or scheduled command may write it"
+        );
+    }
 }

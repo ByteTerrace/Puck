@@ -80,6 +80,17 @@ public static partial class WorldStateHashComposition {
                 );
             }
 
+            if (row.Witness is { } witnessed) {
+                AppendString(
+                    hash: ref hash,
+                    value: "witness"
+                );
+                AppendString(
+                    hash: ref hash,
+                    value: witnessed.Value
+                );
+            }
+
             hash.Add(value: ((uint)cells.Count));
 
             for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {

@@ -660,7 +660,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
 /// </summary>
 /// <summary>The document row's wire shape: the engine's <see cref="StateRowJsonConverter{TRow}"/> plus the members
-/// only a world reads, <c>gatesDrive</c> beside the flags and <c>field</c>/<c>verdict</c> beside the traits.</summary>
+/// only a world reads, <c>gatesDrive</c> beside the flags and <c>field</c>/<c>verdict</c>/<c>witness</c> beside the traits.</summary>
 internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldStateRow> {
     /// <inheritdoc/>
     protected override IReadOnlyList<string> SchemaCycleExclusiveMembers => ["field"];
@@ -668,10 +668,10 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
     protected override IReadOnlyList<string> SchemaDrawSiteMembers => ["field"];
 
     /// <inheritdoc/>
-    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"behavior\":\"None\",\"clock\":{\"epochTick\":…,\"epochEngineTick\":…,\"y0\":…,\"v0\":…,\"substepTicks\":…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"Markov\"|\"UniformRange\"|\"WeightedNumeric\"|\"StreamDraw\"|\"SymmetryOrbit\",…},\"timing\":\"Boot\"|\"TickPeriod\"|\"Event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…},\"verdict\":{\"gate\":…,\"status\":…}}";
+    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"behavior\":\"None\",\"clock\":{\"epochTick\":…,\"epochEngineTick\":…,\"y0\":…,\"v0\":…,\"substepTicks\":…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"overflow\":\"Refuse\"|\"Saturate\",\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"Markov\"|\"UniformRange\"|\"WeightedNumeric\"|\"StreamDraw\"|\"SymmetryOrbit\",…},\"timing\":\"Boot\"|\"TickPeriod\"|\"Event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…},\"verdict\":{\"gate\":…,\"status\":…},\"witness\":…}";
 
     /// <inheritdoc/>
-    protected override bool ClaimsMember(string name) => (name is "gatesDrive" or "field" or "verdict");
+    protected override bool ClaimsMember(string name) => (name is "gatesDrive" or "field" or "verdict" or "witness");
     /// <inheritdoc/>
     protected override WorldStateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => new(
         row: row,
@@ -701,6 +701,16 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
                 options: options,
                 context: $"state row '{members.Name}'.verdict"
             )
+        : null),
+        witness: (members.Claimed.TryGetValue(
+            key: "witness",
+            value: out var witness
+        )
+        ? ReadNested<CellName>(
+                element: witness,
+                options: options,
+                context: $"state row '{members.Name}'.witness"
+            )
         : null)
     );
     /// <inheritdoc/>
@@ -718,6 +728,10 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
         new(
             Name: "verdict",
             Schema: exportType(typeof(WorldVerdictTrait))
+        ),
+        new(
+            Name: "witness",
+            Schema: exportType(typeof(CellName))
         ),
     ];
     /// <inheritdoc/>
@@ -755,6 +769,13 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
                 propertyName: "verdict",
                 value: verdictTrait,
                 writer: writer
+            );
+        }
+
+        if (row.Witness is { } witness) {
+            writer.WriteString(
+                propertyName: "witness",
+                value: witness.Value
             );
         }
     }

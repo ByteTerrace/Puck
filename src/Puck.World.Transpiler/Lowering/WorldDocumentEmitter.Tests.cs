@@ -122,8 +122,8 @@ public static partial class WorldDocumentEmitter {
                 break;
         }
     }
-    // Whether a name is a declared Int row of any lane of the document's state section.
-    private static bool IsIntRow(JsonObject state, string name) {
+    // The kind of a declared row of any lane of the document's state section, or null for a name none declares.
+    private static CellKind? KindOfRow(JsonObject state, string name) {
         foreach (var (_, lane) in state) {
             if (lane is not JsonArray rows) {
                 continue;
@@ -131,13 +131,27 @@ public static partial class WorldDocumentEmitter {
 
             foreach (var candidate in rows.OfType<JsonObject>()) {
                 if (candidate["name"]?.GetValue<string>() == name) {
-                    return ((candidate["kind"]?.GetValue<string>() ?? nameof(CellKind.Int)) == nameof(CellKind.Int));
+                    return (Enum.TryParse<CellKind>(
+                        result: out var kind,
+                        value: (candidate["kind"]?.GetValue<string>() ?? nameof(CellKind.Int))
+                    )
+                        ? kind
+                        : null
+                    );
                 }
             }
         }
 
-        return false;
+        return null;
     }
+    // The value a witness cell is authored at before its verdict's rule fires, or null for a kind no gate reads.
+    private static JsonNode? UnseenValue(CellKind kind) => kind switch {
+        CellKind.Bool => JsonValue.Create(value: false),
+        CellKind.Fixed => JsonValue.Create(value: "0"),
+        _ => null,
+    };
+    // The row that holds what a verdict's gate saw of rows of one kind other than Int.
+    private static string WitnessRow(string verdict, CellKind kind) => $"{verdict}-{kind.ToString().ToLowerInvariant()}";
     private static JsonObject SetVerdictCell(string row, string key, long value) => new() {
         ["$type"] = "setState",
         ["key"] = key,
@@ -502,16 +516,19 @@ public static partial class WorldDocumentEmitter {
                 ["else"] = fail,
                 ["then"] = pass,
             });
-            var folded = new HashSet<string>(comparer: StringComparer.Ordinal) { VerdictStatusKey };
+            var folded = new HashSet<(CellKind Kind, string Key)> { (CellKind.Int, VerdictStatusKey) };
+            var witnesses = new SortedDictionary<CellKind, JsonArray>();
 
             foreach (var (readState, readKey) in reads) {
-                // The verdict row is an Int row, so it holds what the gate read of an Int row and nothing else: a
-                // fold out of a row of another kind is a write the validator refuses. The gate's own text still
-                // names every row it read.
-                if (!IsIntRow(
-                    name: readState,
-                    state: state
-                )) {
+                // A row holds one kind, so what the gate read of an Int row is a cell of the verdict row and what it
+                // read of a Fixed or a Bool row is a cell of that kind's witness.
+                if (
+                    (KindOfRow(
+                        name: readState,
+                        state: state
+                    ) is not { } kind) ||
+                    ((kind != CellKind.Int) && (UnseenValue(kind: kind) is null))
+                ) {
                     continue;
                 }
 
@@ -520,17 +537,35 @@ public static partial class WorldDocumentEmitter {
                     state: readState
                 );
 
-                if ((key.Length == 0) || !folded.Add(item: key)) {
+                if ((key.Length == 0) || !folded.Add(item: (kind, key))) {
                     continue;
                 }
 
-                cells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = 0 });
+                var into = row;
+
+                if (kind == CellKind.Int) {
+                    cells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = 0 });
+                } else {
+                    into = WitnessRow(
+                        kind: kind,
+                        verdict: row
+                    );
+
+                    if (!witnesses.TryGetValue(
+                        key: kind,
+                        value: out var witnessCells
+                    )) {
+                        witnessCells = [];
+                        witnesses[kind] = witnessCells;
+                    }
+                    witnessCells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = UnseenValue(kind: kind) });
+                }
 
                 var fold = new JsonObject {
                     ["$type"] = "setState",
                     ["fromState"] = readState,
                     ["key"] = key,
-                    ["state"] = row,
+                    ["state"] = into,
                 };
 
                 if (readKey is not null) {
@@ -549,6 +584,28 @@ public static partial class WorldDocumentEmitter {
                     ["status"] = VerdictStatusKey,
                 },
             });
+            foreach (var (kind, witnessCells) in witnesses) {
+                var witness = WitnessRow(
+                    kind: kind,
+                    verdict: row
+                );
+
+                if (rows.OfType<JsonObject>().Any(predicate: candidate => (candidate["name"]?.GetValue<string>() == witness))) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.TestShapeInadmissible,
+                        message: $"test '{test.Name}' would generate the witness row '{witness}', which this world already declares",
+                        span: expectation.Span
+                    );
+
+                    continue;
+                }
+                rows.AppendNode(item: new JsonObject {
+                    ["cells"] = witnessCells,
+                    ["kind"] = kind.ToString(),
+                    ["name"] = witness,
+                    ["witness"] = row,
+                });
+            }
             rules.AppendNode(item: new JsonObject {
                 ["effects"] = effects,
                 ["gate"] = new JsonObject {

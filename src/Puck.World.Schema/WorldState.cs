@@ -151,6 +151,8 @@ public sealed record WorldStateSection(
 /// <param name="HostOwned">See <see cref="StateRow.HostOwned"/>.</param>
 /// <param name="Verdict">The test-verdict trait (see <see cref="WorldVerdictTrait"/>) — this row is a test
 /// expectation's answer; <see langword="null"/> for every other row.</param>
+/// <param name="Witness">The verdict row whose gate this row records (see <see cref="WorldVerdict"/>): the row holds
+/// the values that gate saw of rows of this row's own kind; <see langword="null"/> for every other row.</param>
 [method: JsonConstructor]
 public sealed record WorldStateRow(
     CellName Name,
@@ -177,7 +179,8 @@ public sealed record WorldStateRow(
     string? Space = null,
     CellName? Enum = null,
     bool HostOwned = false,
-    WorldVerdictTrait? Verdict = null
+    WorldVerdictTrait? Verdict = null,
+    CellName? Witness = null
 ) : StateRow(
     Name,
     Kind,
@@ -210,7 +213,8 @@ public sealed record WorldStateRow(
     /// <param name="gatesDrive">Whether the row is a drive-admission gate.</param>
     /// <param name="field">The physical-field trait, or <see langword="null"/>.</param>
     /// <param name="verdict">The test-verdict trait, or <see langword="null"/>.</param>
-    public WorldStateRow(StateRow row, bool gatesDrive, WorldStateFieldTrait? field, WorldVerdictTrait? verdict = null) : this(
+    /// <param name="witness">The verdict row this row is a witness of, or <see langword="null"/>.</param>
+    public WorldStateRow(StateRow row, bool gatesDrive, WorldStateFieldTrait? field, WorldVerdictTrait? verdict = null, CellName? witness = null) : this(
         Name: row.Name,
         Kind: row.Kind,
         Min: row.Min,
@@ -238,10 +242,16 @@ public sealed record WorldStateRow(
         Space: row.Space,
         Enum: row.Enum,
         HostOwned: row.HostOwned,
-        Verdict: verdict
+        Verdict: verdict,
+        Witness: witness
     ) {
         this.Generated = row.Generated;
     }
+
+    /// <summary>Gets a value indicating whether only a rule's own effect may write this row: it is a verdict, or a
+    /// witness of one.</summary>
+    [JsonIgnore]
+    public bool IsRuleWritten => ((Verdict is not null) || (Witness is not null));
 
     /// <inheritdoc/>
     /// <remarks>A verdict row mints <see cref="WorldVerdict.FiredTickKey"/> beside the slot key: the effect door

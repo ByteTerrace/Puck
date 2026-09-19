@@ -636,7 +636,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   leg with exit 2. A `state` row may
   carry a `verdict` trait (`gate` prose plus the `status` cell key; the
   row's other cells are the values the gate saw, status 0/1/2 =
-  never-evaluated/pass/fail). `world.schedule` and `world.verdicts` are the
+  never-evaluated/pass/fail). A verdict row is kind Int, so what its gate saw of
+  a Fixed or Bool row sits in a row of that kind carrying `witness: "<verdict
+  row>"`, which the same doors refuse and which freezes with its verdict.
+  `world.schedule` and `world.verdicts` are the
   read-backs; `puck test <path>` boots each such world twice through the real
   executable, refuses one whose two exports differ, and prints one line per
   verdict. This section and that trait are what a `.puck`

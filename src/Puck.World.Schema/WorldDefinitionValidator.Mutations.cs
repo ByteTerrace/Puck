@@ -88,6 +88,11 @@ public static partial class WorldDefinitionValidator {
                 errors: errors,
                 row: row
             );
+            ValidateWitnessRow(
+                definition: definition,
+                errors: errors,
+                row: row
+            );
 
             if (
                 (row.EffectiveDomain is StateDomain.CellsOf board) &&

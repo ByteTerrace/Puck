@@ -1016,6 +1016,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `hud.panels[].elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `hud.panels[].elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
+| `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
 | `state.world[].name` | State | Declares |  | `StateRow.Name` |
 | `state.world[].cells[].dynamics.row` | Dynamics | Names | Read | `StateDynamics.Row` |
 | `state.world[].cells[].visibility.readersFrom` | State | Names | Read | `StateVisibility.ReadersFrom` |

@@ -480,7 +480,9 @@ A test world carries its own test. Its `schedule` section says what command to
 submit and at exactly which simulation tick, acting as which seat; its
 `verdict`-marked `state` rows say what the rules must conclude, and the rule
 that decides each one writes the status plus the values its gate saw into that
-row's own cells. `puck test` boots each world through the real `Puck.World`
+row's own cells. A verdict row holds ints, so a value the gate saw of a `Fixed`
+or a `Bool` row is written to a `witness` row of that kind, which names its
+verdict and is printed with it (`saw=[hp=3 speed=2.25 open=false]`). `puck test` boots each world through the real `Puck.World`
 executable, headless, and reads the verdicts back out of the canonical state
 export the world writes at the tick its schedule derives (the last scheduled
 tick plus the declared `settleTicks` margin).
@@ -578,8 +580,8 @@ authored ceiling (no ceiling bounds a tick), or a cell capacity with no room for
 the stamp.
 
 A failing verdict is sticky: once a firing writes `fail`, later firings are
-absorbed, so the report names the first failing tick and the values the gate saw
-then. An expectation is therefore written at the tick it becomes decidable — a
+absorbed, for the verdict row and its witnesses alike, so the report names the
+first failing tick and the values the gate saw then. An expectation is therefore written at the tick it becomes decidable — a
 rule whose `else` branch fails pre-emptively settles the verdict on its first
 tick and can never pass.
 

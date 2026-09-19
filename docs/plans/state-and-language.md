@@ -527,15 +527,16 @@ pose or position), and a generated verdict row carries no `Generated` mark
 because no document member does — the verdict trait is what says the row is
 machinery.
 
-Two more limits are owed. A verdict row is an Int row, so a generated rule
-records beside the status only what its gate read of an Int row; a value read
-from a `Fixed`, `Bool` or `Text` row is named by the gate's text and not listed.
-Recording it needs either a verdict trait that names the cells its gate read,
-for the runner to report from the export by their own kinds, or a companion row
-per kind written by the same firing. And the gate grammar reads `true` and
-`false` as row names, in a rule's `when` as much as in an `expect` line, so a
-`Bool` row is compared to `0` or `1`; S3's operand grammar is where the two
-literals belong.
+A verdict row is an Int row, so what a gate read of a `Fixed` or a `Bool` row
+is written by the same firing to a `witness` row of that kind: a row trait
+naming its verdict, refused at every door the verdict is refused at, frozen
+when the verdict settles, and printed beside the verdict's own cells. A rule
+compares numbers, so no gate reads a `Text` or a `Vector` row and neither has a
+witness.
+
+One limit is owed. The gate grammar reads `true` and `false` as row names, in a
+rule's `when` as much as in an `expect` line, so a `Bool` row is compared to `0`
+or `1`; S3's operand grammar is where the two literals belong.
 
 ### The costing correction
 

@@ -65,9 +65,9 @@ public static class WorldArenaTransforms {
             Subjects(transform: transform).Select(selector: name => WorldDefinitionRows.FindStateRow(
             rows: definition.State,
             name: name
-        )).FirstOrDefault(predicate: static subject => (subject?.Verdict is not null)) is { } verdictRow
+        )).FirstOrDefault(predicate: static subject => (subject?.IsRuleWritten ?? false)) is { } verdictRow
         ) {
-            reason = WorldVerdict.RefuseWrite(row: verdictRow.Name);
+            reason = WorldVerdict.RefuseWrite(row: verdictRow);
 
             return false;
         }

@@ -1,4 +1,3 @@
-using System.Globalization;
 using Puck.Commands;
 using Puck.World.Server;
 
@@ -49,18 +48,24 @@ internal sealed class WorldScheduleCommandModule(WorldServer server) : ICommandM
             );
             var saw = new List<string>();
 
-            foreach (var cell in (row.Cells ?? [])) {
-                if ((cell is null) || (cell.Key == verdict.Status)) {
+            foreach (var holder in rows) {
+                if ((holder is null) || ((holder != row) && (holder.Witness != row.Name))) {
                     continue;
                 }
 
-                saw.Add(item: string.Create(
-                    provider: CultureInfo.InvariantCulture,
-                    handler: $"{cell.Key}={ReadCell(
+                foreach (var cell in (holder.Cells ?? [])) {
+                    if (
+                        (cell is null) ||
+                        ((holder == row) && (cell.Key == verdict.Status))
+                    ) {
+                        continue;
+                    }
+
+                    saw.Add(item: DescribeSeen(
                         key: cell.Key,
-                        row: row
-                    )}"
-                ));
+                        row: holder
+                    ));
+                }
             }
 
             lines.Add(item: $"  {row.Name}: {WorldVerdict.Describe(status: status)} gate=\"{verdict.Gate}\" saw=[{string.Join(
@@ -82,6 +87,26 @@ internal sealed class WorldScheduleCommandModule(WorldServer server) : ICommandM
             separator: Environment.NewLine,
             values: lines
         ));
+    }
+    private string DescribeSeen(WorldStateRow row, CellName key) {
+        _ = WorldStateReader.TryReadValue(
+            definition: server.Definition,
+            engineTick: server.CompletedEngineTicks,
+            key: key.Value,
+            row: out _,
+            rowName: row.Name.Value,
+            tick: (server.NextInputTick - 1UL),
+            value: out var value
+        );
+
+        return WorldVerdict.DescribeSeen(
+            key: key.Value,
+            kind: row.Kind,
+            raw: ((value.HasValue && (value.Kind is CellKind.Bool or CellKind.Fixed or CellKind.Int))
+                ? value.Raw
+                : 0L
+            )
+        );
     }
     private long ReadCell(WorldStateRow row, CellName key) {
         _ = WorldStateReader.TryReadValue(

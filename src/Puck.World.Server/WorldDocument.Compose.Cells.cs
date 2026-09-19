@@ -73,8 +73,8 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        if (row.Verdict is not null) {
-            reason = WorldVerdict.RefuseWrite(row: row.Name);
+        if (row.IsRuleWritten) {
+            reason = WorldVerdict.RefuseWrite(row: row);
 
             return false;
         }
@@ -373,8 +373,8 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        if (row.Verdict is not null) {
-            reason = WorldVerdict.RefuseWrite(row: row.Name);
+        if (row.IsRuleWritten) {
+            reason = WorldVerdict.RefuseWrite(row: row);
 
             return false;
         }

@@ -232,6 +232,12 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names
         ),
         new(
+            typeof(WorldStateRow),
+            nameof(WorldStateRow.Witness),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
             typeof(StateDomain.KeysOf),
             nameof(StateDomain.KeysOf.Row),
             WorldNameKind.State,

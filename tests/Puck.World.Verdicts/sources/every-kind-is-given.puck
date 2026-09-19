@@ -1,5 +1,6 @@
 // A row of every scalar kind, each given a boot value by a test and expected on. The verdict row a test generates
-// is an Int row, so it records what its gate read of an Int row and leaves the rest to the gate's own text.
+// is an Int row, so what its gate read of the Fixed row and of the Bool row is recorded in a witness row of that
+// kind, and the report lists it beside the ints.
 
 schema: "puck.world.definition.v1"
 documentId: "every-kind-is-given"

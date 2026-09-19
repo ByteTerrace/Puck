@@ -299,9 +299,40 @@ internal static partial class TestCommand {
                 } else if (key == statusKey) {
                     status = value;
                 } else {
-                    saw.Add(item: string.Create(
-                        provider: CultureInfo.InvariantCulture,
-                        handler: $"{key}={value}"
+                    saw.Add(item: WorldVerdict.DescribeSeen(
+                        key: key,
+                        kind: CellKind.Int,
+                        raw: value
+                    ));
+                }
+            }
+
+            // A witness holds what the gate saw of rows of its own kind, so it reads on after the verdict's cells.
+            foreach (var witness in rows.OfType<JsonObject>()) {
+                if (
+                    (witness[propertyName: "witness"]?.GetValue<string>() != name) ||
+                    (witness[propertyName: "name"]?.GetValue<string>() is not { } witnessName) ||
+                    !Enum.TryParse<CellKind>(
+                        result: out var kind,
+                        value: witness[propertyName: "kind"]?.GetValue<string>()
+                    )
+                ) {
+                    continue;
+                }
+
+                foreach (var cell in (witness[propertyName: "cells"] as JsonArray ?? [])) {
+                    if (cell?[propertyName: "key"]?.GetValue<string>() is not { } key) {
+                        continue;
+                    }
+
+                    saw.Add(item: WorldVerdict.DescribeSeen(
+                        key: key,
+                        kind: kind,
+                        raw: ReadResolved(
+                            export: export,
+                            key: key,
+                            row: witnessName
+                        )
                     ));
                 }
             }
