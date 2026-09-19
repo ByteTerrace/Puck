@@ -1899,8 +1899,9 @@ visits (keying and grouping) plus the sort of the keyed points. A neighbours
 option is charged the 27 cell lookups around its observer, the query's walk and
 retained-neighbour heap over the candidate budget, a perception test and the
 option's gate per candidate, a score per retained candidate, and the sort of the
-retained choices. A line-of-sight test is a flat weight: the march behind it
-walks the baked field's cells, a count the document does not carry. The cost
+retained choices. A line-of-sight test is a flat weight: the sphere trace behind
+it spends a sample budget over the world's compiled solids, and neither that
+program's length nor its step scale is a fact the document carries. The cost
 sheet separately reports the maximum poses copied, distinct range-scale grids
 rebuilt, and total grid points sorted. Those ceilings assume simultaneous
 reconsideration; sharing a range scale does not charge a new grid per option or

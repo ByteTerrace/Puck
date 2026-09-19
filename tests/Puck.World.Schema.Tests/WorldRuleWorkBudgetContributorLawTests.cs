@@ -191,6 +191,47 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
         Assert.True(condition: (line.Multiplier < document.Population.Capacity));
     }
     [Fact]
+    public void AdmissionRefusesABoundWithNoNumberAndAdmitsOnlyAKnownOneUnderTheCeiling() {
+        var asked = 0;
+        IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Lines() {
+            asked++;
+
+            return [];
+        }
+
+        Assert.Null(@object: WorldRuleWorkBudget.Refuse(
+            contributors: Lines,
+            work: RuleWork.Known(units: RuleCapacity.MaxWorkUnitsPerTick)
+        ));
+        Assert.Equal(
+            0,
+            asked
+        );
+        Assert.Contains(
+            expectedSubstring: "exceeding the maximum",
+            actualString: WorldRuleWorkBudget.Refuse(
+                contributors: Lines,
+                work: RuleWork.Known(units: (RuleCapacity.MaxWorkUnitsPerTick + 1L))
+            )
+        );
+
+        foreach (var unbounded in new[] { RuleWork.Overflow, RuleWork.Unmodeled(reason: "operation 255"), (RuleWork.Unmodeled(reason: "operation 255") + 1L) }) {
+            var refusal = WorldRuleWorkBudget.Refuse(
+                contributors: Lines,
+                work: unbounded
+            );
+
+            Assert.Contains(
+                expectedSubstring: "no bound on their work per tick",
+                actualString: refusal
+            );
+            Assert.Contains(
+                expectedSubstring: unbounded.ToString(),
+                actualString: refusal
+            );
+        }
+    }
+    [Fact]
     public void AnOverBudgetRefusalNamesTheCostliestLines() {
         var document = Document(
             Heavy(

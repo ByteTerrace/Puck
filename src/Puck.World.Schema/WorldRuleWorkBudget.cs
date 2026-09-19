@@ -298,6 +298,29 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             WorldFactsCompiler.CompileAllInteractions(definition: definition)
         );
     }
+    /// <summary>Returns admission's refusal of a tick's work, or <see langword="null"/> when the work is admitted.
+    /// Only a known number at or under <see cref="RuleCapacity.MaxWorkUnitsPerTick"/> is admitted: a bound nothing
+    /// prices and a bound that overflowed are refused as having no number, never read as a small one.</summary>
+    /// <param name="work">The tick's worst-case work.</param>
+    /// <param name="contributors">Lists the sheet's lines, costliest first; called only to word a refusal, which
+    /// names the first three.</param>
+    /// <returns>The refusal, in the author's vocabulary, or <see langword="null"/>.</returns>
+    public static string? Refuse(RuleWork work, Func<IReadOnlyList<RuleWorkContributor>> contributors) {
+        ArgumentNullException.ThrowIfNull(argument: contributors);
+
+        if (work.Fits(ceiling: RuleCapacity.MaxWorkUnitsPerTick)) {
+            return null;
+        }
+
+        var costliest = string.Join(
+            separator: ", ",
+            values: contributors().Take(count: 3).Select(selector: static line => $"'{line.Name}' x{line.Multiplier} = {line.WorkUnits}")
+        );
+
+        return $"rules/interactions/flock affinities derive {(work.IsKnown
+            ? $"{work} worst-case work units per tick, exceeding"
+            : $"no bound on their work per tick ({work}), which cannot be admitted under")} the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} (a forEach line's multiplier is its row's capacity, so author the capacity the row needs; world.budget.rules lists every line).";
+    }
     /// <summary>Describes why one contributor's multiplier is what it is — the forEach row's capacity, the
     /// interaction's carrier/pair-count formula, or the region-capacity bound's own terms — for
     /// <c>world.budget.rules --why</c>.</summary>

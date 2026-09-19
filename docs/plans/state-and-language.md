@@ -579,12 +579,17 @@ inside one and a checkpoint carries what it has folded; a tree step is a unit
 like any other. `ArenaSearchAllowanceLawTests` holds every step under its
 allowance against a judge counted from outside the search.
 
-Owed: a line-of-sight test is a flat weight, because the march behind it walks
-the baked field's cells and the document does not carry that count; its
-traversal bound needs the baked artifact's cell size in the cost context. No
-document can spell an unpriced operation or an overflowing count, so admission's
-refusal of one is held at the sheet, not through a world. The reference
-schedule, reference-cycle admission, and the shared report are C1's.
+Owed: a line-of-sight test is a flat weight. The test is a budgeted sphere
+trace over the world's compiled solids: at most the evaluator's march budget of
+exact samples, each one a run of the compiled field program, plus one banded
+lookup per bound step along the segment. Bounding it needs that program's
+length, its step scale and the band's step floor, which a server compiles and
+the document's cost context does not carry, and a sound product of them is a
+price in reference cycles rather than a work-unit weight; both arrive with C1.
+No document can spell an unpriced operation or an overflowing count, so
+admission's refusal of one is held on admission's own function,
+`WorldRuleWorkBudget.Refuse`, and at the sheet, not through a world. The
+reference schedule, reference-cycle admission, and the shared report are C1's.
 
 ### Embeddings (done)
 
