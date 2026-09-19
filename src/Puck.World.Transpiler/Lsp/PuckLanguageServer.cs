@@ -1,12 +1,12 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Machines;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Lowering;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
-using Puck.World.Transpiler.Embeddings;
 using Puck.World.Transpiler.Validation;
 using Puck.World.Transpiler.Vocabulary;
 
@@ -14,9 +14,11 @@ namespace Puck.World.Transpiler.Lsp;
 
 /// <summary>High-performance, Native AOT-compatible Language Server Protocol (LSP) implementation for the Puck authoring language.</summary>
 public sealed class PuckLanguageServer {
+    private readonly string m_catalogFingerprint;
     private readonly Func<DocumentNode, JsonArray?>? m_completeDocument;
     private readonly Func<DocumentNode, string?, DiagnosticBag, bool>? m_diagnoseDocument;
     private readonly Stream m_input;
+    private readonly IMachineValidationCatalog? m_machines;
     private readonly Stream m_output;
 
     private readonly Dictionary<string, string> m_documents = new(comparer: StringComparer.OrdinalIgnoreCase);
@@ -278,18 +280,10 @@ public sealed class PuckLanguageServer {
     // on the parts that do.
     private string? GetStateRowHoverCard(string text, string word, string? sourcePath = null) {
         try {
-            var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-                source: text,
-                vocabulary: m_vocabularyResolver.Resolve(source: text)
-            );
-
-            if (parseResult.Value is not { } document) {
-                return null;
-            }
-            if (WorldDocumentEmitter.LowerWithDiagnostics(
-                document: document,
-                embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
-            ).Value?["state"] is not JsonObject stateSection) {
+            if (LowerStateSection(
+                sourcePath: sourcePath,
+                text: text
+            ) is not { } stateSection) {
                 return null;
             }
             foreach (var (_, section) in stateSection) {
@@ -485,17 +479,40 @@ public sealed class PuckLanguageServer {
         }
 
         try {
-            var prefix = text[..Math.Clamp(
-                max: text.Length,
-                min: 0,
-                value: cursorOffset
-            )];
-            var recovered = (prefix + ComputeClosingSuffix(source: prefix));
+            var recovered = RecoverToCursor(
+                cursorOffset: cursorOffset,
+                text: text
+            );
 
             return PuckParser.ParseDocumentWithDiagnostics(source: recovered, vocabulary: m_vocabularyResolver.Resolve(source: recovered)).Value;
         } catch {
             return null;
         }
+    }
+    // The text before the cursor with every delimiter it left open closed, which parses when the whole buffer,
+    // mid-edit, does not.
+    private static string RecoverToCursor(string text, int cursorOffset) {
+        var prefix = text[..Math.Clamp(
+            max: text.Length,
+            min: 0,
+            value: cursorOffset
+        )];
+
+        return (prefix + ComputeClosingSuffix(source: prefix));
+    }
+    // The `state` section `text` lowers to, or null when the text is not a world source or lowers to none. Whatever
+    // the compile reports is dropped: a document mid-edit still answers for the rows that do lower.
+    private JsonObject? LowerStateSection(string text, string? sourcePath) {
+        if (m_vocabularyResolver.Resolve(source: text) is not WorldDocumentVocabulary vocabulary) {
+            return null;
+        }
+
+        return (WorldCompiler.Compile(
+            imports: ImportHandling.Ignore,
+            source: text,
+            sourcePath: sourcePath,
+            vocabulary: vocabulary
+        ).Json?["state"] as JsonObject);
     }
     // The closing `}`/`]`/`)` sequence, innermost first, that balances every delimiter `source` opened and never
     // closed — skipping string/backquote contents and comments, exactly like the formatter's own nesting scan.
@@ -587,16 +604,16 @@ public sealed class PuckLanguageServer {
     // generic keyword list instead of offering zero completions for what might just be an unresolved recovery.
     private JsonArray? GetStateRowKeyCompletions(string text, string rowName, int cursorOffset, string? sourcePath = null) {
         try {
-            if (TryParseDocumentBestEffort(
-                cursorOffset: cursorOffset,
+            if ((LowerStateSection(
+                sourcePath: sourcePath,
                 text: text
-            ) is not { } document) {
-                return null;
-            }
-            if (WorldDocumentEmitter.LowerWithDiagnostics(
-                document: document,
-                embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
-            ).Value?["state"] is not JsonObject stateSection) {
+            ) ?? LowerStateSection(
+                sourcePath: sourcePath,
+                text: RecoverToCursor(
+                    cursorOffset: cursorOffset,
+                    text: text
+                )
+            )) is not { } stateSection) {
                 return null;
             }
             foreach (var (_, section) in stateSection) {
@@ -1526,62 +1543,19 @@ public sealed class PuckLanguageServer {
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
     private async Task PublishDiagnosticsAsync(string uri, string text) {
-        var diagnosticsBag = new DiagnosticBag();
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            text,
-            diagnostics: diagnosticsBag,
-            vocabulary: m_vocabularyResolver.Resolve(source: text)
-        );
-
-        if (
-            (parseResult.Value is not null) &&
-            !(m_diagnoseDocument?.Invoke(
-            parseResult.Value,
-            (TryGetLocalPath(
-                path: out var localPath,
-                uri: uri
-            )
-            ? localPath
-            : null),
-            diagnosticsBag
-        ) ?? false)
-        ) {
-            PuckLinter.Lint(
-                parseResult.Value,
-                diagnosticsBag
-            );
-
-            // Reference resolution needs a real directory to resolve a declared basis/import against, which only a
-            // `file://` URI carries — an unsaved buffer publishes syntax-level lint alone.
-            if (TryGetLocalPath(
+        var diagnosticsBag = WorldSourceDiagnostics.Diagnose(
+            catalogFingerprint: m_catalogFingerprint,
+            foreign: m_diagnoseDocument,
+            machines: m_machines,
+            source: text,
+            sourcePath: (TryGetLocalPath(
                 path: out var sourcePath,
                 uri: uri
-            )) {
-                var loweringDiags = new DiagnosticBag();
-                var sourceMap = new SourceMap();
-                var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-                    document: parseResult.Value,
-                    basePath: Path.GetDirectoryName(path: sourcePath),
-                    sourceMap: sourceMap,
-                    diagnostics: loweringDiags,
-                    embeddings: EmbeddingLock.TryLoad(rootSourcePath: sourcePath)
-                );
-
-                diagnosticsBag.AddRange(diagnostics: loweringDiags);
-
-                if (
-                    (loweringResult.Value is not null) &&
-                    !diagnosticsBag.HasErrors
-                ) {
-                    PuckLinter.LintReferences(
-                        loweringResult.Value,
-                        sourceMap,
-                        diagnosticsBag,
-                        sourcePath: sourcePath
-                    );
-                }
-            }
-        }
+            )
+                ? sourcePath
+                : null),
+            vocabularies: m_vocabularyResolver
+        );
 
         var lspDiags = new JsonArray();
 
@@ -1792,9 +1766,15 @@ public sealed class PuckLanguageServer {
     /// <param name="diagnoseDocument">An optional schema dispatcher; returns true when it supplies the document's diagnostics.</param>
     /// <param name="completeDocument">An optional schema completion provider; null retains World completions.</param>
     /// <param name="vocabularyResolver">An optional vocabulary resolver; null uses default World resolver.</param>
+    /// <param name="machines">The deployment's machine vocabulary, which the engine's validation of a world reads.</param>
+    /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
     public PuckLanguageServer(Stream input, Stream output, Func<DocumentNode, string?, DiagnosticBag, bool>? diagnoseDocument = null,
         Func<DocumentNode, JsonArray?>? completeDocument = null,
-        DocumentVocabularyResolver? vocabularyResolver = null) {
+        DocumentVocabularyResolver? vocabularyResolver = null,
+        IMachineValidationCatalog? machines = null,
+        string catalogFingerprint = "") {
+        m_catalogFingerprint = catalogFingerprint;
+        m_machines = machines;
         m_input = input;
         m_output = output;
         m_diagnoseDocument = diagnoseDocument;

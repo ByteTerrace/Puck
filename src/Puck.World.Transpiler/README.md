@@ -15,7 +15,7 @@ authoring layer: JSON stays the wire form and the checked-in source of every shi
 pipeline: source text in, canonical document out, having parsed with this vocabulary, walked the import graph
 (`ImportHandling` picks validate, bundle, or neither) and resolved authored vector text against the
 `.embeddings.json` lock beside the source. `WorldDocumentEmitter`'s lowering is internal to this assembly, so
-`puck compile`, `puck lint`, `puck embed`, the game's boot path, the basis composer and every test harness run the
+`puck compile`, `puck lint`, `puck embed`, the language server, the game's boot path, the basis composer and every test harness run the
 same stages in the same order rather than each assembling its own. The cartridge vocabulary is this one's peer and
 lowers through `CartridgeDocumentEmitter`, which no world code reaches.
 
@@ -652,6 +652,13 @@ always runs and always reports. Every other check is Information severity; the s
 ## Editor tooling
 
 The [VS Code extension](../../editors/vscode/README.md) starts this server through `puck lsp` when a Puck document opens. Its setup guide covers CLI paths, packaging, and restarting the server.
+
+The diagnostics the server publishes and the ones `puck lint` prints are both
+`Validation/WorldSourceDiagnostics.Diagnose`: a compile through `WorldCompiler.Compile`, the lint, the engine's
+validation of the composed world when the document is a root, then the reference lint. A buffer with no file path
+cannot compose a `basis` or an import, so a document naming either is diagnosed no further than its lowering; a
+document naming neither is validated as it stands. A source in another vocabulary is parsed with that vocabulary and
+handed to the dispatcher the host supplied, which is how a cartridge is diagnosed.
 
 `Lsp/PuckLanguageServer.cs` offers completion for the gate/effect/rule keywords (`if`/`else` included), `table`/
 `slot`/`pile`/`grid`/`row` and their `bounds`/`advance`/`capacity`/`behavior`/`dimensions`/`wrap`/`cellSize`/

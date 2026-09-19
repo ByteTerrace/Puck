@@ -32,10 +32,11 @@ Everything below has landed on `main`.
   a published-configuration memory profile.
 - **S1** is landed: `WorldCompiler.Compile` is the one door, and
   `ProjectionLawTests` holds over every shipped source and a generated corpus
-  of every registered construct. Owed: the language server does not go through
-  that door — it publishes the parser's and `PuckLinter`'s findings and never
-  runs `WorldSemanticValidator`, so no refusal `puck lint` reports reaches an
-  editor.
+  of every registered construct. `puck lint` and the language server both
+  publish `WorldSourceDiagnostics.Diagnose`, which compiles through that door
+  and then runs the lint, the engine's validation of the composed world and the
+  reference lint, so an editor refuses what `puck lint` refuses, by the same
+  code, text and line.
 - **S2** is landed: the syntax tree carries trivia, `puck fmt`,
   the language server and `puck decompile` are parse-then-print through
   `PuckPrinter`, the text formatter is gone, and formatting every shipped
