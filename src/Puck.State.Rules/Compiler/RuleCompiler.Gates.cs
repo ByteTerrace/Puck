@@ -566,9 +566,9 @@ public static partial class RuleCompiler {
         return false;
     }
     private static void FlattenPredicate(ActionPredicate? predicate, List<GateToken> gate, string ruleName, RuleCompileContext context, int depth = 0) {
-        if (depth >= RuleCapacity.MaxPredicateTokens) {
+        if (depth >= RuleCapacity.MaxPredicateNesting) {
             throw new RuleException(
-                detail: $"a gate is nested past the {RuleCapacity.MaxPredicateTokens}-token ceiling",
+                detail: $"a gate nests more than {RuleCapacity.MaxPredicateNesting} predicates deep; name the inner condition as a local and test that",
                 refusal: RuleRefusal.PredicateKindInadmissible,
                 ruleName: ruleName
             );

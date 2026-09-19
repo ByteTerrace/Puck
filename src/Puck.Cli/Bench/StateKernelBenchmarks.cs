@@ -226,7 +226,7 @@ public class StateExpressionKernels {
     private StateKernelReader? m_reader;
 
     /// <summary>Gets or sets the token count the compiled program carries.</summary>
-    [Params(0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64)]
+    [Params(0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256)]
     public int Tokens { get; set; }
     /// <summary>Gets or sets how the program reaches its operand values.</summary>
     [Params(KernelRead.Literal, KernelRead.Direct, KernelRead.Indirect)]

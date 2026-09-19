@@ -7,7 +7,9 @@ namespace Puck.State.Rules;
 /// the reader's <see cref="ArenaScratch"/> at the program's own length, a call's argument frame is a fixed few
 /// words of machine stack, and a fold reads its family's cells straight off the arena.</remarks>
 public static class RuleExpressions {
-    private const int MaxArguments = 8;
+    /// <summary>The most arguments one shared function takes: a call's argument frame is this many eight-byte
+    /// words of machine stack in every evaluator frame.</summary>
+    public const int MaxArguments = 16;
 
     // The compiler folds constants with no evaluation in flight, so it has no host to borrow from.
     [ThreadStatic]

@@ -244,8 +244,25 @@ mebibyte, 16,384 walks at the 64 bytes each occupies. `sortZone` and
 `sortKeyed` lease their key buffers instead of allocating them per firing.
 `MaxTotalCells` waits on the document's memory bound, which does not exist yet:
 the arena's layout knows every column's width, and the bound belongs there
-rather than on boards alone. The raises, that memory bound and the journal's,
-and the reference schedule have not started.
+rather than on boards alone.
+
+The rule-program raises are landed: 64 locals, 256 expression tokens, 64
+subprograms of at most 16 arguments, 256 effects and transaction effects, 1,024
+gate tokens with a nesting ceiling of their own (64), 256 traced evaluations,
+and spellings of 16,384 characters. Two of them could not be raised as numbers.
+An expression spelling nested with nothing bounding it, so two thousand
+parentheses, inside the old length limit, ended the process with a stack
+overflow; it nests to 256 now along every path the parser recurses on. And a
+subprogram that calls the level below twice doubles with its depth, which at
+sixteen levels was 65,536 evaluations and at sixty-four never finishes: the
+compiler's constant folder evaluated such a chain before anything priced it,
+and pricing walked every call site. A compiled body carries the tokens one call
+evaluates, the folder leaves a subtree longer than 65,536 of them in the
+program, and pricing takes each shared body once, so the chain compiles and
+prices in its authored size and its price, an overflow, is what refuses it. The
+remaining raises (state rows, enums, topologies, vectors, patterns, lanes,
+generators, search, groups), the memory bound and the journal's, and the
+reference schedule have not started.
 
 **Check:** the state, rules, search, and World schema suites green with a law
 at each raised edge for the two ceilings that bind today (locals, expression
@@ -519,7 +536,11 @@ tick), the `verdict` state-row trait, `world.schedule`/`world.verdicts`, and
 What a green run now means. The section submits nothing unless the boot armed it
 with `--schedule-dir`, and a row may open only with a verb from a closed step
 vocabulary tied to the live command registry by a law, acting as a seat under the
-document's own grants. Reaching the authored export tick is part of the verdict,
+document's own grants. A step is due in the tick after the one it was submitted
+at: its session stamps the earliest capture tick rather than the capture
+clock's now, which is wall time, so a world whose tick takes about as long as
+its period lands each step on the same tick every run instead of wherever the
+simulation had caught up to. Reaching the authored export tick is part of the verdict,
 and every declared row is reconciled against the manifest at its own position.
 Only a rule's own effect writes a verdict row: the effect door stamps the
 firing's tick, a status with no stamp reads never-evaluated whatever the cell

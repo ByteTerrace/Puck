@@ -38,30 +38,105 @@ public static partial class RuleWorkBudget {
     public static RuleWork ExpressionCost(CompiledExpressionToken[] tokens, CellKind kind, IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: tokens);
 
+        return ExpressionCost(
+            context: context,
+            kind: kind,
+            priced: null,
+            tokens: tokens
+        );
+    }
+    /// <summary>The most tokens the compiler evaluates to fold one constant subtree. A longer one is left in the
+    /// program for the work sheet to price.</summary>
+    public const long MaxFoldSteps = 65_536L;
+
+    /// <summary>Counts the tokens one evaluation of a program runs, every call site and fold member expanded,
+    /// saturating at <see cref="long.MaxValue"/>. A call contributes its body's own count, which the body carries,
+    /// so the count is linear in the program however many times its bodies are shared.</summary>
+    /// <param name="tokens">The compiled postfix program.</param>
+    /// <returns>The token count.</returns>
+    public static long Steps(ReadOnlySpan<CompiledExpressionToken> tokens) {
+        var steps = 0L;
+
+        foreach (var token in tokens) {
+            var own = (token switch {
+                { Call: { } call } => call.Steps,
+                { Fold: { } fold } => SaturatingMultiply(
+                    left: Math.Max(
+                        val1: 1L,
+                        val2: fold.Members
+                    ),
+                    right: Steps(tokens: fold.Body)
+                ),
+                _ => 0L,
+            });
+
+            steps = SaturatingAdd(
+                left: SaturatingAdd(
+                    left: steps,
+                    right: 1L
+                ),
+                right: own
+            );
+        }
+
+        return steps;
+    }
+
+    private static long SaturatingMultiply(long left, long right) => (((left != 0L) && (right > (long.MaxValue / left)))
+        ? long.MaxValue
+        : (left * right)
+    );
+    // A body is shared by every site that calls it, so it is priced once per kind and the price reused: walking each
+    // call site again would take as long as evaluating the chain does.
+    private static RuleWork ExpressionCost(CompiledExpressionToken[] tokens, CellKind kind, IRuleCostContext context, Dictionary<(CompiledExpressionToken[] Body, CellKind Kind), RuleWork>? priced) {
         var cost = RuleWork.Zero;
 
         foreach (var token in tokens) {
-            cost += token switch {
-                { Operand: { } operand } => operand.Cost(context: context),
-                { Fold: { } fold } => (Math.Max(
-                    val1: 1L,
-                    val2: fold.Members
-                ) * ExpressionCost(
-                    context: context,
-                    kind: fold.MemberKind,
-                    tokens: fold.Body
-                )),
-                { Call: { } call } => ExpressionCost(
-                    context: context,
-                    kind: kind,
-                    tokens: call.Body
-                ),
-                _ => OperationCost(
-                    board: token.Board,
-                    kind: kind,
-                    operation: token.Operation
-                ),
-            };
+            switch (token) {
+                case { Operand: { } operand }:
+                    cost += operand.Cost(context: context);
+
+                    break;
+                case { Fold: { } fold }:
+                    cost += (Math.Max(
+                        val1: 1L,
+                        val2: fold.Members
+                    ) * ExpressionCost(
+                        context: context,
+                        kind: fold.MemberKind,
+                        priced: priced,
+                        tokens: fold.Body
+                    ));
+
+                    break;
+                case { Call: { } call }:
+                    priced ??= new Dictionary<(CompiledExpressionToken[] Body, CellKind Kind), RuleWork>();
+
+                    if (!priced.TryGetValue(
+                        key: (call.Body, kind),
+                        value: out var body
+                    )) {
+                        body = ExpressionCost(
+                            context: context,
+                            kind: kind,
+                            priced: priced,
+                            tokens: call.Body
+                        );
+                        priced[(call.Body, kind)] = body;
+                    }
+
+                    cost += body;
+
+                    break;
+                default:
+                    cost += OperationCost(
+                        board: token.Board,
+                        kind: kind,
+                        operation: token.Operation
+                    );
+
+                    break;
+            }
         }
 
         return cost;

@@ -51,8 +51,8 @@ public static partial class RuleCompiler {
     // successful reader-free subtree becomes a raw constant. A domain refusal stays in the program, including an
     // unselected ternary branch: expressions are eager, so folding must not hide that refusal.
     private static CompiledExpressionToken[] FoldConstants(CompiledExpressionToken[] tokens, CellKind kind) {
-        Span<bool> constants = stackalloc bool[RuleCapacity.MaxExpressionTokens];
-        Span<int> starts = stackalloc int[RuleCapacity.MaxExpressionTokens];
+        var constants = new bool[tokens.Length];
+        var starts = new int[tokens.Length];
         var count = 0;
         var depth = 0;
         var output = new CompiledExpressionToken[tokens.Length];
@@ -76,6 +76,18 @@ public static partial class RuleCompiler {
 
             depth -= arity;
             output[count++] = token;
+            // Folding evaluates the subtree here and now, before anything has priced it. A subtree too long to fold
+            // stays in the program, where the work sheet prices it like any other.
+            if (
+                constant &&
+                (arity != 0) &&
+                (RuleWorkBudget.Steps(tokens: output.AsSpan(
+                    length: (count - start),
+                    start: start
+                )) > RuleWorkBudget.MaxFoldSteps)
+            ) {
+                constant = false;
+            }
             if (
                 constant &&
                 (arity != 0)
@@ -399,6 +411,10 @@ public static partial class RuleCompiler {
 
             var declared = expression.Subprograms[call.Subprogram];
 
+            if (declared.Arity > RuleExpressions.MaxArguments) {
+                throw Malformed(detail: $"calls a function of {declared.Arity} arguments; a function takes at most {RuleExpressions.MaxArguments}");
+            }
+
             Require(
                 arity: declared.Arity,
                 operation: ExpressionOp.Call
@@ -425,7 +441,8 @@ public static partial class RuleCompiler {
                     Call: new CompiledSubprogram(
                         Arity: declared.Arity,
                         Body: body,
-                        Name: declared.Name
+                        Name: declared.Name,
+                        Steps: RuleWorkBudget.Steps(tokens: body)
                     ),
                     Operation: ExpressionOp.Call
                 ),

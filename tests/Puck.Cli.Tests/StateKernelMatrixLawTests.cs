@@ -9,7 +9,7 @@ using Puck.State;
 namespace Puck.Cli.Tests;
 
 public sealed class StateKernelMatrixLawTests {
-    private static readonly int[] Breakpoints = [0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64];
+    private static readonly int[] Breakpoints = [0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256];
 
     private static void AssertBreakpoints(IReadOnlyList<int> capacities, int maximum) {
         Assert.Contains(

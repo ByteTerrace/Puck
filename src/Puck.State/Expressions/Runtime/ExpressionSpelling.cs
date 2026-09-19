@@ -50,9 +50,9 @@ public static class ExpressionSpelling {
     private const int TernaryLevel = 1;
     private const int UnaryLevel = 11;
 
-    /// <summary>The longest spelling admitted, a capacity bound on the parser's input rather than on the expression
-    /// (the 64-token ceiling still applies to what it parses to).</summary>
-    public const int MaxLength = 4096;
+    /// <summary>The longest spelling admitted, in characters: a bound on the parser's input rather than on the
+    /// expression, whose token ceiling still applies to what it parses to.</summary>
+    public const int MaxLength = 16_384;
     /// <summary>The deepest a spelling may nest: parentheses, brackets and arguments, a chain of prefix operators, a
     /// chain of ternaries, and the left spine a run of binary operators builds all spend it. The parser and every
     /// walk over the tree it builds recurse once per level, so this is what keeps a spelling's depth off the

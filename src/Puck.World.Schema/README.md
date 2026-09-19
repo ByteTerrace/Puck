@@ -2158,7 +2158,7 @@ token vocabulary, the opcode enum, the arithmetic, and the state transforms in
 folds successful constant subexpressions and prices the remaining program the
 same way for both spellings, and the document writes back whichever
 spelling it read. Expressions are
-postfix token lists with a 64-token ceiling; they provide constants, state or
+postfix token lists with a 256-token ceiling; they provide constants, state or
 reserved-channel reads, `add`, `subtract`, `multiply`, `divide`, `modulo`
 (remainder toward zero; in `fixed` the raw remainder, so `2.5 modulo 1` is
 `0.5`), `min`, `max`, `clamp`, the comparisons `equal`/`notEqual`/`less`/
@@ -2268,7 +2268,7 @@ fixed-point instruction path as authored body actions. `paintField` clips a
 sphere to the lattice, clamps every result to the field envelope, and caps its
 radius at eight cells, bounding one firing to at most 4,913 candidate visits.
 
-Rule execution admits at most 64 top-level effects per rule/interaction and
+Rule execution admits at most 256 top-level effects per rule/interaction and
 4,000,000 statically derived heuristic work units per tick. There is no separate
 ordinary-rule count ceiling. A line has three parts: setup, paid once per sweep;
 check, paid once per evaluation whether or not the gate holds; and firing, paid
@@ -2308,7 +2308,7 @@ Live effect failures are bounded diagnostics, not a Level-rule log flood.
 latest tick, rule, effect, and concrete reason; stderr narrates only the first
 occurrence of each category. To see WHY one rule did what it did,
 `world.rule.trace <rule> [evaluations]` arms a capture of its next evaluations
-(at most 32); after `world.wait`, `world.rule.trace` prints one line per
+(at most 256); after `world.wait`, `world.rule.trace` prints one line per
 evaluation—the tick, the `forEach` key, every local's value, every gate
 conjunct with the two values it compared and its verdict, whether the gate
 held (and whether an edge rule was already held), and each effect's spelling,

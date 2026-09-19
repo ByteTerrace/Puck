@@ -152,15 +152,15 @@ public sealed class RuleCompilerLawTests {
             Name: RulesFixture.Name(value: "crowded")
         );
 
-        // One declared value, the one key every later binding reads through, and fourteen declared bindings fill the
-        // buffer exactly.
+        // One declared value, the one key every later binding reads through, and two fewer declared bindings than
+        // the ceiling fill the buffer exactly.
         Assert.Equal(
-            actual: RulesFixture.Compile(rule: Declaring(computed: 14)).Locals!.Length,
+            actual: RulesFixture.Compile(rule: Declaring(computed: (RuleCapacity.MaxLocalsPerRule - 2))).Locals!.Length,
             expected: RuleCapacity.MaxLocalsPerRule
         );
-        // Sixteen declared bindings pass the authored count, and the shared key makes seventeen.
+        // One more declared binding still passes the authored count, and the shared key puts it one past the ceiling.
         Assert.Equal(
-            actual: RulesFixture.Refusal(rule: Declaring(computed: 15)),
+            actual: RulesFixture.Refusal(rule: Declaring(computed: (RuleCapacity.MaxLocalsPerRule - 1))),
             expected: RuleRefusal.EffectKindInadmissible
         );
     }

@@ -182,22 +182,28 @@ public enum MatchFacet : byte {
     /// <summary>One board-origin ray: the step distance to <see cref="Cell"/>'s cell, or -1 on the same terms.</summary>
     Distance,
 }
-/// <summary>Hard bounds for rule programs; these are representation and per-tick work limits, not gameplay tuning.</summary>
+/// <summary>Hard bounds for rule programs. Each names the storage it sizes or the recursion it bounds; what a
+/// program costs to run is the work sheet's to price, not a count's to cap.</summary>
 public static class RuleCapacity {
-    /// <summary>The most local values one rule may declare — the width of the per-evaluation scratch every evaluator
-    /// carries for them.</summary>
-    public const int MaxLocalsPerRule = 16;
-    /// <summary>The most top-level effects one rule may carry.</summary>
-    public const int MaxEffectsPerRule = 64;
-    /// <summary>The most postfix tokens in one numeric expression.</summary>
-    public const int MaxExpressionTokens = 64;
+    /// <summary>The most local values one rule may declare: every evaluator host holds one eight-byte slot per
+    /// local for the evaluation in flight, 512 bytes a host.</summary>
+    public const int MaxLocalsPerRule = 64;
+    /// <summary>The most top-level effects one rule may carry. Each is priced on the work sheet; the count bounds
+    /// the compiled rule's effect table.</summary>
+    public const int MaxEffectsPerRule = 256;
+    /// <summary>The most postfix tokens in one numeric expression. A token pushes at most one value, so this is
+    /// also the deepest an evaluation's leased value stack grows: eight bytes and one mark a token.</summary>
+    public const int MaxExpressionTokens = 256;
     /// <summary>The most shared subprograms one expression program may carry. The call graph is acyclic, so this
-    /// also bounds how deep a call chain nests at evaluation.</summary>
-    public const int MaxSubprograms = 16;
-    /// <summary>The most postfix tokens in one Boolean gate.</summary>
-    public const int MaxPredicateTokens = 256;
-    /// <summary>The most effects in one atomic transaction branch.</summary>
-    public const int MaxTransactionEffects = 64;
+    /// is how deep a call chain nests, and each level is one evaluator frame of machine stack.</summary>
+    public const int MaxSubprograms = 64;
+    /// <summary>How deep one Boolean gate's predicates nest. Flattening a gate recurses once per level, so this is
+    /// machine stack, where <see cref="MaxPredicateTokens"/> is the gate's length.</summary>
+    public const int MaxPredicateNesting = 64;
+    /// <summary>The most postfix tokens in one Boolean gate: one byte of leased stack each at evaluation.</summary>
+    public const int MaxPredicateTokens = 1024;
+    /// <summary>The most effects in one atomic transaction branch, priced like any other effect.</summary>
+    public const int MaxTransactionEffects = 256;
     /// <summary>The maximum statically derived rule work admitted for one simulation tick — sized against the
     /// tick's own budget at a consumer's shipped 30 Hz cadence (a 33.3 ms tick), not chosen independent of it. The
     /// rule sweep is one of several passes a tick pays for; reserving roughly a fifth of the tick (~6.7 ms) as its

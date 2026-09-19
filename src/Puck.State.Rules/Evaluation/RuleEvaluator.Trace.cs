@@ -96,7 +96,7 @@ public sealed class RuleTraceEvaluation {
 public readonly record struct RuleRuntimeDiagnostic(Enum Refusal, ulong Count, ulong LastTick, string Rule, string Effect, string Detail);
 public sealed partial class RuleEvaluator {
     /// <summary>The most evaluations one trace arming captures.</summary>
-    public const int MaxTraceEvaluations = 32;
+    public const int MaxTraceEvaluations = 256;
 
     private readonly Dictionary<(Type, int), int> m_refusalSlots = [];
     private readonly List<RuleRuntimeDiagnostic> m_refusals = [];

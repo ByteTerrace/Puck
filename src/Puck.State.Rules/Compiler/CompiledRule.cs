@@ -45,7 +45,11 @@ public sealed record CompiledFold(ExpressionOp Operation, int RowOrdinal, string
 /// <param name="Name">The authored name, for a refusal that quotes what the author wrote.</param>
 /// <param name="Arity">How many operands the call consumes.</param>
 /// <param name="Body">The body, reading its operands through <see cref="ExpressionOp.Argument"/>.</param>
-public sealed record CompiledSubprogram(string Name, int Arity, CompiledExpressionToken[] Body);
+/// <param name="Steps">How many tokens one call evaluates, every call site and fold member inside it expanded
+/// (<see cref="RuleWorkBudget.Steps"/>). A body is shared by its call sites, so a chain that calls the level below
+/// twice at each level is short to write and doubles with its depth; this is what lets a walk know that without
+/// taking it.</param>
+public sealed record CompiledSubprogram(string Name, int Arity, CompiledExpressionToken[] Body, long Steps);
 /// <summary>One compiled <see cref="RuleLocal"/>: its ordinal is its slot in the evaluation's bound-value scratch,
 /// and its expression may read only locals with a smaller ordinal.</summary>
 /// <param name="Name">The authored name.</param>

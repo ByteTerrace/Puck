@@ -91,10 +91,15 @@ belongs to and is evaluated once per member, with the member in flight read by
 the binder's own name. A fold is priced as the family's size times its body's
 cost, and nests at most once.
 
-A program carries at most sixteen subprograms, each bounded by the same token
-ceiling as the program itself. The compiler compiles each subprogram once and
-every call site shares that body, refuses a cycle by the subprogram's name, and
-so bounds how deep a chain of calls can nest at evaluation.
+A program carries at most 64 subprograms, each bounded by the same 256-token
+ceiling as the program itself, and a function takes at most 16 arguments. The
+compiler compiles each subprogram once and every call site shares that body,
+refuses a cycle by the subprogram's name, and so bounds how deep a chain of
+calls can nest at evaluation. Sharing makes a chain cheap to write and not to
+run: a function that calls the level below twice doubles at every level, so a
+body carries the count of tokens one call evaluates, the compiler folds a
+constant subtree only when that count is small, and the work sheet prices the
+chain at what it runs, which admission refuses when it overflows.
 
 ### Answer an absent read
 

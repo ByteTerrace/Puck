@@ -852,8 +852,7 @@ touching the board when the request names an out-of-bounds or already-occupied
 cell, so a bad request never sticks. `ttt-check-win` (gated on
 `tttBoardVersion` having advanced) folds all 76 four-in-a-row lines—each a
 literal 64-bit cell mask, `(occupancyMask & lineMask) == lineMask`—through
-eight-line chunks (the 64-token expression ceiling bounds how many lines one
-expression ORs together) into `tttWinner` (0 none, 1 X, 2 O, 3 draw at 64
+eight-line chunks into `tttWinner` (0 none, 1 X, 2 O, 3 draw at 64
 moves). `world.state tttBoard`/`tttWinner` is the read-back; there is no
 dedicated verb, since the generic one already answers it.
 
