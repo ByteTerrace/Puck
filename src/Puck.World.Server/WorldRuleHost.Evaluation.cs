@@ -255,9 +255,6 @@ public sealed partial class WorldRuleHost {
             engineTick: Host.CompletedEngineTicks,
             tick: tick
         );
-        // The mark is taken while the installed document still equals the arena, so everything this tick writes —
-        // the identity lanes included — is what the export installs.
-        Host.MarkRowVersions();
         SyncIdentityFactLanes();
         FreezeDecisionPerception(rules: m_rules);
 
@@ -283,7 +280,7 @@ public sealed partial class WorldRuleHost {
             stepTicks: stepTicks
         );
         FlushIdentityFacts();
-        applied |= Host.InstallArenaExport();
+        applied |= Host.PublishArena();
         if (applied) {
             Host.Document.DeliverPending();
         }

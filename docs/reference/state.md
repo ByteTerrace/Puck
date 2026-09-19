@@ -16,8 +16,9 @@ Start with four ideas:
   journal scope on the arena. Either every reversible effect in it lands, or
   the scope rewinds and none of them do.
 - **A host serves facets and owns what cannot be rewound.** The host supplies
-  the tick, answers the capabilities a rule declared it needs, and fires an
-  irreversible arm only after the scope has committed.
+  the tick, answers the capabilities a rule declared it needs, installs a
+  firing's transactional arms as one unit with its commit, and delivers every
+  other arm that leaves the arena only after it.
 
 ## See the whole system
 
@@ -29,7 +30,8 @@ flowchart TB
     Admit --> Evaluate["Evaluation: gate, bindings,<br/>one journal scope per firing"]
     Evaluate --> Arena["StateArena: columns, journal scopes,<br/>versions, hash"]
     Arena -- "Export / Import" --> Document["StateRow list (serialization)"]
-    Evaluate -- "after commit" --> Outward["Irreversible arms:<br/>saves, cues, placements"]
+    Evaluate -- "with the commit" --> Unit["Transactional arms:<br/>document rows, as one unit"]
+    Evaluate -- "after the commit" --> Outward["Delivered arms:<br/>saves, cues, poses"]
     Search["Search: candidates as scopes"] --> Arena
 ```
 

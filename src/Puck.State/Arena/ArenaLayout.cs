@@ -86,6 +86,12 @@ public sealed class ArenaLayout {
     private const long IndexBytesPerCellSlot = (sizeof(int) + (4L * sizeof(int)));
     // A row's bookkeeping: its layout record, its versions, generations and stamps, and its key map's slack.
     private const long BytesPerRow = 512L;
+    // A string a reference column points at: the object's header, length and terminator, then two bytes a UTF-16
+    // code unit. Every cell slot may carry a provenance, and every slot of a text row a text, each at the length
+    // ceiling its write doors hold it to.
+    private const long StringOverheadBytes = 32L;
+    private const long ProvenanceBytesPerCellSlot = (StringOverheadBytes + (2L * StateCapacity.MaxProvenanceLength));
+    private const long TextBytesPerTextSlot = (StringOverheadBytes + (2L * StateCapacity.MaxTextValueLength));
 
     private readonly int[] m_changeBases;
     private readonly ArenaColumnRange[] m_columns;
@@ -133,12 +139,22 @@ public sealed class ArenaLayout {
         MaskWordCount = maskWordCount;
         Options = options;
         VectorByteCount = vectorByteCount;
+
+        var textSlots = 0L;
+
+        foreach (var row in rows) {
+            if (row.Kind == CellKind.Text) {
+                textSlots += row.CellCapacity;
+            }
+        }
+
         Bytes = Measure(
             cellSlots: cellSlotCount,
             laneRoster: laneRosterCount,
             laneSlots: laneSlotCount,
             maskWords: maskWordCount,
             rowCount: rows.Length,
+            textSlots: textSlots,
             vectorBytes: vectorByteCount
         );
 
@@ -236,8 +252,11 @@ public sealed class ArenaLayout {
 
         return false;
     }
-    private static long Measure(long cellSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long vectorBytes) {
+    private static long Measure(long cellSlots, long textSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long vectorBytes) {
         var bytes = vectorBytes;
+
+        bytes += (cellSlots * ProvenanceBytesPerCellSlot);
+        bytes += (textSlots * TextBytesPerTextSlot);
 
         foreach (var column in ArenaColumns.All) {
             var size = (ArenaColumns.Space(column: column) switch {
@@ -260,9 +279,10 @@ public sealed class ArenaLayout {
 
         return bytes;
     }
-    private static void RequireFits(string what, long cellSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long vectorBytes) {
+    private static void RequireFits(string what, long cellSlots, long textSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long vectorBytes) {
         var bytes = Measure(
             cellSlots: cellSlots,
+            textSlots: textSlots,
             laneRoster: laneRoster,
             laneSlots: laneSlots,
             maskWords: maskWords,
@@ -308,6 +328,7 @@ public sealed class ArenaLayout {
         // The same extents in a width a hostile capacity cannot wrap, checked as each row is placed so nothing is
         // allocated for a section that does not fit.
         var cellTotal = 0L;
+        var textTotal = 0L;
         var vectorTotal = 0L;
         var laneTotal = 0L;
         var maskTotal = 0L;
@@ -342,6 +363,7 @@ public sealed class ArenaLayout {
                 laneSlots: 0L,
                 maskWords: 0L,
                 rowCount: catalog.Count,
+                textSlots: 0L,
                 vectorBytes: 0L,
                 what: $"The {lane} lane's roster"
             );
@@ -414,6 +436,10 @@ public sealed class ArenaLayout {
                             }
 
                             cellTotal += capacity;
+                            textTotal += ((row.Kind == CellKind.Text)
+                                ? capacity
+                                : 0L
+                            );
                             vectorTotal += (((long)dimensions) * capacity);
 
                             RequireFits(
@@ -422,6 +448,7 @@ public sealed class ArenaLayout {
                                 laneSlots: laneTotal,
                                 maskWords: maskTotal,
                                 rowCount: catalog.Count,
+                                textSlots: textTotal,
                                 what: $"State row '{row.Name.Value}'",
                                 vectorBytes: vectorTotal
                             );
@@ -492,6 +519,7 @@ public sealed class ArenaLayout {
                                 laneSlots: laneTotal,
                                 maskWords: maskTotal,
                                 rowCount: catalog.Count,
+                                textSlots: textTotal,
                                 what: $"State row '{descriptor.Name}'",
                                 vectorBytes: vectorTotal
                             );

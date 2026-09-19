@@ -43,6 +43,46 @@ public static class UnitConversion {
         UnitDimension.Fraction => FractionUnits,
         _ => [],
     };
+    /// <summary>Converts an exact number carrying a unit suffix into <paramref name="dimension"/>'s native unit,
+    /// when the unit's scale is a power of ten and the conversion is therefore exact.</summary>
+    /// <param name="dimension">The dimension governing the value.</param>
+    /// <param name="value">The authored number.</param>
+    /// <param name="unit">The suffix as written; matched without regard to case.</param>
+    /// <param name="converted">The converted value.</param>
+    /// <returns><see langword="true"/> when <paramref name="dimension"/> accepts <paramref name="unit"/> at a
+    /// power-of-ten scale and a decimal holds the converted value exactly. Degrees into radians returns
+    /// <see langword="false"/>, and so does a value so small that dividing it would round: both are
+    /// <see cref="TryConvert"/>'s.</returns>
+    /// <remarks>KEEP IN SYNC with <see cref="TryConvert"/>: every unit it accepts at a rational scale is accepted
+    /// here at the same scale.</remarks>
+    public static bool TryConvertExact(UnitDimension dimension, decimal value, string unit, out decimal converted) {
+        ArgumentNullException.ThrowIfNull(unit);
+
+        decimal? divisor = ((dimension, unit.ToLowerInvariant()) switch {
+            (UnitDimension.Degrees, "deg") => 1m,
+            (UnitDimension.Radians, "rad") => 1m,
+            (UnitDimension.Seconds, "s") => 1m,
+            (UnitDimension.Seconds, "ms") => 1000m,
+            (UnitDimension.Meters, "m") => 1m,
+            (UnitDimension.Meters, "cm") => 100m,
+            (UnitDimension.Meters, "mm") => 1000m,
+            (UnitDimension.Hertz, "hz") => 1m,
+            (UnitDimension.Fraction, "%" or "pct") => 100m,
+            _ => null,
+        });
+
+        if (divisor is not { } scale) {
+            converted = value;
+
+            return false;
+        }
+
+        converted = (value / scale);
+
+        // A decimal division rounds without saying so. Multiplying back by a power of ten is exact, so it returns
+        // the operand exactly when the division lost nothing.
+        return ((converted * scale) == value);
+    }
     /// <summary>Converts a number carrying a unit suffix into <paramref name="dimension"/>'s native unit.</summary>
     /// <param name="dimension">The dimension governing the value.</param>
     /// <param name="numericValue">The authored number.</param>

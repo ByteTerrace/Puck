@@ -29,7 +29,7 @@ public class UnaryOperandTests {
 
         Assert.Equal(
             1.8,
-            origin[0]?.GetValue<double>()
+            origin[0].AsNumber()
         );
     }
     [Fact]
@@ -51,7 +51,7 @@ public class UnaryOperandTests {
 
         Assert.Equal(
             -1.8,
-            origin[0]?.GetValue<double>()
+            origin[0].AsNumber()
         );
     }
     [Fact]
@@ -88,7 +88,7 @@ public class UnaryOperandTests {
 
         Assert.Equal(
             -1.8,
-            origin[0]?.GetValue<double>()
+            origin[0].AsNumber()
         );
     }
     [Fact]
@@ -164,7 +164,7 @@ public class UnaryOperandTests {
 
         Assert.Equal(
             1.8,
-            origin[0]?.GetValue<double>()
+            origin[0].AsNumber()
         );
     }
     [Fact]

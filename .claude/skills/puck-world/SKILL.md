@@ -511,10 +511,20 @@ Client code never mutates local state before the server's verdict
 (`WorldRuleHost.cs`, `WorldServer.Arena.cs`) inside its own firing's journal
 scope, and rules read through the same arena; one rule firing is one scope,
 committed on success and rewound on the first refusal. What the arena
-accumulated across the tick's firings exports into one mutation through the
-ordinary door at the end of the tick (`InstallArenaExport`), so every other
-reader (bodies, fields, search, the console) sees a rule's write only after
-that export. Row versions on the arena drive the rule scheduler and memoized
+accumulated across the tick's firings is published into the installed document
+at the end of the tick (`WorldServer.PublishArena`), so every other reader
+(bodies, fields, search, the console) sees a rule's write only after that
+publication. Only rows whose version moved are read back out of the arena; the
+rest of the installed rows are kept. Publication ends in
+`WorldDocument.ReconcileStateConsumers`, the same routine a value mutation ends
+in, so anything outside the arena that caches a state value (drive gates, field
+input, body scale, inhabit counts) is added there, never to one door. A
+document-row arm is `EffectNeeds.Transactional`: a firing's rows are prepared
+as one `WorldMutation.Batch` through `WorldDocument.TryPrepareMutation` before
+the arena scope commits, where any gate's refusal rewinds the firing, and
+installed by `InstallPrepared` after it. A gate added to the mutation door goes
+in `TryPrepareMutation`; nothing in `InstallPrepared` may refuse. Every other world arm is delivered after
+the commit, and a failed delivery is counted and undoes nothing. Row versions on the arena drive the rule scheduler and memoized
 bindings (`RuleSchedule`, `IStateReader.TryRowVersion`); a rule whose read
 rows are unchanged keeps its closed verdict. A text cell, a removal, a draw, a
 shuffle, and a random or slice transfer take the same arena kernels

@@ -86,17 +86,11 @@ public sealed class DocumentValueEqualityComparer : IEqualityComparer<JsonNode?>
             }
             return hash.ToHashCode();
         }
-        if (DocumentNumbers.TryInteger(
-            node: obj,
-            number: out var integer
+        if (DocumentNumbers.TryHash(
+            hash: out var number,
+            node: obj
         )) {
-            return integer.GetHashCode();
-        }
-        if (DocumentLowering.TryReadNumber(
-            node: obj,
-            number: out var number
-        )) {
-            return number.GetHashCode();
+            return number;
         }
         return StringComparer.Ordinal.GetHashCode(obj: obj.ToJsonString());
     }

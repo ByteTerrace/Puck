@@ -102,6 +102,12 @@ public sealed class WorldDocumentEffect : WorldFactEffect {
     public string Id { get; }
     /// <summary>Gets the placement the write installs, or <see langword="null"/>.</summary>
     public WorldPlacement? Placement { get; }
+    /// <summary>Gets what firing needs: a document row is committed with the firing, as one unit with the firing's
+    /// other rows; a save is delivered after it.</summary>
+    public override EffectNeeds Needs => ((Write == WorldDocumentWrite.Save)
+        ? EffectNeeds.Irreversible
+        : (EffectNeeds.Irreversible | EffectNeeds.Transactional)
+    );
     /// <inheritdoc/>
     public override bool SubmitsMutation => (Write != WorldDocumentWrite.Save);
     /// <summary>Gets what the effect installs.</summary>

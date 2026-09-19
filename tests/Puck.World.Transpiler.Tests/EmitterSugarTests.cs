@@ -562,11 +562,11 @@ public class EmitterSugarTests {
 
         Assert.Equal(
             1.5,
-            position[0]!.GetValue<double>()
+            position[0].AsNumber()!.Value
         );
         Assert.Equal(
             0.005,
-            position[2]!.GetValue<double>()
+            position[2].AsNumber()!.Value
         );
     }
     [Fact]
@@ -673,7 +673,7 @@ public class EmitterSugarTests {
 
         Assert.Equal(
             0.5,
-            host["opacity"]?.GetValue<double>()
+            host["opacity"].AsNumber()
         );
     }
     [Fact]

@@ -152,6 +152,14 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
     /// <inheritdoc/>
     public virtual void Preflighting() { }
     /// <inheritdoc/>
+    public virtual bool PrepareTransactional(in EffectFiring firing, out EffectRefusal refusal) {
+        refusal = EffectRefusal.None;
+
+        return true;
+    }
+    /// <inheritdoc/>
+    public virtual void CommitTransactional(in EffectFiring firing) { }
+    /// <inheritdoc/>
     public virtual bool Fire(ICompiledFact effect, in EffectFiring firing, out EffectRefusal refusal) {
         refusal = IEffectHost.Unbound(effect: effect);
 

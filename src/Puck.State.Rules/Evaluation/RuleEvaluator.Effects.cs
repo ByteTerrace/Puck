@@ -86,16 +86,24 @@ public sealed partial class RuleEvaluator {
 
         arena.Commit(mark: mark);
 
-        // The scope is closed: an arm that refuses here is a host failure, never an authored one. The arena stays
-        // committed and the arms that already fired are never replayed. Every firing reads the queue from its own
-        // mark up, so an arm left below it would never fire again and never leave: the queue is emptied however
-        // the firing ends.
+        // The scope is closed. The transactional arms install first, as the unit the host prepared, and the rest are
+        // delivered in authored order: a delivery that refuses is counted, undoes nothing, and stops no later
+        // delivery. Every firing reads the queue from its own mark up, so an arm left below it would never
+        // fire again and never leave: the queue is emptied however the firing ends.
         try {
             m_host.Committed(scope: mark);
+
+            if (QueuedTransactional(from: queued)) {
+                m_host.CommitTransactional(firing: in firing);
+                applied = true;
+            }
 
             for (var index = queued; (index < m_deferred.Count); index++) {
                 var arm = m_deferred[index];
 
+                if ((arm.Needs & EffectNeeds.Transactional) != EffectNeeds.None) {
+                    continue;
+                }
                 if (arm.TryFire(
                     firing: in firing,
                     host: m_host,
@@ -120,7 +128,8 @@ public sealed partial class RuleEvaluator {
     }
 
     // Everything a firing does before its commit: the reversible effects, then each queued arm's preflight against
-    // the state they propose. False means refused, already reported.
+    // the state they propose, then the host's preparation of the transactional arms as one unit. False means
+    // refused, already reported.
     private bool Propose(IRuleEffect[] effects, string ruleName, in EffectFiring firing, int queued, ref bool applied) {
         if (!FireSequence(
             applied: ref applied,
@@ -157,7 +166,34 @@ public sealed partial class RuleEvaluator {
             }
         }
 
+        if (
+            QueuedTransactional(from: queued) &&
+            !m_host.PrepareTransactional(
+                firing: in preflight,
+                refusal: out var unitRefusal
+            )
+        ) {
+            ReportRefusal(
+                effect: "the firing's transactional arms",
+                fallback: RuleEffectRefusal.MutationRejected,
+                refusal: in unitRefusal,
+                ruleName: ruleName,
+                tick: firing.Tick
+            );
+
+            return false;
+        }
+
         return true;
+    }
+    private bool QueuedTransactional(int from) {
+        for (var index = from; (index < m_deferred.Count); index++) {
+            if ((m_deferred[index].Needs & EffectNeeds.Transactional) != EffectNeeds.None) {
+                return true;
+            }
+        }
+
+        return false;
     }
     private void DiscardQueued(int from) => m_deferred.RemoveRange(
         count: (m_deferred.Count - from),

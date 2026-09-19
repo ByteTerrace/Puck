@@ -186,7 +186,7 @@ public class DiagnosticsFixTests {
         );
         Assert.Equal(
             0.5,
-            Assert.IsType<JsonObject>(@object: json["look"])["alpha"]!.GetValue<double>()
+            Assert.IsType<JsonObject>(@object: json["look"])["alpha"].AsNumber()!.Value
         );
     }
     // ---- reachability -----------------------------------------------------------------------------------------

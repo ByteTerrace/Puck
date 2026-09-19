@@ -19,16 +19,26 @@ making different choices at those boundaries.
 
 ## Implement the mutation boundary
 
-`TryApply` has two meanings selected by `preflight`. In preflight it validates
-and composes a private candidate; outside preflight it performs the application's
-normal installation. Later reads within a scope must see the candidate already
-composed by earlier effects.
+`IEffectHost.Apply` runs one mutation inside the firing's open journal scope,
+so a later read in the same firing sees it and a refused firing rewinds it. The
+host composes no private candidate for arena state: the scope is the candidate.
 
-`BeginPreflight` opens a nested scope. `EndPreflight` discards it and restores
-the previous view. `TryCommitPreflight` installs the whole candidate as one
-mutation; a scope containing no changes installs nothing.
-The [transaction diagram](rules.md#make-several-effects-succeed-together)
-shows the evaluator's use of this protocol.
+An arm that leaves the arena is called through `IEffectHost.Fire`, first with
+`EffectFiring.Preflight` set and then, if it is a delivered arm, once more after
+the commit. `Preflighting` tells the host a firing's checks are about to begin,
+in the order the arms will fire, so it can carry what one arm would do into the
+check of the next. `PrepareTransactional` runs once every check has passed and
+before the scope commits: the host decides there everything that can refuse
+the firing's transactional arms as one unit, and a refusal rewinds the firing.
+`Committed` observes the committed scope. `CommitTransactional` installs the
+prepared unit and has no way to refuse, which is what lets those arms share
+the firing's all-or-nothing promise. A host with no transactional arm keeps
+both defaults. The
+[firing diagram](rules.md#make-several-effects-succeed-together) shows the
+order, and the table above it states what each kind of arm may promise.
+
+A host that keeps its own copy of a state value outside the arena updates it
+where state is published, not at one of the doors a value can arrive through.
 
 Use the same admission and write composition rules for external commands and
 rule-driven mutations. The evaluator compiling an effect does not grant it
@@ -165,10 +175,12 @@ the evidence needed before cycle-based admission.
 A document meets two real limits. `RuleCapacity.MaxWorkUnitsPerTick` bounds the
 static work one tick may do. `ArenaCapacity.MaxBytes` (64 MiB) bounds what the
 document's state may occupy: `ArenaLayout.Bytes` measures every column at its
-full width, with the change stamps and indexes beside them, and a section that
-lays out past the ceiling is refused at the row that crossed. `world.state`
+full width, with the change stamps and indexes beside them and the strings a
+text or provenance cell may hold counted at their length ceilings, and a
+section that lays out past the ceiling is refused at the row that crossed. `world.state`
 prints the measure beside the ceiling. While scopes are open, the undo record
-they hold is bounded too (`ArenaCapacity.MaxJournalBytes`, 16 MiB): a firing
+they hold is bounded too (`ArenaCapacity.MaxJournalBytes`, 16 MiB), the strings
+it retains for a rewind included: a firing
 whose writes pass it is refused as `JournalCeiling` and rewound. The counts
 beside these, `StateCapacity.MaxRows` (1,024) and the rest, bound what one
 declaration may ask for, and each names the storage it sizes. None is a

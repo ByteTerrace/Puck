@@ -323,6 +323,29 @@ public static class DocumentLowering {
             }
         }
 
+        // A sum, a difference and a product of exact operands stay decimal when a decimal holds the result exactly.
+        // One it would overflow on or round, a product too small for its scale included, is computed in double
+        // below, which keeps the magnitude a rounded decimal would lose.
+        if (
+            (bin.Operator is "+" or "-" or "*") &&
+            DocumentNumbers.TryExact(
+                node: leftNode,
+                number: out var exactLeft
+            ) &&
+            DocumentNumbers.TryExact(
+                node: rightNode,
+                number: out var exactRight
+            ) &&
+            DocumentNumbers.TryExactArithmetic(
+                left: exactLeft,
+                operation: bin.Operator,
+                result: out var exactResult,
+                right: exactRight
+            )
+        ) {
+            return DocumentNumbers.ExactNode(number: exactResult);
+        }
+
         return NumberNode(
             value: bin.Operator switch {
                 "+" => (lNum + rNum),
@@ -431,6 +454,14 @@ public static class DocumentLowering {
                 ? -integer
                 : integer));
         }
+        if (DocumentNumbers.TryExact(
+            node: operand,
+            number: out var exact
+        )) {
+            return DocumentNumbers.ExactNode(number: ((un.Operator == "-")
+                ? -exact
+                : exact));
+        }
         if (!TryReadNumber(
             node: operand,
             number: out var number
@@ -503,9 +534,22 @@ public static class DocumentLowering {
             provider: CultureInfo.InvariantCulture
         ),
         };
+        // A literal that kept its text lowers as the decimal it spells, so no digit an author wrote is lost to a
+        // binary approximation on the way to a decimal field.
+        decimal? authored = ((lit.Value is long integer)
+            ? integer
+            : (DecimalValues.TryAuthored(
+                authored: out var spelled,
+                literal: lit
+            )
+                ? spelled
+                : null
+            )
+        );
 
         if (lit.Unit is not null) {
             return LowerUnitLiteral(
+                authored: authored,
                 numVal: numVal,
                 unit: lit.Unit,
                 fieldKey: fieldKey,
@@ -514,8 +558,8 @@ public static class DocumentLowering {
             );
         }
 
-        if (lit.Value is long longVal) {
-            return JsonValue.Create(value: longVal);
+        if (authored is { } exact) {
+            return DocumentNumbers.ExactNode(number: exact);
         }
 
         if (!double.IsFinite(d: numVal)) {
@@ -530,12 +574,23 @@ public static class DocumentLowering {
     // Every unit is checked against the vocabulary's field-dimension table, `%`/`pct` included: a field the table
     // does not cover is PUCK024, a unit the field's own dimension does not accept is PUCK025. No unit converts
     // outside the table, so a suffix can never silently change a value the table says nothing about.
-    private static JsonNode LowerUnitLiteral(double numVal, string unit, string? fieldKey, SourceSpan span, DocumentScope scope) {
+    private static JsonNode LowerUnitLiteral(double numVal, decimal? authored, string unit, string? fieldKey, SourceSpan span, DocumentScope scope) {
         var dimension = ((fieldKey is null)
             ? UnitDimension.None
             : scope.Vocabulary.ClassifyField(fieldKey: fieldKey)
         );
 
+        if (
+            (authored is { } exact) &&
+            UnitConversion.TryConvertExact(
+                converted: out var scaled,
+                dimension: dimension,
+                unit: unit,
+                value: exact
+            )
+        ) {
+            return DocumentNumbers.ExactNode(number: scaled);
+        }
         if (UnitConversion.TryConvert(
             converted: out var converted,
             dimension: dimension,

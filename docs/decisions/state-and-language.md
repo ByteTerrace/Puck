@@ -48,17 +48,35 @@ needs drive scheduling.
 iteration binding, and every effect it produces lands in one journal scope
 that commits when every required effect succeeds and rewinds otherwise, with
 the rewind one counted refusal naming the effect. The edge latch records the
-crossing either way. An irreversible arm (a save, a HUD or placement upsert,
-anything a host cannot rewind) is queued during the scope and fired after it
-commits, so a rewound firing fires nothing outward; a host preflights what it
-can before commit, so a post-commit refusal is a host failure, never an
-authored one, and the arena stays committed. A `transaction` is a savepoint
+crossing either way. An arm that leaves the arena is queued during the scope
+and preflighted before it commits, in the order the arms fire, each against
+what the arms before it would leave. Such an arm is one of two kinds, and the
+atomic promise covers one. A transactional arm (a placement or HUD row) is
+committed with the firing in two phases: the host prepares the firing's
+transactional arms as one unit before the scope commits, where every gate that
+can refuse them runs and a refusal rewinds the firing, and installs the
+prepared unit after the commit through a step that cannot refuse. A delivered
+arm (a cue, a pose, a body motion, a save) fires after the commit; a delivery
+that refuses is one counted refusal that undoes nothing and stops no later
+delivery, and the promise does not cover it. One class cannot serve both:
+rollback can be promised only for an effect whose install is prepared before
+the commit and cannot refuse after it. A `transaction` is a savepoint
 inside the firing: a refusal inside it rewinds the savepoint, `onFailure` runs
 in the firing's scope, later siblings continue, and the firing commits if they
 succeed; a refusal inside `onFailure` or a later sibling rewinds the whole
 firing. There is no `attempt` group: the inventory found no shipped rule with
 a refusable transform at a non-first position, and the six candidates were
 partial firing by accident.
+
+**D4a — One publication boundary, and one proposal behind it.** A value written
+in the arena reaches everything outside it through one routine, which installs
+the rows that moved and then settles every consumer that keeps its own copy of
+a value: the routine a value mutation also ends in. A consumer is added there,
+never to one of the doors a value can arrive through. What a publication
+installs is composed by a step that installs nothing, and a preflight judges
+that same proposal, an open scope's writes included, so what a firing was
+judged against is what its commit installs. Its cost follows the rows that
+moved, by per-row versions, and not what the document declares.
 
 **D5 — Ordinal addressing at runtime.** A compiled read or write addresses a
 row ordinal and an interned cell key; a key minted at runtime is interned in
@@ -205,19 +223,21 @@ them dominates.
 
 **K2a — The memory bound is the arena's layout, in bytes.** `ArenaLayout.Bytes`
 measures every column at its full width, the change stamps a settle keeps per
-position, the row and key indexes, and the vector components, with a reference
-counted as eight bytes on every host so a document measures the same wherever
-it is admitted. `ArenaCapacity.MaxBytes` bounds it, and a section is refused at
+position, the row and key indexes, the vector components, and the strings its
+reference columns point at, with a reference counted as eight bytes on every
+host so a document measures the same wherever it is admitted. A string is
+counted at the length ceiling its write doors hold it to: a provenance for
+every cell slot, a text for every slot of a text row. `ArenaCapacity.MaxBytes` bounds it, and a section is refused at
 the row that crossed before anything is allocated for it. A count of cells
 cannot stand in for it: a cell slot costs about 250 bytes once every column a
 row may use is allocated, and lanes, draw masks and vectors are not cells. The
-undo record has its own ceiling (`ArenaCapacity.MaxJournalBytes`), read between
-effects: a write is never dropped or interrupted, because a member write spans
+undo record has its own ceiling (`ArenaCapacity.MaxJournalBytes`), which counts
+its entries, its snapshotted vector components, and the texts and other
+references it overwrote, since the record alone keeps those alive. It is read
+between effects: a write is never dropped or interrupted, because a member write spans
 several columns and a torn one would be read by whatever ran next, so the
 record may pass the ceiling by the writes of the one effect that crossed it
-before the firing is refused and rewound. The text a text or provenance cell
-refers to is bounded per cell by its own length ceiling and is outside the
-measure.
+before the firing is refused and rewound.
 
 **K3 — A set of cells wider than a word lives in a board row.** An expression
 value stays one 64-bit word and the bit operators stay generic Int operators.

@@ -187,6 +187,42 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
             expected: 0
         );
     }
+    // A gate that only the install door runs, here the render envelope, is decided before the firing commits: the
+    // row composes and validates, the envelope has no room for it, and nothing of the firing lands.
+    [Fact]
+    public void ARowTheRenderEnvelopeRefusesRewindsTheFiringsStateWrite() {
+        var created = (Placement(
+            definition: Fixtures.BuildCameraBodyDocument(),
+            id: PlacementId
+        ) with { Id = "past-the-envelope" });
+
+        using var fixture = Fixtures.FreshServer(definition: Sequence(new WorldEffect.UpsertPlacement(Placement: created)));
+        using var full = fixture.Server.Envelope.Configure(
+            instanceCapacity: 0,
+            measure: static _ => (1, 1),
+            programWordCapacity: 0
+        );
+        var installs = 0;
+
+        fixture.Server.MutationJournalTap = (_, _, _) => installs++;
+        fixture.Step();
+
+        Assert.Equal(
+            actual: State(
+                definition: fixture.Server.Definition,
+                row: "stage"
+            ),
+            expected: 0L
+        );
+        Assert.DoesNotContain(
+            collection: fixture.Server.Definition.Placements,
+            filter: placement => (placement.Id == created.Id)
+        );
+        Assert.Equal(
+            actual: installs,
+            expected: 0
+        );
+    }
     // The other direction: a removal of a placement an earlier arm of the same firing creates is valid as a sequence
     // and is judged as one, so the firing commits and both arms run.
     [Fact]
@@ -216,9 +252,10 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
             collection: fixture.Server.Definition.Placements,
             filter: placement => (placement.Id == created.Id)
         );
+        // The firing's rows are one unit, so they are one install.
         Assert.Equal(
             actual: installs,
-            expected: 2
+            expected: 1
         );
     }
     [Fact]

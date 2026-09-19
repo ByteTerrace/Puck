@@ -203,7 +203,7 @@ public class RoundTripFidelityTests {
 
         Assert.Equal(
             expected,
-            gain!.GetValue<double>(),
+            gain.AsNumber()!.Value,
             9
         );
     }

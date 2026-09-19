@@ -7,13 +7,15 @@ namespace Puck.State;
 /// lay out identically.</remarks>
 public static class ArenaCapacity {
     /// <summary>The most bytes one arena may occupy, as <see cref="ArenaLayout.Bytes"/> measures it: every column
-    /// at its full width, the change stamps a settle keeps per position, the row and key indexes, and the vector
-    /// components. It is a document's memory bound, the one figure every row's capacity, every board and every lane
-    /// is counted against, and a section that lays out past it is refused at the row that crossed. The text a text
-    /// or provenance cell refers to is bounded per cell by its own length ceiling and is not counted here.</summary>
+    /// at its full width, the change stamps a settle keeps per position, the row and key indexes, the vector
+    /// components, and the strings its reference columns point at, each counted at its length ceiling: a provenance
+    /// for every cell slot and a text for every slot of a text row. It is a document's memory bound, the one figure
+    /// every row's capacity, every board and every lane is counted against, and a section that lays out past it is
+    /// refused at the row that crossed.</summary>
     public const long MaxBytes = (64L * 1024L * 1024L);
-    /// <summary>The bytes of undo record an arena's open scopes may hold, entries and snapshotted vector components
-    /// together, before a firing is refused and rewound. It is checked between effects, so the record may pass it by
+    /// <summary>The bytes of undo record an arena's open scopes may hold, before a firing is refused and rewound:
+    /// its entries, the vector components it snapshotted, and the texts, provenances and other references it
+    /// overwrote, which the record alone keeps alive. It is checked between effects, so the record may pass it by
     /// the writes of the one effect that crossed it. The positions a settle visits are a subset of the record's, so
     /// this bounds that buffer too.</summary>
     public const int MaxJournalBytes = (16 * 1024 * 1024);

@@ -116,6 +116,10 @@ public static class WorldDocumentRowDefaults {
             number = i;
             return true;
         }
+        if (value.TryGetValue<decimal>(value: out var exact)) {
+            number = ((double)exact);
+            return true;
+        }
         number = 0;
         return false;
     }

@@ -378,12 +378,17 @@ public sealed partial class StateArena {
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="key">The cell key.</param>
     /// <param name="provenance">The issuer id, or <see langword="null"/> for a locally minted value.</param>
-    /// <returns><see langword="true"/> when the cell address resolves.</returns>
-    public bool TryWriteProvenance(int rowOrdinal, CellKey key, string? provenance) => TryWriteCellReference(
-        column: ArenaColumn.Provenance,
-        key: key,
-        rowOrdinal: rowOrdinal,
-        value: provenance
+    /// <returns><see langword="true"/> when the cell address resolves and the id is no longer than
+    /// <see cref="StateCapacity.MaxProvenanceLength"/>, the length the arena's byte measure counts a provenance
+    /// at.</returns>
+    public bool TryWriteProvenance(int rowOrdinal, CellKey key, string? provenance) => (
+        ((provenance?.Length ?? 0) <= StateCapacity.MaxProvenanceLength) &&
+        TryWriteCellReference(
+            column: ArenaColumn.Provenance,
+            key: key,
+            rowOrdinal: rowOrdinal,
+            value: provenance
+        )
     );
     /// <summary>Writes one cell's own audience restriction.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>

@@ -64,6 +64,63 @@ public sealed class RuleWriteReconciliationLawTests {
         )).Accepted);
     }
 
+    // What a publication costs follows what was written: a row no rule moved is carried across as the instance the
+    // installed document already held, and only the row that moved is read back out of the arena.
+    [Fact]
+    public void APublicationCarriesTheRowsThatMovedAndKeepsTheRest() {
+        using var fixture = Fixtures.FreshServer(definition: Document(
+            rules: [new WorldRule(
+                    CellName.Parse(candidate: "count"),
+                    [new ActionEffect.AddState(
+                            Key: "0",
+                            State: "stunned",
+                            Value: 1m
+                        )]
+                )],
+            scaled: false
+        ));
+
+        static WorldStateRow Row(WorldFixture fixture, string name) => WorldDefinitionRows.FindStateRow(
+            name: name,
+            rows: fixture.Server.Definition.State
+        )!;
+
+        // The first publication after the arena is seeded carries every row, so the comparison starts after it.
+        fixture.Step();
+
+        var quiet = Row(
+            fixture: fixture,
+            name: "scale"
+        );
+        var written = Row(
+            fixture: fixture,
+            name: "stunned"
+        );
+
+        fixture.Step();
+
+        Assert.Same(
+            actual: Row(
+                fixture: fixture,
+                name: "scale"
+            ),
+            expected: quiet
+        );
+        Assert.NotSame(
+            actual: Row(
+                fixture: fixture,
+                name: "stunned"
+            ),
+            expected: written
+        );
+        Assert.Equal(
+            actual: Row(
+                fixture: fixture,
+                name: "stunned"
+            ).Cells![0].Value.AsInt,
+            expected: 2L
+        );
+    }
     [InlineData(false)]
     [InlineData(true)]
     [Theory]

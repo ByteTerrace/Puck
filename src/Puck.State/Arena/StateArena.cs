@@ -247,6 +247,42 @@ public sealed partial class StateArena {
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <returns>The version.</returns>
     public ulong RowVersion(int rowOrdinal) => m_rowVersions[rowOrdinal];
+    /// <summary>Flags every row the open scopes have written. <see cref="RowVersion"/> settles when the outermost
+    /// scope commits, so until then this is what says which rows may differ from what it last proved.</summary>
+    /// <param name="rows">One flag per catalog ordinal; a written row's flag is set and no flag is cleared.</param>
+    /// <exception cref="ArgumentException"><paramref name="rows"/> is shorter than the layout's row count.</exception>
+    public void FlagOpenRows(Span<bool> rows) {
+        if (rows.Length < m_layout.RowCount) {
+            throw new ArgumentException(
+                message: $"the flags cover {rows.Length} rows and the layout declares {m_layout.RowCount}.",
+                paramName: nameof(rows)
+            );
+        }
+
+        for (var index = 0; (index < m_journal.Length); index++) {
+            var entry = m_journal[index];
+
+            if (entry.Column == ArenaColumn.LaneRoster) {
+                var lane = LaneOfRoster(rosterIndex: entry.Index);
+
+                rows.Slice(
+                    length: lane.Count,
+                    start: lane.FirstOrdinal
+                ).Fill(value: true);
+
+                continue;
+            }
+
+            var row = m_layout.RowOf(
+                column: entry.Column,
+                index: entry.Index
+            );
+
+            if (row >= 0) {
+                rows[row] = true;
+            }
+        }
+    }
     /// <summary>Closes the innermost open scope, restoring every column position it wrote to what it overwrote,
     /// most recent write first.</summary>
     /// <param name="mark">The mark <see cref="BeginScope"/> returned.</param>

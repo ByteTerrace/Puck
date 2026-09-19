@@ -291,7 +291,7 @@ public class ComprehensiveSyntheticTests {
         );
         Assert.Equal(
             0.25,
-            layout0["transitionSeconds"]?.GetValue<double>()
+            layout0["transitionSeconds"].AsNumber()
         );
 
         var seatRig = Assert.IsType<JsonObject>(@object: views["seatRig"]);
@@ -314,9 +314,9 @@ public class ComprehensiveSyntheticTests {
         );
         Assert.Equal(
             2.5,
-            orbitOp["distance"]?.GetValue<double>()
+            orbitOp["distance"].AsNumber()
         );
-        Assert.True(condition: (orbitOp["pitch"]?.GetValue<double>() > 0.78)); // 45 deg in rad
+        Assert.True(condition: (orbitOp["pitch"].AsNumber() > 0.78)); // 45 deg in rad
 
         // Assert addon auto-hash
         var addons = Assert.IsType<JsonArray>(@object: json["addons"]);

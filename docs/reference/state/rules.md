@@ -71,26 +71,41 @@ first one.
 
 ## Make several effects succeed together
 
-Two ordinary effects have separate preflight and installation steps. If spending
-coins succeeds but awarding a card is refused, the first write can remain.
-A transaction gives the host one private candidate to validate and install.
+One firing is one journal scope on the arena. Every write the firing makes
+lands when the scope commits, or none does: if spending coins succeeds and
+awarding a card is refused, the scope rewinds and the coins are back.
+
+An effect that leaves the arena cannot be rewound by the journal, so it is
+queued instead of fired, checked before the commit, and handled after it. There
+are two kinds, and the firing's all-or-nothing promise covers only the first.
+
+| Kind | Declares | What the firing promises |
+|---|---|---|
+| Transactional arm | `EffectNeeds.Irreversible \| EffectNeeds.Transactional` | The host composes every such arm of the firing, in order, against one speculative state while they are checked, decides everything that can refuse the unit before the scope commits, and installs it when the scope commits. The install cannot refuse, so the arms land with the firing's writes or not at all. |
+| Delivered arm | `EffectNeeds.Irreversible` | It is checked before the commit and fired after it, in authored order. A delivery that refuses is one counted refusal. It undoes nothing, and later deliveries still run. |
+
+The arms are checked as the sequence they are. A later arm is judged against
+what the earlier arms of the same firing would leave, so removing the same
+placement twice refuses the firing before it commits, and removing a placement
+an earlier arm creates is admitted.
 
 ```mermaid
 sequenceDiagram
     participant E as RuleEvaluator
+    participant A as StateArena
     participant H as IEffectHost
-    participant C as Private candidate
-    E->>H: BeginPreflight
-    E->>H: TryApply(spend coins, preflight)
-    H->>C: Validate and compose
-    E->>H: TryApply(award card, preflight)
-    H->>C: Read the composed state and validate
-    alt Every required effect succeeds
-        E->>H: TryCommitPreflight
-        H->>H: Install as one mutation
-    else An effect refuses
-        E->>H: EndPreflight
-        H->>C: Discard the candidate
+    E->>A: BeginScope
+    E->>A: Arena writes, in order
+    E->>H: Preflighting
+    E->>H: Fire(arm, preflight) for each queued arm, in order
+    E->>H: PrepareTransactional (the transactional arms, as one unit)
+    alt Every write, every check and the preparation succeed
+        E->>A: Commit
+        E->>H: Committed
+        E->>H: CommitTransactional (installs the prepared unit)
+        E->>H: Fire(arm) for each delivered arm, in order
+    else Anything refuses
+        E->>A: Rewind
     end
 ```
 
@@ -109,11 +124,10 @@ var buyCard = new Rule(
     ])]);
 ```
 
-The compiler admits only effect families that support transactions. A custom
-effect that sends an irreversible notification, for example, cannot promise
-rollback simply by returning success from preflight. The
-[host protocol](hosting.md#implement-the-mutation-boundary) owns installation,
-validation, journaling, and delivery.
+A custom effect that sends a notification cannot promise rollback by returning
+success from its check: it is a delivered arm, and the table above is what it
+may rely on. The [host protocol](hosting.md#implement-the-mutation-boundary)
+owns installation, validation, journaling, and delivery.
 
 A transaction is a savepoint inside the firing, not the firing's own boundary.
 A refused step rewinds only the savepoint, so the effects before the
@@ -435,9 +449,9 @@ and local values. The host's `IStateReader` forwards that context to operands.
 ### Mutation and iteration contracts
 
 Core effects produce four mutation shapes: `UpsertCell`, `RemoveCell`,
-`Generate`, and `Apply` a transform. Top-level effects preflight and
-install individually. A transaction preflights its branch as one candidate,
-then calls the host's `TryCommitPreflight`.
+`Generate`, and `Apply` a transform. Each is written inside the firing's
+journal scope through `IEffectHost.Apply`. A transaction is a savepoint inside
+that scope.
 
 The evaluator visits rules in array order and binds values before the gate.
 Its `RuleLatch` preserves Edge/Level history per evaluation binding, including

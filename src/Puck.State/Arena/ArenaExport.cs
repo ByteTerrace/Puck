@@ -65,6 +65,36 @@ public sealed partial class StateArena {
         return traits;
     }
 
+    /// <summary>Exports one document row as <see cref="ToRows"/> would: the row the arena was built over with its
+    /// stored columns written back, or the row as declared when a host owns its values.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <returns>The row.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rowOrdinal"/> names no document row.</exception>
+    public StateRow ToRow(int rowOrdinal) {
+        if (
+            (((uint)rowOrdinal) >= ((uint)m_layout.RowCount)) ||
+            (m_catalog.Descriptors[rowOrdinal].Lane != StateLane.Document)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: rowOrdinal,
+                message: "The ordinal names no document row.",
+                paramName: nameof(rowOrdinal)
+            );
+        }
+
+        var row = m_rows[m_catalog.Descriptors[rowOrdinal].LaneOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
+
+        return (layout.IsStored
+            ? ExportRow(
+                layout: layout,
+                row: row,
+                rowOrdinal: rowOrdinal
+            )
+            : row
+        );
+    }
+
     private StateCell ExportCell(in ArenaRowLayout layout, Dictionary<CellName, StateCell>? traits, CellName name, int slot) {
         var authored = traits?.GetValueOrDefault(key: name);
 

@@ -651,6 +651,11 @@ public sealed partial class StateArena {
             )) {
                 return false;
             }
+            if ((cell.Provenance?.Length ?? 0) > StateCapacity.MaxProvenanceLength) {
+                reason = $"row '{row.Name.Value}' cell '{cell.Key.Value}' carries a provenance of {cell.Provenance!.Length} characters, past the {StateCapacity.MaxProvenanceLength}-character limit";
+
+                return false;
+            }
             if (!TraitsAgree(
                 cell: cell,
                 declared: declared,

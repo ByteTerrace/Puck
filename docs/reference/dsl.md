@@ -183,6 +183,16 @@ The two evaluators fold a name differently, on purpose:
   rule language's `Q48.16` fixed point to agree with it bit-for-bit would quantize the authored value to 1/65536
   for no gain: the folded number is document DATA, baked into JSON at compile time, and never simulation state. The
   double fold already agrees with the fixed-point one exactly on whole numbers.
+- A fractional literal lowers as the decimal its text spells, to the 28 significant digits a `decimal` holds, and
+  stays exact through arithmetic that is closed over finite decimals: a sign, `+`, `-`, `*`, and a unit whose scale
+  is a power of ten (`ms`, `cm`, `mm`, `%`). A result a `decimal` would overflow on or round, a product or a
+  conversion too small for its scale included, is computed in `double` instead, which keeps its magnitude. A
+  quotient, a remainder, a folded function and degrees into radians are always computed in `double`; a decimal
+  field reads such a result at its 15 significant digits, the same on every runtime. One value has one spelling:
+  `1.50` lowers as `1.5`, and `2.0` and `1.5e3` lower as the integers they are.
+- A comparison, and the ordering and equality `sort` and `distinct` use, is decided on the
+  exact value of each number, whether it is held as an integer, a decimal or a double. `1.0000000000000001 > 1`
+  is true, and the double nearest `0.1` is not equal to the decimal `0.1`.
 - `select(condition, whenTrue, whenFalse)` reads its condition first and lowers only the arm it takes—the other
   arm is never evaluated, which is what lets an untaken arm reference something the taken one does not need.
 
