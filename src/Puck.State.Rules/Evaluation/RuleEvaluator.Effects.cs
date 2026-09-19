@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Puck.State.Rules;
 
 public sealed partial class RuleEvaluator {
@@ -187,6 +189,20 @@ public sealed partial class RuleEvaluator {
                 refused: (m_refusalSerial != serial)
             ));
             if (!fired) {
+                return false;
+            }
+
+            // Every write a scope holds is a record the rewind needs, so the record is what a firing is bounded by:
+            // checked between effects, it refuses the sequence the way any refused effect does.
+            if (m_host.Arena.Journal.OverCeiling) {
+                ReportRefusal(
+                    detail: $"its writes hold {m_host.Arena.Journal.Bytes.ToString(provider: CultureInfo.InvariantCulture)} bytes of undo record, past the {ArenaCapacity.MaxJournalBytes.ToString(provider: CultureInfo.InvariantCulture)}-byte ceiling; write fewer cells in one firing, or split the work across rules",
+                    effect: effect.Describe,
+                    refusal: RuleEffectRefusal.JournalCeiling,
+                    ruleName: firing.RuleName,
+                    tick: firing.Tick
+                );
+
                 return false;
             }
         }

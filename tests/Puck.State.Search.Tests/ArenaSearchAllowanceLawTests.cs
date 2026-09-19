@@ -395,9 +395,12 @@ public sealed class ArenaSearchAllowanceLawTests {
             depth: depth,
             method: SearchMethod.Negamax
         );
+        // The node ceiling is what suspends the walk here: the minimum allowance covers a restart, which clears the
+        // whole transposition table, so every other step has room to fold a chance ply in one go.
         var plan = Plan(
             atDepth: atDepth,
             depth: depth,
+            nodes: 2,
             work: (priced with { Allowance = priced.Minimum })
         );
 

@@ -162,11 +162,19 @@ weights cannot be converted to reference cycles, and admission still runs on
 them. The [costing brief](../../plans/abstract-machine-costing.md) describes
 the evidence needed before cycle-based admission.
 
-`StateRow.MaxRows` (document size) and `RuleCapacity.MaxWorkUnitsPerTick`
-(static per-tick work) are structural ceilings, never a fixed-size buffer or
-a per-world tunable. Several content lanes that each fit comfortably under
-both ceilings in isolation can still sum past one or both once merged into a
-single document — a document-capacity collision the per-lane work could not
+A document meets two real limits. `RuleCapacity.MaxWorkUnitsPerTick` bounds the
+static work one tick may do. `ArenaCapacity.MaxBytes` (64 MiB) bounds what the
+document's state may occupy: `ArenaLayout.Bytes` measures every column at its
+full width, with the change stamps and indexes beside them, and a section that
+lays out past the ceiling is refused at the row that crossed. `world.state`
+prints the measure beside the ceiling. While scopes are open, the undo record
+they hold is bounded too (`ArenaCapacity.MaxJournalBytes`, 16 MiB): a firing
+whose writes pass it is refused as `JournalCeiling` and rewound. The counts
+beside these, `StateCapacity.MaxRows` (1,024) and the rest, bound what one
+declaration may ask for, and each names the storage it sizes. None is a
+fixed-size buffer or a per-world tunable. Several content lanes that each fit
+comfortably under both limits in isolation can still sum past one or both once
+merged into a single document — a document-capacity collision the per-lane work could not
 see, not a defect in any one lane's own design. The fix for a genuine
 collision is to widen the ceiling that was hit, never to cut a lane to fit
 under an unchanged one.

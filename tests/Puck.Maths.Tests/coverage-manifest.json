@@ -13400,6 +13400,20 @@
       "CoveredBy": [
         "sampling.pcg-extended-delegation-and-refusals"
       ],
+      "Id": "Puck.Maths.Pcg32Extended.MaxTableSize",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.pcg-extended-delegation-and-refusals"
+      ],
+      "Id": "Puck.Maths.Pcg32Extended.MinTableSize",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "sampling.pcg-extended-delegation-and-refusals"
+      ],
       "Id": "Puck.Maths.Pcg32Extended.Multiplier",
       "State": "covered"
     },

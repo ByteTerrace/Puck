@@ -64,6 +64,95 @@ public sealed class AtomicFiringLawTests {
         );
     }
     [Fact]
+    public void AFiringWhoseUndoRecordPassesItsCeilingRewindsWithOneNamedRefusal() {
+        var (host, evaluator, rules, latch) = Arrange(rules: new Rule(
+            Name: RulesFixture.Name(value: "flood"),
+            Effects: [
+                EvaluatorFixture.Set(
+                    row: "score",
+                    value: 7m
+                ),
+                EvaluatorFixture.Set(
+                    row: "other",
+                    value: 9m
+                ),
+            ]
+        ));
+        var arena = host.Arena;
+        var score = EvaluatorFixture.Ordinal(
+            host: host,
+            row: "score"
+        );
+
+        Assert.True(condition: arena.Catalog.Keys.TryResolve(
+            key: out var slot,
+            name: StateRow.SlotKey
+        ));
+
+        // An enclosing scope that already holds all the record the ceiling admits, so the firing's first write is
+        // the one that crosses it.
+        var outer = arena.BeginScope();
+
+        while ((arena.Journal.Bytes + ArenaJournal.EntryBytes) <= ArenaCapacity.MaxJournalBytes) {
+            Assert.True(condition: arena.TryWrite(
+                key: slot,
+                operand: 1L,
+                reason: out _,
+                rowOrdinal: score,
+                write: StateWriteKind.Set
+            ));
+        }
+
+        Assert.False(condition: arena.Journal.OverCeiling);
+        Assert.False(condition: evaluator.Evaluate(
+            latch: latch,
+            rules: rules,
+            stepTicks: 1UL
+        ));
+
+        // The firing rewound to what the enclosing scope had written, and its second effect never ran.
+        Assert.Equal(
+            actual: EvaluatorFixture.Cell(
+                host: host,
+                row: "score"
+            ),
+            expected: 1L
+        );
+        Assert.Equal(
+            actual: EvaluatorFixture.Cell(
+                host: host,
+                row: "other"
+            ),
+            expected: 0L
+        );
+        Assert.False(condition: arena.Journal.OverCeiling);
+
+        var refusal = Assert.Single(collection: evaluator.Diagnostics());
+
+        Assert.Equal(
+            actual: refusal.Refusal,
+            expected: RuleEffectRefusal.JournalCeiling
+        );
+        Assert.Equal(
+            actual: refusal.Rule,
+            expected: "flood"
+        );
+        Assert.Contains(
+            actualString: refusal.Detail,
+            expectedSubstring: "byte ceiling"
+        );
+
+        arena.Rewind(mark: outer);
+
+        Assert.Equal(
+            actual: EvaluatorFixture.Cell(
+                host: host,
+                row: "score"
+            ),
+            expected: 0L
+        );
+    }
+    [Fact]
     public void ASavepointRewindsItsOwnWritesWhileSiblingsAndOnFailureLand() {
         var (host, evaluator, rules, latch) = Arrange(rules: new Rule(
             Name: RulesFixture.Name(value: "deal"),

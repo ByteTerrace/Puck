@@ -13,14 +13,15 @@ public sealed record PatternSymbol(CellName Name, decimal Min, decimal Max);
 /// deterministic table the <c>$match:</c> operand runs allocation-free, one indexed step per token.</summary>
 /// <param name="Name">The pattern name a rule references.</param>
 /// <param name="Kind">The numeric kind of the values the word is read from: Int or Fixed.</param>
-/// <param name="Symbols">The alphabet, 1..32 named value ranges.</param>
+/// <param name="Symbols">The alphabet, 1..<see cref="PatternCapacity.MaxSymbols"/> named value ranges.</param>
 /// <param name="Pattern">The language.</param>
 /// <param name="Attribute">For a zone source, the keyed row (over the zone's token domain) whose cell values form the
 /// word, in pile order; null reads the source row's own cell values.</param>
 /// <param name="Value">For a zone source, an expression in the pattern's kind evaluated once per token in pile order,
 /// where a state token keyed <c>$token</c> reads that token's cell of a row keyed over the zone's token domain: the
 /// word over a tuple of attributes (<c>suit * 16 + rank</c>) rather than one. Exclusive with <paramref name="Attribute"/>.</param>
-/// <param name="MaxStates">The machine-state budget the compile refuses past, 1..256.</param>
+/// <param name="MaxStates">The machine-state budget the compile refuses past,
+/// 1..<see cref="PatternCapacity.MaxStates"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PatternRow(
     CellName Name,

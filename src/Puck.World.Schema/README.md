@@ -34,10 +34,12 @@ The discrete substrate shares `state.lattices` with physical fields. Declare a
 discrete cases—a `"box"` case exists too, for a 3-layer discrete board; the document's own
 `"field"` case is `WorldFieldTopology`, registered through `WorldJsonVocabulary`) and bind an
 integer/boolean row through `domain: { "$type": "cellsOf", "topology": "map", "empty": 0 }`. Only
-a `"field"` lattice creates physical field storage. A world may declare at most 16 topologies, including
-at most one physical field topology. Each discrete topology admits 4096 cells;
-boards together admit 65536 cells, and all declared state storage admits
-262144 cells; a row of any domain may author a capacity up to 4096 cells, and a slot or keys row that authors none gets 128.
+a `"field"` lattice creates physical field storage. A world may declare at most 64 topologies, including
+at most one physical field topology. Each discrete topology admits 4096 cells; a row of any domain may author a
+capacity up to 4096 cells, and a slot or keys row that authors none gets 128. What all of a document's state may
+occupy together is one figure in bytes, `ArenaCapacity.MaxBytes` (64 MiB): the arena's layout measures every column
+at its full width, and a document that lays out past the ceiling is refused at the row that crossed. `world.state`
+prints the measure beside the ceiling.
 
 A `cellsOf` row may declare itself derived rather than authored:
 `inverse: { "tokens": "pieceCell", "codes": "pieceCode" }` (`Puck.State.StateInverse`) names a keyed
@@ -2742,7 +2744,7 @@ minimal two-token primitive a castle's rook needs, not a general rule for every
 pair's own reach). `relocate` with
 `displace: false` leaves the standing token in place, so a judge rule that
 reads two tokens sharing a cell decides the candidate itself. `promote`
-(`codes`, an integer row keyed by the tokens; `to`, up to eight codes) relocates
+(`codes`, an integer row keyed by the tokens; `to`, up to sixteen codes) relocates
 the walked token onto any other cell, evicting what stood there, with its code
 in `codes` changed to each offered value in turn—one candidate per (cell,
 code); the judge decides where a code may change.

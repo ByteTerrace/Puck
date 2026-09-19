@@ -171,6 +171,7 @@ public sealed record WorldSearchRow(
 /// <summary>Derives what a search job needs from the document: the rules a frame can evaluate, their cost, and each
 /// job's plan.</summary>
 public static class WorldSearchCompilation {
+    private static string WeightOverflow(string jobName, WorldSearchChance chanceRow) => $"search '{jobName}' chance row '{chanceRow.Row}' bakes weights whose total passes one 64-bit word; divide the generator's weights by a common factor";
     // Bakes a chance row's own generator into every one of its outcomes, in the row's own cell order, as their
     // cross product: two cells of uniformRange 1..6 bake the 36 ordered dice pairs. The one place the runtime's
     // pure-data SearchChancePlan is built from a document's generator vocabulary.
@@ -239,10 +240,21 @@ public static class WorldSearchCompilation {
                     perCell = new (long, ulong)[outcomes.Count];
 
                     for (var index = 0; (index < outcomes.Count); index++) {
-                        perCell[index] = (outcomes[index].Value, (outcomes[index].Weight * ((ulong)Math.Max(
+                        var units = (((UInt128)outcomes[index].Weight) * ((ulong)Math.Max(
                             val1: 1,
                             val2: (outcomes[index].Multiplicity ?? 1)
-                        ))));
+                        )));
+
+                        if (units > ulong.MaxValue) {
+                            reason = WeightOverflow(
+                                chanceRow: chanceRow,
+                                jobName: jobName
+                            );
+
+                            return false;
+                        }
+
+                        perCell[index] = (outcomes[index].Value, ((ulong)units));
                     }
 
                     break;
@@ -269,10 +281,14 @@ public static class WorldSearchCompilation {
         var total = ((int)outcomeCount);
         var values = new long[(total * cellCount)];
         var weights = new ulong[total];
+        var totalWeight = UInt128.Zero;
 
+        // A chance ply folds each outcome's value times its weight into a 128-bit sum and divides by the weight it
+        // carried. The sum is exact while the whole table's weight fits one word, so that is what is checked here;
+        // how many outcomes share it does not matter.
         for (var outcome = 0; (outcome < total); outcome++) {
             var residue = outcome;
-            var weight = 1UL;
+            var weight = UInt128.One;
 
             for (var cell = 0; (cell < cellCount); cell++) {
                 var index = (residue % perCell.Length);
@@ -280,9 +296,29 @@ public static class WorldSearchCompilation {
                 residue /= perCell.Length;
                 values[((outcome * cellCount) + cell)] = perCell[index].Value;
                 weight *= perCell[index].Weight;
+
+                if (weight > ulong.MaxValue) {
+                    reason = WeightOverflow(
+                        chanceRow: chanceRow,
+                        jobName: jobName
+                    );
+
+                    return false;
+                }
             }
 
-            weights[outcome] = weight;
+            totalWeight += weight;
+
+            if (totalWeight > ulong.MaxValue) {
+                reason = WeightOverflow(
+                    chanceRow: chanceRow,
+                    jobName: jobName
+                );
+
+                return false;
+            }
+
+            weights[outcome] = ((ulong)weight);
         }
 
         chance = new SearchChancePlan(

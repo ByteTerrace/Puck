@@ -581,7 +581,7 @@ public static partial class WorldConstructs {
                     Kind: WorldMemberKind.Number,
                     Name: "maxStates",
                     Position: WorldMemberPosition.Property,
-                    Summary: "The derivative machine's state budget, inside 1 to 256."
+                    Summary: "The derivative machine's state budget, inside 1 to 1,024."
                 ),
                 new(
                     DocumentKeys: ["symbols"],

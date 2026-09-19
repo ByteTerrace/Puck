@@ -552,37 +552,45 @@ public static class StateCapacity {
     /// name used by many rows to one entry, so this admits sixteen fully disjoint
     /// <see cref="MaxCellsPerRow"/>-wide key sets before a mint refuses by name.</summary>
     public const int MaxCellKeys = (16 * MaxCellsPerRow);
-    /// <summary>A <see cref="StateEnum"/>'s member-count ceiling — the widest symbolic domain a row's integer
-    /// cells may name.</summary>
-    public const int MaxEnumMembers = 256;
-    /// <summary>The section's enum-count ceiling.</summary>
-    public const int MaxEnums = 64;
-    /// <summary>The section's family-count ceiling; a family's own size is bounded by <see cref="MaxRows"/>, since
-    /// its members are rows.</summary>
-    public const int MaxFamilies = 64;
+    /// <summary>A <see cref="StateEnum"/>'s member-count ceiling, the widest symbolic domain a row's integer
+    /// cells may name. A member is one name the catalog holds; nothing per tick is sized by it.</summary>
+    public const int MaxEnumMembers = 1024;
+    /// <summary>The section's enum-count ceiling: one name table of at most <see cref="MaxEnumMembers"/> names
+    /// each, held once by the catalog.</summary>
+    public const int MaxEnums = 256;
+    /// <summary>The section's family-count ceiling: one member-ordinal table per family in the catalog. A family's
+    /// own size is bounded by <see cref="MaxRows"/>, since its members are rows.</summary>
+    public const int MaxFamilies = 256;
     /// <summary>A cell's <see cref="StateCell.Provenance"/> length ceiling, in UTF-16 code units — bounded like
     /// <see cref="MaxTextValueLength"/> since it is likewise a free-form issuer label, never a validated-identifier
     /// type.</summary>
     public const int MaxProvenanceLength = 256;
-    /// <summary>The section's row-count ceiling — a pure capacity bound on document size and per-tick iteration
-    /// cost, never a fixed-size stack buffer or a per-world tunable.</summary>
-    public const int MaxRows = 256;
-    /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units.</summary>
-    public const int MaxTextValueLength = 256;
+    /// <summary>The section's row-count ceiling. A row is one layout record, one key-to-slot map, and one version,
+    /// generation and change stamp in every arena over the catalog; its cells are counted by the arena's byte
+    /// ceiling (<see cref="ArenaCapacity.MaxBytes"/>), and what a rule does across rows is priced on the work
+    /// sheet.</summary>
+    public const int MaxRows = 1024;
+    /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units: two bytes a unit,
+    /// so one text cell holds at most two kibibytes.</summary>
+    public const int MaxTextValueLength = 1024;
     /// <summary>The minimum allowed dimensions for a vector embedding space.</summary>
     public const int MinVectorDimensions = 8;
     /// <summary>The maximum allowed dimensions for a vector embedding space.</summary>
     public const int MaxVectorDimensions = 1024;
-    /// <summary>The maximum number of vector embedding spaces a world may declare.</summary>
-    public const int MaxVectorSpaces = 16;
+    /// <summary>The maximum number of vector embedding spaces a world may declare. A space is a name and a
+    /// dimension count; the components its rows hold are bounded by <see cref="MaxVectorSectionBytes"/>.</summary>
+    public const int MaxVectorSpaces = 64;
     /// <summary>The maximum byte capacity of a single vector row (capacity * dimensions).</summary>
     public const int MaxVectorRowBytes = 65536;
     /// <summary>The maximum total byte capacity of all vector rows across a state section (4 MiB).</summary>
     public const int MaxVectorSectionBytes = 4194304;
-    /// <summary>The maximum number of results returned by a nearest vector transform.</summary>
-    public const int MaxNearestResults = 64;
-    /// <summary>The maximum number of terms in a mix vector transform.</summary>
-    public const int MaxMixTerms = 8;
+    /// <summary>The maximum number of results returned by a nearest vector transform. The transform leases one
+    /// candidate per cell of the row it scans, so this bounds the writes one firing makes rather than its
+    /// scratch.</summary>
+    public const int MaxNearestResults = 256;
+    /// <summary>The maximum number of terms in a mix vector transform. The sum is one leased word per dimension
+    /// however many terms feed it; each term is one pass over the dimensions, priced on the work sheet.</summary>
+    public const int MaxMixTerms = 32;
     /// <summary>The maximum absolute weight magnitude of a term in a mix vector transform.</summary>
     public const int MaxMixWeight = 1000;
 }

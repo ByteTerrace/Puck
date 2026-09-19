@@ -22,4 +22,9 @@ public enum RuleEffectRefusal : byte {
     /// group stops running until its trigger re-arms it.</summary>
     [Refusal(door: "state.rule.fire", condition: "a fixpoint group breaches its pass ceiling without closing", kind: RefusalKind.Verdict)]
     GroupPassCeiling,
+
+    /// <summary>A firing's writes grew the arena's undo record past <c>ArenaCapacity.MaxJournalBytes</c>. The
+    /// firing rewinds, so nothing it wrote remains.</summary>
+    [Refusal(door: "state.rule.fire", condition: "a firing's writes grow the arena's undo record past its byte ceiling", kind: RefusalKind.Verdict)]
+    JournalCeiling,
 }

@@ -242,9 +242,14 @@ distinct rows. `PatternMemo.MaxEntries` dropped the memo at 256 walks, which a
 board read from every cell in every direction passes at once; it is one
 mebibyte, 16,384 walks at the 64 bytes each occupies. `sortZone` and
 `sortKeyed` lease their key buffers instead of allocating them per firing.
-`MaxTotalCells` waits on the document's memory bound, which does not exist yet:
-the arena's layout knows every column's width, and the bound belongs there
-rather than on boards alone.
+`MaxTotalCells` is gone with the fourth, and so is an unnamed 262,144-cell
+budget beside it: the document's memory bound is `ArenaLayout.Bytes` against
+`ArenaCapacity.MaxBytes` (64 MiB), measured over every column at its full width
+and refused at the row that crossed. The largest shipped world lays out to
+about 5 MiB. The undo record takes `ArenaCapacity.MaxJournalBytes` (16 MiB),
+read between effects; a firing past it is the `JournalCeiling` refusal and
+rewinds, and the positions a settle visits are a subset of the record's, so
+the same figure bounds that buffer.
 
 The rule-program raises are landed: 64 locals, 256 expression tokens, 64
 subprograms of at most 16 arguments, 256 effects and transaction effects, 1,024
@@ -259,10 +264,21 @@ compiler's constant folder evaluated such a chain before anything priced it,
 and pricing walked every call site. A compiled body carries the tokens one call
 evaluates, the folder leaves a subtree longer than 65,536 of them in the
 program, and pricing takes each shared body once, so the chain compiles and
-prices in its authored size and its price, an overflow, is what refuses it. The
-remaining raises (state rows, enums, topologies, vectors, patterns, lanes,
-generators, search, groups), the memory bound and the journal's, and the
-reference schedule have not started.
+prices in its authored size and its price, an overflow, is what refuses it.
+
+The remaining raises are landed at the table's targets: state rows, enums,
+families, text, topologies, vectors, patterns, lanes, drawn masks, generators,
+search, and groups. `MaxSymbols` stays 32, which is what a 64-bit letter mask
+holds. A document's pattern tables are bounded together by
+`PatternCapacity.MaxTableBytes` (4 MiB), refused at the row that crossed, and
+nothing is compiled past the row ceiling. The extended generator table's
+ceiling is `Pcg32Extended.MaxTableSize`, raised in `Puck.Maths` with its laws.
+A fixpoint group runs one pass a tick, so its members times its passes is
+never one tick's work: its members are priced as the rules they are, and its
+passes count ticks. A chance table's weights are multiplied and summed in 128
+bits at the bake and refused when their total passes one word, which is the
+condition the chance ply's exact average rests on; the outcome count never
+was. The reference schedule and the shared cost report have not started.
 
 **Check:** the state, rules, search, and World schema suites green with a law
 at each raised edge for the two ceilings that bind today (locals, expression

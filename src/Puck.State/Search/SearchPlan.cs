@@ -12,25 +12,31 @@ public static class SearchCapacity {
     public const long MateScore = (long.MaxValue >> 2);
     /// <summary>The most outcomes one <see cref="SearchChancePlan"/> may bake — the cross product of its row's own
     /// generator's domain across every one of the row's cells (two six-sided dice bakes 36).</summary>
-    public const int MaxChanceOutcomes = 64;
-    /// <summary>The most plies one job searches ahead.</summary>
-    public const int MaxDepth = 32;
+    public const int MaxChanceOutcomes = 256;
+    /// <summary>The most plies one job searches ahead. A ply is one level record and two open scopes; the walk
+    /// holds them in arrays, so depth costs no machine stack.</summary>
+    public const int MaxDepth = 64;
     /// <summary>The most tree iterations one job runs before it lands.</summary>
     public const int MaxIterations = 65_536;
-    /// <summary>The most jobs one document declares.</summary>
-    public const int MaxJobs = 8;
+    /// <summary>The most jobs one document declares. A job with a score holds its own transposition table and a
+    /// tree job its own node pool, so this multiplies <see cref="TranspositionEntries"/> and
+    /// <see cref="TreeNodes"/>.</summary>
+    public const int MaxJobs = 16;
     /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves. A jump chain may
     /// enumerate no more candidates per token than this, which is what bounds how long a chain may be.</summary>
     public const int MaxNodesPerTick = 4_096;
-    /// <summary>The most codes one <c>promote</c> shape offers.</summary>
-    public const int MaxPromotions = 8;
-    /// <summary>The most candidate shapes one job declares.</summary>
-    public const int MaxShapesPerJob = 8;
+    /// <summary>The most codes one <c>promote</c> shape offers; each multiplies the shape's candidates, which the
+    /// node ceiling counts.</summary>
+    public const int MaxPromotions = 16;
+    /// <summary>The most candidate shapes one job declares; each adds its candidates to the walk, which the node
+    /// ceiling counts.</summary>
+    public const int MaxShapesPerJob = 16;
     /// <summary>The transposition table's entries per job with a score: a power of two, indexed by the low bits of a
-    /// position's frame hash.</summary>
-    public const int TranspositionEntries = 1_024;
-    /// <summary>The tree nodes one job with an outcome may grow.</summary>
-    public const int TreeNodes = 2_048;
+    /// position's frame hash. An entry is three eight-byte words, so a table is 192 KiB, and a restart clears
+    /// it.</summary>
+    public const int TranspositionEntries = 8_192;
+    /// <summary>The tree nodes one job with an outcome may grow: 48 bytes a node, 384 KiB a job.</summary>
+    public const int TreeNodes = 8_192;
 }
 /// <summary>How a job with a score compares plies.</summary>
 [JsonConverter(typeof(StrictEnumConverter<SearchMethod>))]

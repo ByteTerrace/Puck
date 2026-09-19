@@ -159,10 +159,12 @@ key is the one reserved exception). Declaring `min: 0` is a per-row floor ANY
 numeric row may declare; `int` + `min: 0` IS a timer, never
 a fifth kind, and the cross-document write-back channel
 (`Server.WorldOwnedWorlds.Decide`) reads that same row envelope through
-`TryAdmitWrite` rather than assuming a floor of its own. Capped at `StateCapacity.MaxRows` (256)
-rows, `MaxCellsPerRow` (128) cells per row (which an authored `capacity` may
-only NARROW, never widen), and
-`MaxTextValueLength` (256) text UTF-16 code units, refused by name past any.
+`TryAdmitWrite` rather than assuming a floor of its own. Capped at `StateCapacity.MaxRows` (1,024)
+rows, `MaxCellsPerRow` (4,096) cells per row (which an authored `capacity` may
+only NARROW, never widen; a slot or keys row authoring none gets `DefaultCellRoom`, 128), and
+`MaxTextValueLength` (1,024) text UTF-16 code units, refused by name past any. The rows
+together are bounded in bytes, not cells: `ArenaLayout.Bytes` against
+`ArenaCapacity.MaxBytes` (64 MiB), refused at the row that crossed; `world.state` prints both.
 
 A keyed row may set `evicts: true` to trade its ordinary refuse-on-overflow
 capacity ceiling for FIFO drop-oldest: an `UpsertStateCell` write that mints a
@@ -474,9 +476,9 @@ fields. Read law:
 `tests/Puck.World.Schema.Tests/WorldLatticeDrawLawTests.cs`; live proof:
 `tests/Puck.World.Canaries/lattice-draw-fill`.
 
-`GeneratorCapacity`: 32 contexts, 64 alternatives per context (one
-drawn-mask bit each), bound ≤ 64, token ≤ 64 UTF-16 units, 64 weighted outcomes,
-64 declared sources, uniform bounds inside int32.
+`GeneratorCapacity`: 64 contexts, 256 alternatives per context (one
+drawn-mask bit each), bound ≤ 256, token ≤ 64 UTF-16 units, 256 weighted outcomes,
+256 declared sources, an extended table of at most 4,096 words, uniform bounds inside int32.
 
 **A source holds NO position.** Declare it once in the optional `generators`
 section (`{"name": …, "generator": {…}}`) and reference it from any number of
@@ -571,7 +573,7 @@ leaves the board, onto an empty destination), and `pair` (`with`: a cell key
 of `tokens` — the companion relocates by the same lattice translation, `CompiledTopology.TryTranslation`
 carried by `TryOffset`: grid, ring, hex, or box; a graph or tiling refuses it; its own
 destination empty), and `promote` (`codes`: an int row keyed
-by the tokens; `to`: up to eight codes — relocate and change the token's code to each in turn) are the other
+by the tokens; `to`: up to sixteen codes — relocate and change the token's code to each in turn) are the other
 arms. `relocate` with `displace: false` leaves the standing token in place rather than evicting it. A job
 with a score keeps a transposition table (`WorldSearchCapacity.TranspositionEntries`
 slots keyed by the frame hash) that rides the checkpoint and hash.

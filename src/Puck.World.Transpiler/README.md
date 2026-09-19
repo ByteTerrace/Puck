@@ -383,7 +383,7 @@ Shared state declaration and semantic codes also apply:
 
 | Code | Severity | Refusal |
 |---|---|---|
-| PUCK077 | Error | Embedding space is malformed: unknown or missing property, dimensions outside `[8, 1024]`, duplicate space name, or exceeds 16 spaces limit. |
+| PUCK077 | Error | Embedding space is malformed: unknown or missing property, dimensions outside `[8, 1024]`, duplicate space name, or more spaces than `StateCapacity.MaxVectorSpaces` (64). |
 | PUCK078 | Error | Vector row names no space and document has no default, names an undeclared space, or a non-Vector row declares a space. |
 | PUCK079 | Error | Authored text in a vector slot or `embed(...)` has no lock entry; run `puck embed`. |
 | PUCK080 | Error | Lock file's model, revision, or dimensions differ from the declared space; run `puck embed`. |

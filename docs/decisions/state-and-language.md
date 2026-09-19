@@ -193,7 +193,31 @@ sized by a topology's cell count, a token count, or an expression's length
 times its nesting; 4,096 cells is 96 KiB on the stack and sixteen times that
 is 1.5 MiB. Scratch is leased from the arena's own growing buffers
 (`ArenaScratch`), returned in order so a nested evaluation never writes over its
-caller's, and is covered by the allocation laws after warm-up.
+caller's, and is covered by the allocation laws after warm-up. It is the
+arena's own rather than `ArrayPool<T>.Shared` because leases nest by element
+type: an expression that calls a function or folds a family rents a second
+value stack while the first is open. The shared pool serves only the first
+rental of a size class from its thread-local slot and takes a per-core locked
+stack for the rest, which measures about four times a depth-indexed buffer for
+three nested 64-word leases. A single small lease is about twice the cost, and
+leases of thousands of elements cost the same either way, because clearing
+them dominates.
+
+**K2a — The memory bound is the arena's layout, in bytes.** `ArenaLayout.Bytes`
+measures every column at its full width, the change stamps a settle keeps per
+position, the row and key indexes, and the vector components, with a reference
+counted as eight bytes on every host so a document measures the same wherever
+it is admitted. `ArenaCapacity.MaxBytes` bounds it, and a section is refused at
+the row that crossed before anything is allocated for it. A count of cells
+cannot stand in for it: a cell slot costs about 250 bytes once every column a
+row may use is allocated, and lanes, draw masks and vectors are not cells. The
+undo record has its own ceiling (`ArenaCapacity.MaxJournalBytes`), read between
+effects: a write is never dropped or interrupted, because a member write spans
+several columns and a torn one would be read by whatever ran next, so the
+record may pass the ceiling by the writes of the one effect that crossed it
+before the firing is refused and rewound. The text a text or provenance cell
+refers to is bounded per cell by its own length ceiling and is outside the
+measure.
 
 **K3 — A set of cells wider than a word lives in a board row.** An expression
 value stays one 64-bit word and the bit operators stay generic Int operators.

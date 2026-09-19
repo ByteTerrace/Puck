@@ -271,7 +271,7 @@ public class StateBulkKernels {
     private long[] m_scratch = [];
 
     /// <summary>Gets or sets the element count the scenario operates over.</summary>
-    [Params(0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256)]
+    [Params(0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511, 512, 513, 1023, 1024)]
     public int Capacity { get; set; }
 
     /// <summary>Fills the source arrays for the selected capacity.</summary>

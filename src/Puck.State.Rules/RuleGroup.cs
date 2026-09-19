@@ -38,14 +38,16 @@ public sealed record RuleGroupStep(CellName Rule, RuleGroupStepPolicy OnRefusal 
 /// <param name="Trigger">The gate that arms the group, or <see langword="null"/> for always.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record RuleGroupDeclaration(CellName Name, RuleGroupShape Shape, IReadOnlyList<RuleGroupStep> Steps, int? Passes = null, ActionPredicate? Trigger = null);
-/// <summary>Hard bounds for rule groups; these are per-tick work limits, not gameplay tuning.</summary>
+/// <summary>Hard bounds for rule groups. A fixpoint group runs one pass a tick, so a tick's work is its members',
+/// which the work sheet prices as the rules they are; its passes count ticks.</summary>
 public static class RuleGroupCapacity {
     /// <summary>The pass ceiling a fixpoint group takes when it authors none.</summary>
     public const int DefaultPasses = 8;
-    /// <summary>The most members one group may claim.</summary>
-    public const int MaxMembers = 64;
-    /// <summary>The most passes one fixpoint group may author.</summary>
-    public const int MaxPasses = 64;
+    /// <summary>The most members one group may claim: one index and one policy each in the compiled group.</summary>
+    public const int MaxMembers = 256;
+    /// <summary>The most passes one fixpoint group may author: the ticks a cascade may take to settle before the
+    /// group reports a breach.</summary>
+    public const int MaxPasses = 256;
 }
 /// <summary>One compiled rule group: which compiled rules it claims, how it runs them, the rows a pass must leave
 /// unchanged to close, its pass ceiling, and the gate that arms it.</summary>

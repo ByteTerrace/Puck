@@ -180,7 +180,7 @@ public sealed class ArenaVectorBlendLawTests {
         );
     }
     [InlineData(0)]
-    [InlineData(9)]
+    [InlineData(StateCapacity.MaxMixTerms + 1)]
     [Theory]
     public void AMixOutsideTheTermCeilingRefuses(int count) {
         var arena = VectorArenaFixture.Arena(catalog: out var catalog);

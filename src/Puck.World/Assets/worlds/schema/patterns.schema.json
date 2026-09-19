@@ -20,7 +20,7 @@
         "description": "The numeric kind of the values the word is read from: Int or Fixed."
       },
       "symbols": {
-        "description": "The alphabet, 1..32 named value ranges.",
+        "description": "The alphabet, 1..MaxSymbols named value ranges.",
         "type": "array",
         "items": {
           "description": "One symbol of a pattern\u0027s alphabet: the cell values in Min..Max (inclusive, in the pattern\u0027s kind) read as this letter. Symbols may overlap; the refined alphabet splits them.",
@@ -65,7 +65,7 @@
         "default": null
       },
       "maxStates": {
-        "description": "The machine-state budget the compile refuses past, 1..256.",
+        "description": "The machine-state budget the compile refuses past, 1..MaxStates.",
         "type": "integer",
         "default": 64
       },

@@ -162,7 +162,7 @@ pattern name : Kind { [attribute: … | value: …] [maxStates: n] symbols { nam
 | `kind` (required) | header | cellkind (`Int`, `Fixed`, `Bool`, `Text`, `Vector`) | — | `kind` | — | The domain every cell of the row holds a value in. |
 | `attribute:` | property | reference | — | `attribute` | — | The row supplying each token's word, in place of `value`. |
 | `value:` | property | operand | — | `value` | — | An infix expression evaluated once per token to produce its word. |
-| `maxStates:` | property | number | — | `maxStates` | — | The derivative machine's state budget, inside 1 to 256. |
+| `maxStates:` | property | number | — | `maxStates` | — | The derivative machine's state budget, inside 1 to 1,024. |
 | `symbols` (required) | body | statements | — | `symbols` | — | The alphabet, each entry a name standing for one value or a band. |
 | `match:` (required) | property | text | — | `pattern` | — | The pattern language, loosest operator first: choice, intersection, sequence, complement, repetition; it lowers to the compiled tree. |
 

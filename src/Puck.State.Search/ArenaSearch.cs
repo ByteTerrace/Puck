@@ -63,7 +63,8 @@ public sealed partial class ArenaSearch {
         public int BestToken = -1;
         public long Beta = SearchCapacity.MateScore;
         // The outcomes folded so far, each value times its weight, and the weight they carried. The sum is exact:
-        // MaxChanceOutcomes values of MateScore magnitude under one word of weight stay inside 128 bits.
+        // a baked table's whole weight fits one word, so values of MateScore magnitude under it stay inside 128 bits
+        // however many outcomes share it.
         public Int128 ChanceSum;
         public ulong ChanceWeight;
         // The cell the candidate that opened this ply lands on, which is what the parent folds as its best move.

@@ -26,6 +26,9 @@ public sealed class CompiledPattern {
     public PatternRow Source { get; }
     /// <summary>Gets the number of states in the compiled machine.</summary>
     public int StateCount => m_accepting.Length;
+    /// <summary>Gets the bytes the machine's transition and accepting tables occupy, which is what
+    /// <see cref="PatternCapacity.MaxTableBytes"/> totals across a document.</summary>
+    public long TableBytes => ((((long)m_transitions.Length) * sizeof(int)) + m_accepting.Length);
 
     private static bool TryLower(CellKind kind, decimal literal, out long raw) {
         try {
@@ -809,9 +812,15 @@ public sealed class CompiledPatterns {
 
         rows ??= [];
 
+        // Past the row ceiling nothing is compiled: a machine is work to build, and the count is what bounds it.
         if (rows.Count > PatternCapacity.MaxRows) {
             errors.Add(item: $"patterns declares {rows.Count} rows; the maximum is {PatternCapacity.MaxRows}.");
+            patterns = Empty;
+
+            return false;
         }
+
+        var tableBytes = 0L;
 
         for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
@@ -827,6 +836,14 @@ public sealed class CompiledPatterns {
             )) {
                 errors.Add(item: $"patterns[{index}] {reason}.");
                 continue;
+            }
+
+            tableBytes += compiled!.TableBytes;
+
+            if (tableBytes > PatternCapacity.MaxTableBytes) {
+                errors.Add(item: $"patterns[{index}] '{row.Name}' brings the document's pattern tables to {tableBytes} bytes, past the {PatternCapacity.MaxTableBytes}-byte ceiling; lower a row's maxStates, merge symbols that are always matched together, or drop a pattern.");
+
+                break;
             }
             if (!table.TryAdd(
                 key: row.Name.Value,

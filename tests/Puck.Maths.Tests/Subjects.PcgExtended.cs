@@ -44,9 +44,9 @@ internal static partial class Subjects {
         return null;
     }
     /// <summary>An all-zero extension table reproduces the base <see cref="Pcg32XshRr"/>'s own draws exactly, over
-    /// several full index wraps at three table sizes, well short of a tick boundary.</summary>
+    /// several full index wraps at table sizes from the floor to the ceiling, well short of a tick boundary.</summary>
     public static string? PcgExtendedBaseEquivalence() {
-        foreach (var k in new[] { 2, 64, 1024 }) {
+        foreach (var k in new[] { Pcg32Extended.MinTableSize, 64, 1024, Pcg32Extended.MaxTableSize }) {
             var generator = Pcg32Extended.Create(
                 k: k,
                 state: 7UL,
@@ -252,6 +252,10 @@ internal static partial class Subjects {
             ),
             paramName: "k"
         )) { return "k=0 was accepted"; }
+        var floor = Pcg32Extended.MinTableSize;
+        var ceiling = Pcg32Extended.MaxTableSize;
+
+        if ((floor != 2) || (ceiling != 4096)) { return $"the table bounds are [{floor}, {ceiling}], not [2, 4096]"; }
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
             action: () => Pcg32Extended.Create(
                 k: 3,
@@ -262,12 +266,12 @@ internal static partial class Subjects {
         )) { return "a non-power-of-two k was accepted"; }
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
             action: () => Pcg32Extended.Create(
-                k: 2048,
+                k: (Pcg32Extended.MaxTableSize * 2),
                 state: 0UL,
                 stream: 0UL
             ),
             paramName: "k"
-        )) { return "k above 1024 was accepted"; }
+        )) { return "k above the table ceiling was accepted"; }
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
             action: () => Pcg32Extended.Create(
                 k: 4,
@@ -278,12 +282,12 @@ internal static partial class Subjects {
         )) { return "a stream above MaxStream was accepted"; }
 
         _ = Pcg32Extended.Create(
-            k: 2,
+            k: Pcg32Extended.MinTableSize,
             state: 0UL,
             stream: 0UL
         );
         _ = Pcg32Extended.Create(
-            k: 1024,
+            k: Pcg32Extended.MaxTableSize,
             state: 0UL,
             stream: 0UL
         );
@@ -458,10 +462,10 @@ internal static partial class Subjects {
             action: () => Pcg32Extended.CreateWithTable(
                 state: 0UL,
                 stream: 0UL,
-                table: new uint[2048]
+                table: new uint[(Pcg32Extended.MaxTableSize * 2)]
             ),
             paramName: "table"
-        )) { return "a table length above 1024 was accepted"; }
+        )) { return "a table length above the table ceiling was accepted"; }
         if (!ThrowsExactly<ArgumentOutOfRangeException>(
             action: () => Pcg32Extended.CreateWithTable(
                 state: 0UL,

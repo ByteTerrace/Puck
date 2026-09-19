@@ -1592,6 +1592,16 @@ public static partial class WorldDefinitionValidator {
             ) is { } refusal) {
                 errors.Add(item: refusal);
             }
+            // The other real limit: what the document's state occupies, laid out exactly as the server lays it out.
+            if (!ArenaLayout.TryBuild(
+                catalog: definition.StateCatalog,
+                layout: out _,
+                options: WorldSlotLanes.Options(definition: definition),
+                reason: out var layoutRefusal,
+                section: definition.StateRaw
+            )) {
+                errors.Add(item: $"state: {layoutRefusal}");
+            }
         }
         if (errors.Count == 0) {
             ValidateSearch(

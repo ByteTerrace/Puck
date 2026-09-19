@@ -4,27 +4,16 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     private static void ValidateStateDisclosure(WorldDefinition definition, List<string> errors) {
-        var storage = 0L;
-
         foreach (var row in definition.State) {
             if (row is null) {
                 continue;
             }
 
-            storage += (row.Capacity ?? ((row.EffectiveDomain is StateDomain.CellsOf board)
-                ? (WorldTopologyCompilation.Find(
-                    definition: definition,
-                    name: board.Topology
-                )?.CellCount ?? row.CellCeiling)
-                : row.CellCeiling));
             ValidateDisclosureRow(
                 definition: definition,
                 errors: errors,
                 row: row
             );
-        }
-        if (storage > 262_144) {
-            errors.Add(item: "state declared cell storage exceeds the 262144-cell world budget.");
         }
     }
     // One row's own disclosure shape: phaseOf, row/cell visibility and readersFrom, a secret draw site, each cell's

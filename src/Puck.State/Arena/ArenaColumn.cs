@@ -129,6 +129,19 @@ public static class ArenaColumns {
         ArenaColumn.LaneRoster => ArenaIndexSpace.LaneRoster,
         _ => ArenaIndexSpace.Cell,
     });
+    /// <summary>Returns the bytes a column of <paramref name="size"/> positions occupies. A reference counts eight
+    /// bytes on every host, so a document measures the same wherever it is admitted; a vector column counts
+    /// nothing here, because its components are sized by dimension and measured apart.</summary>
+    /// <param name="column">The column to measure.</param>
+    /// <param name="size">How many positions the column addresses.</param>
+    /// <returns>The column's bytes.</returns>
+    public static long StorageBytes(ArenaColumn column, long size) => (column switch {
+        ArenaColumn.Presence or ArenaColumn.ClockSet or ArenaColumn.LaneRoster => (((size + 63L) / 64L) * sizeof(ulong)),
+        ArenaColumn.Vector => 0L,
+        ArenaColumn.MemberKey => (size * sizeof(int)),
+        ArenaColumn.Behavior => size,
+        _ => (size * sizeof(long)),
+    });
     /// <summary>Returns a value indicating whether <paramref name="column"/> stores object references rather than
     /// numbers.</summary>
     /// <param name="column">The column to classify.</param>

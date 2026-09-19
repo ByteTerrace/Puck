@@ -869,6 +869,86 @@ public sealed class WorldPatternLawTests {
             expectedSubstring: "both attribute and value"
         );
     }
+    // Staggered ranges give every value its own set of memberships, so the alphabet is as wide as a letter mask
+    // holds, and a long exact repeat gives the machine a state for every copy: a wide, tall table.
+    private static PatternRow Wide(int index) => new(
+        Name(value: $"wide{index}"),
+        CellKind.Int,
+        MaxStates: PatternCapacity.MaxStates,
+        Symbols: [.. Enumerable.Range(
+                count: PatternCapacity.MaxSymbols,
+                start: 0
+            ).Select(selector: static symbol => new PatternSymbol(
+                Name(value: $"p{symbol}"),
+                symbol,
+                (symbol + PatternCapacity.MaxSymbols)
+            ))],
+        Pattern: new PatternNode.Repeat(
+            Item: new PatternNode.Symbol(Name: "p0"),
+            Max: PatternCapacity.MaxRepeat,
+            Min: PatternCapacity.MaxRepeat
+        )
+    );
+
+    [Fact]
+    public void ADocumentsPatternTablesAreBoundedTogetherInBytesAndRefusedAtTheRowThatCrossed() {
+        var errors = new List<string>();
+
+        Assert.True(
+            condition: CompiledPatterns.TryCompileAll(
+                errors: errors,
+                patterns: out var one,
+                rows: [Wide(index: 0)]
+            ),
+            userMessage: string.Join(
+                separator: "; ",
+                values: errors
+            )
+        );
+
+        var each = one.All.Single().TableBytes;
+        var fit = ((int)(PatternCapacity.MaxTableBytes / each));
+
+        // The rows that fit are fewer than the row ceiling, so the bytes are the limit that binds.
+        Assert.InRange(
+            actual: fit,
+            high: (PatternCapacity.MaxRows - 1),
+            low: 1
+        );
+        Assert.True(
+            condition: CompiledPatterns.TryCompileAll(
+                errors: errors,
+                patterns: out _,
+                rows: [.. Enumerable.Range(
+                    count: fit,
+                    start: 0
+                ).Select(selector: Wide)]
+            ),
+            userMessage: string.Join(
+                separator: "; ",
+                values: errors
+            )
+        );
+        Assert.False(condition: CompiledPatterns.TryCompileAll(
+            errors: errors,
+            patterns: out _,
+            rows: [.. Enumerable.Range(
+                count: (fit + 1),
+                start: 0
+            ).Select(selector: Wide)]
+        ));
+
+        var refusal = Assert.Single(collection: errors);
+
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: $"patterns[{fit}] 'wide{fit}'"
+        );
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: $"{PatternCapacity.MaxTableBytes}-byte ceiling"
+        );
+    }
     [Fact]
     public void CellAndDistanceFacetsAnswerTheFirstRejectedRayCellExactlyLikeAFixedRayQueryWouldAndGeneralizeIt() {
         // Eastward from cell 0 the board reads 2, 2, 1: a run of two "them" (2) is the longest accepted prefix of

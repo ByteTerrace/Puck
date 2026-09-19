@@ -48,18 +48,25 @@ public abstract record PatternNode {
     /// <summary>The item between <paramref name="Min"/> and <paramref name="Max"/> times.</summary>
     public sealed record Repeat(PatternNode Item, int Min, int Max) : PatternNode;
 }
-/// <summary>Representation ceilings for the pattern section.</summary>
+/// <summary>Representation ceilings for the pattern section. The memory a document's patterns take is one figure,
+/// <see cref="MaxTableBytes"/>; the counts beside it bound what one row may ask for.</summary>
 public static class PatternCapacity {
     /// <summary>The state budget a row that declares none gets.</summary>
     public const int DefaultStates = 64;
-    /// <summary>The most times a <c>repeat</c> node may unroll its item.</summary>
-    public const int MaxRepeat = 64;
+    /// <summary>The most times a <c>repeat</c> node may unroll its item. Each copy is one shared term, so the
+    /// unrolled pattern grows by the count and not by the item.</summary>
+    public const int MaxRepeat = 128;
     /// <summary>The most pattern rows a document declares.</summary>
-    public const int MaxRows = 64;
-    /// <summary>The state ceiling any row may budget: 256 states over 64 letters is a 64 KiB table.</summary>
-    public const int MaxStates = 256;
-    /// <summary>The most named symbols in one alphabet.</summary>
+    public const int MaxRows = 256;
+    /// <summary>The state ceiling any row may budget: 1,024 states over 64 letters is a 256 KiB table.</summary>
+    public const int MaxStates = 1024;
+    /// <summary>The most named symbols in one alphabet. The ranges of n symbols cut the value line into at most
+    /// 2n - 1 runs inside a range and one remainder, and a letter is one bit of a 64-bit mask, so 32 is the most
+    /// an alphabet can hold.</summary>
     public const int MaxSymbols = 32;
+    /// <summary>The most bytes every compiled pattern table of one document may occupy together: four bytes a
+    /// transition and one a state. A document whose rows cross it is refused at the row that crossed.</summary>
+    public const int MaxTableBytes = (4 * 1024 * 1024);
     /// <summary>The longest word one read walks: every source row fits, so a read is always decided.</summary>
     public const int MaxWord = TopologyCompilation.MaxCells;
 }

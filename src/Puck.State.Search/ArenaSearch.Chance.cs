@@ -22,8 +22,8 @@ public sealed partial class ArenaSearch {
         level.ChanceSum += (((Int128)value) * weight);
         level.ChanceWeight += weight;
     }
-    // Round-half-away-from-zero over a weighted sum, exact in Int128 so SearchCapacity.MaxChanceOutcomes outcomes at
-    // MateScore magnitude each never overflow the accumulator.
+    // Round-half-away-from-zero over a weighted sum, exact in Int128: the table's whole weight fits one word, so
+    // outcomes at MateScore magnitude each never overflow the accumulator.
     private static long RoundedWeightedAverage(Int128 weightedSum, ulong totalWeight) {
         if (totalWeight == 0UL) {
             return 0L;

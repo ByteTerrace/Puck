@@ -42,7 +42,6 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"state.lattices '{topology.Name}': {reason}.");
             }
         }
-        var totalCells = 0L;
         var derivation = new BoardDerivation(definition: definition);
 
         foreach (var row in (definition.State ?? [])) {
@@ -53,26 +52,21 @@ public static partial class WorldDefinitionValidator {
             ) {
                 continue;
             }
-            if (ValidateBoardRow(
+            _ = ValidateBoardRow(
                 board: board,
                 definition: definition,
                 derivation: derivation,
                 errors: errors,
                 row: row
-            ) is { } compiled) {
-                totalCells += compiled.CellCount;
-            }
-        }
-        if (totalCells > TopologyCompilation.MaxTotalCells) {
-            errors.Add(item: $"state board storage exceeds the {TopologyCompilation.MaxTotalCells}-cell world budget.");
+            );
         }
     }
     // One cellsOf board row's own shape (plain int/bool cells, no other storage/time trait, a value domain that
     // includes board.empty), its topology's cells, and — when it derives from tokens/codes — its derivation. Called
     // once per board row by the whole-document walk above and by a state mutation's touched-row walk
-    // (<see cref="WorldDefinitionValidator.TryValidateTouchedStateRows"/>). Returns the resolved topology so the
-    // whole-document walk can total its cells against the world storage budget; null when the row names no valid
-    // topology (already refused by name).
+    // (<see cref="WorldDefinitionValidator.TryValidateTouchedStateRows"/>). Returns the resolved topology; null
+    // when the row names no valid topology (already refused by name). What a board's cells occupy is counted with
+    // every other row's, by the arena's byte ceiling.
     private static CompiledTopology? ValidateBoardRow(WorldDefinition definition, WorldStateRow row, StateDomain.CellsOf board, BoardDerivation derivation, List<string> errors) {
         if (
             (row.Kind is not (CellKind.Int or CellKind.Bool)) ||
