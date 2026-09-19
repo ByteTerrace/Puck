@@ -23,9 +23,9 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const int MaxHashChars = 128;
     private const int MaxSectionBytes = ((64 * 1024) * 1024);
     private const int MaxStringBytes = WireLimits.MaxStringBytes;
-    // Version 4 adds each journal entry's engine-tick timestamp. Earlier envelopes refuse before their
-    // journal payload is read; there is no compatibility reader.
-    private const ushort SupportedVersion = 4;
+    /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
+    /// before its payload is read; there is no compatibility reader.</summary>
+    public const ushort SupportedVersion = 5;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;

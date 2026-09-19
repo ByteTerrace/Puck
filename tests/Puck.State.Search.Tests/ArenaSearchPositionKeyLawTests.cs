@@ -48,7 +48,7 @@ public sealed class ArenaSearchPositionKeyLawTests {
             Verdict: "verdict",
             Off: -1L,
             Nodes: 64,
-            JudgeCost: 1L,
+            Work: SearchWork.NodeBounded(judge: 1L),
             Depth: depth,
             Best: "best",
             Shapes: [new SearchShapePlan(

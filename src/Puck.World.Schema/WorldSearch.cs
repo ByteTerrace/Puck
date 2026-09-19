@@ -584,12 +584,14 @@ public static class WorldSearchCompilation {
     /// <param name="definition">The world.</param>
     /// <param name="row">The job.</param>
     /// <param name="judgeCost">The work units one judge run costs.</param>
-    /// <param name="leftover">The work units the sheet leaves per tick, shared by every job.</param>
+    /// <param name="allowance">The work units a tick may spend on the job: the job's share of what the sheet and
+    /// the search's own per-tick upkeep leave.</param>
+    /// <param name="position">The work units folding one position key costs.</param>
     /// <param name="context">The rule compile context, for compiling <see cref="WorldSearchRow.Score"/>.</param>
     /// <param name="plan">The plan.</param>
     /// <param name="score">The compiled score program the job's judge reads, or <see langword="null"/>.</param>
     /// <param name="reason">Why the job cannot run, or empty.</param>
-    public static bool TryPlan(WorldDefinition definition, WorldSearchRow row, long judgeCost, long leftover, WorldFactsCompileContext context, out SearchPlan? plan, out CompiledExpressionToken[]? score, out string reason) {
+    public static bool TryPlan(WorldDefinition definition, WorldSearchRow row, long judgeCost, long allowance, long position, WorldFactsCompileContext context, out SearchPlan? plan, out CompiledExpressionToken[]? score, out string reason) {
         score = null;
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: row);
@@ -964,21 +966,11 @@ public static class WorldSearchCompilation {
             }
         }
 
-        var derived = ((int)Math.Min(
-            val1: (leftover / judgeCost),
-            val2: SearchCapacity.MaxNodesPerTick
-        ));
-
-        if (derived < 1) {
-            reason = $"search '{row.Name}' has no work left: the rules leave {leftover} work units per tick and one judge run costs {judgeCost}";
-
-            return false;
-        }
         if (
             (row.Nodes is { } authored) &&
-            ((authored < 1) || (authored > derived))
+            ((authored < 1) || (authored > SearchCapacity.MaxNodesPerTick))
         ) {
-            reason = $"search '{row.Name}' nodes {authored} must lie in 1..{derived}, what the work sheet leaves";
+            reason = $"search '{row.Name}' nodes {authored} must lie in 1..{SearchCapacity.MaxNodesPerTick}";
 
             return false;
         }
@@ -1010,6 +1002,55 @@ public static class WorldSearchCompilation {
             }
         }
 
+        var scoreCost = ((score is null)
+            ? RuleWork.Zero
+            : RuleWorkBudget.ExpressionCost(
+                context: context,
+                kind: CellKind.Int,
+                tokens: score
+            )
+        );
+
+        if (!scoreCost.IsKnown) {
+            reason = $"search '{row.Name}' has no work allowance: one score read is {scoreCost}";
+
+            return false;
+        }
+
+        var work = SearchWork.Price(
+            allowance: allowance,
+            cellCount: cellCount,
+            chanceCells: (chance?.CellCount ?? 0),
+            depth: row.Depth,
+            judge: judgeCost,
+            keyed: ((score is not null) && (row.Method == SearchMethod.Negamax)),
+            method: row.Method,
+            position: position,
+            score: scoreCost.Units,
+            seats: ((row.Scores is { } seatRow)
+                ? (WorldDefinitionRows.FindStateRow(
+                    name: seatRow,
+                    rows: definition.State
+                )?.Cells?.Count ?? 0)
+                : 0),
+            shapes: shapes,
+            tokens: ((int)Math.Min(
+                val1: int.MaxValue,
+                val2: context.RowCapacity(name: row.Tokens)
+            ))
+        );
+
+        if (
+            (work.Minimum == long.MaxValue) ||
+            (work.Allowance < work.Minimum)
+        ) {
+            reason = $"search '{row.Name}' has too little work left: a tick may spend {work.Allowance} work units on it, and it needs {((work.Minimum == long.MaxValue)
+                ? "more than any tick holds"
+                : work.Minimum.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))} to make progress — a restart at {work.Restart}, a replay of {work.Scopes} plies at {work.Candidate} each (one judge run is {judgeCost}), and one unit at {work.Unit}";
+
+            return false;
+        }
+
         plan = new SearchPlan(
             Name: row.Name,
             Tokens: row.Tokens,
@@ -1019,8 +1060,8 @@ public static class WorldSearchCompilation {
             Turn: turnName,
             Verdict: verdictName,
             Off: off,
-            Nodes: (row.Nodes ?? derived),
-            JudgeCost: judgeCost,
+            Nodes: (row.Nodes ?? SearchCapacity.MaxNodesPerTick),
+            Work: work,
             Depth: row.Depth,
             Best: row.Best,
             Shapes: shapes,
@@ -1083,17 +1124,27 @@ public static class WorldSearchCompilation {
             return false;
         }
 
-        var leftover = (Math.Max(
+        // One fold of every row is what the search pays a tick before any job moves: the stamp that tells a job its
+        // inputs changed. It comes out of what the sheet leaves before the jobs share the rest equally; a share's
+        // remainder goes unspent, and no job borrows another's.
+        var position = 0L;
+
+        for (var ordinal = 0; (ordinal < definition.StateCatalog.Descriptors.Count); ordinal++) {
+            position += context.RowCapacity(rowOrdinal: ordinal);
+        }
+
+        var allowance = (Math.Max(
             val1: 0L,
-            val2: (RuleCapacity.MaxWorkUnitsPerTick - sheet.Units)
+            val2: ((RuleCapacity.MaxWorkUnitsPerTick - sheet.Units) - position)
         ) / rows.Count);
 
         for (var index = 0; (index < rows.Count); index++) {
             if (!TryPlan(
                 definition: definition,
                 row: rows[index],
+                allowance: allowance,
                 judgeCost: judgeCost.Units,
-                leftover: leftover,
+                position: position,
                 context: context,
                 plan: out var plan,
                 score: out var compiledScore,

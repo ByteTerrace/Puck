@@ -106,7 +106,7 @@ public sealed class ArenaSearchSeatScoreLawTests {
             Verdict: "verdict",
             Off: -1L,
             Nodes: nodes,
-            JudgeCost: 1L,
+            Work: SearchWork.NodeBounded(judge: 1L),
             Depth: 2,
             Best: "best",
             Shapes: [new SearchShapePlan(

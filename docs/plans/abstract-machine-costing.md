@@ -24,7 +24,9 @@ The typed scaffolding exists and the accounting structure of §4 is in place:
 heuristic work is a typed bound that propagates an unpriced operation or an
 overflow, lines separate setup, check, and firing, and interactions, decisions,
 sorts, and transactions are priced at the paths they execute, held against the
-evaluator's own trace on enumerated worlds. Search (§6) is not yet bounded. The evidence manifest
+evaluator's own trace on enumerated worlds. Search (§6) spends a reserved,
+resumable allowance per job, chance plies and playouts included, in the same
+heuristic units. The evidence manifest
 (`src/Puck.State/ReferenceSchedule.json`) pins eight targets and prices the
 unary expression operations; every other coefficient, and the whole memory
 profile, is recorded as unmodeled, and admission still runs on the heuristic

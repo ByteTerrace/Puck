@@ -21,20 +21,16 @@ public sealed partial class ArenaSearch {
             hash.Add(value: ((byte)(job.Done
                 ? 1
                 : 0)));
-            hash.Add(value: ((uint)job.Shape));
-            hash.Add(value: ((uint)job.Token));
-            hash.Add(value: ((uint)job.Target));
             hash.Add(value: job.Count);
             hash.Add(value: job.Nodes);
-            hash.Add(value: job.BaseTurn);
+            hash.Add(value: job.Work);
             hash.Add(value: ((uint)job.PassDepth));
             hash.Add(value: ((uint)job.Active));
-            hash.Add(value: job.Best);
-            hash.Add(value: ((uint)job.BestToken));
-            hash.Add(value: ((uint)job.BestTarget));
-            hash.Add(value: job.Alpha);
-            hash.Add(value: job.Beta);
             hash.Add(value: ((uint)job.TokenCount));
+            AddLevelTo(
+                hash: ref hash,
+                level: job.Root
+            );
 
             foreach (var mask in job.Legal) {
                 hash.Add(value: mask);
@@ -48,21 +44,10 @@ public sealed partial class ArenaSearch {
                 }
             }
             foreach (var level in job.Levels) {
-                hash.Add(value: ((uint)level.Shape));
-                hash.Add(value: ((uint)level.Token));
-                hash.Add(value: ((uint)level.Target));
-                hash.Add(value: level.Alpha);
-                hash.Add(value: level.Beta);
-                hash.Add(value: level.Best);
-                hash.Add(value: ((uint)level.BestToken));
-                hash.Add(value: ((uint)level.BestTarget));
-                hash.Add(value: level.BaseTurn);
-                hash.Add(value: level.Key);
-                hash.Add(value: level.AlphaEntry);
-
-                foreach (var seat in level.Seats) {
-                    hash.Add(value: seat);
-                }
+                AddLevelTo(
+                    hash: ref hash,
+                    level: level
+                );
             }
 
             hash.Add(value: ((uint)job.ScopeCount));
@@ -127,22 +112,7 @@ public sealed partial class ArenaSearch {
             var scopes = new ArenaSearchScopeCheckpoint[job.ScopeCount];
 
             for (var level = 0; (level < levels.Length); level++) {
-                var entry = job.Levels[level];
-
-                levels[level] = new ArenaSearchLevelCheckpoint(
-                    Alpha: entry.Alpha,
-                    AlphaEntry: entry.AlphaEntry,
-                    BaseTurn: entry.BaseTurn,
-                    Best: entry.Best,
-                    BestTarget: entry.BestTarget,
-                    BestToken: entry.BestToken,
-                    Beta: entry.Beta,
-                    Key: entry.Key,
-                    Seats: entry.Seats.ToArray(),
-                    Shape: entry.Shape,
-                    Target: entry.Target,
-                    Token: entry.Token
-                );
+                levels[level] = CaptureLevel(level: job.Levels[level]);
             }
             for (var scope = 0; (scope < scopes.Length); scope++) {
                 scopes[scope] = new ArenaSearchScopeCheckpoint(
@@ -157,23 +127,17 @@ public sealed partial class ArenaSearch {
                 Stamp: job.Stamp,
                 Running: job.Running,
                 Done: job.Done,
-                Shape: job.Shape,
-                Token: job.Token,
-                Target: job.Target,
+                Root: CaptureLevel(level: job.Root),
                 Count: job.Count,
                 Legal: job.Legal.ToArray(),
                 Counts: job.Counts.ToArray(),
                 Wide: (job.Wide?.ToArray() ?? []),
                 Nodes: job.Nodes,
-                BaseTurn: job.BaseTurn,
+                Work: job.Work,
+                PeakStepWork: job.PeakStepWork,
                 TokenCount: job.TokenCount,
                 PassDepth: job.PassDepth,
                 Active: job.Active,
-                Best: job.Best,
-                BestToken: job.BestToken,
-                BestTarget: job.BestTarget,
-                Alpha: job.Alpha,
-                Beta: job.Beta,
                 Levels: levels,
                 Scopes: scopes,
                 TtKey: (job.TtKey?.ToArray() ?? []),
@@ -242,48 +206,39 @@ public sealed partial class ArenaSearch {
             entry.TtValue.AsSpan().CopyTo(destination: (job.TtValue ?? []));
             entry.Wide.AsSpan().CopyTo(destination: (job.Wide ?? []));
             job.Active = entry.Active;
-            job.Alpha = entry.Alpha;
-            job.BaseTurn = entry.BaseTurn;
-            job.Best = entry.Best;
-            job.BestTarget = entry.BestTarget;
-            job.BestToken = entry.BestToken;
-            job.Beta = entry.Beta;
             job.Count = entry.Count;
             job.Done = entry.Done;
             job.Nodes = entry.Nodes;
             job.PassDepth = entry.PassDepth;
             job.Running = entry.Running;
-            job.Shape = entry.Shape;
             job.Stamp = entry.Stamp;
-            job.Target = entry.Target;
-            job.Token = entry.Token;
+            job.PeakStepWork = entry.PeakStepWork;
             job.TokenCount = entry.TokenCount;
+            job.Work = entry.Work;
+            RestoreLevel(
+                carried: entry.Root,
+                level: job.Root
+            );
 
             for (var level = 0; (level < entry.Levels.Length); level++) {
-                var carried = entry.Levels[level];
-                var target = job.Levels[level];
-
-                target.Alpha = carried.Alpha;
-                target.AlphaEntry = carried.AlphaEntry;
-                target.BaseTurn = carried.BaseTurn;
-                target.Best = carried.Best;
-                target.BestTarget = carried.BestTarget;
-                target.BestToken = carried.BestToken;
-                target.Beta = carried.Beta;
-                target.Key = carried.Key;
-
-                (carried.Seats ?? []).AsSpan().CopyTo(destination: target.Seats);
-
-                target.Shape = carried.Shape;
-                target.Target = carried.Target;
-                target.Token = carried.Token;
+                RestoreLevel(
+                    carried: entry.Levels[level],
+                    level: job.Levels[level]
+                );
             }
+
+            var chanceScopes = 0;
+
             for (var scope = 0; (scope < entry.Scopes.Length); scope++) {
                 job.ScopeShape[scope] = entry.Scopes[scope].Shape;
                 job.ScopeTarget[scope] = entry.Scopes[scope].Target;
                 job.ScopeToken[scope] = entry.Scopes[scope].Token;
+                if (entry.Scopes[scope].Shape == ChanceScope) {
+                    chanceScopes++;
+                }
             }
 
+            job.ChanceScopes = chanceScopes;
             job.ScopeCount = entry.Scopes.Length;
 
             RestoreTree(
@@ -307,6 +262,64 @@ public sealed partial class ArenaSearch {
         return true;
     }
 
+    private static void AddLevelTo(ref Fnv1aHash hash, Level level) {
+        hash.Add(value: ((uint)level.Shape));
+        hash.Add(value: ((uint)level.Token));
+        hash.Add(value: ((uint)level.Target));
+        hash.Add(value: level.Alpha);
+        hash.Add(value: level.Beta);
+        hash.Add(value: level.Best);
+        hash.Add(value: ((uint)level.BestToken));
+        hash.Add(value: ((uint)level.BestTarget));
+        hash.Add(value: level.BaseTurn);
+        hash.Add(value: level.Key);
+        hash.Add(value: level.AlphaEntry);
+        hash.Add(value: ((uint)level.EntryTarget));
+        hash.Add(value: ((ulong)(level.ChanceSum >> 64)));
+        hash.Add(value: ((ulong)level.ChanceSum));
+        hash.Add(value: level.ChanceWeight);
+
+        foreach (var seat in level.Seats) {
+            hash.Add(value: seat);
+        }
+    }
+    private static ArenaSearchLevelCheckpoint CaptureLevel(Level level) => new(
+        Alpha: level.Alpha,
+        AlphaEntry: level.AlphaEntry,
+        BaseTurn: level.BaseTurn,
+        Best: level.Best,
+        BestTarget: level.BestTarget,
+        BestToken: level.BestToken,
+        Beta: level.Beta,
+        ChanceSumHigh: ((long)(level.ChanceSum >> 64)),
+        ChanceSumLow: ((ulong)level.ChanceSum),
+        ChanceWeight: level.ChanceWeight,
+        EntryTarget: level.EntryTarget,
+        Key: level.Key,
+        Seats: level.Seats.ToArray(),
+        Shape: level.Shape,
+        Target: level.Target,
+        Token: level.Token
+    );
+    private static void RestoreLevel(Level level, ArenaSearchLevelCheckpoint carried) {
+        level.Alpha = carried.Alpha;
+        level.AlphaEntry = carried.AlphaEntry;
+        level.BaseTurn = carried.BaseTurn;
+        level.Best = carried.Best;
+        level.BestTarget = carried.BestTarget;
+        level.BestToken = carried.BestToken;
+        level.Beta = carried.Beta;
+        level.ChanceSum = ((((Int128)carried.ChanceSumHigh) << 64) | carried.ChanceSumLow);
+        level.ChanceWeight = carried.ChanceWeight;
+        level.EntryTarget = carried.EntryTarget;
+        level.Key = carried.Key;
+
+        (carried.Seats ?? []).AsSpan().CopyTo(destination: level.Seats);
+
+        level.Shape = carried.Shape;
+        level.Target = carried.Target;
+        level.Token = carried.Token;
+    }
     // Whether a checkpoint describes this job: every array a restore copies is present at the length the job
     // allocated, and every value a replay or a walk indexes by lands inside what it indexes. A job that allocated
     // no table or tree is matched by a checkpoint carrying an empty one or none. Token cursors are held to the
@@ -354,7 +367,9 @@ public sealed partial class ArenaSearch {
             (((uint)entry.Active) > ((uint)job.Levels.Length)) ||
             (((uint)(entry.PassDepth - 1)) > ((uint)job.Levels.Length)) ||
             (((uint)entry.TokenCount) > ((uint)tokens)) ||
-            !Cursor(shape: entry.Shape, token: entry.Token, target: entry.Target) ||
+            (entry.Root is null) ||
+            !Cursor(shape: entry.Root.Shape, token: entry.Root.Token, target: entry.Root.Target) ||
+            (entry.Root.Seats is { Length: > 0 }) ||
             ((entry.Tree is null) != (job.Path is null))
         ) {
             return false;

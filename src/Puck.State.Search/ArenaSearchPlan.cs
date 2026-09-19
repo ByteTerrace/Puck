@@ -28,8 +28,8 @@ public sealed record ArenaSearchChancePlan(int RowOrdinal, int AtDepth, int Cell
 /// <param name="TurnOrdinal">The slot row whose change marks an accepted relocation.</param>
 /// <param name="VerdictOrdinal">The slot row the judge writes its verdict into.</param>
 /// <param name="Off">The token value meaning off the board.</param>
-/// <param name="Nodes">The candidates judged per step.</param>
-/// <param name="JudgeCost">The work units one judge run costs.</param>
+/// <param name="Nodes">The most candidates judged per step, whatever the allowance leaves.</param>
+/// <param name="Work">What a step may spend on the job and what each unit of its walk costs.</param>
 /// <param name="Depth">How many plies the job searches ahead.</param>
 /// <param name="Scored">Whether the job compares plies by a score; a scored job's judge reads one.</param>
 /// <param name="Shapes">The candidate shapes, in declared order.</param>
@@ -59,7 +59,7 @@ public sealed record ArenaSearchPlan(
     int VerdictOrdinal,
     long Off,
     int Nodes,
-    long JudgeCost,
+    SearchWork Work,
     int Depth,
     bool Scored,
     SearchShapePlan[] Shapes,
@@ -253,7 +253,7 @@ public sealed record ArenaSearchPlan(
             VerdictOrdinal: verdict,
             Off: plan.Off,
             Nodes: plan.Nodes,
-            JudgeCost: plan.JudgeCost,
+            Work: plan.Work,
             Depth: plan.Depth,
             Scored: plan.Scored,
             Shapes: plan.Shapes,

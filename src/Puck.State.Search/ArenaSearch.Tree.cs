@@ -5,7 +5,7 @@ using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class ArenaSearch {
-    // The tree search a job with the tree method runs once its root walk has landed: one judge per node of budget,
+    // The tree search a job with the tree method runs once its root walk has landed: at most one judge a step,
     // resumable at any phase. Selection descends by UCB1, expansion judges every candidate of the leaf once and
     // keeps the accepted ones as children, a playout draws from the job's own seeded stream until no candidate is accepted
     // or the depth cap is reached, and the score folds back along the path with alternating sign, read from the
@@ -159,14 +159,9 @@ public sealed partial class ArenaSearch {
 
         return false;
     }
-    private long EvaluateOutcome(Job job) => EvaluateOutcome(
-        job: job,
-        ply: job.ScopeCount
-    );
-    // `ply` is how many candidates the position sits below the root. The job's own scope count says so only for a
-    // position its scope stack built; the negamax beneath a chance node opens scopes of its own and says so itself.
-    private long EvaluateOutcome(Job job, int ply) => (job.Judge.Scores
-        ? job.Judge.Score(view: View(ply: ply))
+    // The score of the position the arena holds, from the perspective of the side that moved into it.
+    private long EvaluateOutcome(Job job) => (job.Judge.Scores
+        ? job.Judge.Score(view: View(ply: MovePly(job: job)))
         : 0L
     );
     private void StartTree(Job job) {
@@ -195,9 +190,12 @@ public sealed partial class ArenaSearch {
         job.PlayCount = 0;
         job.PlayoutPlies = 0;
     }
-    // One judge's worth of tree search.
-    private void StepTree(Job job) {
+    // One unit of tree search. Returns what it cost: a cursor move, an inspected or a judged candidate, a chance
+    // draw, or a whole step that selects, opens, scores, and folds back.
+    private long StepTree(Job job) {
         var plan = job.Plan;
+        var work = plan.Work;
+        var judged = job.Nodes;
         var shapes = plan.Shapes;
         var cells = plan.CellCount;
         var node = job.Path![(job.PathLength - 1)];
@@ -212,7 +210,7 @@ public sealed partial class ArenaSearch {
                             value: EvaluateOutcome(job: job)
                         );
 
-                        return;
+                        return work.TreeStep;
                     }
                     if (job.TreeExpanded![node] == 0L) {
                         job.Phase = TreeExpandPhase;
@@ -220,7 +218,7 @@ public sealed partial class ArenaSearch {
                         job.UTarget = 0;
                         job.UToken = 0;
 
-                        return;
+                        return SearchWork.Cursor;
                     }
                     if (job.TreeChildCount![node] == 0) {
                         Backpropagate(
@@ -228,7 +226,7 @@ public sealed partial class ArenaSearch {
                             value: EvaluateOutcome(job: job)
                         );
 
-                        return;
+                        return work.TreeStep;
                     }
 
                     var chosen = SelectChild(
@@ -255,7 +253,7 @@ public sealed partial class ArenaSearch {
                         );
                     }
 
-                    return;
+                    return work.TreeStep;
                 }
             case TreeExpandPhase: {
                     if (job.UShape >= shapes.Length) {
@@ -267,7 +265,7 @@ public sealed partial class ArenaSearch {
                                 value: EvaluateOutcome(job: job)
                             );
 
-                            return;
+                            return work.TreeStep;
                         }
 
                         // The first playout starts from a child drawn from the fresh children.
@@ -300,7 +298,7 @@ public sealed partial class ArenaSearch {
                             );
                         }
 
-                        return;
+                        return work.TreeStep;
                     }
 
                     var shape = shapes[job.UShape];
@@ -310,13 +308,13 @@ public sealed partial class ArenaSearch {
                         job.UTarget = 0;
                         job.UToken = 0;
 
-                        return;
+                        return SearchWork.Cursor;
                     }
                     if (job.UTarget >= shape.CandidateCount(cellCount: cells)) {
                         job.UTarget = 0;
                         job.UToken++;
 
-                        return;
+                        return SearchWork.Cursor;
                     }
 
                     var candidate = job.UTarget++;
@@ -353,7 +351,10 @@ public sealed partial class ArenaSearch {
                         job.TreeChildCount[node]++;
                     }
 
-                    return;
+                    return ((job.Nodes != judged)
+                        ? work.Candidate
+                        : work.Inspect
+                    );
                 }
             default: {
                     if (job.PlayoutPlies >= plan.Depth) {
@@ -362,7 +363,7 @@ public sealed partial class ArenaSearch {
                             value: EvaluateOutcome(job: job)
                         );
 
-                        return;
+                        return work.TreeStep;
                     }
 
                     // A chance ply draws rather than chooses: one weighted pick over this job's own stream, the same
@@ -381,7 +382,7 @@ public sealed partial class ArenaSearch {
 
                         job.PlayoutPlies++;
 
-                        return;
+                        return work.Outcome;
                     }
 
                     var total = TotalCandidates(
@@ -398,7 +399,7 @@ public sealed partial class ArenaSearch {
                             value: EvaluateOutcome(job: job)
                         );
 
-                        return;
+                        return work.TreeStep;
                     }
 
                     var flat = ((job.UStart + job.UScan++) % total);
@@ -425,7 +426,10 @@ public sealed partial class ArenaSearch {
                         job.UStart = ((int)(Next(seed: ref job.Seed) % ((ulong)total)));
                     }
 
-                    return;
+                    return ((job.Nodes != judged)
+                        ? work.Candidate
+                        : work.Inspect
+                    );
                 }
         }
     }

@@ -799,7 +799,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                         ? "done"
                         : (job.Running
                             ? "running"
-                            : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerStep} judgeCost={job.JudgeCost} judgeRules={job.JudgeRules}{depth}]");
+                            : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerStep} judgeCost={job.JudgeCost} allowance={job.Allowance} peakTick={job.PeakStepWork} spent={job.Work} judgeRules={job.JudgeRules}{depth}]");
                 }
                 return new CommandResult(Output: string.Join(
                     separator: Environment.NewLine,

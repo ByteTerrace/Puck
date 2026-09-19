@@ -174,6 +174,72 @@ public sealed class SearchLawTests {
         return definition;
     }
 
+    // What the sheet and one fold of every row leave is divided equally among the jobs, and a share that cannot
+    // cover a restart, a full replay and one unit is refused by that sum rather than left to stall.
+    [Fact]
+    public void AJobsAllowanceIsItsEqualShareOfWhatTheSheetLeavesAndTooSmallAShareIsRefusedByItsSum() {
+        var one = MiniNegamaxWorld(depth: 3);
+        var two = one with {
+            SearchRaw = new WorldSearchSection(Jobs: [one.Search.Rows[0], one.Search.Rows[0] with { Name = "second" }]),
+        };
+
+        static SearchPlan[] Plans(WorldDefinition definition) {
+            Assert.True(
+                condition: WorldSearchCompilation.TryPlanAll(
+                    definition: definition,
+                    judge: out _,
+                    plans: out var plans,
+                    reason: out var reason,
+                    rules: WorldFactsCompiler.CompileAll(definition: definition),
+                    scores: out _
+                ),
+                userMessage: reason
+            );
+
+            return plans;
+        }
+
+        var alone = Plans(definition: one)[0].Work;
+        var shared = Plans(definition: two);
+
+        Assert.True(condition: (alone.Allowance < RuleCapacity.MaxWorkUnitsPerTick));
+        Assert.True(condition: (alone.Allowance >= alone.Minimum));
+        Assert.Equal(
+            (alone.Allowance / 2L),
+            shared[0].Work.Allowance
+        );
+        Assert.Equal(
+            shared[0].Work.Allowance,
+            shared[1].Work.Allowance
+        );
+
+        var context = WorldFactsCompiler.Context(definition: one);
+        // The price of a unit folds the position key, so the refusal is asked at the fold the planner itself uses.
+        var position = Enumerable.Range(
+            count: one.StateCatalog.Descriptors.Count,
+            start: 0
+        ).Sum(selector: ordinal => context.RowCapacity(rowOrdinal: ordinal));
+
+        Assert.False(condition: WorldSearchCompilation.TryPlan(
+            allowance: (alone.Minimum - 1L),
+            context: context,
+            definition: one,
+            judgeCost: alone.Judge,
+            plan: out _,
+            position: position,
+            reason: out var refusal,
+            row: one.Search.Rows[0],
+            score: out _
+        ));
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: "too little work left"
+        );
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: $"may spend {(alone.Minimum - 1L)}"
+        );
+    }
     // An independent oracle over the SAME declared rule ("any token to any other cell, evicting whoever stood
     // there, always accepted, turn always flips") rather than a second reading of the runtime's own code: plain
     // recursion over a two-element array, token-major/target-ascending enumeration (matching ArenaSearch's

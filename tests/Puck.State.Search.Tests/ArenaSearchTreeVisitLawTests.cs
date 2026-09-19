@@ -69,7 +69,7 @@ public sealed class ArenaSearchTreeVisitLawTests {
                 Verdict: "verdict",
                 Off: -1L,
                 Nodes: 64,
-                JudgeCost: 1L,
+                Work: SearchWork.NodeBounded(judge: 1L),
                 Depth: 2,
                 Best: "best",
                 Shapes: [new SearchShapePlan(

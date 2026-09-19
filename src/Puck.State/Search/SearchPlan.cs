@@ -137,8 +137,8 @@ public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, lo
 /// <param name="Turn">The slot row whose change marks an accepted relocation.</param>
 /// <param name="Verdict">The slot row the rules judge a relocation into.</param>
 /// <param name="Off">The token value meaning off the board.</param>
-/// <param name="Nodes">The relocations judged per tick.</param>
-/// <param name="JudgeCost">The work units one judge run costs.</param>
+/// <param name="Nodes">The most relocations judged per tick, whatever the allowance leaves.</param>
+/// <param name="Work">What a tick may spend on the job and what each unit of its walk costs.</param>
 /// <param name="Depth">How many plies the job searches ahead.</param>
 /// <param name="Best">The best-move output row, or <see langword="null"/>.</param>
 /// <param name="Shapes">The compiled candidate shapes, in declared order.</param>
@@ -169,7 +169,7 @@ public sealed record SearchPlan(
     string Verdict,
     long Off,
     int Nodes,
-    long JudgeCost,
+    SearchWork Work,
     int Depth,
     string? Best,
     SearchShapePlan[] Shapes,

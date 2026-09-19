@@ -1,7 +1,8 @@
 namespace Puck.State;
 
-/// <summary>One recursive ply's checkpointed progress: its own (shape, token, candidate) cursor, its negamax
-/// window, and the best candidate found so far. The ply's position is not carried — it is the arena under the
+/// <summary>One ply's checkpointed progress, the root's included: its own (shape, token, candidate) cursor, its
+/// negamax window, and the best candidate found so far. A chance ply carries its outcome cursor in
+/// <paramref name="Target"/> and the weighted sum it has folded. The ply's position is not carried — it is the arena under the
 /// scopes <see cref="ArenaSearchJobCheckpoint.Scopes"/> names, reopened from them on restore.</summary>
 /// <param name="Shape">The shape cursor.</param>
 /// <param name="Token">The token cursor.</param>
@@ -14,10 +15,15 @@ namespace Puck.State;
 /// <param name="BaseTurn">The turn value the position carried when the ply opened.</param>
 /// <param name="Key">The position's key, for the transposition table's store.</param>
 /// <param name="AlphaEntry">The window's lower edge at entry.</param>
+/// <param name="EntryTarget">The cell the candidate that opened the ply lands on, or <c>-1</c>.</param>
+/// <param name="ChanceSumHigh">The high word of a chance ply's weighted sum, which is a signed 128-bit value.</param>
+/// <param name="ChanceSumLow">The low word of a chance ply's weighted sum.</param>
+/// <param name="ChanceWeight">The weight a chance ply's folded outcomes carried.</param>
 /// <param name="Seats">The seat vector of the best line found at this ply; empty for a job with no per-seat
 /// scores.</param>
 public sealed record ArenaSearchLevelCheckpoint(
-    int Shape, int Token, int Target, long Alpha, long Beta, long Best, int BestToken, int BestTarget, long BaseTurn, ulong Key, long AlphaEntry, long[]? Seats = null
+    int Shape, int Token, int Target, long Alpha, long Beta, long Best, int BestToken, int BestTarget, long BaseTurn, ulong Key, long AlphaEntry,
+    int EntryTarget, long ChanceSumHigh, ulong ChanceSumLow, ulong ChanceWeight, long[]? Seats = null
 );
 /// <summary>One open candidate scope, named by the candidate that opened it rather than by the columns it wrote: a
 /// restore reopens the scope by resolving, applying, and judging that candidate again.</summary>
@@ -60,23 +66,17 @@ public sealed record ArenaSearchTreeCheckpoint(
 /// <param name="Stamp">The input fold the job's progress was computed against.</param>
 /// <param name="Running">Whether the job is still walking.</param>
 /// <param name="Done">Whether the job has landed.</param>
-/// <param name="Shape">The root ply's shape cursor.</param>
-/// <param name="Token">The root ply's token cursor.</param>
-/// <param name="Target">The root ply's candidate cursor.</param>
+/// <param name="Root">The root ply.</param>
 /// <param name="Count">How many candidates the root accepted.</param>
 /// <param name="Legal">One accepted-cell bitmask per token.</param>
 /// <param name="Counts">One accepted-candidate count per token.</param>
 /// <param name="Wide">One bit-packed accepted-destination set per token; empty when the job paints no reach.</param>
 /// <param name="Nodes">How many candidates the job has judged.</param>
-/// <param name="BaseTurn">The turn value the root position carried.</param>
+/// <param name="Work">The work units the job has spent since it last restarted.</param>
+/// <param name="PeakStepWork">The most work units any one step has spent on the job since it last restarted.</param>
 /// <param name="TokenCount">How many tokens the job walks.</param>
 /// <param name="PassDepth">The depth the current pass searches to.</param>
 /// <param name="Active">Which ply is being expanded.</param>
-/// <param name="Best">The best value the root folded.</param>
-/// <param name="BestToken">The token of the best candidate, or <c>-1</c>.</param>
-/// <param name="BestTarget">The target of the best candidate, or <c>-1</c>.</param>
-/// <param name="Alpha">The root window's lower edge.</param>
-/// <param name="Beta">The root window's upper edge.</param>
 /// <param name="Levels">One entry per ply beyond the root.</param>
 /// <param name="Scopes">The candidate scopes the job holds, outermost first.</param>
 /// <param name="TtKey">The transposition table's keys.</param>
@@ -84,8 +84,8 @@ public sealed record ArenaSearchTreeCheckpoint(
 /// <param name="TtMeta">The transposition table's depth and bound flags.</param>
 /// <param name="Tree">The tree search in flight, or <see langword="null"/>.</param>
 public sealed record ArenaSearchJobCheckpoint(
-    string Name, ulong Stamp, bool Running, bool Done, int Shape, int Token, int Target, long Count, long[] Legal, long[] Counts, long[] Wide, long Nodes, long BaseTurn, int TokenCount,
-    int PassDepth, int Active, long Best, int BestToken, int BestTarget, long Alpha, long Beta, ArenaSearchLevelCheckpoint[] Levels, ArenaSearchScopeCheckpoint[] Scopes,
+    string Name, ulong Stamp, bool Running, bool Done, ArenaSearchLevelCheckpoint Root, long Count, long[] Legal, long[] Counts, long[] Wide, long Nodes, long Work, long PeakStepWork,
+    int TokenCount, int PassDepth, int Active, ArenaSearchLevelCheckpoint[] Levels, ArenaSearchScopeCheckpoint[] Scopes,
     ulong[] TtKey, long[] TtValue, long[] TtMeta, ArenaSearchTreeCheckpoint? Tree = null
 );
 /// <summary>The search's checkpointed state, in job order.</summary>

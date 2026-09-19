@@ -2833,22 +2833,34 @@ of the leaf once and keeps the accepted ones as children (a pool of
 job's own SplitMix64 stream seeded by its stamp—never an RNG in simulation
 state—until nothing is accepted or the depth cap, then the score read there
 from the side that just moved and folded back along the path with alternating
-sign; it lands the most-visited root move in `best` with the mean score. One
-judge is one node of the quota here too, and the whole tree, path, frames, and
-seed ride the checkpoint and hash.
+sign; it lands the most-visited root move in `best` with the mean score. A tree
+step is a unit of the job's allowance like any other, and the whole tree, path,
+frames, and seed ride the checkpoint and hash.
 
-Work derives: one judge run costs the sum of the frame-evaluable rules'
-work-sheet lines, and the per-tick node quota is what `RuleCapacity.
-MaxWorkUnitsPerTick` leaves after the sheet, shared by the jobs and divided by
-that cost (at most `WorldSearchCapacity.MaxNodesPerTick`); a document whose
-rules leave no room for one judge run is refused. `nodes` may lower the quota
-for a job with something specific in mind, never raise it—a deeper search
-spends the same quota over more ticks rather than a larger one. Job progress
-is simulation state—it hashes and rides the checkpoint—and `world.search`
-lists each job's phase, walk position, accepted count, judged count, quota,
-judge cost, rule count, and (a job authoring a score) the depth it is
+Search spends work, not nodes. One judge run costs the sum of the
+frame-evaluable rules' work-sheet lines. What `RuleCapacity.
+MaxWorkUnitsPerTick` leaves after the sheet, less one fold of every row (the
+stamp that tells a job its inputs moved), is divided equally among the jobs;
+a share's remainder goes unspent, no job borrows another's, and nothing carries
+to the next tick. That share is the job's allowance. Every unit of the walk has
+a price: a cursor move, a candidate resolved and refused, a candidate applied,
+judged, scored, keyed and folded, a chance outcome, a tree step. The walk
+reserves its costliest unit before it runs any and yields when that no longer
+fits, so a tick never spends past the allowance. A tick that resumes a job pays
+to replay its open scopes, and one whose inputs moved pays for the restart,
+both out of the same allowance. A job whose allowance cannot cover a restart, a
+full replay and one unit would stall, so it is refused by that sum. A chance
+ply is a ply like any other: it folds one outcome a unit, at the root or inside
+the walk, and a checkpoint carries the outcomes it has folded. `nodes`
+(1..`WorldSearchCapacity.MaxNodesPerTick`) caps the candidates one tick judges,
+for a job that should take longer than its allowance makes it. Job progress is
+simulation state—it hashes and rides the checkpoint—and `world.search` lists
+each job's phase, walk position, accepted count, judged count, node cap, judge
+cost, allowance, the most any one tick has spent, the total spent since the
+last restart, rule count, and (a job authoring a score) the depth it is
 iterative-deepening through and the negamax answer the deepest completed pass
-found.
+found. The best move a job lands names the cell its candidate lands on at every
+depth.
 
 ## The egress documents—what leaves an authority
 

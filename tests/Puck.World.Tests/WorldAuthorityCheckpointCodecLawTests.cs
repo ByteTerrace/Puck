@@ -652,14 +652,16 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         );
     }
     [Fact]
-    public void Version_five_envelope_refuses_by_name() {
+    public void A_later_version_envelope_refuses_by_name() {
         var checkpoint = CapturedCheckpoint();
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
         var downgraded = ((byte[])encoded.Clone());
 
         // A future version must refuse even when the payload has the current shape.
-        downgraded[4] = 5;
-        downgraded[5] = 0;
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: downgraded.AsSpan(start: 4),
+            value: ((ushort)(WorldAuthorityCheckpointCodec.SupportedVersion + 1))
+        );
 
         Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
             bytes: downgraded,
@@ -668,7 +670,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: "version 5"
+            expectedSubstring: $"version {(WorldAuthorityCheckpointCodec.SupportedVersion + 1)}"
         );
     }
     [Fact]

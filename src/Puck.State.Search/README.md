@@ -26,6 +26,14 @@ Four properties hold for every job:
   differing only outside that reach transpose.
 - **Nothing is drawn from the store.** A tree job's playout draws advance a
   SplitMix64 stream seeded by an authored plan field.
+- **A step spends a bounded amount of work.** A plan's `SearchWork` prices every
+  unit of the walk (a cursor move, a refused or a judged candidate, a chance
+  outcome, a tree step, a replay, a restart) and carries the step's allowance.
+  The walk reserves its costliest unit before it runs any and yields when that
+  no longer fits, so no step spends past the allowance, and a plan whose
+  allowance cannot cover a restart, a full replay and one unit is refused by
+  that sum. A chance ply sits on the same explicit stack as a move ply and
+  folds one outcome a unit, so a step can suspend inside it.
 
 Negamax (iterative deepening, alpha-beta, transpositions), UCB1 tree search,
 chance nodes (`ArenaSearchChancePlan`), and per-seat max-n scores are all

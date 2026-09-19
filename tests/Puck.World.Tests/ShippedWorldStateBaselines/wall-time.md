@@ -12,7 +12,7 @@ Machine: Microsoft Windows 10.0.26200; X64; 16 logical processor(s); .NET 10.0.1
 | billiards | 510 | 24.4 | 28.0 |
 | bowling | 600 | 0.6 | 0.6 |
 | chess | 600 | 155.1 | 175.6 |
-| chinese-checkers | 600 | 5787.0 | 5762.8 |
+| chinese-checkers | 600 | 5235.1 | 5219.1 |
 | codenames | 162 | 24.7 | 114.8 |
 | dominoes | 600 | 0.6 | 0.6 |
 | freecell | 610 | 6.2 | 24.2 |

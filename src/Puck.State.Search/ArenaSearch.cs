@@ -12,8 +12,11 @@ namespace Puck.State;
 /// <param name="Cells">How many cells the job has.</param>
 /// <param name="Count">How many candidates the root accepted.</param>
 /// <param name="Nodes">How many candidates the job has judged.</param>
-/// <param name="NodesPerStep">The per-step judge quota.</param>
+/// <param name="NodesPerStep">The most candidates one step judges.</param>
 /// <param name="JudgeCost">The work units one judge run costs.</param>
+/// <param name="Allowance">The work units one step may spend on the job.</param>
+/// <param name="PeakStepWork">The most work units any one step has spent on the job since it last restarted.</param>
+/// <param name="Work">The work units the job has spent since it last restarted.</param>
 /// <param name="HasScore">Whether the job compares plies by a score.</param>
 /// <param name="Depth">The authored depth cap.</param>
 /// <param name="PassDepth">The depth the current iterative-deepening pass searches to.</param>
@@ -26,6 +29,7 @@ namespace Puck.State;
 /// <param name="HasOutcome">Whether the job's method backpropagates an outcome rather than a score.</param>
 public readonly record struct ArenaSearchStatus(
     string Name, bool Running, bool Done, int Token, int Tokens, int Target, int Cells, long Count, long Nodes, int NodesPerStep, long JudgeCost,
+    long Allowance, long PeakStepWork, long Work,
     bool HasScore, int Depth, int PassDepth, long BestScore, int BestToken, int BestTarget, int Iteration, int Iterations,
     int JudgeRules = 0, bool HasOutcome = false
 );
@@ -48,14 +52,22 @@ public readonly record struct ArenaSearchStatus(
 /// its own judge, and translates a landed job's writes into whatever mutation vocabulary it owns.</para>
 /// </remarks>
 public sealed partial class ArenaSearch {
+    // One ply of the walk: the root, a move ply, or a chance ply. A chance ply enumerates outcomes through its
+    // candidate cursor and folds a weighted sum instead of a maximum; the rest of its window goes unused.
     private sealed class Level {
-        public long Alpha;
+        public long Alpha = -SearchCapacity.MateScore;
         public long AlphaEntry;
         public long BaseTurn;
-        public long Best;
+        public long Best = -SearchCapacity.MateScore;
         public int BestTarget = -1;
         public int BestToken = -1;
-        public long Beta;
+        public long Beta = SearchCapacity.MateScore;
+        // The outcomes folded so far, each value times its weight, and the weight they carried. The sum is exact:
+        // MaxChanceOutcomes values of MateScore magnitude under one word of weight stay inside 128 bits.
+        public Int128 ChanceSum;
+        public ulong ChanceWeight;
+        // The cell the candidate that opened this ply lands on, which is what the parent folds as its best move.
+        public int EntryTarget = -1;
         // The position's key and the window's lower edge at entry, for the transposition table's store.
         public ulong Key;
         // The seat vector of the best line found at this ply. A scope rewind discards what the position carried, so
@@ -113,7 +125,14 @@ public sealed partial class ArenaSearch {
         }
 
         public int Active { get; set; }
-        public long BaseTurn { get; set; }
+        public long Alpha { get => Root.Alpha; set => Root.Alpha = value; }
+        public long BaseTurn { get => Root.BaseTurn; set => Root.BaseTurn = value; }
+        public long Best { get => Root.Best; set => Root.Best = value; }
+        public int BestTarget { get => Root.BestTarget; set => Root.BestTarget = value; }
+        public int BestToken { get => Root.BestToken; set => Root.BestToken = value; }
+        public long Beta { get => Root.Beta; set => Root.Beta = value; }
+        // How many of the open scopes hold a chance draw rather than a move, so a ply counts moves alone.
+        public int ChanceScopes { get; set; }
 
         public CellKey[] ChanceKeys { get; set; } = [];
 
@@ -136,6 +155,10 @@ public sealed partial class ArenaSearch {
         public int PlayCount { get; set; }
         public int PlayoutPlies { get; set; }
 
+        // Ply zero. Iterative-deepening negamax is engaged only for a scored job; the root folds candidates into
+        // its window but never cuts on it, so the root outputs never depend on whether a score is authored.
+        public Level Root { get; } = new();
+
         public CellKey[] ScoreKeys { get; set; } = [];
 
         // The seat vector read off the arena, reused by every max-n fold.
@@ -148,10 +171,12 @@ public sealed partial class ArenaSearch {
         public int[] ScopeShape { get; set; }
         public int[] ScopeTarget { get; set; }
         public int[] ScopeToken { get; set; }
-        public int Shape { get; set; }
+        public int Shape { get => Root.Shape; set => Root.Shape = value; }
         public ulong Stamp { get; set; }
-        public int Target { get; set; }
-        public int Token { get; set; }
+        // The most any one step has spent on the job, and what the job has spent in all, since it restarted.
+        public long PeakStepWork { get; set; }
+        public int Target { get => Root.Target; set => Root.Target = value; }
+        public int Token { get => Root.Token; set => Root.Token = value; }
         public int TokenCount { get; set; }
         public CellKey[] TokenKeys { get; set; }
         public int[]? TreeChildCount { get; set; }
@@ -179,18 +204,12 @@ public sealed partial class ArenaSearch {
         public CellKey[] ReachKeys { get; set; } = [];
 
         public long[]? Wide { get; set; }
+        public long Work { get; set; }
 
         public ulong Seed;
 
-        // Iterative-deepening negamax, engaged only for a scored job. PassDepth is the depth the current pass
-        // searches to; Active is which ply (0 = root) is being expanded. The root updates Alpha as candidates fold
-        // in but never breaks its own loop on it, so the root outputs never depend on whether a score is authored.
+        // PassDepth is the depth the current pass searches to; Active is which ply (0 = root) is being expanded.
         public int PassDepth { get; set; } = 1;
-        public long Best { get; set; } = -SearchCapacity.MateScore;
-        public int BestToken { get; set; } = -1;
-        public int BestTarget { get; set; } = -1;
-        public long Alpha { get; set; } = -SearchCapacity.MateScore;
-        public long Beta { get; set; } = SearchCapacity.MateScore;
 
         public static Level[] BuildLevels(int depth, int seatCount) {
             var levels = new Level[Math.Max(
@@ -336,6 +355,12 @@ public sealed partial class ArenaSearch {
             )) {
                 return false;
             }
+            if (!TryCheckWork(
+                plan: plan,
+                reason: out reason
+            )) {
+                return false;
+            }
 
             var job = new Job(
                 cellCount: plan.CellCount,
@@ -370,8 +395,8 @@ public sealed partial class ArenaSearch {
 
         return true;
     }
-    /// <summary>Advances every job by its node quota, landing a finished job's outputs through
-    /// <paramref name="apply"/>.</summary>
+    /// <summary>Advances every job by what its allowance and its judged-candidate quota admit, landing a finished
+    /// job's outputs through <paramref name="apply"/>.</summary>
     /// <param name="tick">The simulation tick.</param>
     /// <param name="engineTick">The engine tick a value-over-time read answers as of.</param>
     /// <param name="apply">Installs one job's writes through the caller's own door.</param>
@@ -390,22 +415,33 @@ public sealed partial class ArenaSearch {
         var stamp = Stamp();
 
         foreach (var job in m_jobs) {
+            var work = job.Plan.Work;
+            var spent = 0L;
+
+            // A restart and a replay are work the step does before the walk moves, so both come out of the step's
+            // allowance; SearchWork.Minimum is what leaves a unit after the costliest pair.
             if (job.Stamp != stamp) {
                 Restart(
                     job: job,
                     stamp: stamp
                 );
+                spent += work.Restart;
             }
             if (job.Running) {
                 try {
+                    spent += work.Replay(scopes: job.ScopeCount);
                     if (!Replay(job: job)) {
                         Restart(
                             job: job,
                             stamp: stamp
                         );
+                        spent += work.Restart;
                     }
 
-                    Walk(job: job);
+                    spent = Walk(
+                        job: job,
+                        spent: spent
+                    );
                 } catch {
                     // Rewinding first puts the arena back to what the stamp was taken over, so the restart reads
                     // the position the step started from.
@@ -420,6 +456,12 @@ public sealed partial class ArenaSearch {
 
                 Suspend(job: job);
             }
+
+            job.PeakStepWork = Math.Max(
+                val1: job.PeakStepWork,
+                val2: spent
+            );
+            job.Work += spent;
             if (
                 job.Running ||
                 job.Done
@@ -463,7 +505,10 @@ public sealed partial class ArenaSearch {
             Count: job.Count,
             Nodes: job.Nodes,
             NodesPerStep: plan.Nodes,
-            JudgeCost: plan.JudgeCost,
+            JudgeCost: plan.Work.Judge,
+            Allowance: plan.Work.Allowance,
+            PeakStepWork: job.PeakStepWork,
+            Work: job.Work,
             HasScore: (plan.Scored || (plan.ScoresOrdinal >= 0)),
             Depth: plan.Depth,
             PassDepth: job.PassDepth,
@@ -555,6 +600,20 @@ public sealed partial class ArenaSearch {
             return false;
         }
 
+        if (
+            (node.AtDepth < 0) ||
+            (node.AtDepth >= plan.Depth)
+        ) {
+            reason = $"search '{plan.Name}' declares a chance node at ply {node.AtDepth}, outside the {plan.Depth} it searches";
+
+            return false;
+        }
+        if (plan.ScoresOrdinal >= 0) {
+            reason = $"search '{plan.Name}' declares a chance node, which averages one value, over per-seat scores, which fold a vector";
+
+            return false;
+        }
+
         var total = 0UL;
 
         foreach (var weight in weights) {
@@ -566,6 +625,31 @@ public sealed partial class ArenaSearch {
 
             total += weight;
         }
+
+        return true;
+    }
+    // A job whose allowance cannot cover a restart, a full replay, and one unit would stop making progress the
+    // first step its scopes ran that deep, so it is refused with the sum it needs rather than left to starve.
+    private static bool TryCheckWork(ArenaSearchPlan plan, out string reason) {
+        var work = plan.Work;
+
+        if (plan.Nodes < 1) {
+            reason = $"search '{plan.Name}' judges {plan.Nodes} candidates a step, and a job that judges none never lands";
+
+            return false;
+        }
+        if (
+            (work.Minimum == long.MaxValue) ||
+            (work.Allowance < work.Minimum)
+        ) {
+            reason = $"search '{plan.Name}' may spend {work.Allowance} work units a step and needs {((work.Minimum == long.MaxValue)
+                ? "more than any allowance holds"
+                : work.Minimum.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))} to make progress: a restart at {work.Restart}, a replay of {work.Scopes} scopes at {work.Candidate} each, and one unit at {work.Unit}";
+
+            return false;
+        }
+
+        reason = string.Empty;
 
         return true;
     }
@@ -736,11 +820,18 @@ public sealed partial class ArenaSearch {
         job.Done = false;
         job.Iteration = 0;
         job.Nodes = 0L;
-        job.PassDepth = 1;
+        // A chance node at the root has no move to choose before the draw, so its one pass searches the plan's
+        // whole depth rather than deepening toward it.
+        job.PassDepth = ((job.Plan.Chance is { AtDepth: 0 })
+            ? job.Plan.Depth
+            : 1
+        );
         job.Running = true;
         job.Stamp = stamp;
         job.TreeActive = false;
+        job.PeakStepWork = 0L;
         job.TreeCount = 0;
+        job.Work = 0L;
         job.TtKey?.AsSpan().Clear();
         job.TtMeta?.AsSpan().Clear();
         job.TtValue?.AsSpan().Clear();
@@ -776,6 +867,8 @@ public sealed partial class ArenaSearch {
         job.BestTarget = -1;
         job.BestToken = -1;
         job.Beta = SearchCapacity.MateScore;
+        job.Root.ChanceSum = Int128.Zero;
+        job.Root.ChanceWeight = 0UL;
         job.Count = 0L;
         job.Counts.AsSpan().Clear();
         job.Legal.AsSpan().Clear();
