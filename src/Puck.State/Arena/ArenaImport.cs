@@ -26,40 +26,12 @@ public sealed partial class StateArena {
     /// the retained key ledger never records a load that did not land.</para>
     /// </remarks>
     public bool TryLoad(IReadOnlyList<StateRow>? rows, in ArenaTime time, out string reason) {
-        var admitted = new List<(int RowOrdinal, StateRow Row)>(capacity: (rows?.Count ?? 0));
-        var pending = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var seen = new bool[m_layout.RowCount];
-        var visibilityBytes = m_visibilityBytes;
-
-        foreach (var row in (rows ?? [])) {
-            if (!TryAdmitImport(
-                pending: pending,
-                reason: out reason,
-                row: row,
-                rowOrdinal: out var rowOrdinal,
-                visibilityBytes: out var importedVisibilityBytes
-            )) {
-                return false;
-            }
-            if (seen[rowOrdinal]) {
-                reason = $"row '{row!.Name.Value}' is imported twice, and a second load would land on the first one's cells";
-
-                return false;
-            }
-
-            seen[rowOrdinal] = true;
-            visibilityBytes -= VisibilityBytes(rowOrdinal: rowOrdinal);
-            visibilityBytes += importedVisibilityBytes;
-            admitted.Add(item: (rowOrdinal, row!));
-        }
-
-        var keyBytes = m_keys.Bytes;
-
-        foreach (var name in pending) {
-            keyBytes += CellKeyTable.EntryBytes(name: CellName.Parse(candidate: name));
-        }
-        if ((((m_layout.Bytes + m_declarationVisibilityBytes) + visibilityBytes) + keyBytes) > ArenaCapacity.MaxBytes) {
-            reason = $"the imported rows bring the arena's retained keys or live visibility payload past the {ArenaCapacity.MaxBytes}-byte ceiling";
+        if (!TryValidateLoad(
+            admitted: out var admitted,
+            reason: out reason,
+            rows: rows,
+            visibilityBytes: out var visibilityBytes
+        )) {
             return false;
         }
 
@@ -93,7 +65,63 @@ public sealed partial class StateArena {
 
         return true;
     }
+    /// <summary>Determines whether <see cref="TryLoad"/> would admit every named row without moving the arena,
+    /// interning a key, or opening a journal scope.</summary>
+    /// <param name="rows">The rows to validate; a row the list omits keeps what the arena holds.</param>
+    /// <param name="reason">Why the load would be refused, or empty when it would be admitted.</param>
+    /// <returns><see langword="true"/> when the rows can be loaded as the arena stands now.</returns>
+    /// <remarks>The result is a point-in-time preflight. A caller that mutates the arena before loading must
+    /// validate again.</remarks>
+    public bool TryValidateLoad(IReadOnlyList<StateRow>? rows, out string reason) => TryValidateLoad(
+        admitted: out _,
+        reason: out reason,
+        rows: rows,
+        visibilityBytes: out _
+    );
 
+    private bool TryValidateLoad(IReadOnlyList<StateRow>? rows, out List<(int RowOrdinal, StateRow Row)> admitted, out long visibilityBytes, out string reason) {
+        admitted = new List<(int RowOrdinal, StateRow Row)>(capacity: (rows?.Count ?? 0));
+        var pending = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var seen = new bool[m_layout.RowCount];
+
+        visibilityBytes = m_visibilityBytes;
+
+        foreach (var row in (rows ?? [])) {
+            if (!TryAdmitImport(
+                pending: pending,
+                reason: out reason,
+                row: row,
+                rowOrdinal: out var rowOrdinal,
+                visibilityBytes: out var importedVisibilityBytes
+            )) {
+                return false;
+            }
+            if (seen[rowOrdinal]) {
+                reason = $"row '{row!.Name.Value}' is imported twice, and a second load would land on the first one's cells";
+
+                return false;
+            }
+
+            seen[rowOrdinal] = true;
+            visibilityBytes -= VisibilityBytes(rowOrdinal: rowOrdinal);
+            visibilityBytes += importedVisibilityBytes;
+            admitted.Add(item: (rowOrdinal, row!));
+        }
+
+        var keyBytes = m_keys.Bytes;
+
+        foreach (var name in pending) {
+            keyBytes += CellKeyTable.EntryBytes(name: CellName.Parse(candidate: name));
+        }
+        if ((((m_layout.Bytes + m_declarationVisibilityBytes) + visibilityBytes) + keyBytes) > ArenaCapacity.MaxBytes) {
+            reason = $"the imported rows bring the arena's retained keys or live visibility payload past the {ArenaCapacity.MaxBytes}-byte ceiling";
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
     // The time traits are declaration, not state: the arena stores a cell's clock and reads the trait off the
     // authored row, so an imported row or cell whose trait differs from the declaration names a disagreement the
     // arena cannot carry.

@@ -437,7 +437,8 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
     }
 }
 /// <summary>A <c>$pair:&lt;bodyRefA&gt;:&lt;bodyRefB&gt;</c> cell key, resolved from the two bodies' indices at
-/// evaluation and interned by the catalog.</summary>
+/// evaluation. Reads resolve only an already-admitted key; a state-writing effect admits its pair key inside the
+/// firing's journal scope.</summary>
 public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
     private readonly PairKeyFact m_key;
 
@@ -459,15 +460,48 @@ public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
     CellKey IRuleKey.Resolve(IStateReader reader, out bool named) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
+        var facet = ((IWorldFacts)reader);
         var key = Resolve(
-            facet: ((IWorldFacts)reader),
+            facet: facet,
             reader: reader
         );
 
-        // A host serving no pairs answers the invalid default and names no cell.
-        named = key.IsValid;
+        // An absent but addressable pair reads its state cell's default, just like any other missing keyed cell.
+        // Only a missing participant is unnamed. PairKey itself does not intern while resolving a read.
+        named = (
+            (facet.ResolveBody(bodyRef: m_key.BodyA) >= 0) &&
+            (facet.ResolveBody(bodyRef: m_key.BodyB) >= 0)
+        );
 
         return key;
+    }
+    bool IRuleKey.TryResolveForWrite(IStateReader reader, out CellKey key, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        var facet = ((IWorldFacts)reader);
+
+        key = facet.PairKey(key: m_key);
+        if (key.IsValid) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        var a = facet.ResolveBody(bodyRef: m_key.BodyA);
+        var b = facet.ResolveBody(bodyRef: m_key.BodyB);
+
+        if ((a < 0) || (b < 0)) {
+            key = default;
+            reason = string.Empty;
+
+            return true;
+        }
+
+        return reader.Arena.Keys.TryIntern(
+            key: out key,
+            name: CellName.Parse(candidate: $"{a}_{b}"),
+            reason: out reason
+        );
     }
     bool IRuleKey.TryResolveIndex(IStateReader reader, out long index) {
         ArgumentNullException.ThrowIfNull(argument: reader);

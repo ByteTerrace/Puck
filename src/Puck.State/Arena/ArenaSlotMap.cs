@@ -106,10 +106,10 @@ public sealed class ArenaSlotMap {
         }
     }
 
-    /// <summary>Forgets every mapping, keeping the array for the row's next keys.</summary>
+    /// <summary>Forgets every mapping, keeping its backing storage for the row's next keys.</summary>
     public void Clear() {
         m_count = 0;
-        m_sparse = null;
+        m_sparse?.Clear();
         Array.Clear(array: m_dense);
     }
     /// <summary>Determines whether a key's ordinal is mapped.</summary>

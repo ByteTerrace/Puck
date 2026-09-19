@@ -1,3 +1,4 @@
+using Puck.State.Rules;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -28,6 +29,40 @@ public sealed class WorldPairKeyLawTests {
         Capacity: 8
     );
 
+    [Fact]
+    public void AWorldHostPairReadDoesNotMintAndAScopedWriteRewindsItsAdmission() {
+        using var fixture = Fixtures.FreshServer();
+        IRuleKey pair = new WorldPairKeyFact(key: new PairKeyFact(
+            bodyA: new CompiledBodyRef(CompiledBodyRefKind.Literal, Index: 0, Row: null),
+            bodyB: new CompiledBodyRef(CompiledBodyRefKind.Literal, Index: 1, Row: null)
+        ));
+        var before = fixture.Server.Arena.Keys.Count;
+
+        Assert.False(condition: pair.Resolve(
+            reader: fixture.Server.RuleHost,
+            named: out var named
+        ).IsValid);
+        Assert.True(condition: named);
+        Assert.Equal(expected: before, actual: fixture.Server.Arena.Keys.Count);
+
+        var scope = fixture.Server.Arena.BeginScope();
+
+        Assert.True(condition: pair.TryResolveForWrite(
+            reader: fixture.Server.RuleHost,
+            key: out var admitted,
+            reason: out var reason
+        ), userMessage: reason);
+        Assert.True(condition: admitted.IsValid);
+        Assert.Equal(expected: (before + 1), actual: fixture.Server.Arena.Keys.Count);
+
+        fixture.Server.Arena.Rewind(mark: scope);
+
+        Assert.Equal(expected: before, actual: fixture.Server.Arena.Keys.Count);
+        Assert.False(condition: fixture.Server.Arena.Keys.TryResolve(
+            name: CellName.Parse(candidate: "0_1"),
+            key: out _
+        ));
+    }
     [Fact]
     public void AMalformedPairKeyRefusesByNameAndAWellFormedOneValidates() {
         var malformed = Document(new WorldRule(

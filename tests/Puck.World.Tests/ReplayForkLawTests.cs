@@ -14,7 +14,7 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed class ReplayForkLawTests {
     [Fact]
-    public void TapeHeaderPinsTheCompletedVisibilityHashShape() {
+    public void TapeHeaderPinsTheRuntimeKeyLedgerHashShape() {
         using var buffer = new MemoryStream();
 
         WorldReplaySnapshot.Write(
@@ -26,7 +26,7 @@ public sealed class ReplayForkLawTests {
         );
 
         Assert.Equal(
-            expected: 2u,
+            expected: 3u,
             actual: BitConverter.ToUInt32(
                 startIndex: sizeof(uint),
                 value: buffer.ToArray()

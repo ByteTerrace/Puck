@@ -265,6 +265,31 @@ public static class RuleReads {
         named: out _,
         reader: reader
     );
+    /// <summary>Attempts to resolve the key a state-writing effect addresses. Only a dynamic key family that must
+    /// create a new runtime address admits one here; read resolution never changes the key table.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="literal">The compile-time key, used when <paramref name="keyFrom"/> is <see langword="null"/>.</param>
+    /// <param name="keyFrom">The live key indirection, or <see langword="null"/>.</param>
+    /// <param name="key">The resolved key, or invalid when no cell was named.</param>
+    /// <param name="reason">Why a required runtime-key admission failed, or empty on success.</param>
+    /// <returns><see langword="true"/> when the write may proceed; otherwise the firing must refuse.</returns>
+    public static bool TryResolveKeyForWrite(IStateReader reader, CellKey literal, CompiledCellRef? keyFrom, out CellKey key, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        if (keyFrom is not { } reference) {
+            key = literal;
+            reason = string.Empty;
+
+            return true;
+        }
+
+        return TryResolveReferenceForWrite(
+            key: out key,
+            reader: reader,
+            reason: out reason,
+            reference: in reference
+        );
+    }
     /// <summary>Resolves the interned key a compiled address names, and whether it named a cell at all.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="literal">The compile-time key, used when <paramref name="keyFrom"/> is
@@ -404,6 +429,26 @@ public static class RuleReads {
             )
         );
     }
+
+    private static bool TryResolveReferenceForWrite(IStateReader reader, in CompiledCellRef reference, out CellKey key, out string reason) {
+        if (reference.Custom is { } custom) {
+            return custom.TryResolveForWrite(
+                key: out key,
+                reader: reader,
+                reason: out reason
+            );
+        }
+
+        key = ResolveReference(
+            named: out _,
+            reader: reader,
+            reference: in reference
+        );
+        reason = string.Empty;
+
+        return true;
+    }
+
     /// <summary>Resolves one live indirection as an integer index — a live row's table index, a static table's key.
     /// An indirection that spells no integer names nothing.</summary>
     /// <param name="reader">The evaluation in flight.</param>

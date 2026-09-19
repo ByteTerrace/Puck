@@ -114,6 +114,7 @@ public sealed class StateCatalog {
         m_handlesByLane = handlesByLane;
         m_identity = identity;
         m_keys = keys;
+        m_keys.SealSeed();
         m_lanes = lanes;
         m_readOnlyDescriptors = Array.AsReadOnly(array: descriptors);
         m_readOnlyFamilies = Array.AsReadOnly(array: families);

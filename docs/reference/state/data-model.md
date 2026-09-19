@@ -435,8 +435,12 @@ interns authored keys and compiled key symbols to a `CellKey`, the declared `Sta
 and each declared `StateFamily` resolved to the contiguous `RowFamily` ordinal
 range of its member rows.
 
-Each `StateArena.Keys` table starts with those symbols and owns its runtime
-additions. A speculative mint consumes room only in that arena; rewinding its
+Each `StateArena.Keys` table starts with the authored cell and topology names
+sealed when its catalog was constructed, and owns its runtime additions.
+Compiler-only symbols do not consume the arena's key or byte budget or enter
+its hash until a runtime operation admits the name. Constructing an arena
+before or after binding a compiler literal therefore gives the same state.
+A speculative mint consumes room only in that arena; rewinding its
 scope releases the name and rejects any retained handle from that mint. A
 later mint can reuse the ordinal without reviving the old handle. Compiled
 keys continue to resolve by name even when compilation introduces a symbol
@@ -444,12 +448,17 @@ after the arena was constructed. Runtime callers resolve and render keys
 through `StateArena.Keys`, not the catalog's symbol table.
 
 Member hashes fold names in cell order. The full arena hash also covers its
-retained key names in canonical name order, because a committed name still
+retained key-name count and a wrapping sum of per-name digests, because a committed name still
 uses key budget after its last cell is removed. Relayouts and checkpoints retain this ledger;
 exported rows alone do not retain orphan names. Both distinct-key count and
 retained key bytes are bounded, and `StateArena.Bytes` includes the key charge.
 Each retained name charges 96 bytes plus two bytes per UTF-16 code unit;
 spare table capacity is bounded separately by `StateCapacity.MaxCellKeys`.
+The digest sum changes only for admitted or released names, so hashing the
+ledger is constant time and requires no sorting or temporary allocation.
+Removing a committed cell still retains its name: distinct names admitted
+over the arena's lifetime remain bounded by that ledger. Reads resolve keys
+without admitting names.
 
 `StateReader` is the one (row, key) → raw-value computation (advance, cycle,
 eased reads, reductions, arg-extrema); `StateArena` is the one cell-write

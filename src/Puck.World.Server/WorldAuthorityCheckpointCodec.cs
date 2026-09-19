@@ -32,7 +32,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader.</summary>
-    public const ushort SupportedVersion = 6;
+    // Version 7 excludes compiler-only symbols from runtime key accounting and changes the ledger fingerprint.
+    public const ushort SupportedVersion = 7;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;

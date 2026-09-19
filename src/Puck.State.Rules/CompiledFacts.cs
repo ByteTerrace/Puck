@@ -63,6 +63,19 @@ public interface IRuleKey : ICompiledFact {
     /// nothing — an empty zone's endpoint — answers <see langword="false"/>, and reads absent.</param>
     /// <returns>The interned key.</returns>
     CellKey Resolve(IStateReader reader, out bool named);
+    /// <summary>Attempts to resolve a key for a state-writing effect. A dynamic key family may explicitly admit a
+    /// runtime key here; ordinary reads never do so.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="key">The resolved key, or the invalid default when the fact names no cell.</param>
+    /// <param name="reason">Why a required runtime-key admission failed, or empty on success.</param>
+    /// <returns><see langword="true"/> when evaluation may continue; <see langword="false"/> makes the enclosing
+    /// firing refuse and rewind.</returns>
+    bool TryResolveForWrite(IStateReader reader, out CellKey key, out string reason) {
+        key = Resolve(named: out _, reader: reader);
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Resolves the key as an integer index — a live zone's table index, a static table's key.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="index">The index on success.</param>

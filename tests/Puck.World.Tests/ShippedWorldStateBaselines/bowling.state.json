@@ -3,10 +3,10 @@
   "tick": 600,
   "engineTick": 1008000,
   "hashes": {
-    "authoritative": "448d618f205cda7f",
+    "authoritative": "c1b35086f0d93970",
     "capture": "f4ed18ebf16aa5cc",
     "pose": "cbf29ce484222325",
-    "world": "009c9495357c951e"
+    "world": "080f1caba40f1b19"
   },
   "state": {
     "world": []

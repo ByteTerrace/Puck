@@ -9,18 +9,18 @@ namespace Puck.State;
 /// <remarks>Compiled keys also resolve in arenas built from their catalog. Runtime keys belong to one arena and
 /// cease to resolve when their mint is rewound. The default value is invalid.</remarks>
 public readonly record struct CellKey {
-    private readonly int m_encodedOrdinal;
+    private readonly ulong m_address;
     private readonly object? m_tableIdentity;
 
-    internal CellKey(int ordinal, object tableIdentity) {
-        m_encodedOrdinal = checked((ordinal + 1));
+    internal CellKey(int ordinal, object tableIdentity, uint generation = 0) {
+        m_address = (((ulong)generation) << 32) | ((uint)checked((ordinal + 1)));
         m_tableIdentity = tableIdentity;
     }
 
     /// <summary>Gets a value indicating whether this key was minted by a key table.</summary>
-    public bool IsValid => (m_encodedOrdinal > 0);
+    public bool IsValid => (((uint)m_address) != 0);
     /// <summary>Gets the key's stable intern ordinal, or <c>-1</c> for the default invalid key.</summary>
-    public int Ordinal => (m_encodedOrdinal - 1);
+    public int Ordinal => (((int)((uint)m_address)) - 1);
 
     internal bool BelongsTo(object tableIdentity) => ReferenceEquals(
         objA: m_tableIdentity,
@@ -28,7 +28,7 @@ public readonly record struct CellKey {
     );
 }
 /// <summary>
-/// An intern table for compiled symbols or one arena's runtime keys. An arena starts with the catalog's keys,
+/// An intern table for compiled symbols or one arena's runtime keys. An arena starts with the catalog's authored keys,
 /// then owns its appended names and releases speculative additions on rewind.
 /// </summary>
 /// <remarks>Interning is global to the table, not per row: one name used by many rows occupies one ordinal. The
@@ -45,15 +45,15 @@ public sealed class CellKeyTable {
     private readonly CellKeyTable? m_source;
     private readonly int m_initialCount;
 
-    private object? m_epochIdentity;
+    private object m_runtimeIdentity = new();
+    private uint m_generation;
+    private int m_seedCount;
 
     private readonly List<ulong> m_nameDigests;
 
     private Func<long>? m_byteBudget;
     private long m_bytes;
-    private string[] m_hashNames = [];
-    private ulong m_ledgerHash;
-    private bool m_ledgerHashValid;
+    private ulong m_ledgerSum;
 
     /// <summary>Initializes an empty table.</summary>
     public CellKeyTable() {
@@ -68,16 +68,23 @@ public sealed class CellKeyTable {
     private CellKeyTable(CellKeyTable source) {
         m_source = source;
         m_identity = source.m_identity;
-        m_names = new List<CellName>(collection: source.m_names);
-        m_keys = new List<CellKey>(collection: source.m_keys);
-        m_nameDigests = new List<ulong>(collection: source.m_nameDigests);
-        m_bytes = source.m_bytes;
-        m_byName = new Dictionary<string, CellKey>(dictionary: source.m_byName, comparer: StringComparer.Ordinal);
+        m_initialCount = source.m_seedCount;
+        m_names = source.m_names.GetRange(count: m_initialCount, index: 0);
+        m_keys = source.m_keys.GetRange(count: m_initialCount, index: 0);
+        m_nameDigests = source.m_nameDigests.GetRange(count: m_initialCount, index: 0);
+        m_byName = new Dictionary<string, CellKey>(capacity: m_initialCount, comparer: StringComparer.Ordinal);
+        for (var index = 0; (index < m_initialCount); index++) {
+            m_byName.Add(key: m_names[index].Value, value: m_keys[index]);
+            m_bytes += EntryBytes(name: m_names[index]);
+            m_ledgerSum = unchecked((m_ledgerSum + m_nameDigests[index]));
+        }
         m_readOnlyNames = m_names.AsReadOnly();
-        m_initialCount = m_names.Count;
     }
 
     internal CellKeyTable Fork() => new(source: this);
+    // Only declaration-owned names seed arenas. Rule/search literals bound after catalog construction remain
+    // compiler symbols until a write admits them, independent of when a particular arena was constructed.
+    internal void SealSeed() => m_seedCount = m_names.Count;
     internal bool ContainsLocal(CellName name) => m_byName.ContainsKey(key: name.Value);
     internal void SetByteBudget(Func<long> budget) => m_byteBudget = budget;
     internal static long EntryBytes(CellName name) => (96L + (2L * name.Value.Length));
@@ -106,16 +113,20 @@ public sealed class CellKeyTable {
         }
         for (var index = count; (index < m_names.Count); index++) {
             m_bytes -= EntryBytes(name: m_names[index]);
+            m_ledgerSum = unchecked((m_ledgerSum - m_nameDigests[index]));
             m_byName.Remove(key: m_names[index].Value);
         }
         m_nameDigests.RemoveRange(index: count, count: (m_nameDigests.Count - count));
         m_keys.RemoveRange(index: count, count: (m_keys.Count - count));
         m_names.RemoveRange(index: count, count: (m_names.Count - count));
-        // Allocate a fresh identity only if a subsequent mint actually needs one. Ordinary candidate rewinds
-        // allocate nothing, and a retained speculative handle cannot alias a later reuse of its ordinal.
-        m_epochIdentity = null;
-        m_ledgerHashValid = false;
-        Array.Clear(array: m_hashNames);
+        // A reused ordinal gets a new generation without allocating an identity object. Renew the identity
+        // only after all 2^32 generations have been used, so counter rollover cannot revive an ancient handle.
+        if (m_generation < uint.MaxValue) {
+            m_generation++;
+        } else {
+            m_runtimeIdentity = new object();
+            m_generation = 0;
+        }
     }
 
     /// <summary>Gets how many distinct keys are interned.</summary>
@@ -176,7 +187,8 @@ public sealed class CellKeyTable {
 
         key = new CellKey(
             ordinal: m_names.Count,
-            tableIdentity: ((m_source is null) ? m_identity : (m_epochIdentity ??= new object()))
+            tableIdentity: ((m_source is null) ? m_identity : m_runtimeIdentity),
+            generation: m_generation
         );
 
         m_byName.Add(
@@ -185,9 +197,11 @@ public sealed class CellKeyTable {
         );
         m_names.Add(item: name);
         m_keys.Add(item: key);
-        m_nameDigests.Add(item: NameDigest(name: name.Value));
+        var digest = NameDigest(name: name.Value);
+
+        m_nameDigests.Add(item: digest);
         m_bytes += EntryBytes(name: name);
-        m_ledgerHashValid = false;
+        m_ledgerSum = unchecked((m_ledgerSum + digest));
 
         reason = string.Empty;
 
@@ -228,6 +242,14 @@ public sealed class CellKeyTable {
         key: name.Value,
         value: out key
     ) || ((m_source is not null) && m_source.TryResolve(key: out key, name: name)));
+    /// <summary>Resolves an existing name directly from characters without allocating a string or admitting a key.</summary>
+    /// <param name="name">The cell key spelling.</param>
+    /// <param name="key">The existing key on success; otherwise the invalid default.</param>
+    /// <returns>Whether this table or its compiler symbol source already knows the name.</returns>
+    public bool TryResolve(ReadOnlySpan<char> name, out CellKey key) => (
+        m_byName.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(key: name, value: out key) ||
+        ((m_source is not null) && m_source.TryResolve(key: out key, name: name))
+    );
 
     internal CellKey KeyAt(int ordinal) => m_keys[ordinal];
     internal void AddNameTo(ref Fnv1aHash hash, int ordinal) {
@@ -246,28 +268,10 @@ public sealed class CellKeyTable {
     }
 
     internal void AddLedgerTo(ref Fnv1aHash hash) {
-        if (!m_ledgerHashValid) {
-            if (m_hashNames.Length < m_names.Count) {
-                Array.Resize(array: ref m_hashNames, newSize: m_names.Count);
-            }
-            for (var index = 0; (index < m_names.Count); index++) {
-                m_hashNames[index] = m_names[index].Value;
-            }
-            Array.Sort(array: m_hashNames, index: 0, length: m_names.Count, comparer: StringComparer.Ordinal);
-            var ledger = Fnv1aHash.Create();
-
-            ledger.Add(value: ((ulong)m_names.Count));
-            for (var index = 0; (index < m_names.Count); index++) {
-                var name = m_hashNames[index];
-
-                ledger.Add(value: ((ulong)name.Length));
-                ledger.Add(value: Fnv1aHash.Compute(values: name.AsSpan()));
-            }
-            m_ledgerHash = ledger.Value;
-            m_ledgerHashValid = true;
-            Array.Clear(array: m_hashNames);
-        }
-        hash.Add(value: m_ledgerHash);
+        // Commutative addition makes the resource identity independent of allocation order. Unlike XOR,
+        // repeated contributions cannot cancel in pairs. Mint/release update only the affected name digest.
+        hash.Add(value: ((ulong)m_names.Count));
+        hash.Add(value: m_ledgerSum);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool TryGetAddress(CellKey key, out CellName name, out int ordinal) {

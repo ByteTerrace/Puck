@@ -687,7 +687,7 @@ public sealed partial class ArenaSearch {
         // until the job lands it. Interning here, in the topology's own cell order, is what gives a landed write an
         // address at all.
         for (var cell = 0; (cell < keys.Length); cell++) {
-            keys[cell] = m_arena.Keys.Intern(name: topology.NameOf(cell: cell));
+            keys[cell] = m_arena.Catalog.Keys.Intern(name: topology.NameOf(cell: cell));
         }
 
         return keys;

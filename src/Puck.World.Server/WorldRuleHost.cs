@@ -353,10 +353,13 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     public CellKey PairKey(PairKeyFact key) {
         ArgumentNullException.ThrowIfNull(argument: key);
 
-        return Host.Arena.Keys.Intern(name: CellName.Parse(candidate: ResolvePairKey(
-            a: ResolveBodyRef(bodyRef: key.BodyA),
-            b: ResolveBodyRef(bodyRef: key.BodyB)
-        )));
+        var a = ResolveBodyRef(bodyRef: key.BodyA);
+        var b = ResolveBodyRef(bodyRef: key.BodyB);
+
+        return (((a < 0) || (b < 0))
+            ? default
+            : ResolvePairKey(a: a, b: b)
+        );
     }
     /// <inheritdoc/>
     public bool TryReadHostOwnedCell(int rowOrdinal, int cell, out long value) {
@@ -431,10 +434,13 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     private int ResolveBodyRef(in CompiledBodyRef bodyRef) => (bodyRef.Kind switch {
         CompiledBodyRefKind.Literal => bodyRef.Index,
         CompiledBodyRefKind.Binding => BoundIndex(key: ((BoundKey)bodyRef.Index)),
-        CompiledBodyRefKind.Cell => (((IntegerOf(value: Host.ReadArenaCell(
-        key: Host.Arena.Keys.Intern(name: CellName.Parse(candidate: bodyRef.Key!)),
-        rowOrdinal: OrdinalOf(handle: bodyRef.Handle)
-    )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < Host.Population.Capacity))
+        CompiledBodyRefKind.Cell => ((Host.Arena.Keys.TryResolve(
+            key: out var cellKey,
+            name: CellName.Parse(candidate: bodyRef.Key!)
+        ) && (IntegerOf(value: Host.ReadArenaCell(
+            key: cellKey,
+            rowOrdinal: OrdinalOf(handle: bodyRef.Handle)
+        )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < Host.Population.Capacity))
         ? ((int)cellIndex)
         : -1),
         // 'placement:$each' names the placement whose id is the iterated key, which is what the compile-time

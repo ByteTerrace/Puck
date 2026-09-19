@@ -109,15 +109,21 @@ public sealed class WorldVerdictStamp {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
         return (
-            arena.TryRead(
-            key: arena.Keys.Intern(name: status),
+            arena.Keys.TryResolve(
+            key: out var statusKey,
+            name: status
+        ) && arena.TryRead(
+            key: statusKey,
             rowOrdinal: rowOrdinal,
             value: out var stored
         ) &&
             (stored.Kind == CellKind.Int) &&
             (stored.AsInt == WorldVerdict.Fail) &&
-            arena.TryRead(
-            key: arena.Keys.Intern(name: WorldVerdict.FiredTickKey),
+            arena.Keys.TryResolve(
+            key: out var stampKey,
+            name: WorldVerdict.FiredTickKey
+        ) && arena.TryRead(
+            key: stampKey,
             rowOrdinal: rowOrdinal,
             value: out var stamp
         ) &&

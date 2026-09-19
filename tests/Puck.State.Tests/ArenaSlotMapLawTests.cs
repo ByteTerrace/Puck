@@ -25,23 +25,22 @@ public sealed class ArenaSlotMapLawTests {
                 map.ContainsKey(key: probe)
             );
             Assert.Equal(
-                (held
+                actual: answered,
+                expected: (held
                     ? slot
                     : -1
-                ),
-                answered
+                )
             );
         }
     }
 
     public static TheoryData<int[]> Orders() => new(
-        [.. Enumerable.Range(start: 100, count: 300)],
-        [.. Enumerable.Range(start: 100, count: 300).Reverse()],
+        [.. Enumerable.Range(count: 300, start: 100)],
+        [.. Enumerable.Range(count: 300, start: 100).Reverse()],
         [7, 9_000, 3, 8_999, 4, 12, 9_001, 0],
         [0, 1_000_000, 2_000_000, 5, 1_000_001],
         [int.MaxValue, 0, (int.MaxValue - 1), 1]
     );
-
     [MemberData(nameof(Orders))]
     [Theory]
     public void TheMapAnswersWhatADictionaryOfTheSameWritesAnswers(int[] keys) {
@@ -122,7 +121,7 @@ public sealed class ArenaSlotMapLawTests {
         map[3_000_000] = 2;
         map.Clear();
 
-        Assert.False(condition: map.IsSparse);
+        Assert.True(condition: map.IsSparse);
         Assert.False(condition: map.ContainsKey(key: 10));
         Assert.False(condition: map.ContainsKey(key: 3_000_000));
 
@@ -133,8 +132,8 @@ public sealed class ArenaSlotMapLawTests {
             value: out var slot
         ));
         Assert.Equal(
-            9,
-            slot
+            actual: slot,
+            expected: 9
         );
         Assert.False(condition: map.ContainsKey(key: 10));
     }

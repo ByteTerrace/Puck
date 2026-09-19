@@ -10,6 +10,7 @@ internal sealed class WorldPreparedMutation(
     WorldMutation mutation,
     WorldDefinition candidate,
     WorldRuleCompilation? compilation,
+    StateArena? arena,
     WorldSolidField? solids,
     bool solidAffecting,
     IWorldAddonPreparedPlan? addonPlan,
@@ -25,6 +26,7 @@ internal sealed class WorldPreparedMutation(
     private bool m_machineSettled;
 
     public IWorldAddonPreparedPlan? AddonPlan { get; } = addonPlan;
+    public StateArena? Arena { get; } = arena;
     public WorldDefinition Candidate { get; } = candidate;
     public WorldRuleCompilation? Compilation { get; } = compilation;
     public ulong EngineTick { get; } = engineTick;

@@ -114,8 +114,10 @@ public sealed partial class WorldServer : IWorldServerHost {
     // The rule facade: the evaluator, the compiled rules/groups/tables, the edge latches, the decision and pattern
     // runtimes, and the world facts and effect arms the evaluator reaches through.
     private readonly WorldRuleHost m_ruleHost;
+
     // The `search` jobs over the arena, rebuilt with the rules on every install.
-    private readonly ArenaSearch m_search;
+    private ArenaSearch m_search;
+
     private readonly Func<IReadOnlyList<ArenaSearchWrite>, bool> m_searchApply;
 
     // Translates a landed job's writes into the ordinary mutation vocabulary: a single write installs directly, more

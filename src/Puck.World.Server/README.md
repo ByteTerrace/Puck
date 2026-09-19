@@ -312,10 +312,12 @@ The mutation door is two steps for the same reason.
 `WorldDocument.TryPrepareMutation` runs every gate that can refuse a mutation,
 against a document the caller names, and moves nothing: admission, composition,
 whole-document validation, the render envelope and field capacities, the solid
-field build, and the addon and machine staging. `WorldDocument.InstallPrepared`
-installs what it produced and refuses nothing. `TryApplyMutation` is the two in
-sequence; a rule firing prepares before its arena scope commits and installs
-after.
+field build, the replacement state arena when the install needs one, and the
+addon and machine staging. `WorldDocument.InstallPrepared` installs what it
+produced and refuses nothing. `TryApplyMutation` is the two in sequence; a rule
+firing prepares before its arena scope commits and installs after.
+Value-only installs reuse the arena and preflight their import against its
+live key and visibility budgets, including names retained after cell removal.
 
 A submitted operation takes the same kernels. `WorldArenaTransforms.TryApply`
 resolves one authored `StateTransform` to ordinals and interned keys through the
@@ -328,8 +330,9 @@ is refused by name, and a phase guard admits against the arena's own
 phase-sequence column before advancing it.
 
 A re-declared row set (`WorldMutation.UpsertStateRow`, an addon-installed row)
-relayouts the arena in place rather than replacing it, so the participant and
-identity lanes ride across and everything holding the store keeps holding it.
+prepares its replacement arena before the mutation commits. The replacement
+carries the runtime key ledger plus the participant and identity lanes; a
+capacity refusal therefore leaves both the installed document and arena alone.
 
 ### The action-state slot lanes (`WorldActionStateLane.cs`)
 
@@ -351,11 +354,10 @@ hands a body its address only; a restore marks the slot occupied before writing
 the registers it captured. A binding reconciles the roster against the live
 table, so a fresh arena re-joins every active ordinal.
 
-Replacing the arena does not lose what the lanes hold. `SyncArena`'s relayout
-carries them across, and its `BuildArena` fallback — reached when a re-declared
-row set refuses to lay out or load — inherits them through the same
-`StateArena.CopyLanesTo`, so the fallback is a document rebuild rather than a
-silent re-birth of every live body's registers.
+Replacing the arena does not lose what the lanes hold. A prepared mutation
+copies them before commit; reconstruction paths use `SyncArena`'s relayout and
+refuse without falling back to a fresh store. Replacement therefore cannot
+silently re-birth every live body's registers.
 
 The values therefore fold into the `Arena` hash component with the rest of the
 store; `BodyActionState` folds the declaration and the per-lane trigger runtime

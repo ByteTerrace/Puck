@@ -77,9 +77,8 @@ public sealed partial class WorldServer {
             throw new InvalidOperationException(message: $"the world's state section does not load into the arena: {reason}");
         }
 
-        // The slot lanes belong to this host's session, not to the document being installed, so a replacement
-        // arena inherits them through the same routine a relayout carries them with. Without this a fallback build
-        // would silently re-birth every live body's registers at their authored initials.
+        // Construction normally has no earlier arena. Keeping the copy here makes an explicitly rebuilt host carry
+        // its session lanes through the same routine as a prepared replacement.
         m_arena?.CopyLanesTo(target: built);
         m_arena = built;
         AdoptLayout(definition: definition);
@@ -89,7 +88,8 @@ public sealed partial class WorldServer {
     // was installed at rather than from the origin, and recomputes every derived board from its own tokens and
     // codes rows. A clockless cell's clock and a derived board's cells are all this adopts — every other field of
     // every row stays the document's own, which is why this settles through the export rather than replacing the
-    // section with it. A load the arena refuses is left to BuildArena, which names the row and cell it is about.
+    // section with it. Construction-time callers leave a refused seed unchanged; a prepared mutation uses the
+    // refusing form below so the refusal lands before its document is installed.
     private WorldDefinition SettleInstalledRows(WorldDefinition definition) {
         var rows = definition.State;
 
@@ -110,6 +110,13 @@ public sealed partial class WorldServer {
             return definition;
         }
 
+        return SettleInstalledRows(
+            definition: definition,
+            seeded: seeded
+        );
+    }
+    private static WorldDefinition SettleInstalledRows(WorldDefinition definition, StateArena seeded) {
+        var rows = definition.State;
         var exported = seeded.ToRows();
         List<WorldStateRow>? settled = null;
 
@@ -173,6 +180,49 @@ public sealed partial class WorldServer {
             : definition.WithWorldState(rows: settled)
         );
     }
+
+    // Builds the exact arena a prepared document install will adopt. The live arena remains untouched until the
+    // document's commit, so a capacity refusal cannot leave its catalog, rows, lanes, or retained keys half moved.
+    internal bool TryPrepareArenaReplacement(WorldDefinition definition, out StateArena prepared, out string reason, out WorldDefinition settled) {
+        var time = m_ruleHost.Time;
+
+        if (!StateArena.TryCreate(
+            arena: out var built,
+            catalog: definition.StateCatalog,
+            options: WorldSlotLanes.Options(definition: definition),
+            reason: out reason,
+            section: definition.StateRaw,
+            time: in time
+        )) {
+            prepared = null!;
+            settled = definition;
+            return false;
+        }
+
+        prepared = built;
+
+        settled = SettleInstalledRows(
+            definition: definition,
+            seeded: prepared
+        );
+        if (!prepared.TryRestoreKeys(
+            names: m_arena.Keys.Names,
+            reason: out reason
+        )) {
+            prepared = null!;
+            return false;
+        }
+
+        m_arena.CopyLanesTo(target: prepared);
+        reason = string.Empty;
+        return true;
+    }
+
+    private void AdoptPreparedArena(StateArena arena, WorldDefinition definition) {
+        m_arena = arena;
+        m_search = new ArenaSearch(arena: arena);
+        AdoptLayout(definition: definition);
+    }
     // A board is a key and a value per occupied cell; nothing else about its cells is derived, so nothing else
     // decides whether the recompute moved it.
     private static bool SameBoardCells(IReadOnlyList<StateCell>? left, IReadOnlyList<StateCell>? right) {
@@ -223,8 +273,10 @@ public sealed partial class WorldServer {
     }
 
     // Re-seeds the arena from an installed document. A document whose catalog is the same instance keeps its
-    // columns and reloads their values; a re-declared row set relayouts in place, which moves every column to its
-    // new ordinal and carries the participant and identity lanes across, where a fresh build would drop them.
+    // columns and reloads their values; a reconstruction-time re-declaration relayouts atomically and carries the
+    // runtime key ledger plus the participant and identity lanes. Relayout refusal leaves the arena alone; a load
+    // refusal after a successful relayout throws from the reconstruction path rather than dropping the ledger via
+    // a fresh-build fallback.
     public void SyncArena(WorldDefinition definition) {
         var time = m_ruleHost.Time;
 
@@ -237,9 +289,7 @@ public sealed partial class WorldServer {
                 rows: definition.State,
                 time: in time
             )) {
-                BuildArena(definition: definition);
-
-                return;
+                throw new InvalidOperationException(message: $"the installed document does not load into the arena: {reason}");
             }
             if (reason.Length != 0) {
                 throw new InvalidOperationException(message: $"the installed document does not load into the arena: {reason}");
@@ -250,26 +300,26 @@ public sealed partial class WorldServer {
 
             return;
         }
-        if (
-            m_arena.TryRelayout(
+        if (!m_arena.TryRelayout(
             catalog: definition.StateCatalog,
-            reason: out _,
+            reason: out var relayoutReason,
             section: definition.StateRaw,
             time: in time
-        ) &&
-            m_arena.TryLoad(
+        )) {
+            throw new InvalidOperationException(message: $"the installed document does not relayout into the arena: {relayoutReason}");
+        }
+        if (!m_arena.TryLoad(
             reason: out var loaded,
             rows: definition.State,
             time: in time
-        ) &&
-            (loaded.Length == 0)
-        ) {
-            AdoptLayout(definition: definition);
-
-            return;
+        )) {
+            throw new InvalidOperationException(message: $"the relaid-out document does not load into the arena: {loaded}");
+        }
+        if (loaded.Length != 0) {
+            throw new InvalidOperationException(message: $"the relaid-out document only partially loads into the arena: {loaded}");
         }
 
-        BuildArena(definition: definition);
+        AdoptLayout(definition: definition);
     }
 
     // The document and the arena agree on every row as they stand.
@@ -680,8 +730,10 @@ public sealed partial class WorldServer {
         return best;
     }
 
-    public WorldDefinition RecompileRules(WorldDefinition definition, WorldRuleCompilation? compilation = null) {
-        definition = SettleInstalledRows(definition: definition);
+    public WorldDefinition RecompileRules(WorldDefinition definition, WorldRuleCompilation? compilation = null, StateArena? arena = null) {
+        if (arena is null) {
+            definition = SettleInstalledRows(definition: definition);
+        }
         m_document.AdoptDefinition(definition: definition);
         // The rows a document value reads are a function of the sections this install may have replaced.
         m_documentValueRows = null;
@@ -691,7 +743,11 @@ public sealed partial class WorldServer {
             objB: definition
         )) { compilation = WorldRuleCompilation.Compile(definition: definition); }
         m_ruleHost.Install(compilation: compilation!);
-        SyncArena(definition: definition);
+        if (arena is null) {
+            SyncArena(definition: definition);
+        } else {
+            AdoptPreparedArena(arena: arena, definition: definition);
+        }
         m_ruleHost.PruneLatches();
         m_tick.PruneBoardEnforcement(definition: definition);
         m_ruleHost.ReconcileDecisions();

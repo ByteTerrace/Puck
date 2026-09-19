@@ -800,6 +800,7 @@ public sealed partial class WorldDocument {
 
         return true;
     }
+
     // The non-consuming primer path for AttachSink: PEEKS every body's continuity hint instead of consuming it, so a
     // newly attached sink's boot-state primer can never steal the flag an already-attached sink is still due to
     // observe via the next ordinary EmitSnapshot broadcast (the bug this repairs — see docs/architecture/worlds.md's
@@ -811,6 +812,7 @@ public sealed partial class WorldDocument {
         stepTicks: Host.LastStepTicks,
         tick: Host.CompletedTick
     );
+
     // Every live body's authoritative sim pose, color, archetype, and this tick's continuity hint, written into the
     // reused Host.SnapshotEntries array — the SAME borrowed-scratch shape as before the output hub: a typed subscriber
     // must fully consume (or copy) the returned WorldSnapshot before returning from DeliverSnapshot, because the next
@@ -822,6 +824,7 @@ public sealed partial class WorldDocument {
         stepTicks: stepTicks,
         tick: tick
     );
+
     private WorldSnapshot BuildSnapshotCore(ulong tick, ulong stepTicks, bool consumeContinuity) {
         var count = 0;
 
@@ -883,6 +886,7 @@ public sealed partial class WorldDocument {
             EngineTick: Host.CompletedEngineTicks
         );
     }
+
     // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo (Rejected,
     // Denied). Grant's administration and co-drive-consent refusals, Revoke's administration refusal, a lever write
     // lacking its section's Mutate hold, world.undo lacking every section's Mutate hold, and a rebuild lacking every
@@ -932,11 +936,11 @@ public sealed partial class WorldDocument {
     /// <see cref="DeliverPending"/> carries them to every attached sink.</summary>
     /// <remarks>A shape change already pending outranks this: a definition delivery carries the values too.</remarks>
     internal void MarkStateDeliveryPending() => m_pendingStateDelivery = true;
-    internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null) {
+    internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null, StateArena? arena = null) {
         m_pendingDefinitionDelivery = true;
         m_definition = definition;
         Host.InputHold.Reconfigure(settings: definition.CompiledInputHold);
-        definition = Host.RecompileRules(compilation: compilation, definition: definition);
+        definition = Host.RecompileRules(arena: arena, compilation: compilation, definition: definition);
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
         // nothing on the ticks that never touch the groups section, and unconditional is what keeps membership
         // expansion CHECK-TIME correct without a bespoke "did this mutation touch Groups" classification to maintain.
@@ -1030,6 +1034,7 @@ public sealed partial class WorldDocument {
             fields: true
         );
     }
+
     // Everything outside the arena that reads a state value and keeps its own copy: the drive gates the grant table
     // resolved, the field lattice's input, each body's scale, and the cell-driven inhabit counts. A state value
     // reaches the installed document through two doors, a value mutation and the arena's end-of-tick export of what
@@ -1066,6 +1071,7 @@ public sealed partial class WorldDocument {
         m_inhabitCountAdmitted.Clear();
         m_inhabitCountDisconnected.Clear();
     }
+
     private bool TouchesDriveGate(WorldDefinition definition, WorldMutation mutation) {
         m_touchedRows.Clear();
 
@@ -1105,6 +1111,7 @@ public sealed partial class WorldDocument {
                 return false;
         }
     }
+
     internal bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
         compilation = null;
 
@@ -1116,6 +1123,7 @@ public sealed partial class WorldDocument {
             ? WorldDefinitionValidator.TryValidateLocally(compilation: out compilation, definition: candidate, reason: out reason)
             : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
     }
+
     // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed
     // over them, with nothing compiled.
     private bool TryValidateStateMutation(WorldDefinition candidate, WorldMutation mutation, out string reason) {
@@ -1232,6 +1240,7 @@ public sealed partial class WorldDocument {
                 );
         }
     }
+
     // Adopt a wholesale-rebuilt field (a swap/undo), bumping the revision when the field actually moved so the status
     // read-back tracks it. A swap into an analytic world clears the field.
     internal void SwapSolids(WorldSolidField? solids) {
@@ -1243,6 +1252,7 @@ public sealed partial class WorldDocument {
             m_solidRevision++;
         }
     }
+
     // Applies one screen op SYNCHRONOUSLY (see WorldScreenOp's own remarks for why: never buffered, so a following
     // Command.Engage in the same batch observes the effect). Authority FIRST — Control over the targeted screen(s),
     // the SAME grant subject ScreenCommandModule's pre-inversion client-side precheck used, now checked
@@ -1361,6 +1371,7 @@ public sealed partial class WorldDocument {
 
         return ok;
     }
+
     // Build the SDF contact field for a candidate — null when the requirements permit analytic contact (the set is
     // derived inside the population's compile, not here), the built field under the FIELD provider, or a
     // named failure when a solid names an op the warp-free evaluator cannot interpret.
@@ -1382,6 +1393,7 @@ public sealed partial class WorldDocument {
             reason: out reason
         );
     }
+
     // The Control check over a screen op's targeted screen(s): every op names exactly one index except Link (every
     // named member) and Unlink (every member of the ALREADY-LIVE link by that name, when one exists — mirroring the
     // pre-inversion console module's own "control over every member is required to sever" rule; a missing link
@@ -1851,7 +1863,6 @@ public sealed partial class WorldDocument {
             );
         }
     }
-
     // Pre-sizes the per-tick addon contention tracking against a plan's own MountedCount (or, at boot/AttachAddons,
     // the runtime's already-committed count) — called BEFORE the addon plan's own Commit, so the caller can adopt
     // the new arrays by reference in the same breath as the plan itself publishes, with no allocation at that
@@ -1875,7 +1886,6 @@ public sealed partial class WorldDocument {
         principal = new WorldPrincipal[capacity];
         collided = new bool[capacity];
     }
-
     /// <summary>Attaches a client sink the per-tick snapshot is delivered to, immediately delivering the live
     /// definition followed by a primer snapshot of the current table, so the client renders the current state before
     /// its first ordinary tick delivery. A subscribe, not an overwrite: <see cref="WorldOutputHub"/> supports more

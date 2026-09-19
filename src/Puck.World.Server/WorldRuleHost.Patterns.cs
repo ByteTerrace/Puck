@@ -105,11 +105,19 @@ public sealed partial class WorldRuleHost {
                 cells: cells,
                 start: start
             ); (index < cells.Count); index++) {
-                BoundTokenKey = Host.Arena.Keys.Intern(name: cells[index].Key);
-                BoundPreviousKey = ((index > 0)
-                    ? Host.Arena.Keys.Intern(name: cells[(index - 1)].Key)
-                    : default
+                _ = Host.Arena.Keys.TryResolve(
+                    key: out var tokenKey,
+                    name: cells[index].Key
                 );
+                BoundTokenKey = tokenKey;
+                BoundPreviousKey = default;
+                if (index > 0) {
+                    _ = Host.Arena.Keys.TryResolve(
+                        key: out var previousKey,
+                        name: cells[(index - 1)].Key
+                    );
+                    BoundPreviousKey = previousKey;
+                }
                 word[length++] = (RuleExpressions.TryEvaluate(
                     fault: out _,
                     kind: kind,

@@ -78,7 +78,8 @@ public interface IWorldFacts : IFacet {
     /// <param name="bodyRef">The reference.</param>
     /// <returns>The index, or -1.</returns>
     int ResolveBody(in CompiledBodyRef bodyRef);
-    /// <summary>Returns the cell key a <c>$pair:</c> indirection names for the evaluation in flight.</summary>
+    /// <summary>Returns an already-admitted cell key a <c>$pair:</c> indirection names for the evaluation in flight.
+    /// A writing effect admits a missing pair key inside its journal scope.</summary>
     /// <param name="key">The pair key.</param>
     /// <returns>The interned key.</returns>
     CellKey PairKey(PairKeyFact key);

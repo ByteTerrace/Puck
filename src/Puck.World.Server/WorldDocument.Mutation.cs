@@ -103,6 +103,38 @@ public sealed partial class WorldDocument {
             return false;
         }
 
+        var installsArena = RequiresFullInstall(
+            candidate: candidate,
+            mutation: mutation,
+            previous: current
+        );
+        StateArena? arena = null;
+
+        // A malformed declaration must be named by the validator before StateCatalog or StateArena construction
+        // can throw while preparing it. Settling can replace derived cells and clocks, so the exact settled
+        // candidate is validated again below and owns the retained compilation.
+        if (
+            installsArena &&
+            !TryValidateMutationCandidate(
+            candidate: candidate,
+            compilation: out _,
+            mutation: mutation,
+            reason: out reason,
+            retainCompilation: false
+        )) {
+            return false;
+        }
+        if (
+            installsArena &&
+            !Host.TryPrepareArenaReplacement(
+            definition: candidate,
+            prepared: out arena,
+            reason: out reason,
+            settled: out candidate
+        )) {
+            return false;
+        }
+
         if (
             (mutation is WorldMutation.UpsertKit upsertKit) &&
             !Host.Population.CanReplaceKit(
@@ -130,6 +162,18 @@ public sealed partial class WorldDocument {
         }
 
         if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out reason, compilation: out var compilation)) {
+            return false;
+        }
+        // A value-only candidate reuses the live arena rather than carrying a prepared replacement. Validate its
+        // complete import against that arena now, while a rule firing's scope is still open, so retained orphan keys
+        // and visibility payload can refuse before commit. Direct mutations install immediately after preparation;
+        // a rule commit closes the same unchanged scope, so the following TryLoad has the same admission inputs.
+        if (
+            !installsArena &&
+            !Host.Arena.TryValidateLoad(
+            rows: candidate.State,
+            reason: out reason
+        )) {
             return false;
         }
 
@@ -241,6 +285,7 @@ public sealed partial class WorldDocument {
 
             prepared = new WorldPreparedMutation(
                 addonPlan: addonPlan,
+                arena: arena,
                 candidate: candidate,
                 compilation: compilation,
                 engineTick: engineTick,
@@ -298,14 +343,11 @@ public sealed partial class WorldDocument {
             // still carries the state catalog identity the rules were compiled against. A document-value refresh or
             // a slot-to-keyed reshape mints a new one, and a look-assignment rebind needs the population rebuild,
             // so those take the full install like every other mutation.
-            if (
-                IsStateMutation(mutation: mutation) &&
-                ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
-                !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
-            ) {
+            if (prepared.Arena is null) {
                 InstallRuntimeStateValue(definition: candidate, mutation: mutation);
             } else {
                 Install(
+                    arena: prepared.Arena,
                     definition: candidate,
                     compilation: prepared.Compilation,
                     rebuildPopulation: (AffectsPopulation(mutation: mutation) || RefreshesLookAssignment(
@@ -401,4 +443,12 @@ public sealed partial class WorldDocument {
         ));
 
     }
+
+    // A state-value mutation can reuse every compiled product only while it keeps the catalog identity and does
+    // not rebind a population look. All other mutations install a replacement prepared alongside the document.
+    private bool RequiresFullInstall(WorldDefinition candidate, WorldMutation mutation, WorldDefinition previous) => !(
+        IsStateMutation(mutation: mutation) &&
+        ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
+        !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
+    );
 }

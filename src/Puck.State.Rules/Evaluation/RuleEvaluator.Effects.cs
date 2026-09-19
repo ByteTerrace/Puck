@@ -635,11 +635,23 @@ public sealed partial class RuleEvaluator {
             return true;
         }
 
-        var key = RuleReads.ResolveKey(
+        if (!RuleReads.TryResolveKeyForWrite(
             keyFrom: write.KeyFrom,
             literal: write.Key,
-            reader: m_host
-        );
+            key: out var key,
+            reader: m_host,
+            reason: out var keyReason
+        )) {
+            ReportRefusal(
+                detail: keyReason,
+                effect: effect.Describe,
+                refusal: RuleEffectRefusal.MutationRejected,
+                ruleName: firing.RuleName,
+                tick: firing.Tick
+            );
+
+            return false;
+        }
 
         if (!key.IsValid) {
             return true;

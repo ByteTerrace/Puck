@@ -3,7 +3,7 @@ using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class StateArena {
-    /// <summary>Appends the retained key-name set in canonical name order, independently of intern ordinals.
+    /// <summary>Appends the retained key-name count and an order-independent digest sum in constant time.
     /// Names no row uses still affect admission of future mints.</summary>
     /// <param name="hash">The running hash.</param>
     public void AddKeyLedgerTo(ref Fnv1aHash hash) => m_keys.AddLedgerTo(hash: ref hash);

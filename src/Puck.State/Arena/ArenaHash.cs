@@ -13,7 +13,7 @@ public sealed partial class StateArena {
     /// same bytes in the same order.
     /// <para>A host-owned row is excluded: it has no columns here, and its facet hashes what it serves.</para>
     /// <para>Members fold their names in slot order, independently of intern ordinals. The retained key ledger
-    /// also folds in canonical name order because orphan committed names affect future mint admission.</para>
+    /// folds its count and order-independent digest sum because orphan names affect future mint admission.</para>
     /// </remarks>
     public ulong ComputeHash() {
         var hash = Fnv1aHash.Create();
@@ -27,8 +27,8 @@ public sealed partial class StateArena {
             );
         }
 
-        // Retained names affect future mint admission, including names no row currently uses. Canonical name
-        // order preserves that resource state without making allocation ordinals part of content identity.
+        // Retained names affect future mint admission, including names no row currently uses. The digest sum
+        // preserves that resource state without making allocation ordinals part of content identity.
         m_keys.AddLedgerTo(hash: ref hash);
         return hash.Value;
     }

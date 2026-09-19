@@ -267,9 +267,9 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 public sealed class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // The visibility hash became complete in this shape; refusing the previous token prevents an otherwise valid
-    // tape from loading only to report a false authoritative-hash divergence at every visibility-bearing tick.
-    private const uint ShapeToken = 2u;
+    // The retained-name fingerprint and compiler-symbol budget separation changed authoritative hashes. Refuse
+    // earlier tapes at intake instead of reporting their old hash contract as a simulation divergence.
+    private const uint ShapeToken = 3u;
 
     /// <summary>Gets the record-start world definition as its canonical UTF-8 JSON — the rehydrated starting state.</summary>
     public required byte[] DefinitionJson { get; init; }
