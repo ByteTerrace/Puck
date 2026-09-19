@@ -1,6 +1,7 @@
 using Parlot.Fluent;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Units;
 
 namespace Puck.Transpiler.Parsing;
@@ -920,7 +921,7 @@ public static partial class PuckParser {
             }
             SkipWhiteSpace(context: context);
             var literal = ParseNumberWithOptionalUnit(context: context);
-            var delay = LiteralToDecimal(value: literal.Value);
+            var delay = DecimalValues.FromLiteral(literal: literal);
 
             if (literal.Unit is null) {
                 diagnostics?.ReportError(
@@ -939,7 +940,7 @@ public static partial class PuckParser {
                 literal.Unit,
                 out var seconds
             )) {
-                delay = ((decimal)seconds);
+                delay = DecimalValues.FromDouble(value: seconds);
             } else {
                 var accepted = string.Join(
                     "/",
@@ -1669,7 +1670,7 @@ public static partial class PuckParser {
                         );
                     }
                     return new RhsSecondsNode(
-                        LiteralToDecimal(value: literal.Value),
+                        DecimalValues.FromLiteral(literal: literal),
                         literal.Offset,
                         literal.Length,
                         literal.Line,

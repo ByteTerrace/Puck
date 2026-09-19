@@ -150,6 +150,8 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
     /// <inheritdoc/>
     public virtual void Committed(int scope) { }
     /// <inheritdoc/>
+    public virtual void Preflighting() { }
+    /// <inheritdoc/>
     public virtual bool Fire(ICompiledFact effect, in EffectFiring firing, out EffectRefusal refusal) {
         refusal = IEffectHost.Unbound(effect: effect);
 

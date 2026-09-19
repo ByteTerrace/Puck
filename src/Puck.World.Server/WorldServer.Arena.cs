@@ -12,6 +12,12 @@ public sealed partial class WorldServer {
     private StateCatalog? m_arenaCatalog;
     private string[] m_drawSites = [];
     private ulong[] m_rowVersionMarks = [];
+    // What the last exports moved that a consumer outside the arena keeps its own copy of, until SettleStateConsumers
+    // brings them up to date.
+    private bool m_bodyScaleOwed;
+    private bool m_consumersOwed;
+    private bool m_driveGateOwed;
+    private bool m_fieldsOwed;
     private HashSet<string>? m_documentValueRows;
     // Document rows occupy the catalog's first ordinals, so this bounds every walk that only the exported document
     // depends on — a slot lane's write moves its own row's version and nothing the document carries.
@@ -307,8 +313,15 @@ public sealed partial class WorldServer {
     }
     // The document becomes the arena's export. Every exported row is the row the arena was built over with its
     // stored columns written back, so a WorldStateRow's own traits ride across and the cast is total.
-    public bool InstallArenaExport() {
+    /// <param name="reconcile">Whether the consumers that keep their own copy of a state value are brought up to
+    /// date now. An export taken in the middle of a firing leaves that owed, and the export that ends the tick
+    /// settles it whether or not anything moved in between.</param>
+    public bool InstallArenaExport(bool reconcile = true) {
         if (!ArenaMoved()) {
+            if (reconcile) {
+                SettleStateConsumers();
+            }
+
             return false;
         }
 
@@ -317,6 +330,32 @@ public sealed partial class WorldServer {
 
         for (var index = 0; (index < exported.Count); index++) {
             rows[index] = ((WorldStateRow)exported[index]);
+        }
+
+        // Which of the consumers that keep their own copy of a state value read a row this export moved.
+        var before = m_document.Definition;
+        var scaleRow = before.Population.ScaleRow;
+        var descriptors = m_arena.Catalog.Descriptors;
+        var marked = Math.Min(
+            val1: m_documentRowCount,
+            val2: m_arena.Layout.RowCount
+        );
+
+        for (var ordinal = 0; (ordinal < marked); ordinal++) {
+            if (
+                (m_rowVersionMarks[ordinal] == m_arena.RowVersion(rowOrdinal: ordinal)) ||
+                (descriptors[ordinal].Lane != StateLane.Document) ||
+                (descriptors[ordinal].LaneOrdinal >= before.State.Count)
+            ) {
+                continue;
+            }
+
+            m_driveGateOwed |= before.State[descriptors[ordinal].LaneOrdinal].GatesDrive;
+            m_bodyScaleOwed |= string.Equals(
+                a: descriptors[ordinal].Name,
+                b: scaleRow,
+                comparisonType: StringComparison.Ordinal
+            );
         }
 
         // A document value bound to a state row — a placement's spatial extent, a creation's scale — is resolved
@@ -344,11 +383,62 @@ public sealed partial class WorldServer {
         // The installed document now carries values no sink has seen: a rule's own write reaches a client through the
         // same state delivery a console write does.
         m_document.MarkStateDeliveryPending();
+        // The field section compiles from the state section and is republished only when what it reads changed, so
+        // its reference is what says whether the lattice's input moved.
+        m_fieldsOwed |= !ReferenceEquals(
+            objA: before.Fields,
+            objB: m_document.Definition.Fields
+        );
+        m_consumersOwed = true;
+
+        if (reconcile) {
+            SettleStateConsumers();
+        }
 
         // The document equals the arena again, so this is where the next export's baseline sits.
         MarkRowVersions();
 
         return true;
+    }
+    /// <summary>Returns the installed document carrying the arena's values as they stand, a firing's uncommitted
+    /// writes included, and installs nothing: what a preflight judges a document arm against.</summary>
+    /// <returns>The proposed document.</returns>
+    public WorldDefinition ProposedDefinition() {
+        if (
+            !ArenaMoved() &&
+            (m_arena.Journal.Length == 0)
+        ) {
+            return m_document.Definition;
+        }
+
+        var exported = m_arena.ToRows();
+        var rows = new WorldStateRow[exported.Count];
+
+        for (var index = 0; (index < exported.Count); index++) {
+            rows[index] = ((WorldStateRow)exported[index]);
+        }
+
+        return m_document.Definition.WithWorldState(rows: rows);
+    }
+    private void SettleStateConsumers() {
+        if (!m_consumersOwed) {
+            return;
+        }
+
+        var bodyScale = m_bodyScaleOwed;
+        var driveGate = m_driveGateOwed;
+        var fields = m_fieldsOwed;
+
+        m_bodyScaleOwed = false;
+        m_consumersOwed = false;
+        m_driveGateOwed = false;
+        m_fieldsOwed = false;
+        m_document.ReconcileStateConsumers(
+            bodyScale: bodyScale,
+            definition: m_document.Definition,
+            driveGate: driveGate,
+            fields: fields
+        );
     }
     // Every search job is one resolved plan and one judge over this server's own arena, admitted at install: a
     // judge whose rules the host cannot serve refuses the plan by name rather than at a tick.

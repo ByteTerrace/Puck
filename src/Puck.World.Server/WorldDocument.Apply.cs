@@ -1023,17 +1023,31 @@ public sealed partial class WorldDocument {
         Host.SyncArena(definition: definition);
         m_pendingStateDelivery = true;
 
-        if (TouchesDriveGate(definition: definition, mutation: mutation)) {
+        ReconcileStateConsumers(
+            bodyScale: true,
+            definition: definition,
+            driveGate: TouchesDriveGate(definition: definition, mutation: mutation),
+            fields: true
+        );
+    }
+    // Everything outside the arena that reads a state value and keeps its own copy: the drive gates the grant table
+    // resolved, the field lattice's input, each body's scale, and the cell-driven inhabit counts. A state value
+    // reaches the installed document through two doors, a value mutation and the arena's end-of-tick export of what
+    // the rules wrote, and both end here, so a gate a rule closed is as closed as one a command closed. Nothing here
+    // writes the arena or opens a scope. Each flag says whether a row that consumer reads moved.
+    internal void ReconcileStateConsumers(WorldDefinition definition, bool driveGate, bool fields, bool bodyScale) {
+        if (driveGate) {
             Host.GrantTable.SyncState(definition: definition);
         }
+        if (fields) {
+            Host.Population.InstallFields(definition: definition);
+        }
+        if (bodyScale) {
+            Host.Population.SyncBodyScale(definition: definition);
+        }
 
-        Host.Population.InstallFields(definition: definition);
-        Host.Population.SyncBodyScale(definition: definition);
-
-        // A cell-driven inhabit count's row lives on this same state catalog, so a value-only mutation is exactly
-        // the moment its live raw value could have moved (a rule frame's end-of-tick fold, or a direct console
-        // write) — ReconcileInhabitCounts itself compares against its own cache and is a no-op walk when the
-        // touched row is unrelated to any tracked inhabit facet.
+        // ReconcileInhabitCounts compares against its own cache and is a no-op walk when no tracked inhabit facet's
+        // row moved.
         Host.Population.ReconcileInhabitCounts(
             admitted: m_inhabitCountAdmitted,
             definition: definition,

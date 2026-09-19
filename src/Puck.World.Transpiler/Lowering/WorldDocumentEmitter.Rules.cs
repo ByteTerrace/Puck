@@ -389,7 +389,7 @@ public static partial class WorldDocumentEmitter {
     private static decimal ToDecimalNode(JsonNode? node) => node switch {
         JsonValue v when v.TryGetValue<decimal>(value: out var d) => d,
         JsonValue v when v.TryGetValue<long>(value: out var l) => l,
-        JsonValue v when v.TryGetValue<double>(value: out var db) => ((decimal)db),
+        JsonValue v when v.TryGetValue<double>(value: out var db) => DecimalValues.FromDouble(value: db),
         _ => 0m,
     };
     // ---- Gate lowering (§1) --------------------------------------------------------------------------------

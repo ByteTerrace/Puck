@@ -133,6 +133,10 @@ public sealed partial class RuleEvaluator {
 
         var preflight = (firing with { Preflight = true });
 
+        if (m_deferred.Count > queued) {
+            m_host.Preflighting();
+        }
+
         for (var index = queued; (index < m_deferred.Count); index++) {
             var arm = m_deferred[index];
 

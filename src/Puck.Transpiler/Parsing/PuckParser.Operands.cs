@@ -399,14 +399,6 @@ public static partial class PuckParser {
         cursor.Advance();
         return (name.Length > 0);
     }
-    private static decimal LiteralToDecimal(object? value) => value switch {
-        decimal m => m,
-        long l => l,
-        ulong ul => ul,
-        double d => ((decimal)d),
-        int i => i,
-        _ => 0m,
-    };
     private static string? LongestMatchingPunctuation(string buffer, int offset, string[] candidates) {
         foreach (var candidate in candidates) {
             if (

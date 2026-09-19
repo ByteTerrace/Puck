@@ -11,6 +11,11 @@ namespace Puck.World.Server;
 /// called once with <see cref="EffectFiring.Preflight"/> set — where it validates and does nothing outward — and
 /// once after the firing's scope commits.</remarks>
 public sealed partial class WorldRuleHost {
+    // What one firing's preflights carry from each arm to the next: the document its document arms have composed so
+    // far, and the velocity its impulses would leave each rigid body at. Preflighting clears both.
+    private readonly Dictionary<int, FixedVector3> m_preflightRigidVelocity = [];
+    private WorldDefinition? m_preflightDocument;
+
     /// <inheritdoc/>
     public bool Apply(in Mutation mutation, out EffectRefusal refusal) => Host.ArenaHost.Apply(
         mutation: in mutation,
@@ -23,11 +28,16 @@ public sealed partial class WorldRuleHost {
         refusal: out refusal,
         transform: transform
     );
-    // Committed and Fire implement IEffectHost members that carry default bodies. Narrowing either one compiles
+    // Committed, Preflighting and Fire implement IEffectHost members that carry default bodies. Narrowing one compiles
     // clean and rebinds to the interface's own implementation, which flushes no identity fact and refuses every
     // world arm as unbound, so their accessibility is load-bearing.
     /// <inheritdoc/>
     public void Committed(int scope) => FlushIdentityFacts();
+    /// <inheritdoc/>
+    public void Preflighting() {
+        m_preflightDocument = null;
+        m_preflightRigidVelocity.Clear();
+    }
     /// <inheritdoc/>
     public bool Fire(ICompiledFact effect, in EffectFiring firing, out EffectRefusal refusal) {
         switch (effect) {
@@ -279,16 +289,37 @@ public sealed partial class WorldRuleHost {
 
         refusal = EffectRefusal.None;
 
-        if (preflight) {
-            return true;
-        }
-
         var magnitude = FixedQ4816.FromRawBits(value: magnitudeFact.ToRaw(kind: CellKind.Fixed));
+        var impulse = (heading.FixedOrientation.Rotate(vector: RigidImpulseLocalForward) * magnitude);
+        var accepted = true;
 
-        if (!target.TryApplyRigidImpulse(
-            impulse: (heading.FixedOrientation.Rotate(vector: RigidImpulseLocalForward) * magnitude),
-            velocityCeiling: Host.Population.RigidVelocityCeiling
-        )) {
+        // A preflighted impulse lands on the velocity the firing's earlier impulses would leave the body at, so two
+        // that each fit and together pass the ceiling are refused before the commit, where the firing still rewinds.
+        if (preflight) {
+            accepted = target.TryProjectRigidImpulse(
+                impulse: impulse,
+                projected: out var projected,
+                velocity: (m_preflightRigidVelocity.TryGetValue(
+                    key: targetIndex,
+                    value: out var pending
+                )
+                    ? pending
+                    : target.RigidVelocity),
+                velocityCeiling: Host.Population.RigidVelocityCeiling
+            );
+
+            if (accepted) {
+                m_preflightRigidVelocity[targetIndex] = projected;
+
+                return true;
+            }
+        } else {
+            accepted = target.TryApplyRigidImpulse(
+                impulse: impulse,
+                velocityCeiling: Host.Population.RigidVelocityCeiling
+            );
+        }
+        if (!accepted) {
             return Refuse(
                 code: WorldRuleEffectRefusal.RigidImpulseOutOfRange,
                 reason: $"body:{targetIndex} impulse is not representable or would exceed the world's declared speed ceiling ({((double)Host.Population.RigidVelocityCeiling):0.###})",
@@ -566,10 +597,6 @@ public sealed partial class WorldRuleHost {
             );
         }
 
-        // A document mutation composes against the installed document and its install re-seeds the arena from what
-        // it composed, so the tick's rule writes go into the document first or the re-seed drops them.
-        _ = Host.InstallArenaExport();
-
         WorldMutation mutation = (effect.Write switch {
             WorldDocumentWrite.UpsertHudPanel => new WorldMutation.UpsertHudPanel(
             Panel: effect.HudPanel!,
@@ -590,10 +617,13 @@ public sealed partial class WorldRuleHost {
         });
 
         if (firing.Preflight) {
-            // A host preflights what it can so a post-commit refusal is a host failure, never an authored one.
+            // A host preflights what it can so a post-commit refusal is a host failure, never an authored one. The
+            // firing's document arms compose in order onto one candidate, so each is judged against the document the
+            // ones before it leave. Nothing is installed: the firing's scope is still open, and a document carrying
+            // writes that may yet rewind would keep them.
             if (!WorldDocument.TryCompose(
                 candidate: out var candidate,
-                current: Host.Definition,
+                current: (m_preflightDocument ??= Host.ProposedDefinition()),
                 engineTick: firing.EngineTick,
                 evictedKey: out _,
                 instanceIdentity: Host.InstanceIdentity,
@@ -621,8 +651,15 @@ public sealed partial class WorldRuleHost {
                 );
             }
 
+            m_preflightDocument = candidate;
+
             return true;
         }
+
+        // A document mutation composes against the installed document and its install re-seeds the arena from what
+        // it composed, so the tick's rule writes go into the document first or the re-seed drops them.
+        _ = Host.InstallArenaExport(reconcile: false);
+
         if (!Host.TryApplyMutation(
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0,

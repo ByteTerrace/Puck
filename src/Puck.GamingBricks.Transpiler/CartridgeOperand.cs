@@ -25,7 +25,7 @@ public static class CartridgeOperand {
             (real >= 0) &&
             (real <= CartridgeLimits.WideMaximum)
         ) {
-            return ((decimal)real);
+            return DecimalValues.FromDouble(value: real);
         }
 
         return null;

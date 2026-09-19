@@ -314,27 +314,15 @@ public sealed partial class WorldBody {
     /// <see langword="false"/> otherwise, leaving velocity entirely unchanged (no partial application) — the caller
     /// refuses the command by name in that case.</returns>
     public bool TryApplyRigidImpulse(FixedVector3 impulse, FixedQ4816 velocityCeiling) {
-        if (m_rigid is not { } rigid) {
+        if (m_rigid is null) {
             return true;
         }
-
-        if (!TryImpulseToVelocity(
+        if (!TryProjectRigidImpulse(
             impulse: impulse,
-            inverseMassRaw: ScaleRigid(rigid: rigid).InverseMassRaw,
-            delta: out var delta
+            projected: out var candidate,
+            velocity: m_rigidVelocity,
+            velocityCeiling: velocityCeiling
         )) {
-            return false;
-        }
-
-        if (!TryAdd(
-            left: m_rigidVelocity,
-            right: delta,
-            sum: out var candidate
-        )) {
-            return false;
-        }
-
-        if (candidate.Length > velocityCeiling) {
             return false;
         }
 
@@ -342,6 +330,38 @@ public sealed partial class WorldBody {
         m_resting = false;
         m_restingHoldTicks = 0UL;
         return true;
+    }
+
+    /// <summary>Returns the velocity an impulse would leave a rigid body at, starting from
+    /// <paramref name="velocity"/> rather than the body's own, and changes nothing: the admission
+    /// <see cref="TryApplyRigidImpulse"/> decides by, asked ahead of the act.</summary>
+    /// <param name="impulse">The world-space impulse.</param>
+    /// <param name="velocityCeiling">The world's declared speed ceiling.</param>
+    /// <param name="velocity">The velocity the impulse lands on.</param>
+    /// <param name="projected">The resulting velocity, on success; <paramref name="velocity"/> for a body with no
+    /// rigid facet.</param>
+    /// <returns><see langword="true"/> when the impulse is representable and the result stays at or under the
+    /// ceiling.</returns>
+    public bool TryProjectRigidImpulse(FixedVector3 impulse, FixedQ4816 velocityCeiling, FixedVector3 velocity, out FixedVector3 projected) {
+        projected = velocity;
+
+        if (m_rigid is not { } rigid) {
+            return true;
+        }
+
+        return (
+            TryImpulseToVelocity(
+                impulse: impulse,
+                inverseMassRaw: ScaleRigid(rigid: rigid).InverseMassRaw,
+                delta: out var delta
+            ) &&
+            TryAdd(
+                left: velocity,
+                right: delta,
+                sum: out projected
+            ) &&
+            (projected.Length <= velocityCeiling)
+        );
     }
 
     // The tick-rate-independent decay factor an authored per-second rate applies over an elapsed duration:

@@ -275,6 +275,11 @@ public interface IEffectHost : IStateReader {
     /// <returns><see langword="true"/> when the mutation moved the arena; <see langword="false"/> with no refusal
     /// when it was admitted and left the addressed cell exactly as it was.</returns>
     bool Apply(in Mutation mutation, out EffectRefusal refusal);
+    /// <summary>Observes a firing about to preflight its queued arms, in the order they will fire. The arms of one
+    /// firing are a sequence: a later one fires into what the earlier ones did, so a host that preflights each
+    /// against the state before any of them admits a sequence that cannot run and refuses one that can. A host
+    /// resets here whatever it carries from one preflight to the next.</summary>
+    void Preflighting() { }
     /// <summary>Observes a firing whose journal scope has just committed, so a host can install its own side of it.
     /// Called once per committed firing, before any irreversible arm fires.</summary>
     /// <param name="scope">The mark the committed scope closed with.</param>
