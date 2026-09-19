@@ -31,9 +31,11 @@ public static partial class ArenaTransforms {
             );
         }
 
-        Span<long> values = stackalloc long[topology.CellCount];
-        Span<long> visible = stackalloc long[topology.CellCount];
+        using var valuesLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
 
+        var values = valuesLease.Span;
+        using var visibleLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
+        var visible = visibleLease.Span;
         if (
             !TrySourceBoard(
             context: in context,

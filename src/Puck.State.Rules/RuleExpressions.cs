@@ -3,10 +3,15 @@ namespace Puck.State.Rules;
 /// <summary>The one operator dispatch for a compiled postfix program: the walk a gate, a binding, an effect source,
 /// and the compiler's own constant folder all evaluate through, so a folded constant and a live evaluation of the
 /// same operation agree bit for bit.</summary>
-/// <remarks>Evaluation allocates nothing: the value stack, the absence marks, and a call's argument frame are
-/// stack-allocated per program, and a fold reads its family's cells straight off the arena.</remarks>
+/// <remarks>Evaluation allocates nothing once it has run: the value stack and the absence marks are leased from
+/// the reader's <see cref="ArenaScratch"/> at the program's own length, a call's argument frame is a fixed few
+/// words of machine stack, and a fold reads its family's cells straight off the arena.</remarks>
 public static class RuleExpressions {
     private const int MaxArguments = 8;
+
+    // The compiler folds constants with no evaluation in flight, so it has no host to borrow from.
+    [ThreadStatic]
+    private static ArenaScratch? FoldScratch;
 
     /// <summary>Evaluates a compiled postfix program.</summary>
     /// <param name="reader">The evaluation in flight, or <see langword="null"/> to fold constants — a live read
@@ -28,10 +33,18 @@ public static class RuleExpressions {
 
     private static bool Run(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, long? member, ReadOnlySpan<long> arguments, out long value, out ExpressionFault fault) {
         fault = ExpressionFault.Domain;
-        Span<long> stack = stackalloc long[RuleCapacity.MaxExpressionTokens];
+
+        // A token pushes at most one value, so a program's own length bounds its stack: the lease is as deep as
+        // this program can reach, and a nested call or fold takes the next one down rather than more machine stack.
+        var scratch = (reader?.Scratch ?? (FoldScratch ??= new ArenaScratch()));
+
+        using var stackLease = scratch.Rent<long>(length: program.Length);
         // An operand whose dynamic key named no cell pushes a marked slot rather than failing at once, so
         // `isAbsent` and `??` can answer it. Any other operation consuming a marked slot fails as it always has.
-        Span<bool> absent = stackalloc bool[RuleCapacity.MaxExpressionTokens];
+        using var absentLease = scratch.Rent<bool>(length: program.Length);
+
+        var stack = stackLease.Span;
+        var absent = absentLease.Span;
         // One frame serves every call site: a call evaluates its body before the next call site is reached.
         Span<long> frame = stackalloc long[MaxArguments];
         var top = 0;

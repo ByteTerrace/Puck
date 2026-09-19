@@ -50,7 +50,7 @@ public sealed partial class StateArena {
         }
 
         foreach (var (rowOrdinal, row) in admitted) {
-            var layout = m_layout[rowOrdinal];
+            ref readonly var layout = ref m_layout[rowOrdinal];
 
             if (layout.IsStored) {
                 LoadRow(
@@ -553,7 +553,7 @@ public sealed partial class StateArena {
         rowOrdinal = handle.Ordinal;
 
         var descriptor = m_catalog.Descriptors[rowOrdinal];
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
         var cells = (row.Cells ?? []);
 
         if (descriptor.Kind != row.Kind) {

@@ -19,8 +19,11 @@ public static partial class ArenaTransforms {
             return false;
         }
 
-        Span<long> left = stackalloc long[topology.CellCount];
-        Span<long> right = stackalloc long[topology.CellCount];
+        using var leftLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
+
+        var left = leftLease.Span;
+        using var rightLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
+        var right = rightLease.Span;
         var leftEmpty = 0L;
         var rightEmpty = 0L;
 
@@ -51,8 +54,9 @@ public static partial class ArenaTransforms {
             return false;
         }
 
-        Span<long> result = stackalloc long[topology.CellCount];
+        using var resultLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
 
+        var result = resultLease.Span;
         BoardCombination.Write(
             direction: combine.Direction,
             element: combine.Element,

@@ -566,6 +566,8 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
             ).Value >> FixedQ4816.FractionBitCount));
         }
 
+        using var values = reader.Scratch.Rent<long>(length: Board.Topology.CellCount);
+
         return RuleFact.Finite(
             kind: CellKind.Int,
             value: (ArenaBoards.TryEvaluate(
@@ -576,7 +578,7 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
                 result: out var result,
                 rowOrdinal: RowOrdinal,
                 source: origin,
-                values: reader.BoardScratch(cells: Board.Topology.CellCount)
+                values: values.Span
             )
             ? result
             : -1L)

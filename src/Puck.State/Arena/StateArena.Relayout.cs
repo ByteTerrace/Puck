@@ -100,7 +100,7 @@ public sealed partial class StateArena {
         );
 
         for (var rowOrdinal = 0; (rowOrdinal < m_layout.RowCount); rowOrdinal++) {
-            var from = m_layout[rowOrdinal];
+            ref readonly var from = ref m_layout[rowOrdinal];
 
             if (from.LaneSlotStart < 0) {
                 continue;

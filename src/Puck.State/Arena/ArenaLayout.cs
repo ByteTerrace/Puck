@@ -162,7 +162,7 @@ public sealed class ArenaLayout {
     /// <summary>Gets one row's place in the arena.</summary>
     /// <param name="ordinal">The row's catalog ordinal.</param>
     /// <returns>The row's layout.</returns>
-    public ArenaRowLayout this[int ordinal] => m_rows[ordinal];
+    public ref readonly ArenaRowLayout this[int ordinal] => ref m_rows[ordinal];
 
     private static int Dimensions(IStateSection? section, StateRow row) {
         if (row.Kind != CellKind.Vector) {

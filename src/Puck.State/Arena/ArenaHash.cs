@@ -63,7 +63,7 @@ public sealed partial class StateArena {
             );
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         // The ordinal and each column's own ordinal frame the row's runs, so neither two rows nor two adjacent
         // columns of one row can present the same values by dividing them differently.
@@ -156,7 +156,7 @@ public sealed partial class StateArena {
                 length: range.RowCount,
                 start: range.FirstRow
             )) {
-                var layout = m_layout[rowOrdinal];
+                ref readonly var layout = ref m_layout[rowOrdinal];
 
                 if (
                     layout.HostOwned ||

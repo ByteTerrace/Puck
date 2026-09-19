@@ -39,7 +39,9 @@ public static partial class ArenaTransforms {
             );
         }
 
-        Span<int> ordinals = stackalloc int[RuleReads.MaxArrangementTokens];
+        using var ordinalsLease = context.Arena.Scratch.Rent<int>(length: RuleReads.MaxArrangementTokens);
+
+        var ordinals = ordinalsLease.Span;
         var count = DomainOrdinals(
             arena: arena,
             domainOrdinal: arrange.DomainRowOrdinal,
@@ -71,8 +73,9 @@ public static partial class ArenaTransforms {
             return Applied(refusal: out refusal);
         }
 
-        Span<int> relative = stackalloc int[RuleReads.MaxArrangementTokens];
+        using var relativeLease = context.Arena.Scratch.Rent<int>(length: RuleReads.MaxArrangementTokens);
 
+        var relative = relativeLease.Span;
         StateReader.RelativeOrder(
             ordinals: ordinals[..count],
             relative: relative[..count]
@@ -80,21 +83,23 @@ public static partial class ArenaTransforms {
 
         // sorted[r] is the position whose relative rank is r; the unranked permutation says which of those each
         // arranged position takes.
-        Span<int> sorted = stackalloc int[count];
-
+        using var sortedLease = context.Arena.Scratch.Rent<int>(length: count);
+        var sorted = sortedLease.Span;
         for (var position = 0; (position < count); position++) {
             sorted[relative[position]] = position;
         }
 
-        Span<int> permutation = stackalloc int[RuleReads.MaxArrangementTokens];
+        using var permutationLease = context.Arena.Scratch.Rent<int>(length: RuleReads.MaxArrangementTokens);
 
+        var permutation = permutationLease.Span;
         Puck.Maths.Combinatorics.PermutationUnrank(
             destination: permutation[..count],
             rank: ((ulong)rank)
         );
 
-        Span<int> order = stackalloc int[count];
+        using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
 
+        var order = orderLease.Span;
         for (var position = 0; (position < count); position++) {
             order[position] = sorted[permutation[position]];
         }

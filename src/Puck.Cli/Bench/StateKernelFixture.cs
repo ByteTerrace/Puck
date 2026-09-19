@@ -12,7 +12,6 @@ public sealed class StateKernelReader : IStateReader {
     private const string CursorRow = "cursor";
     private const string ProbeRow = "probe";
 
-    private readonly long[] m_boardScratch = new long[CellCount];
     private readonly long[] m_locals = new long[RuleCapacity.MaxLocalsPerRule];
     private readonly long[] m_patternWord = new long[PatternCapacity.MaxWord];
 
@@ -76,10 +75,6 @@ public sealed class StateKernelReader : IStateReader {
     public Span<long> Locals => m_locals;
     public Span<long> PatternWord => m_patternWord;
 
-    public Span<long> BoardScratch(int cells) => m_boardScratch.AsSpan(
-        length: cells,
-        start: 0
-    );
     public int BoundIndex(BoundKey key) => -1;
 
     private int Resolve(string name) => (Catalog.TryResolve(

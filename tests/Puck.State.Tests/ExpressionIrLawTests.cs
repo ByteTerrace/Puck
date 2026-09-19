@@ -726,7 +726,6 @@ public sealed class ExpressionIrLawTests {
         public IReadOnlyList<StateRow> Rows { get; }
         public ulong Tick => 0UL;
 
-        public Span<long> BoardScratch(int cells) => new long[cells];
         public int BoundIndex(BoundKey key) => -1;
         public Rules.CompiledExpressionToken[] Compile(string text, CellKind kind = CellKind.Int) =>
             Compile(

@@ -191,8 +191,9 @@ surprise both limits exist to remove.
 **K2 — A buffer sized by a document is heap, grown once.** No `stackalloc` is
 sized by a topology's cell count, a token count, or an expression's length
 times its nesting; 4,096 cells is 96 KiB on the stack and sixteen times that
-is 1.5 MiB. Scratch comes from the host's growing buffers and is covered by
-the allocation laws after warm-up.
+is 1.5 MiB. Scratch is leased from the arena's own growing buffers
+(`ArenaScratch`), returned in order so a nested evaluation never writes over its
+caller's, and is covered by the allocation laws after warm-up.
 
 **K3 — A set of cells wider than a word lives in a board row.** An expression
 value stays one 64-bit word and the bit operators stay generic Int operators.

@@ -167,7 +167,7 @@ public sealed partial class StateArena {
                 break;
             }
 
-            var layout = m_layout[rowOrdinal];
+            ref readonly var layout = ref m_layout[rowOrdinal];
 
             if (layout.LaneSlotStart >= 0) {
                 WriteNumber(

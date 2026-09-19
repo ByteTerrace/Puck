@@ -425,7 +425,9 @@ public sealed partial class ArenaSearch {
     private bool TryResolveJumpChain(Job job, SearchShapePlan shape, int token, long from, int candidateIndex, out int target) {
         var radix = (shape.Directions.Length + 1);
         var topology = job.Plan.Topology!;
-        var visited = (stackalloc int[(shape.MaxHops + 1)]);
+        using var visitedLease = m_arena.Scratch.Rent<int>(length: (shape.MaxHops + 1));
+
+        var visited = visitedLease.Span;
         var visitedCount = 1;
         var current = ((int)from);
         var index = candidateIndex;

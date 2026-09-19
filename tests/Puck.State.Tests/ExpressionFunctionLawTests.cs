@@ -23,7 +23,6 @@ public sealed class ExpressionFunctionLawTests {
         public Span<long> PatternWord => [];
         public ulong Tick => 0UL;
 
-        public Span<long> BoardScratch(int cells) => new long[cells];
         public int BoundIndex(BoundKey key) => -1;
     }
 

@@ -31,7 +31,6 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
     private readonly ArenaDrawSite m_site;
     private readonly int m_ticksPerSecond;
 
-    private long[] m_boardScratch = new long[64];
 
     /// <summary>Initializes a host over an arena.</summary>
     /// <param name="arena">The store every read and write addresses.</param>
@@ -155,20 +154,6 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
         refusal = IEffectHost.Unbound(effect: effect);
 
         return false;
-    }
-    /// <inheritdoc/>
-    public Span<long> BoardScratch(int cells) {
-        if (m_boardScratch.Length < cells) {
-            m_boardScratch = new long[cells];
-        }
-
-        return m_boardScratch.AsSpan(
-            length: Math.Max(
-                val1: 0,
-                val2: cells
-            ),
-            start: 0
-        );
     }
     /// <inheritdoc/>
     public virtual int BoundIndex(BoundKey key) => -1;

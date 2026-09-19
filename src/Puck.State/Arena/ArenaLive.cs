@@ -88,7 +88,7 @@ public sealed partial class StateArena {
             return false;
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (
             !layout.HasTraits ||
@@ -199,7 +199,7 @@ public sealed partial class StateArena {
             return false;
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Kind is (CellKind.Text or CellKind.Vector)) {
             reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is a {layout.Kind} row, which takes no numeric write";

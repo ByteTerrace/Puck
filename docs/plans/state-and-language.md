@@ -217,6 +217,23 @@ shipped world; validator, console, search plans, `BrowserExports`, and the
 portal worker read one report with source-path attribution. The method is
 [costing §3 to §7](abstract-machine-costing.md#3-price-schedule-and-evidence).
 
+**Status:** the scratch changes are landed. `ArenaScratch` is the arena's
+working storage, leased and returned in order: the board transforms, the sorts,
+`arrange`, a jump chain's visited cells, and all four vector transforms (each of
+which allocated on every call, not `Nearest` alone) take their buffers from it,
+and the expression evaluator leases its value stack at the program's own length
+through `IStateReader.Scratch`, which replaces `BoardScratch`. The generator
+engine keeps its stack buffers: they are sized by `MaxEntriesPerSet`, a constant,
+and the engine is a pure surface with no arena behind it. The compiled-operand
+slot did not survive its profile. Cell reads are about 43% of a judged
+candidate, but the cost was the arena copying its row's twenty-field layout two
+or three times a read, because `ArenaLayout`'s indexer returned it by value; the
+indexer returns a reference now, and a row's key-to-slot map is an array over
+the row's key ordinals rather than a dictionary. A slot held on the operand was
+rejected: compiled rules are shared by every arena they run over. Chinese
+Checkers measures 4.15 ms a tick against 5.1. The ceilings, the byte caps, and
+the reference schedule have not started.
+
 **Check:** the state, rules, search, and World schema suites green with a law
 at each raised edge for the two ceilings that bind today (locals, expression
 tokens) and for each scratch change; every ceiling refusing at compile time;

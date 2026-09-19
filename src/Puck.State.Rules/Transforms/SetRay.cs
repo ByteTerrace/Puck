@@ -42,10 +42,13 @@ public static partial class ArenaTransforms {
             );
         }
 
-        Span<long> values = stackalloc long[topology.CellCount];
-        Span<long> word = stackalloc long[topology.CellCount];
-        Span<int> affected = stackalloc int[topology.CellCount];
+        using var valuesLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
 
+        var values = valuesLease.Span;
+        using var wordLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
+        var word = wordLease.Span;
+        using var affectedLease = context.Arena.Scratch.Rent<int>(length: topology.CellCount);
+        var affected = affectedLease.Span;
         if (!context.Arena.TryReadBoard(
             rowOrdinal: ray.RowOrdinal,
             values: values

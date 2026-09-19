@@ -147,14 +147,6 @@ public sealed class RecordingWorldFacts : IStateReader, IWorldFacts {
     private static RuleFact Unserved() => throw new NotSupportedException(message: "this host serves the influence read alone");
 
     /// <inheritdoc/>
-    public Span<long> BoardScratch(int cells) => m_scratch.AsSpan(
-        length: Math.Min(
-            val1: cells,
-            val2: m_scratch.Length
-        ),
-        start: 0
-    );
-    /// <inheritdoc/>
     public int BoundIndex(BoundKey key) => -1;
     /// <inheritdoc/>
     public CellKey PairKey(PairKeyFact key) => default;

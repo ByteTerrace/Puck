@@ -129,7 +129,7 @@ public static class CellSetLowering {
         reason = string.Empty;
 
         foreach (var rowOrdinal in family.Ordinals()) {
-            var layout = arena.Layout[rowOrdinal];
+            ref readonly var layout = ref arena.Layout[rowOrdinal];
 
             if (layout.Shape == RowShape.Slot) {
                 slots++;
@@ -183,7 +183,7 @@ public static class CellSetLowering {
                         return false;
                     }
 
-                    var layout = arena.Layout[rowOrdinal];
+                    ref readonly var layout = ref arena.Layout[rowOrdinal];
 
                     if (layout.Shape != RowShape.Lattice) {
                         reason = $"cell set reads board '{board.Row.Value}', which is not a lattice row";
@@ -240,7 +240,7 @@ public static class CellSetLowering {
                         return false;
                     }
 
-                    var layout = arena.Layout[rowOrdinal];
+                    ref readonly var layout = ref arena.Layout[rowOrdinal];
 
                     if (layout.Shape is not (RowShape.Ordered or RowShape.Keyed)) {
                         reason = $"cell set reads zone '{zone.Row.Value}', which is neither an ordered nor a keyed row";

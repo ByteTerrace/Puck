@@ -445,7 +445,7 @@ public sealed partial class WorldServer {
             return FixedQ4816.Zero;
         }
 
-        var layout = m_arena.Layout[rowOrdinal];
+        ref readonly var layout = ref m_arena.Layout[rowOrdinal];
         var time = m_ruleHost.Time;
 
         if (!m_arena.TryReadLiveNumber(

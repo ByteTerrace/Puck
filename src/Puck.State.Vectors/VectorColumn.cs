@@ -61,7 +61,7 @@ public readonly struct VectorColumn : IEquatable<VectorColumn> {
             return false;
         }
 
-        var layout = arena.Layout[rowOrdinal];
+        ref readonly var layout = ref arena.Layout[rowOrdinal];
         var name = arena.Catalog.Descriptors[rowOrdinal].Name;
 
         if (layout.HostOwned || !layout.IsStored) {

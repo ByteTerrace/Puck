@@ -28,7 +28,7 @@ public sealed partial class StateArena {
             return default;
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (
             (layout.MaskWordStart < 0) ||

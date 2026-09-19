@@ -63,8 +63,9 @@ public static partial class ArenaTransforms {
             );
         }
 
-        Span<long> values = stackalloc long[topology.CellCount];
+        using var valuesLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
 
+        var values = valuesLease.Span;
         if (!arena.TryReadBoard(
             rowOrdinal: enclosed.RowOrdinal,
             values: values

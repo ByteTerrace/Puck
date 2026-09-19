@@ -633,7 +633,7 @@ public sealed class BrowserSession {
             return false;
         }
 
-        var layout = m_arena.Layout[handle.Ordinal];
+        ref readonly var layout = ref m_arena.Layout[handle.Ordinal];
 
         if (
             (layout.Topology is not { } topology) ||

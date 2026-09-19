@@ -84,7 +84,7 @@ public static partial class ArenaVectorTransforms {
             return false;
         }
 
-        var layout = arena.Layout[whereRowOrdinal];
+        ref readonly var layout = ref arena.Layout[whereRowOrdinal];
 
         if ((layout.Kind != CellKind.Bool) || (layout.Shape != RowShape.Keyed)) {
             refusal = Refused(

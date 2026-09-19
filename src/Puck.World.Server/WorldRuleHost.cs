@@ -84,7 +84,6 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
 
     private readonly long[] m_localValues = new long[RuleCapacity.MaxLocalsPerRule];
     private readonly long[] m_hostPatternWord = new long[PatternCapacity.MaxWord];
-    private long[] m_boardScratch = [];
 
     private ulong m_hostEngineTick;
     private ulong m_hostTick;
@@ -126,23 +125,6 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
 
-    /// <inheritdoc/>
-    public Span<long> BoardScratch(int cells) {
-        if (m_boardScratch.Length < cells) {
-            m_boardScratch = new long[Math.Max(
-                val1: cells,
-                val2: BoardMask.MaxCells
-            )];
-        }
-
-        return m_boardScratch.AsSpan(
-            length: Math.Max(
-                val1: 0,
-                val2: cells
-            ),
-            start: 0
-        );
-    }
     /// <inheritdoc/>
     public int BoundIndex(BoundKey key) => (key switch {
         BoundKey.Each => BoundEachIndex(),

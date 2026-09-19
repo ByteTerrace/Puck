@@ -56,10 +56,9 @@ public interface IStateReader {
     /// <param name="ordinal">The local's slot in the rule.</param>
     /// <returns>The local's raw value.</returns>
     long LocalValue(int ordinal) => Locals[ordinal];
-    /// <summary>Returns scratch for one board read, at least <paramref name="cells"/> wide.</summary>
-    /// <param name="cells">The topology's cell count.</param>
-    /// <returns>The scratch.</returns>
-    Span<long> BoardScratch(int cells);
+    /// <summary>Gets the working storage a read borrows: a board read's cell values, an expression's value
+    /// stack.</summary>
+    ArenaScratch Scratch => Arena.Scratch;
     /// <summary>Returns the participant index a binding names for the evaluation in flight, or -1 when it is not in
     /// play.</summary>
     /// <param name="key">The binding.</param>

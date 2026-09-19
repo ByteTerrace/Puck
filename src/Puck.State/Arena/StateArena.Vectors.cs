@@ -49,7 +49,7 @@ public sealed partial class StateArena {
             return false;
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Kind != CellKind.Vector) {
             reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is not a Vector row";

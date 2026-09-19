@@ -36,7 +36,7 @@ public sealed partial class StateArena {
     private IReadOnlyList<StateRow> m_rows;
     private ulong[] m_rowGenerations;
     private ulong[] m_rowVersions;
-    private Dictionary<int, int>[] m_slotOfKey;
+    private ArenaSlotMap[] m_slotOfKey;
     private long[] m_numbers;
     private ulong[] m_presence;
     private ulong[] m_clockSet;
@@ -140,7 +140,7 @@ public sealed partial class StateArena {
         m_rowGenerations = new ulong[layout.RowCount];
         m_rowVersions = new ulong[layout.RowCount];
         m_rows = (section?.Rows ?? []);
-        m_slotOfKey = new Dictionary<int, int>[layout.RowCount];
+        m_slotOfKey = new ArenaSlotMap[layout.RowCount];
         m_vectors = new sbyte[layout.VectorByteCount];
 
         Array.Fill(
@@ -149,7 +149,7 @@ public sealed partial class StateArena {
         );
 
         for (var ordinal = 0; (ordinal < layout.RowCount); ordinal++) {
-            m_slotOfKey[ordinal] = new Dictionary<int, int>();
+            m_slotOfKey[ordinal] = new ArenaSlotMap();
         }
 
         if (TryLoad(
@@ -201,6 +201,9 @@ public sealed partial class StateArena {
 
     /// <summary>Gets the catalog whose descriptors this arena stores.</summary>
     public StateCatalog Catalog => m_catalog;
+    /// <summary>Gets the working storage an evaluation over this arena borrows instead of sizing a buffer from the
+    /// document on the stack.</summary>
+    public ArenaScratch Scratch { get; } = new();
     /// <summary>Gets the undo journal this arena's scopes record through.</summary>
     public ArenaJournal Journal => m_journal;
     /// <summary>Gets the column plan this arena stores into.</summary>

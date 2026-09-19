@@ -227,7 +227,7 @@ public static partial class ArenaTransforms {
         moved = false;
 
         var arena = context.Arena;
-        var from = arena.Layout[fromOrdinal];
+        ref readonly var from = ref arena.Layout[fromOrdinal];
 
         if (!arena.TryCellSlot(
             key: key,
@@ -250,8 +250,9 @@ public static partial class ArenaTransforms {
                 return Applied(refusal: out refusal);
             }
 
-            Span<int> order = stackalloc int[count];
+            using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
 
+            var order = orderLease.Span;
             for (var position = 0; (position < count); position++) {
                 order[position] = ((position < run)
                     ? (start + position)
@@ -321,8 +322,9 @@ public static partial class ArenaTransforms {
             return Applied(refusal: out refusal);
         }
 
-        Span<int> order = stackalloc int[count];
+        using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
 
+        var order = orderLease.Span;
         for (var slot = 0; (slot < count); slot++) {
             order[slot] = (insertFirst
                 ? ((slot == 0)

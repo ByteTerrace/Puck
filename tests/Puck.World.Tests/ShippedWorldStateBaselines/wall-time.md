@@ -7,26 +7,26 @@ Machine: Microsoft Windows 10.0.26200; X64; 16 logical processor(s); .NET 10.0.1
 
 | World | Ticks | Median tick (us) | Mean tick (us) |
 |---|---|---|---|
-| arena | 224 | 20.1 | 19.6 |
-| backgammon | 630 | 1.0 | 11.2 |
-| billiards | 510 | 24.4 | 28.0 |
+| arena | 224 | 16.9 | 15.9 |
+| backgammon | 630 | 1.0 | 10.0 |
+| billiards | 510 | 23.8 | 27.9 |
 | bowling | 600 | 0.6 | 0.6 |
-| chess | 600 | 155.1 | 175.6 |
-| chinese-checkers | 600 | 5235.1 | 5219.1 |
-| codenames | 162 | 24.7 | 114.8 |
+| chess | 600 | 148.6 | 167.8 |
+| chinese-checkers | 600 | 4086.3 | 4081.0 |
+| codenames | 162 | 24.1 | 108.1 |
 | dominoes | 600 | 0.6 | 0.6 |
-| freecell | 610 | 6.2 | 24.2 |
-| hearts | 288 | 10.1 | 226.0 |
-| hexlines | 600 | 103.6 | 129.3 |
-| klondike | 680 | 10.9 | 44.2 |
-| mancala | 590 | 3.9 | 5.7 |
-| moth-courtyard | 600 | 10.3 | 17.4 |
+| freecell | 610 | 5.4 | 25.6 |
+| hearts | 288 | 10.1 | 228.8 |
+| hexlines | 600 | 98.8 | 124.2 |
+| klondike | 680 | 10.1 | 43.8 |
+| mancala | 590 | 3.9 | 7.2 |
+| moth-courtyard | 600 | 10.0 | 16.7 |
 | pipeline | 600 | 0.5 | 0.5 |
-| poker | 610 | 3.2 | 8.4 |
-| pong | 2941 | 35.3 | 42.2 |
-| reversi | 580 | 159.9 | 176.9 |
-| snake | 635 | 12.0 | 17.4 |
+| poker | 610 | 3.1 | 8.1 |
+| pong | 2941 | 35.4 | 41.3 |
+| reversi | 580 | 140.7 | 156.2 |
+| snake | 635 | 11.5 | 14.6 |
 | solitaire | 600 | 0.6 | 0.6 |
-| spider | 810 | 7.9 | 97.5 |
-| stratego | 190 | 11.0 | 119.9 |
-| tictactoe | 600 | 1.6 | 4.9 |
+| spider | 810 | 9.4 | 98.8 |
+| stratego | 190 | 10.6 | 123.9 |
+| tictactoe | 600 | 1.5 | 4.5 |

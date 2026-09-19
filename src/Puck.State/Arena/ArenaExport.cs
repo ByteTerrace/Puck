@@ -24,7 +24,7 @@ public sealed partial class StateArena {
             }
 
             var row = m_rows[descriptor.LaneOrdinal];
-            var layout = m_layout[rowOrdinal];
+            ref readonly var layout = ref m_layout[rowOrdinal];
 
             exported.Add(item: (layout.IsStored
                 ? ExportRow(

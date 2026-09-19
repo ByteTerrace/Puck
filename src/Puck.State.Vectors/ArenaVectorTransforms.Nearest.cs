@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace Puck.State;
 
 /// <summary>A <c>nearest</c>: the top-<c>k</c> keys of a vector table ranked against a query vector.</summary>
@@ -84,7 +82,12 @@ public static partial class ArenaVectorTransforms {
         }
 
         var candidateCount = from.Count;
-        var candidates = new List<NearestCandidate>(capacity: candidateCount);
+
+        using var candidatesLease = arena.Scratch.Rent<NearestCandidate>(length: candidateCount);
+        using var matchesLease = arena.Scratch.Rent<VectorTransforms.NearestMatch>(length: request.K);
+
+        var candidates = candidatesLease.Span;
+        var gathered = 0;
 
         for (var position = 0; (position < candidateCount); position++) {
             if (
@@ -97,7 +100,7 @@ public static partial class ArenaVectorTransforms {
                 key: key
             )
             ) {
-                candidates.Add(item: new NearestCandidate(
+                candidates[gathered++] = new NearestCandidate(
                     Admitted: Admits(
                         arena: arena,
                         key: key,
@@ -105,13 +108,13 @@ public static partial class ArenaVectorTransforms {
                     ),
                     Components: components,
                     Key: arena.Catalog.Keys[key: key]
-                ));
+                );
             }
         }
 
-        var matches = new VectorTransforms.NearestMatch[request.K];
+        var matches = matchesLease.Span;
         var matched = VectorTransforms.SelectNearest(
-            candidates: CollectionsMarshal.AsSpan(list: candidates),
+            candidates: candidates[..gathered],
             excludeKey: (arena.Catalog.Keys.TryGetName(
                 key: request.Exclude,
                 name: out var excluded

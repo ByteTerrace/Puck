@@ -13,7 +13,6 @@ public interface IWeatherFacts : IFacet {
 /// <summary>A reader over the arena that serves no facet.</summary>
 public class StubReader : IStateReader {
     private readonly long[] m_locals = new long[RuleCapacity.MaxLocalsPerRule];
-    private readonly long[] m_boardScratch = new long[TopologyCompilation.MaxCells];
     private readonly long[] m_patternWord = new long[8];
 
     /// <summary>Initializes the reader over an arena.</summary>
@@ -37,14 +36,6 @@ public class StubReader : IStateReader {
     /// <inheritdoc/>
     public ulong Tick { get; set; }
 
-    /// <inheritdoc/>
-    public Span<long> BoardScratch(int cells) => m_boardScratch.AsSpan(
-        length: Math.Min(
-            val1: cells,
-            val2: m_boardScratch.Length
-        ),
-        start: 0
-    );
     /// <inheritdoc/>
     public int BoundIndex(BoundKey key) => -1;
 }

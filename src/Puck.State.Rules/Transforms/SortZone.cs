@@ -76,8 +76,9 @@ public static partial class ArenaTransforms {
             }
         }
 
-        Span<int> order = stackalloc int[count];
+        using var orderLease = context.Arena.Scratch.Rent<int>(length: count);
 
+        var order = orderLease.Span;
         SortOrder(
             count: count,
             descending: descending,

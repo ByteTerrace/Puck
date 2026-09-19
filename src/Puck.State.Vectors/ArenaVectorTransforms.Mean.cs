@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace Puck.State;
 
 /// <summary>A <c>mean</c>: the normalized centroid of a vector table, written into one cell.</summary>
@@ -50,7 +48,11 @@ public static partial class ArenaVectorTransforms {
         }
 
         var count = from.Count;
-        var candidates = new List<ReadOnlyMemory<sbyte>>(capacity: count);
+
+        using var gatheredLease = arena.Scratch.Rent<ReadOnlyMemory<sbyte>>(length: count);
+
+        var gathered = gatheredLease.Span;
+        var admitted = 0;
 
         for (var position = 0; (position < count); position++) {
             if (
@@ -68,11 +70,13 @@ public static partial class ArenaVectorTransforms {
                 key: key
             )
             ) {
-                candidates.Add(item: components);
+                gathered[admitted++] = components;
             }
         }
 
-        if (candidates.Count == 0) {
+        var candidates = gathered[..admitted];
+
+        if (candidates.Length == 0) {
             refusal = Refused(
                 code: RuleRefusal.VectorMeanEmpty,
                 reason: $"row '{from.RowName()}' admits no cell to average"
@@ -81,16 +85,20 @@ public static partial class ArenaVectorTransforms {
             return false;
         }
 
-        Span<sbyte> destination = stackalloc sbyte[into.Dimensions];
+        using var destinationLease = arena.Scratch.Rent<sbyte>(length: into.Dimensions);
+        using var sumLease = arena.Scratch.Rent<long>(length: into.Dimensions);
+
+        var destination = destinationLease.Span;
 
         if (!VectorTransforms.TryMean(
-            candidates: CollectionsMarshal.AsSpan(list: candidates),
+            candidates: candidates,
             destination: destination,
-            refusal: out var code
+            refusal: out var code,
+            sum: sumLease.Span
         )) {
             refusal = Refused(
                 code: code.Value,
-                reason: $"row '{from.RowName()}' averages its {candidates.Count} admitted cells to no direction"
+                reason: $"row '{from.RowName()}' averages its {candidates.Length} admitted cells to no direction"
             );
 
             return false;

@@ -194,11 +194,15 @@ public sealed partial class StateArena {
     public bool TryCellSlot(int rowOrdinal, CellKey key, out int slot) {
         slot = -1;
 
+        if (((uint)rowOrdinal) >= ((uint)m_layout.RowCount)) {
+            return false;
+        }
+
+        // Read in place: a row's layout is wide, and this is the path every cell read and write takes.
+        ref readonly var layout = ref m_layout[rowOrdinal];
+
         if (
-            !TryRowLayout(
-            layout: out var layout,
-            rowOrdinal: rowOrdinal
-        ) ||
+            !layout.IsStored ||
             !m_catalog.Keys.TryGetName(
             key: key,
             name: out var name
@@ -265,7 +269,7 @@ public sealed partial class StateArena {
             return false;
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Kind is (CellKind.Text or CellKind.Vector)) {
             reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is a {layout.Kind} row, which takes no numeric write";
@@ -459,7 +463,7 @@ public sealed partial class StateArena {
             return false;
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.HostOwned) {
             reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' is host-owned; its facet serves it and no rule writes it";

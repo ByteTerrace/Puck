@@ -80,7 +80,9 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
 
     private long ReadBoardMatch(IStateReader reader, int rowOrdinal, BoardNeighbourQuery query) {
         var arena = reader.Arena;
-        var values = reader.BoardScratch(cells: query.Topology.CellCount);
+        using var valuesLease = reader.Scratch.Rent<long>(length: query.Topology.CellCount);
+
+        var values = valuesLease.Span;
         var word = reader.PatternWord;
         var key = RuleReads.ResolveKey(
             keyFrom: KeyFrom,

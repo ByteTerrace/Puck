@@ -586,7 +586,7 @@ public sealed partial class StateArena {
             }
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Dimensions > 0) {
             WriteVectorSlot(
@@ -622,7 +622,7 @@ public sealed partial class StateArena {
             }
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Dimensions > 0) {
             WriteVectorSlot(
@@ -683,7 +683,7 @@ public sealed partial class StateArena {
             }
         }
 
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
 
         if (layout.Dimensions <= 0) {
             return;
@@ -900,7 +900,7 @@ public sealed partial class StateArena {
         return true;
     }
     private bool TryRemoveAt(int rowOrdinal, int position, out string reason) {
-        var layout = m_layout[rowOrdinal];
+        ref readonly var layout = ref m_layout[rowOrdinal];
         var count = ((int)m_memberCounts[rowOrdinal]);
 
         if (((uint)position) >= ((uint)count)) {

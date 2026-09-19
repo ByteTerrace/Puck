@@ -32,6 +32,44 @@ public sealed class ArenaVectorSearchLawTests {
         return keys;
     }
 
+    // The candidates and the ranking are leased from the arena's scratch. The rows a ranking writes are the
+    // arena's own to grow, so the law holds the transform to the same request repeated, where they no longer do.
+    [Fact]
+    public void ARepeatedNearestAllocatesNothing() {
+        var arena = VectorArenaFixture.Arena(catalog: out var catalog);
+        var request = new VectorNearestRequest(
+            FromRowOrdinal: VectorArenaFixture.Memories,
+            IntoRowOrdinal: VectorArenaFixture.Recalled,
+            K: 2,
+            Query: Query(
+                catalog: catalog,
+                key: "north"
+            )
+        );
+
+        for (var warm = 0; (warm < 4); warm++) {
+            Assert.True(condition: ArenaVectorTransforms.TryNearest(
+                arena: arena,
+                refusal: out _,
+                request: request
+            ));
+        }
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var round = 0; (round < 256); round++) {
+            _ = ArenaVectorTransforms.TryNearest(
+                arena: arena,
+                refusal: out _,
+                request: request
+            );
+        }
+
+        Assert.Equal(
+            actual: (GC.GetAllocatedBytesForCurrentThread() - before),
+            expected: 0L
+        );
+    }
     // An Int destination scores by exact dot product, so the ranking is the kernel's order and the stored value is
     // the kernel's score rather than a rank index.
     [Fact]
