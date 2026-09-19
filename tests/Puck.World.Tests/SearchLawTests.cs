@@ -672,6 +672,57 @@ public sealed class SearchLawTests {
         return definition;
     }
 
+    // A chain's length is bounded by the candidates it enumerates per token against the nodes a job judges in a
+    // tick, and by no count of hops: one direction hops two ways (stop, or go), so twelve hops is 4,096 chains and
+    // fits, thirteen is 8,192 and does not, and a chain long enough to overflow its own count refuses the same way.
+    [Fact]
+    public void AJumpChainIsAsLongAsTheNodesOneTickJudges() {
+        WorldDefinition Hops(int maxHops) {
+            var world = JumpWorld();
+
+            return world with {
+                SearchRaw = new WorldSearchSection(Jobs: [
+                    world.Search.Rows[0] with {
+                        Counts = null,
+                        Legal = null,
+                        Shapes = [new WorldSearchShape.Jump(Over: ["E"], MaxHops: maxHops)],
+                    },
+                ]),
+            };
+        }
+
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: Hops(maxHops: 12),
+                reason: out var admitted
+            ),
+            userMessage: admitted
+        );
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: Hops(maxHops: 13),
+            reason: out var refused
+        ));
+        Assert.Contains(
+            expectedSubstring: "enumerates 8192 candidates per token",
+            actualString: refused
+        );
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: Hops(maxHops: 64),
+            reason: out var overflowed
+        ));
+        Assert.Contains(
+            expectedSubstring: "enumerates more than 2147483647 candidates per token",
+            actualString: overflowed
+        );
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
+            definition: Hops(maxHops: 0),
+            reason: out var none
+        ));
+        Assert.Contains(
+            expectedSubstring: "must be at least 1",
+            actualString: none
+        );
+    }
     [Fact]
     public void JumpOverAnOccupiedIntermediateCellLandsOnTheEmptyCellBeyondAndEvictsIt() {
         using var fixture = Fixtures.FreshServer(definition: JumpWorld());

@@ -567,9 +567,6 @@ public static class StateCapacity {
     /// <summary>The section's row-count ceiling — a pure capacity bound on document size and per-tick iteration
     /// cost, never a fixed-size stack buffer or a per-world tunable.</summary>
     public const int MaxRows = 256;
-    /// <summary>The most attribute keys one zone sort orders by — each key names a declared state row, so a sort
-    /// can never carry more keys than <see cref="MaxRows"/> the section holds.</summary>
-    public const int MaxSortKeys = MaxRows;
     /// <summary>A <see cref="CellKind.Text"/> cell's value-length ceiling, in UTF-16 code units.</summary>
     public const int MaxTextValueLength = 256;
     /// <summary>The minimum allowed dimensions for a vector embedding space.</summary>

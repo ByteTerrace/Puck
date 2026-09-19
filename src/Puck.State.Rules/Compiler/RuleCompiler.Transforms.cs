@@ -304,11 +304,11 @@ public static partial class RuleCompiler {
             case StateTransform.SortZone sortZone: {
                     if (
                         (Row(name: sortZone.Row).EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zone) ||
-                        (sortZone.By is not { Count: >= 1 and <= StateCapacity.MaxSortKeys }) ||
+                        (sortZone.By is not { Count: >= 1 }) ||
                         sortZone.By.Any(predicate: key => ((key is null) || (Row(name: key.Row) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed } sortRow) || (sortRow.EffectiveDomain is not StateDomain.KeysOf sortKeysOf) || (sortKeysOf.Row != zone.Row))) ||
                         (sortZone.By.Select(selector: key => key!.Row).Distinct(comparer: StringComparer.Ordinal).Count() != sortZone.By.Count)
                     ) {
-                        throw Invalid(message: $"sortZone requires an ordered zone with 1..{StateCapacity.MaxSortKeys} distinct numeric attribute keys over the zone's token domain, each carrying its own direction");
+                        throw Invalid(message: $"sortZone requires an ordered zone with one or more distinct numeric attribute keys over the zone's token domain, each carrying its own direction");
                     }
 
                     var sortKeys = new ArenaSortKey[sortZone.By.Count];

@@ -360,10 +360,9 @@ is a ring of the last pushed values, the temporal twin of a ray: `push`
 `empty` past what the ring holds); `$match:<pattern>:<row>` reads the ring
 oldest first, so a combo, a rhythm window, or "three claims then silence" is
 one pattern. `world.state <row>` echoes capacity, cursor, and how much of
-the ring is held. `sortZone` puts a zone in canonical order by `by`, up to
-`MaxSortKeys` (`StateCapacity`, derived from `MaxRows` -- a sort key
-names a declared row, so a sort can never carry more keys than a section can
-hold) attribute keys (`row`, `descending`) in precedence order; `sortKeyed`
+the ring is held. `sortZone` puts a zone in canonical order by `by`, one or
+more distinct attribute keys (`row`, `descending`) in precedence order, each
+priced on the work sheet; `sortKeyed`
 orders a keyed row by its own values under one `descending` flag. Both sort
 stably,
 which is what turns a multiset question into a regular one: Reversi's

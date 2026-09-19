@@ -4296,7 +4296,7 @@
           "type": "string"
         },
         "by": {
-          "description": "The attribute keys, 1..MaxSortKeys distinct numeric rows keyed over the zone\u0027s token domain, in precedence order; each carries its own direction.",
+          "description": "The attribute keys, one or more distinct numeric rows keyed over the zone\u0027s token domain, in precedence order; each carries its own direction. Distinct rows bound the count, and the work sheet prices each one.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/SortKey"

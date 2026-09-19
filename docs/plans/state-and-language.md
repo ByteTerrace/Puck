@@ -231,8 +231,21 @@ or three times a read, because `ArenaLayout`'s indexer returned it by value; the
 indexer returns a reference now, and a row's key-to-slot map is an array over
 the row's key ordinals rather than a dictionary. A slot held on the operand was
 rejected: compiled rules are shared by every arena they run over. Chinese
-Checkers measures 4.15 ms a tick against 5.1. The ceilings, the byte caps, and
-the reference schedule have not started.
+Checkers measures 4.15 ms a tick against 5.1.
+
+Three of the four counts that protected nothing are gone. `MaxJumpHops` bounded
+nothing the node ceiling did not: a chain over even one direction enumerates
+8,192 candidates a token at thirteen hops against the 4,096 a job judges in a
+tick, and that check is the one that refuses, overflowing counts included.
+`MaxSortKeys` was a copy of `MaxRows` under a check that already requires
+distinct rows. `PatternMemo.MaxEntries` dropped the memo at 256 walks, which a
+board read from every cell in every direction passes at once; it is one
+mebibyte, 16,384 walks at the 64 bytes each occupies. `sortZone` and
+`sortKeyed` lease their key buffers instead of allocating them per firing.
+`MaxTotalCells` waits on the document's memory bound, which does not exist yet:
+the arena's layout knows every column's width, and the bound belongs there
+rather than on boards alone. The raises, that memory bound and the journal's,
+and the reference schedule have not started.
 
 **Check:** the state, rules, search, and World schema suites green with a law
 at each raised edge for the two ceilings that bind today (locals, expression

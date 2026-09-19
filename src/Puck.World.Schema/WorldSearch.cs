@@ -402,11 +402,8 @@ public static class WorldSearchCompilation {
                                 directions[index2] = resolved;
                             }
                         }
-                        if (
-                            (jump.MaxHops < 1) ||
-                            (jump.MaxHops > SearchCapacity.MaxJumpHops)
-                        ) {
-                            reason = $"search '{row.Name}' shape[{index}] jump maxHops {jump.MaxHops} must lie in 1..{SearchCapacity.MaxJumpHops}";
+                        if (jump.MaxHops < 1) {
+                            reason = $"search '{row.Name}' shape[{index}] jump maxHops {jump.MaxHops} must be at least 1";
 
                             return false;
                         }
@@ -429,7 +426,7 @@ public static class WorldSearchCompilation {
                         var chainCount = jumpShape.CandidateCount(cellCount: topology!.CellCount);
 
                         if (chainCount > SearchCapacity.MaxNodesPerTick) {
-                            reason = $"search '{row.Name}' shape[{index}] jump chains to {jump.MaxHops} hops over {directions.Length} directions enumerates {chainCount} candidates per token, more than the {SearchCapacity.MaxNodesPerTick} node ceiling";
+                            reason = $"search '{row.Name}' shape[{index}] jump chains to {jump.MaxHops} hops over {directions.Length} directions enumerates {((chainCount == int.MaxValue) ? "more than 2147483647" : chainCount.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))} candidates per token, more than the {SearchCapacity.MaxNodesPerTick} a job judges in one tick; shorten the chain or hop in fewer directions";
 
                             return false;
                         }

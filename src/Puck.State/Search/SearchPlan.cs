@@ -19,9 +19,8 @@ public static class SearchCapacity {
     public const int MaxIterations = 65_536;
     /// <summary>The most jobs one document declares.</summary>
     public const int MaxJobs = 8;
-    /// <summary>The most hops one <c>jump</c> shape's chain may take in a single candidate.</summary>
-    public const int MaxJumpHops = 12;
-    /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves.</summary>
+    /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves. A jump chain may
+    /// enumerate no more candidates per token than this, which is what bounds how long a chain may be.</summary>
     public const int MaxNodesPerTick = 4_096;
     /// <summary>The most codes one <c>promote</c> shape offers.</summary>
     public const int MaxPromotions = 8;

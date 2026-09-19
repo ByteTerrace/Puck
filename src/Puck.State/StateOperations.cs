@@ -101,8 +101,9 @@ public abstract record StateTransform {
     /// <summary>Reorders an ordered zone by attribute rows over its token domain, stably: the first key decides and
     /// each later key breaks the ties before it. The canonical order a pattern reads a hand in.</summary>
     /// <param name="Row">The ordered zone.</param>
-    /// <param name="By">The attribute keys, 1..<c>MaxSortKeys</c> distinct numeric rows
-    /// keyed over the zone's token domain, in precedence order; each carries its own direction.</param>
+    /// <param name="By">The attribute keys, one or more distinct numeric rows keyed over the zone's token domain, in
+    /// precedence order; each carries its own direction. Distinct rows bound the count, and the work sheet prices
+    /// each one.</param>
     public sealed record SortZone(string Row, IReadOnlyList<SortKey> By) : StateTransform;
     /// <summary>Reorders a keyed or ordered numeric row by its own cell values, stably.</summary>
     /// <param name="Row">Any ordered zone or keyed numeric row.</param>

@@ -21,11 +21,11 @@ public static partial class ArenaTransforms {
         if (
             !zone.IsOrdered ||
             (zone.DomainOrdinal < 0) ||
-            (sort.By is not { Count: >= 1 and <= StateCapacity.MaxSortKeys })
+            (sort.By is not { Count: >= 1 })
         ) {
             return Refuse(
                 code: TransformRefusal.SortZoneShape,
-                reason: $"sortZone requires an ordered zone and 1..{StateCapacity.MaxSortKeys} attribute keys, each carrying its own direction",
+                reason: $"sortZone requires an ordered zone and one or more attribute keys, each carrying its own direction",
                 refusal: out refusal
             );
         }
@@ -36,8 +36,11 @@ public static partial class ArenaTransforms {
             return Applied(refusal: out refusal);
         }
 
-        var keys = new long[(sort.By.Count * count)];
-        var descending = new bool[sort.By.Count];
+        using var keysLease = context.Arena.Scratch.Rent<long>(length: (sort.By.Count * count));
+        using var descendingLease = context.Arena.Scratch.Rent<bool>(length: sort.By.Count);
+
+        var keys = keysLease.Span;
+        var descending = descendingLease.Span;
 
         for (var key = 0; (key < sort.By.Count); key++) {
             var attribute = sort.By[key];
