@@ -10,7 +10,8 @@ namespace Puck.World.Transpiler.Addons;
 /// <param name="Kind">The descriptor kind (0 = Function, 1 = Table, 2 = Memory, 3 = Global).</param>
 public readonly record struct WasmImport(string Module, string Name, byte Kind);
 /// <summary>Summary of WebAssembly guest module contract inspection.</summary>
-/// <param name="IsValid">Whether the module carries valid WASM magic bytes and version.</param>
+/// <param name="IsValid">Whether the module carries the WASM magic bytes and version and every section, length and
+/// name in it lies inside the bytes it claims. A module that is not valid reports no exports and no imports.</param>
 /// <param name="ContentHash">Canonical content integrity hash in 'sha256-64/{16 hex}' format.</param>
 /// <param name="Exports">Exported function and symbol names.</param>
 /// <param name="Imports">Imported host functions and symbols.</param>
@@ -20,168 +21,156 @@ public sealed record WasmInspectionResult(
     IReadOnlyList<string> Exports,
     IReadOnlyList<WasmImport> Imports
 );
-/// <summary>Lightweight, zero-allocation, Native AOT WebAssembly binary contract inspector.</summary>
+/// <summary>Reads a WebAssembly binary's imports and exports without instantiating it.</summary>
 public static class WasmModuleInspector {
     private const uint WasmVersion1 = 1;
 
     private static readonly byte[] WasmMagic = [0x00, 0x61, 0x73, 0x6D]; // \0asm
 
-    private static void ParseExportSection(ReadOnlySpan<byte> payload, List<string> exports) {
-        var offset = 0;
+    // Every read is checked against what remains, and a length is compared as the unsigned value it was encoded as
+    // before it is narrowed: a module is bytes an author points at, so nothing in it is trusted to be in range.
+    private ref struct Reader(ReadOnlySpan<byte> bytes) {
+        private readonly ReadOnlySpan<byte> m_bytes = bytes;
+        private int m_offset;
 
-        if (offset >= payload.Length) {
-            return;
+        public readonly bool AtEnd => (m_offset >= m_bytes.Length);
+
+        public bool TryReadByte(out byte value) {
+            if (m_offset >= m_bytes.Length) {
+                value = 0;
+
+                return false;
+            }
+
+            value = m_bytes[m_offset++];
+
+            return true;
+        }
+        public bool TryReadBytes(uint length, out ReadOnlySpan<byte> value) {
+            if (length > ((uint)(m_bytes.Length - m_offset))) {
+                value = default;
+
+                return false;
+            }
+
+            value = m_bytes.Slice(
+                length: ((int)length),
+                start: m_offset
+            );
+            m_offset += ((int)length);
+
+            return true;
+        }
+        // An unsigned LEB128 of at most 32 bits: five bytes, the fifth carrying four.
+        public bool TryReadVarUInt32(out uint value) {
+            value = 0U;
+
+            for (var shift = 0; (shift < 35); shift += 7) {
+                if (!TryReadByte(value: out var next)) {
+                    return false;
+                }
+                if ((shift == 28) && ((next & 0xF0) != 0)) {
+                    return false;
+                }
+
+                value |= (((uint)(next & 0x7F)) << shift);
+
+                if ((next & 0x80) == 0) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        public bool TryReadName(out string value) {
+            if (
+                !TryReadVarUInt32(value: out var length) ||
+                !TryReadBytes(
+                    length: length,
+                    value: out var bytes
+                )
+            ) {
+                value = string.Empty;
+
+                return false;
+            }
+
+            value = Encoding.UTF8.GetString(bytes: bytes);
+
+            return true;
+        }
+        public bool TrySkipLimits() {
+            if (
+                !TryReadByte(value: out var flags) ||
+                !TryReadVarUInt32(value: out _)
+            ) {
+                return false;
+            }
+
+            return (((flags & 0x01) == 0) || TryReadVarUInt32(value: out _));
+        }
+    }
+
+    private static bool TryParseExportSection(ReadOnlySpan<byte> payload, List<string> exports) {
+        var reader = new Reader(bytes: payload);
+
+        if (!reader.TryReadVarUInt32(value: out var count)) {
+            return false;
         }
 
-        var count = ((int)ReadVarUInt32(
-            buffer: payload,
-            offset: ref offset
-        ));
-
-        for (var i = 0; ((i < count) && (offset < payload.Length)); i++) {
-            var nameLen = ((int)ReadVarUInt32(
-                buffer: payload,
-                offset: ref offset
-            ));
-
-            if ((offset + nameLen) > payload.Length) {
-                break;
+        for (var index = 0U; (index < count); index++) {
+            if (
+                !reader.TryReadName(value: out var name) ||
+                !reader.TryReadByte(value: out _) ||
+                !reader.TryReadVarUInt32(value: out _)
+            ) {
+                return false;
             }
-            var name = Encoding.UTF8.GetString(bytes: payload.Slice(
-                length: nameLen,
-                start: offset
-            ));
-
-            offset += nameLen;
-
-            if (offset >= payload.Length) {
-                break;
-            }
-            _ = payload[offset++]; // kind
-            _ = ReadVarUInt32(
-                buffer: payload,
-                offset: ref offset
-            ); // index
 
             exports.Add(item: name);
         }
-    }
-    private static void ParseImportSection(ReadOnlySpan<byte> payload, List<WasmImport> imports) {
-        var offset = 0;
 
-        if (offset >= payload.Length) {
-            return;
+        return true;
+    }
+    private static bool TryParseImportSection(ReadOnlySpan<byte> payload, List<WasmImport> imports) {
+        var reader = new Reader(bytes: payload);
+
+        if (!reader.TryReadVarUInt32(value: out var count)) {
+            return false;
         }
 
-        var count = ((int)ReadVarUInt32(
-            buffer: payload,
-            offset: ref offset
-        ));
-
-        for (var i = 0; ((i < count) && (offset < payload.Length)); i++) {
-            var modLen = ((int)ReadVarUInt32(
-                buffer: payload,
-                offset: ref offset
-            ));
-
-            if ((offset + modLen) > payload.Length) {
-                break;
+        for (var index = 0U; (index < count); index++) {
+            if (
+                !reader.TryReadName(value: out var module) ||
+                !reader.TryReadName(value: out var name) ||
+                !reader.TryReadByte(value: out var kind)
+            ) {
+                return false;
             }
-            var modName = Encoding.UTF8.GetString(bytes: payload.Slice(
-                length: modLen,
-                start: offset
-            ));
 
-            offset += modLen;
+            // The descriptor after the kind: a function's type index, a table's element type and limits, a
+            // memory's limits, a global's value type and mutability, or a tag's attribute and type index.
+            var described = (kind switch {
+                0 => reader.TryReadVarUInt32(value: out _),
+                1 => (reader.TryReadByte(value: out _) && reader.TrySkipLimits()),
+                2 => reader.TrySkipLimits(),
+                3 => (reader.TryReadByte(value: out _) && reader.TryReadByte(value: out _)),
+                4 => (reader.TryReadByte(value: out _) && reader.TryReadVarUInt32(value: out _)),
+                _ => false,
+            });
 
-            var nameLen = ((int)ReadVarUInt32(
-                buffer: payload,
-                offset: ref offset
-            ));
-
-            if ((offset + nameLen) > payload.Length) {
-                break;
-            }
-            var name = Encoding.UTF8.GetString(bytes: payload.Slice(
-                length: nameLen,
-                start: offset
-            ));
-
-            offset += nameLen;
-
-            if (offset >= payload.Length) {
-                break;
-            }
-            var kind = payload[offset++];
-
-            // Skip descriptor index or limits
-            switch (kind) {
-                case 0: // func
-                    _ = ReadVarUInt32(
-                        buffer: payload,
-                        offset: ref offset
-                    );
-                    break;
-                case 1: // table
-                    _ = payload[offset++]; // elem_type
-                    SkipLimits(
-                        offset: ref offset,
-                        payload: payload
-                    );
-                    break;
-                case 2: // mem
-                    SkipLimits(
-                        offset: ref offset,
-                        payload: payload
-                    );
-                    break;
-                case 3: // global
-                    _ = payload[offset++]; // val_type
-                    _ = payload[offset++]; // mut
-                    break;
+            if (!described) {
+                return false;
             }
 
             imports.Add(item: new WasmImport(
                 Kind: kind,
-                Module: modName,
+                Module: module,
                 Name: name
             ));
         }
-    }
-    private static uint ReadVarUInt32(ReadOnlySpan<byte> buffer, ref int offset) {
-        var result = 0U;
-        var shift = 0;
 
-        while (offset < buffer.Length) {
-            var b = buffer[offset++];
-
-            result |= (((uint)(b & 0x7F)) << shift);
-            if ((b & 0x80) == 0) {
-                break;
-            }
-            shift += 7;
-        }
-        return result;
-    }
-    private static void SkipLimits(ReadOnlySpan<byte> payload, ref int offset) {
-        if (offset >= payload.Length) {
-            return;
-        }
-        var flags = payload[offset++];
-
-        _ = ReadVarUInt32(
-            buffer: payload,
-            offset: ref offset
-        ); // min
-        if (
-            ((flags & 0x01) != 0) &&
-            (offset < payload.Length)
-        ) {
-            _ = ReadVarUInt32(
-                buffer: payload,
-                offset: ref offset
-            ); // max
-        }
+        return true;
     }
 
     /// <summary>Inspects the binary bytes of a WebAssembly module.</summary>
@@ -224,44 +213,38 @@ public static class WasmModuleInspector {
 
         var exports = new List<string>();
         var imports = new List<WasmImport>();
-        var offset = 8;
+        var reader = new Reader(bytes: wasmBytes[8..]);
+        var wellFormed = true;
 
-        while (offset < wasmBytes.Length) {
-            if (offset >= wasmBytes.Length) {
-                break;
-            }
-
-            var sectionId = wasmBytes[offset++];
-            var sectionSize = ((int)ReadVarUInt32(
-                buffer: wasmBytes,
-                offset: ref offset
-            ));
-
-            if ((offset + sectionSize) > wasmBytes.Length) {
-                break;
-            }
-
-            var sectionPayload = wasmBytes.Slice(
-                length: sectionSize,
-                start: offset
-            );
-
-            offset += sectionSize;
-
-            switch (sectionId) {
-                case 2: // Import Section
-                    ParseImportSection(
+        while (wellFormed && !reader.AtEnd) {
+            wellFormed = (
+                reader.TryReadByte(value: out var sectionId) &&
+                reader.TryReadVarUInt32(value: out var sectionSize) &&
+                reader.TryReadBytes(
+                    length: sectionSize,
+                    value: out var payload
+                ) &&
+                (sectionId switch {
+                    2 => TryParseImportSection(
                         imports: imports,
-                        payload: sectionPayload
-                    );
-                    break;
-                case 7: // Export Section
-                    ParseExportSection(
+                        payload: payload
+                    ),
+                    7 => TryParseExportSection(
                         exports: exports,
-                        payload: sectionPayload
-                    );
-                    break;
-            }
+                        payload: payload
+                    ),
+                    _ => true,
+                })
+            );
+        }
+
+        if (!wellFormed) {
+            return new WasmInspectionResult(
+                ContentHash: contentHash,
+                Exports: [],
+                Imports: [],
+                IsValid: false
+            );
         }
 
         return new WasmInspectionResult(
@@ -286,7 +269,7 @@ public static class WasmModuleInspector {
         if (!result.IsValid) {
             diagnostics.ReportError(
                 code: PuckDiagnosticCodes.Template,
-                message: $"Module '{modulePath}' is not a valid WebAssembly binary (invalid header).",
+                message: $"Module '{modulePath}' is not a well-formed WebAssembly binary: its header, a section length, or an import or export entry runs past the bytes it claims.",
                 span: span
             );
             return;

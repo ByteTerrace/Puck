@@ -180,6 +180,58 @@ public sealed class ArenaByteCeilingLawTests {
             expectedSubstring: "byte ceiling"
         );
     }
+    // Lane widths come from whoever builds the arena, not from the document, so the layout admits them itself: a
+    // negative width is refused, widths whose roster alone passes the ceiling are refused though no row is declared,
+    // and nothing is summed in a width that wraps.
+    [InlineData(-1, 1)]
+    [InlineData(1, -1)]
+    [InlineData(int.MinValue, int.MaxValue)]
+    [InlineData(int.MaxValue, 1)]
+    [InlineData(int.MaxValue, int.MaxValue)]
+    [Theory]
+    public void LaneWidthsTheArenaCannotHoldAreRefusedWithNoRowDeclared(int participants, int identities) {
+        var section = new StateSection(Rows: []);
+
+        Assert.False(condition: ArenaLayout.TryBuild(
+            catalog: StateCatalog.Compile(section: section),
+            layout: out _,
+            options: new ArenaOptions(
+                Identities: identities,
+                Participants: participants
+            ),
+            reason: out var reason,
+            section: section
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "lane"
+        );
+    }
+    [InlineData(0, 0)]
+    [InlineData(0, 4)]
+    [InlineData(4096, 4096)]
+    [Theory]
+    public void AZeroWideLaneLaysOutAndAdmitsNoOrdinal(int participants, int identities) {
+        var section = new StateSection(Rows: []);
+
+        Assert.True(
+            condition: ArenaLayout.TryBuild(
+                catalog: StateCatalog.Compile(section: section),
+                layout: out var layout,
+                options: new ArenaOptions(
+                    Identities: identities,
+                    Participants: participants
+                ),
+                reason: out var reason,
+                section: section
+            ),
+            userMessage: reason
+        );
+        Assert.Equal(
+            actual: layout.LaneRosterCount,
+            expected: (participants + identities)
+        );
+    }
     [Fact]
     public void TheJournalReadsOverItsCeilingExactlyWhileItsRecordIsPastIt() {
         var journal = new ArenaJournal();

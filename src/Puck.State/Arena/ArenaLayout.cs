@@ -260,7 +260,7 @@ public sealed class ArenaLayout {
 
         return bytes;
     }
-    private static void RequireFits(string rowName, long cellSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long vectorBytes) {
+    private static void RequireFits(string what, long cellSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long vectorBytes) {
         var bytes = Measure(
             cellSlots: cellSlots,
             laneRoster: laneRoster,
@@ -271,7 +271,7 @@ public sealed class ArenaLayout {
         );
 
         if (bytes > ArenaCapacity.MaxBytes) {
-            throw new InvalidOperationException(message: $"State row '{rowName}' brings the arena to {bytes} bytes, past the {ArenaCapacity.MaxBytes}-byte ceiling; lower a row's capacity, lay a board over a smaller topology, or drop a row.");
+            throw new InvalidOperationException(message: $"{what} brings the arena to {bytes} bytes, past the {ArenaCapacity.MaxBytes}-byte ceiling; lower a row's capacity, lay a board over a smaller topology, or drop a row.");
         }
     }
     private static int SlotCapacity(StateRow row, CompiledTopology? topology) => (row.Shape switch {
@@ -323,10 +323,31 @@ public sealed class ArenaLayout {
 
         var laneRosterBase = new int[Enum.GetValues<StateLane>().Length];
         var laneRosterCount = 0;
+        var rosterTotal = 0L;
 
+        // A lane may be zero wide, which admits no ordinal; it may not be negative. The roster is measured before
+        // any row is placed, so widths alone can refuse a section that declares no row at all.
         foreach (var lane in Enum.GetValues<StateLane>()) {
+            var width = built.Capacity(lane: lane);
+
+            if (width < 0) {
+                throw new InvalidOperationException(message: $"The {lane} lane is {width} ordinals wide; a lane's width is zero or more.");
+            }
+
+            rosterTotal += width;
+
+            RequireFits(
+                cellSlots: 0L,
+                laneRoster: rosterTotal,
+                laneSlots: 0L,
+                maskWords: 0L,
+                rowCount: catalog.Count,
+                vectorBytes: 0L,
+                what: $"The {lane} lane's roster"
+            );
+
             laneRosterBase[((int)lane)] = laneRosterCount;
-            laneRosterCount += built.Capacity(lane: lane);
+            laneRosterCount = ((int)rosterTotal);
         }
 
         // Columns are visited lane-major, then shape, then kind, so every row sharing the triple occupies one
@@ -401,7 +422,7 @@ public sealed class ArenaLayout {
                                 laneSlots: laneTotal,
                                 maskWords: maskTotal,
                                 rowCount: catalog.Count,
-                                rowName: row.Name.Value,
+                                what: $"State row '{row.Name.Value}'",
                                 vectorBytes: vectorTotal
                             );
 
@@ -471,7 +492,7 @@ public sealed class ArenaLayout {
                                 laneSlots: laneTotal,
                                 maskWords: maskTotal,
                                 rowCount: catalog.Count,
-                                rowName: descriptor.Name,
+                                what: $"State row '{descriptor.Name}'",
                                 vectorBytes: vectorTotal
                             );
 

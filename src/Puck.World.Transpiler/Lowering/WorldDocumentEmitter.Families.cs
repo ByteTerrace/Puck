@@ -88,6 +88,7 @@ public static partial class WorldDocumentEmitter {
     private static StateFamilyInfo? ExpandFamilyMembers(IReadOnlyList<FamilyMemberNode> items, string name, SourceSpan span, DocumentScope scope) {
         var indices = new List<int>();
         var memberNames = new List<string>();
+        var seen = new HashSet<int>();
         var named = 0;
 
         void Refuse(string detail) => scope.Diagnostics.ReportError(
@@ -110,19 +111,39 @@ public static partial class WorldDocumentEmitter {
                 return null;
             }
 
-            var first = EvaluateFamilyIndex(expression: firstExpr, name: name, scope: scope, span: span);
-            var last = ((item.Last is { } lastExpr)
-                ? EvaluateFamilyIndex(expression: lastExpr, name: name, scope: scope, span: span)
-                : first);
+            if (EvaluateFamilyIndex(expression: firstExpr, name: name, scope: scope, span: span) is not { } first) {
+                return null;
+            }
 
-            if ((first < 0) || (last < first)) {
-                Refuse(detail: $"declares the member range {first}..{last}, which must be non-negative and least first");
+            var last = first;
+
+            if (item.Last is { } lastExpr) {
+                if (EvaluateFamilyIndex(expression: lastExpr, name: name, scope: scope, span: span) is not { } evaluated) {
+                    return null;
+                }
+
+                last = evaluated;
+            }
+            if (last < first) {
+                Refuse(detail: $"declares the member range {first}..{last}, which must be least first");
 
                 return null;
             }
 
-            for (var index = first; (index <= last); index++) {
-                if (indices.Contains(item: index)) {
+            // Both ends lie inside the row ceiling, so the length fits and the walk is by count: an inclusive walk
+            // to the last index has no end when that index is the widest the counter holds.
+            var length = ((last - first) + 1);
+
+            if ((memberNames.Count + length) > StateCapacity.MaxRows) {
+                Refuse(detail: $"declares more than the {StateCapacity.MaxRows} rows a document holds");
+
+                return null;
+            }
+
+            for (var offset = 0; (offset < length); offset++) {
+                var index = (first + offset);
+
+                if (!seen.Add(item: index)) {
                     Refuse(detail: $"declares member index {index} twice");
 
                     return null;
@@ -151,20 +172,27 @@ public static partial class WorldDocumentEmitter {
             Size: memberNames.Count
         );
     }
-    private static int EvaluateFamilyIndex(ExpressionNode expression, string name, SourceSpan span, DocumentScope scope) {
+    // A family index selects a row, so it lies inside the row ceiling; an index outside it is refused as written
+    // rather than brought inside.
+    private static int? EvaluateFamilyIndex(ExpressionNode expression, string name, SourceSpan span, DocumentScope scope) {
         var evaluated = DocumentLowering.LowerValue(expr: expression, scope: scope);
 
-        if ((evaluated is JsonValue value) && DocumentNumbers.TryInteger(node: value, number: out var parsed)) {
-            return ((int)Math.Clamp(max: int.MaxValue, min: int.MinValue, value: parsed));
+        if (
+            (evaluated is JsonValue value) &&
+            DocumentNumbers.TryInteger(node: value, number: out var parsed) &&
+            (parsed >= 0L) &&
+            (parsed < StateCapacity.MaxRows)
+        ) {
+            return ((int)parsed);
         }
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.FamilyMembersInvalid,
-            message: $"Family '{name}' declares the member index '{evaluated}', which must evaluate to a non-negative integer at compile time",
+            message: $"Family '{name}' declares the member index '{evaluated}', which must evaluate at compile time to an integer in 0..{(StateCapacity.MaxRows - 1)}",
             span: span
         );
 
-        return -1;
+        return null;
     }
 
     internal static void EmitStateFamilies(JsonObject root, DocumentScope scope) {
@@ -228,28 +256,25 @@ public static partial class WorldDocumentEmitter {
         }
 
         var evaluated = DocumentLowering.LowerValue(expr: sizeExpr, scope: scope);
-        var size = 0;
 
-        if (evaluated is JsonValue jv) {
-            if (jv.TryGetValue<int>(value: out var parsedInt)) {
-                size = parsedInt;
-            } else if (jv.TryGetValue<long>(value: out var parsedLong)) {
-                size = ((int)parsedLong);
-            } else if (jv.TryGetValue<double>(value: out var parsedDouble)) {
-                size = ((int)parsedDouble);
-            }
+        // The size is read exactly and bounded before it is narrowed: the members of a family are rows, and a size
+        // past the row ceiling is refused here rather than expanded for the validator to count.
+        if (
+            (evaluated is JsonValue value) &&
+            DocumentNumbers.TryInteger(node: value, number: out var parsed) &&
+            (parsed >= 1L) &&
+            (parsed <= StateCapacity.MaxRows)
+        ) {
+            return ((int)parsed);
         }
 
-        if (size <= 0) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.FamilySizeInvalid,
-                message: $"Family size for '{name}' must evaluate to a positive integer at compile time, got '{evaluated}'",
-                span: span
-            );
-            return 0;
-        }
+        scope.Diagnostics.ReportError(
+            code: PuckDiagnosticCodes.FamilySizeInvalid,
+            message: $"Family size for '{name}' must evaluate at compile time to an integer in 1..{StateCapacity.MaxRows}, got '{evaluated}'",
+            span: span
+        );
 
-        return size;
+        return 0;
     }
 
     internal static IEnumerable<StateTableDeclarationNode> ExpandTableFamily(StateTableDeclarationNode table, DocumentScope scope) {

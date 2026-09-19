@@ -39,11 +39,34 @@ public sealed partial class StateArena {
         return exported;
     }
 
-    private StateCell ExportCell(in ArenaRowLayout layout, StateRow row, CellName name, int slot) {
-        var authored = StateRows.FindCell(
-            cells: row.Cells,
-            key: name
-        );
+    // The three value-over-time traits are declared per cell and stored in no column, so an exported cell carries
+    // them from the authored cell of the same key. They are gathered once a row, and only for a row that declares
+    // any: finding each exported cell's authored twin by scanning the row is quadratic in its cells.
+    private static Dictionary<CellName, StateCell>? AuthoredTraits(in ArenaRowLayout layout, StateRow row) {
+        if (!layout.HasTraits) {
+            return null;
+        }
+
+        Dictionary<CellName, StateCell>? traits = null;
+
+        foreach (var cell in (row.Cells ?? [])) {
+            if (
+                (cell is not null) &&
+                ((cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null))
+            ) {
+                // The first authored cell of a key is the one a scan of the row would have found.
+                _ = (traits ??= []).TryAdd(
+                    key: cell.Key,
+                    value: cell
+                );
+            }
+        }
+
+        return traits;
+    }
+
+    private StateCell ExportCell(in ArenaRowLayout layout, Dictionary<CellName, StateCell>? traits, CellName name, int slot) {
+        var authored = traits?.GetValueOrDefault(key: name);
 
         return new StateCell(
             Advance: authored?.Advance,
@@ -93,6 +116,10 @@ public sealed partial class StateArena {
     }
     private List<StateCell>? ExportCells(int rowOrdinal, in ArenaRowLayout layout, StateRow row) {
         List<StateCell>? cells = null;
+        var traits = AuthoredTraits(
+            layout: layout,
+            row: row
+        );
 
         switch (layout.Shape) {
             case RowShape.Slot:
@@ -123,8 +150,8 @@ public sealed partial class StateArena {
                         (cells ??= []).Add(item: ExportCell(
                             layout: layout,
                             name: m_catalog.Keys[key],
-                            row: row,
-                            slot: slot
+                            slot: slot,
+                            traits: traits
                         ));
                     }
 
@@ -151,8 +178,8 @@ public sealed partial class StateArena {
                         (cells ??= []).Add(item: ExportCell(
                             layout: layout,
                             name: name,
-                            row: row,
-                            slot: slot
+                            slot: slot,
+                            traits: traits
                         ));
                     }
 
@@ -179,8 +206,8 @@ public sealed partial class StateArena {
                         (cells ??= []).Add(item: ExportCell(
                             layout: layout,
                             name: name,
-                            row: row,
-                            slot: slot
+                            slot: slot,
+                            traits: traits
                         ));
                     }
 
