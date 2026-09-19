@@ -431,9 +431,26 @@ axis), the `CellKind` its values are stored in, its `StateParticipantRole`
 (`Counter` or `Timer` on a slot lane, `None` on a document row), and whether a
 lowering generated it or a host facet owns it. Beside the descriptors the
 catalog holds the lane extents (`StateLaneDescriptor`), the `CellKeyTable` that
-interns every cell key to a `CellKey`, the declared `StateEnum`s a row may name,
+interns authored keys and compiled key symbols to a `CellKey`, the declared `StateEnum`s a row may name,
 and each declared `StateFamily` resolved to the contiguous `RowFamily` ordinal
 range of its member rows.
+
+Each `StateArena.Keys` table starts with those symbols and owns its runtime
+additions. A speculative mint consumes room only in that arena; rewinding its
+scope releases the name and rejects any retained handle from that mint. A
+later mint can reuse the ordinal without reviving the old handle. Compiled
+keys continue to resolve by name even when compilation introduces a symbol
+after the arena was constructed. Runtime callers resolve and render keys
+through `StateArena.Keys`, not the catalog's symbol table.
+
+Member hashes fold names in cell order. The full arena hash also covers its
+retained key names in canonical name order, because a committed name still
+uses key budget after its last cell is removed. Relayouts and checkpoints retain this ledger;
+exported rows alone do not retain orphan names. Both distinct-key count and
+retained key bytes are bounded, and `StateArena.Bytes` includes the key charge.
+Each retained name charges 96 bytes plus two bytes per UTF-16 code unit;
+spare table capacity is bounded separately by `StateCapacity.MaxCellKeys`.
+
 `StateReader` is the one (row, key) → raw-value computation (advance, cycle,
 eased reads, reductions, arg-extrema); `StateArena` is the one cell-write
 store, and owns FIFO eviction. `StateArena.TryRead` answers one keyed read as a

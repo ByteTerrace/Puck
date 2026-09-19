@@ -36,7 +36,7 @@ public static class WorldStateDisclosure {
             ordinal: out var ordinal,
             row: row
         ) || observer.CanRead(
-            key: (arena.Catalog.Keys.TryResolve(
+            key: (arena.Keys.TryResolve(
                 key: out var interned,
                 name: key
             )
@@ -114,7 +114,7 @@ public static class WorldStateDisclosure {
                     rowOrdinal: rowOrdinal
                 )) {
                     cells.Add(item: new(
-                        arena.Catalog.Keys[key: key].Value,
+                        arena.Keys[key: key].Value,
                         (value.Kind switch {
                             CellKind.Bool => (value.AsBool
                                 ? 1L

@@ -415,21 +415,6 @@ public static partial class WorldStateHashComposition {
         }
     }
     private static void AppendVisibility(ref Fnv1aHash hash, StateVisibility? visibility) {
-        hash.Add(value: ((byte)((visibility is null)
-            ? 0
-            : 1)));
-
-        if (visibility is null) {
-            return;
-        }
-
-        hash.Add(value: (visibility.Readers?.Count ?? -1));
-
-        for (var index = 0; (index < (visibility.Readers?.Count ?? 0)); index++) {
-            AppendString(
-                hash: ref hash,
-                value: visibility.Readers![index]
-            );
-        }
+        StateVisibilityHash.Append(hash: ref hash, visibility: visibility);
     }
 }

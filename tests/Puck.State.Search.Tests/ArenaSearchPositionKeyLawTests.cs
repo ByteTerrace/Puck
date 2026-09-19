@@ -154,7 +154,7 @@ public sealed class ArenaSearchPositionKeyLawTests {
             position: position
         );
 
-        foreach (var value in (long[])[1L, 2L, 3L]) {
+        foreach (var value in ((long[])[1L, 2L, 3L])) {
             Assert.True(condition: position.Arena.TryPush(
                 reason: out _,
                 rowOrdinal: log,
@@ -253,6 +253,109 @@ public sealed class ArenaSearchPositionKeyLawTests {
         );
         Assert.Equal(
             expected: settled,
+            actual: search.PositionKey(index: 0)
+        );
+    }
+    // A checkpoint names its candidate scopes by positions, then rebuilds its token keys from those positions on
+    // restore. Its carried table entries must therefore remain meaningful when two otherwise equal arenas assigned
+    // their member names different intern ordinals.
+    [Fact]
+    public void ACheckpointRestoresAcrossEquivalentMemberNamesWithDifferentInternOrdinals() {
+        var source = new Position(rows: Board(
+            cells: 4,
+            tokens: 2
+        ));
+        var target = new Position(
+            rows: Board(
+                cells: 4,
+                tokens: 2
+            ),
+            reverseInternOrder: true
+        );
+
+        ArenaSearch Make(Position position) => SearchFixture.Build(
+            judge: RuleJudge(
+                position: position,
+                rules: [SearchFixture.AcceptEveryCandidate()],
+                score: "piece[t0] - piece[t1]"
+            ),
+            plan: (Plan(
+                depth: 3,
+                scored: true
+            ) with { Nodes = 1 }),
+            position: position
+        );
+
+        Assert.NotEqual(
+            expected: source.Key(name: "t0").Ordinal,
+            actual: target.Key(name: "t0").Ordinal
+        );
+        Assert.Equal(
+            expected: source.Arena.ComputeHash(),
+            actual: target.Arena.ComputeHash()
+        );
+
+        var sourceSearch = Make(position: source);
+        var targetSearch = Make(position: target);
+
+        _ = sourceSearch.Step(
+            apply: static _ => true,
+            engineTick: 0UL,
+            tick: 1UL
+        );
+        var checkpoint = sourceSearch.Capture();
+
+        Assert.True(condition: checkpoint.Jobs[0].Running);
+        Assert.True(
+            condition: targetSearch.TryRestore(
+                checkpoint: checkpoint,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+
+        Assert.Equal(
+            expected: SearchFixture.RunArena(
+                catalog: source.Catalog,
+                search: sourceSearch
+            ),
+            actual: SearchFixture.RunArena(
+                catalog: target.Catalog,
+                search: targetSearch
+            )
+        );
+    }
+    [Fact]
+    public void ARetainedOrphanMemberChangesTheSearchPositionKey() {
+        var position = new Position(rows: Board(
+            cells: 4,
+            tokens: 2
+        ));
+        var search = SearchFixture.Build(
+            judge: RuleJudge(
+                position: position,
+                rules: [SearchFixture.AcceptEveryCandidate()]
+            ),
+            plan: Plan(),
+            position: position
+        );
+        var before = search.PositionKey(index: 0);
+
+        Assert.True(condition: position.Arena.TryMint(
+            key: out var orphan,
+            name: Name(value: "orphan"),
+            reason: out var reason,
+            rowOrdinal: position.Ordinal(name: "piece"),
+            value: CellValue.Int(value: 0L)
+        ), userMessage: reason);
+        Assert.True(condition: position.Arena.TryRemove(
+            key: orphan,
+            reason: out reason,
+            rowOrdinal: position.Ordinal(name: "piece")
+        ), userMessage: reason);
+
+        Assert.NotEqual(
+            expected: before,
             actual: search.PositionKey(index: 0)
         );
     }

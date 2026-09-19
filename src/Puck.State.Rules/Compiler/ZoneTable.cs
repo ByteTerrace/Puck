@@ -282,7 +282,7 @@ public sealed class LocalKeyFact : RuleKeyFact {
         named = true;
 
         return (RuleReads.TryIndexKey(
-            catalog: reader.Catalog,
+            keys: reader.Arena.Keys,
             index: reader.LocalValue(ordinal: Ordinal),
             key: out var key
         )

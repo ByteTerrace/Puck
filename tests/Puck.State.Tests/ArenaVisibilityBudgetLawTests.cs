@@ -22,7 +22,7 @@ public sealed class ArenaVisibilityBudgetLawTests {
 
         readers[0] = "changed-after-write";
 
-        var stored = arena.Visibility(rowOrdinal: ArenaFixture.Tokens, key: key)!;
+        var stored = arena.Visibility(key: key, rowOrdinal: ArenaFixture.Tokens)!;
 
         Assert.Equal(
             actual: stored.Readers![0],
@@ -34,7 +34,7 @@ public sealed class ArenaVisibilityBudgetLawTests {
             visibility: stored
         ));
         Assert.Same(
-            actual: arena.Visibility(rowOrdinal: ArenaFixture.Tokens, key: key),
+            actual: arena.Visibility(key: key, rowOrdinal: ArenaFixture.Tokens),
             expected: stored
         );
         Assert.False(condition: arena.TryWriteVisibility(
@@ -62,7 +62,6 @@ public sealed class ArenaVisibilityBudgetLawTests {
             ))
         ));
     }
-
     [Fact]
     public void AnImportedVisibilityIsRefusedBeforeTheRowMoves() {
         var section = ArenaFixture.Section();
@@ -98,7 +97,6 @@ public sealed class ArenaVisibilityBudgetLawTests {
         Assert.Contains(actualString: reason, expectedSubstring: "readersFrom");
         Assert.Equal(actual: arena.ComputeHash(), expected: before);
     }
-
     [Fact]
     public void AuthoredVisibilityIsNormalizedBeforeTheArenaRetainsItsRows() {
         var source = ArenaFixture.Section();
@@ -110,7 +108,7 @@ public sealed class ArenaVisibilityBudgetLawTests {
             Visibility = new StateVisibility(
                 Readers: cellReaders,
                 ReadersFrom: "tokens"
-            )
+            ),
         } };
         var rows = source.Rows.ToArray();
 
@@ -126,6 +124,7 @@ public sealed class ArenaVisibilityBudgetLawTests {
             section: section,
             time: ArenaTime.Origin
         );
+
         Assert.True(condition: StateArena.TryMeasureVisibility(
             bytes: out var visibilityBytes,
             reason: out var reason,
@@ -134,9 +133,11 @@ public sealed class ArenaVisibilityBudgetLawTests {
 
         cellReaders[0] = "changed-after-construction";
         rowReaders[0] = "changed-after-construction";
-        authoredCells[0] = cell with { Visibility = new StateVisibility(
+        authoredCells[0] = cell with {
+            Visibility = new StateVisibility(
                 ReadersFrom: new string(c: 's', count: (SafeName.MaxLength + 1))
-            ) };
+            ),
+        };
 
         Assert.Equal(
             actual: arena.Rows[ArenaFixture.Tokens].Cells![0].Visibility!.Readers![0],
@@ -152,10 +153,9 @@ public sealed class ArenaVisibilityBudgetLawTests {
         );
         Assert.Equal(
             actual: arena.Bytes,
-            expected: (arena.Layout.Bytes + visibilityBytes)
+            expected: ((arena.Layout.Bytes + visibilityBytes) + arena.Keys.Bytes)
         );
     }
-
     [Fact]
     public void NestedRewindReturnsTheVisibilityPayloadCharge() {
         var journal = new ArenaJournal();
@@ -199,7 +199,6 @@ public sealed class ArenaVisibilityBudgetLawTests {
 
         Assert.Equal(actual: journal.Bytes, expected: 0L);
     }
-
     [Fact]
     public void NestedArenaScopesRestoreTheLiveVisibilityCharge() {
         var (catalog, arena) = ArenaFixture.Build();
@@ -233,14 +232,13 @@ public sealed class ArenaVisibilityBudgetLawTests {
 
         Assert.Equal(actual: arena.Bytes, expected: outerBytes);
     }
-
     [Fact]
     public void AReadersFromOnlyDeclarationDoesNotRetainTheCallersCellArray() {
         var source = ArenaFixture.Section();
         var row = source.Rows![ArenaFixture.Tokens];
         var cell = row.Cells![0];
         var authored = new[] { cell with {
-            Visibility = new StateVisibility(ReadersFrom: "tokens")
+            Visibility = new StateVisibility(ReadersFrom: "tokens"),
         } };
         var rows = source.Rows.ToArray();
 
@@ -254,20 +252,21 @@ public sealed class ArenaVisibilityBudgetLawTests {
             time: ArenaTime.Origin
         );
 
-        authored[0] = cell with { Visibility = new StateVisibility(
+        authored[0] = cell with {
+            Visibility = new StateVisibility(
                 ReadersFrom: new string(c: 's', count: (SafeName.MaxLength + 1))
-            ) };
+            ),
+        };
 
         Assert.Equal(
             actual: arena.Rows[ArenaFixture.Tokens].Cells![0].Visibility!.ReadersFrom,
             expected: "tokens"
         );
     }
-
     [Fact]
     public void VisibilityPayloadCannotPushAnArenaPastItsByteCeiling() {
         var capacity = StateCapacity.MaxCellsPerRow;
-        var cells = Enumerable.Range(start: 0, count: capacity).Select(index => new StateCell(
+        var cells = Enumerable.Range(count: capacity, start: 0).Select(selector: index => new StateCell(
             Key: ArenaFixture.Name(value: $"k{index}"),
             Value: CellValue.Int(value: index)
         )).ToArray();
@@ -291,7 +290,7 @@ public sealed class ArenaVisibilityBudgetLawTests {
         ).ToArray());
         var refused = false;
 
-        for (var index = 0; index < capacity; index++) {
+        for (var index = 0; (index < capacity); index++) {
             if (!arena.TryWriteVisibility(
                 key: ArenaFixture.Key(catalog: catalog, value: $"k{index}"),
                 rowOrdinal: 0,
@@ -305,7 +304,7 @@ public sealed class ArenaVisibilityBudgetLawTests {
         Assert.True(condition: refused);
         Assert.True(condition: (arena.Bytes <= ArenaCapacity.MaxBytes));
 
-        var imported = cells.Select(cell => cell with { Visibility = maximum }).ToArray();
+        var imported = cells.Select(selector: cell => cell with { Visibility = maximum }).ToArray();
         var beforeImport = arena.Bytes;
 
         Assert.False(condition: arena.TryLoad(
@@ -316,7 +315,6 @@ public sealed class ArenaVisibilityBudgetLawTests {
         Assert.Contains(actualString: reason, expectedSubstring: "byte ceiling");
         Assert.Equal(actual: arena.Bytes, expected: beforeImport);
     }
-
     [Fact]
     public void RewritingAnAdmittedVisibilityAllocatesNothing() {
         var (catalog, arena) = ArenaFixture.Build();
@@ -328,7 +326,7 @@ public sealed class ArenaVisibilityBudgetLawTests {
             visibility: new StateVisibility(Readers: ["p1"])
         ));
 
-        var admitted = arena.Visibility(rowOrdinal: ArenaFixture.Tokens, key: key);
+        var admitted = arena.Visibility(key: key, rowOrdinal: ArenaFixture.Tokens);
 
         _ = arena.TryWriteVisibility(
             key: key,
@@ -338,7 +336,7 @@ public sealed class ArenaVisibilityBudgetLawTests {
 
         var before = GC.GetAllocatedBytesForCurrentThread();
 
-        for (var iteration = 0; iteration < 128; iteration++) {
+        for (var iteration = 0; (iteration < 128); iteration++) {
             _ = arena.TryWriteVisibility(
                 key: key,
                 rowOrdinal: ArenaFixture.Tokens,

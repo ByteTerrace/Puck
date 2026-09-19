@@ -64,7 +64,7 @@ public sealed class ArenaSlotMap {
     public bool IsSparse => (m_sparse is not null);
 
     /// <summary>Sets the slot a key's ordinal maps to.</summary>
-    /// <param name="key">The key's ordinal in the catalog's key table.</param>
+    /// <param name="key">The key's ordinal in the owning arena's key table.</param>
     public int this[int key] {
         set {
             if (m_sparse is { } sparse) {

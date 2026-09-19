@@ -144,6 +144,7 @@ public sealed partial class WorldRuleHost {
 
         return applied;
     }
+
     // Resolves a document row once through the catalog's name -> handle dictionary (StateCatalog.TryResolve) and the
     // handle's own LaneOrdinal as a direct row-array index, instead of WorldDefinitionRows.FindStateRow's linear scan
     // over every declared row. Shared by every tick-path reader that starts from a row name (Carriers/CarrierKeys
@@ -169,6 +170,7 @@ public sealed partial class WorldRuleHost {
 
         return false;
     }
+
     // The catalog ordinal of a row a carrier sweep iterates, or -1.
     private int CarrierRowOrdinal(string name) => (Host.Arena.Catalog.TryResolve(
         handle: out var handle,
@@ -199,7 +201,7 @@ public sealed partial class WorldRuleHost {
             ) &&
                 StateReader.TryParseCandidateIndex(
                 index: out var index,
-                key: Host.Arena.Catalog.Keys[key]
+                key: Host.Arena.Keys[key]
             )
             ) {
                 into.Add(item: index);
@@ -227,7 +229,7 @@ public sealed partial class WorldRuleHost {
             ) ||
                 !StateReader.TryParseCandidateIndex(
                 index: out var index,
-                key: Host.Arena.Catalog.Keys[key]
+                key: Host.Arena.Keys[key]
             ) ||
                 (Host.Body(index: index) is null) ||
                 (Host.ReadArenaCell(
@@ -243,6 +245,7 @@ public sealed partial class WorldRuleHost {
 
         into.Sort();
     }
+
     // Evaluates every compiled rule's gate and fires its effects in document order, then every compiled
     // interaction's on the same terms. That ordering is the same-tick effect tiebreak: a rule can set up a fact an
     // interaction's gate reads this tick, and two interactions cascade in their own declared order.
@@ -285,6 +288,7 @@ public sealed partial class WorldRuleHost {
             Host.Document.DeliverPending();
         }
     }
+
     // Every rule, every group trigger, and every decision the server installs is admitted against this host once,
     // at compile time. Nothing on the tick path asks again.
     /// <summary>Admits every compiled rule against this host, throwing when one names a need the host cannot

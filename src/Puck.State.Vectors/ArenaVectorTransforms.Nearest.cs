@@ -107,7 +107,7 @@ public static partial class ArenaVectorTransforms {
                         whereRowOrdinal: request.WhereRowOrdinal
                     ),
                     Components: components,
-                    Key: arena.Catalog.Keys[key: key]
+                    Key: arena.Keys[key: key]
                 );
             }
         }
@@ -115,7 +115,7 @@ public static partial class ArenaVectorTransforms {
         var matches = matchesLease.Span;
         var matched = VectorTransforms.SelectNearest(
             candidates: candidates[..gathered],
-            excludeKey: (arena.Catalog.Keys.TryGetName(
+            excludeKey: (arena.Keys.TryGetName(
                 key: request.Exclude,
                 name: out var excluded
             )

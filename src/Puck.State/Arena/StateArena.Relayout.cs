@@ -15,12 +15,14 @@ public sealed partial class StateArena {
     /// capacity, or symbolic domain will not admit is refused by row and cell name, leaving the arena as it was.
     /// <para>Every value crosses through the same admission door an authored write does, so a relayout cannot land
     /// a value no write could.</para>
+    /// <para>The complete committed key ledger also crosses by name, including orphan names no row currently
+    /// references, because those names remain part of future mint admission and the arena hash.</para>
     /// <para>The participant and identity lanes cross whole — the roster and each named lane slot's values — since
     /// they belong to the host's session rather than to the document being re-declared.</para>
     /// <para>Three structures are layout-bound and rebuilt rather than carried: the per-row key-to-slot index, the
     /// change-walk scratch, and every span <see cref="TryReadVector"/> has handed out, which aliases storage this
-    /// replaces. Cell keys are interned per catalog, so a <see cref="CellKey"/> resolved before a relayout
-    /// addresses nothing after it.</para>
+    /// replaces. Runtime cell keys belong to the replaced key table and must be resolved again after relayout.
+    /// Compiled keys remain usable only when the replacement uses their source catalog.</para>
     /// <para>Each of the three per-row counters lands above every value any row held before, because the ordinals
     /// they are indexed by have been reassigned.</para>
     /// </remarks>
@@ -65,6 +67,12 @@ public sealed partial class StateArena {
             reason: out reason,
             rows: carried,
             time: in time
+        )) {
+            return false;
+        }
+        if (!rebuilt.TryRestoreKeys(
+            names: m_keys.Names,
+            reason: out reason
         )) {
             return false;
         }
@@ -153,6 +161,7 @@ public sealed partial class StateArena {
         m_appendGenerations = source.m_appendGenerations;
         m_behaviors = source.m_behaviors;
         m_catalog = source.m_catalog;
+        m_keys = source.m_keys;
         m_clockEpochEngineTicks = source.m_clockEpochEngineTicks;
         m_clockEpochTicks = source.m_clockEpochTicks;
         m_clockSubstepTicks = source.m_clockSubstepTicks;
@@ -184,6 +193,7 @@ public sealed partial class StateArena {
         m_visibilities = source.m_visibilities;
         m_declarationVisibilityBytes = source.m_declarationVisibilityBytes;
         m_visibilityBytes = source.m_visibilityBytes;
+        m_keys.SetByteBudget(budget: KeyByteBudget);
 
         m_changeDiffers = [];
         m_changeStamp = [];

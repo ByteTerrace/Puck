@@ -1549,6 +1549,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             rules: compiledRules
         );
+
         ValidateCellSets(
             definition: definition,
             errors: errors
@@ -1607,8 +1608,8 @@ public static partial class WorldDefinitionValidator {
                 section: definition.StateRaw
             )) {
                 errors.Add(item: $"state: {visibilityRefusal}");
-            } else if ((arenaLayout.Bytes + visibilityBytes) > ArenaCapacity.MaxBytes) {
-                errors.Add(item: $"state: visibility brings the arena to {arenaLayout.Bytes + visibilityBytes} bytes, past the {ArenaCapacity.MaxBytes}-byte ceiling.");
+            } else if (((arenaLayout.Bytes + visibilityBytes) + definition.StateCatalog.Keys.Bytes) > ArenaCapacity.MaxBytes) {
+                errors.Add(item: $"state: visibility and retained keys bring the arena to {((arenaLayout.Bytes + visibilityBytes) + definition.StateCatalog.Keys.Bytes)} bytes, past the {ArenaCapacity.MaxBytes}-byte ceiling.");
             }
         }
         if (errors.Count == 0) {

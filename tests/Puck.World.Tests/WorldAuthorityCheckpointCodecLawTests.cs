@@ -20,6 +20,15 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
     private static WorldAuthorityCheckpoint CapturedCheckpoint() {
         using var fixture = Fixtures.FreshServer();
 
+        Assert.True(
+            condition: fixture.Server.Arena.Keys.TryIntern(
+                key: out _,
+                name: CellName.Parse(candidate: "orphan-checkpoint-key"),
+                reason: out var keyReason
+            ),
+            userMessage: keyReason
+        );
+
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(
             IdentityName: null,
             Principal: WorldPrincipal.Seat(slot: 0),
@@ -183,6 +192,159 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         );
     }
 
+    [Fact]
+    public void Capture_refuses_an_open_arena_transaction() {
+        using var fixture = Fixtures.FreshServer();
+        var mark = fixture.Server.Arena.BeginScope();
+
+        try {
+            Assert.False(condition: fixture.Server.TryCaptureCheckpoint(
+                checkpoint: out _,
+                hostRow: EmptyHostRow(),
+                reason: out var reason
+            ));
+            Assert.Contains(
+                actualString: reason,
+                expectedSubstring: "arena transaction is open"
+            );
+        } finally {
+            fixture.Server.Arena.Rewind(mark: mark);
+        }
+    }
+    [Fact]
+    public void RestoreRetainsAnOrphanArenaKeyLedgerAfterRuleRelayout() {
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(
+                Name: CellName.Parse(candidate: "ledger"),
+                Kind: CellKind.Int,
+                Capacity: 2,
+                Domain: StateDomain.Keys.Instance
+            )]),
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        Assert.True(condition: fixture.Server.Arena.Catalog.TryResolve(
+            handle: out var row,
+            lane: StateLane.Document,
+            name: CellName.Parse(candidate: "ledger")
+        ));
+        var mark = fixture.Server.Arena.BeginScope();
+
+        Assert.True(condition: fixture.Server.Arena.TryMint(
+            key: out var orphan,
+            name: CellName.Parse(candidate: "orphan"),
+            reason: out var reason,
+            rowOrdinal: row.Ordinal,
+            value: CellValue.Int(value: 1L)
+        ), reason);
+        Assert.True(condition: fixture.Server.Arena.TryRemove(
+            key: orphan,
+            reason: out reason,
+            rowOrdinal: row.Ordinal
+        ), reason);
+        fixture.Server.Arena.Commit(mark: mark);
+
+        var expectedBytes = fixture.Server.Arena.Bytes;
+        var expectedHash = fixture.Server.Arena.ComputeHash();
+        var expectedKeyCount = fixture.Server.Arena.Keys.Count;
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(
+            checkpoint: out var checkpoint,
+            hostRow: EmptyHostRow(),
+            reason: out reason
+        ), reason);
+
+        using var restoredMachines = new WorldMachineHost(
+            engines: [],
+            screens: definition.Screens
+        );
+
+        var (restored, _) = WorldServer.FromCheckpoint(
+            checkpoint: checkpoint!,
+            instanceIdentity: "restored-ledger",
+            machines: restoredMachines,
+            profiles: new WorldOwnedWorlds(
+                directory: Directory.CreateTempSubdirectory(prefix: "puck-key-ledger-tests-").FullName,
+                machineId: Guid.NewGuid(),
+                template: definition
+            )
+        );
+
+        Assert.True(condition: restored.Arena.Keys.TryResolve(
+            key: out _,
+            name: CellName.Parse(candidate: "orphan")
+        ));
+        Assert.Equal(expectedKeyCount, restored.Arena.Keys.Count);
+        Assert.Equal(expectedBytes, restored.Arena.Bytes);
+        Assert.Equal(expectedHash, restored.Arena.ComputeHash());
+
+        var next = CellName.Parse(candidate: "next-key");
+
+        Assert.Equal(
+            actual: restored.Arena.Keys.TryIntern(next, out _, out var restoredReason),
+            expected: fixture.Server.Arena.Keys.TryIntern(next, out _, out var originalReason)
+        );
+        Assert.Equal(originalReason, restoredReason);
+        Assert.Equal(fixture.Server.Arena.Bytes, restored.Arena.Bytes);
+        Assert.Equal(fixture.Server.Arena.ComputeHash(), restored.Arena.ComputeHash());
+    }
+    [Fact]
+    public void Duplicate_arena_key_ledger_refuses_by_name() {
+        var duplicate = CellName.Parse(candidate: "duplicate");
+        var captured = CapturedCheckpoint();
+        var checkpoint = captured with {
+            Server = captured.Server with { ArenaKeys = [duplicate, duplicate] },
+        };
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+
+        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: encoded,
+            checkpoint: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "arena key 'duplicate' is duplicated"
+        );
+    }
+    [Fact]
+    public void ArenaKeyLedgerRoundTripsNamesPastTheGeneralWireStringLimit() {
+        var captured = CapturedCheckpoint();
+        var longName = CellName.Parse(candidate: ("key-" + new string(c: 'x', count: 20_000)));
+        var checkpoint = captured with {
+            Server = captured.Server with { ArenaKeys = [longName] },
+        };
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: encoded,
+            checkpoint: out var decoded,
+            reason: out var reason
+        ), reason);
+        Assert.Equal(
+            actual: Assert.Single(collection: decoded!.Server.ArenaKeys),
+            expected: longName
+        );
+    }
+    [Fact]
+    public void ArenaKeyLedgerRoundTripsUnicodeCodeUnitsLosslessly() {
+        var captured = CapturedCheckpoint();
+        var unicode = CellName.Parse(candidate: "key-漢-\uD800-tail");
+        var checkpoint = captured with {
+            Server = captured.Server with { ArenaKeys = [unicode] },
+        };
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: encoded,
+            checkpoint: out var decoded,
+            reason: out var reason
+        ), reason);
+        Assert.Equal(
+            actual: Assert.Single(collection: decoded!.Server.ArenaKeys).Value.AsSpan().ToArray(),
+            expected: unicode.Value.AsSpan().ToArray()
+        );
+    }
     [Fact]
     public void Bit_flipped_blob_refuses_by_name() {
         var checkpoint = CapturedCheckpoint();
@@ -738,14 +900,14 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         );
     }
     [Fact]
-    public void Version_six_envelope_refuses_by_name() {
+    public void Version_five_envelope_refuses_by_name() {
         var checkpoint = CapturedCheckpoint();
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
         var downgraded = ((byte[])encoded.Clone());
 
-        // Version 6 predates cached navigation routes. Refuse that shorter population entry rather than allowing a
-        // resumed producer to silently choose a different continuation after restore.
-        downgraded[4] = 6;
+        // Version 5 predates the arena's full interned-key ledger. Refuse it rather than restoring with orphaned
+        // committed names missing from the key ceiling and retained-memory state.
+        downgraded[4] = 5;
         downgraded[5] = 0;
 
         Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
@@ -755,7 +917,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         ));
         Assert.Contains(
             actualString: reason,
-            expectedSubstring: "version 6"
+            expectedSubstring: "version 5"
         );
     }
     [Fact]

@@ -105,7 +105,7 @@ public sealed partial class WorldDocument {
             (mutation.Vector is not null) &&
             (row.Kind != CellKind.Vector)
         ) {
-            reason = $"state row '{mutation.Row}' cell '{mutation.Key}' is not vector-kind and takes a {StateSpelling.Kind(row.Kind)} operand, never a vector one";
+            reason = $"state row '{mutation.Row}' cell '{mutation.Key}' is not vector-kind and takes a {StateSpelling.Kind(kind: row.Kind)} operand, never a vector one";
 
             return false;
         }
@@ -213,7 +213,7 @@ public sealed partial class WorldDocument {
             var textToWrite = mutation.Text!;
 
             if (isTextCycle) {
-                var currentText = ((arena.Catalog.Keys.TryResolve(
+                var currentText = ((arena.Keys.TryResolve(
                     key: out var currentKey,
                     name: cellKey
                 ) &&
@@ -390,7 +390,7 @@ public sealed partial class WorldDocument {
             name: out var cellKey,
             reason: out _
         ) ||
-            !arena.Catalog.Keys.TryResolve(
+            !arena.Keys.TryResolve(
             key: out var key,
             name: cellKey
         )
@@ -413,7 +413,7 @@ public sealed partial class WorldDocument {
         return true;
     }
     // The live number a cell reads at `time`, or null when the row holds no cell under the key.
-    private static long? ReadLiveNumber(StateArena arena, int rowOrdinal, CellName cellKey, in ArenaTime time) => ((arena.Catalog.Keys.TryResolve(
+    private static long? ReadLiveNumber(StateArena arena, int rowOrdinal, CellName cellKey, in ArenaTime time) => ((arena.Keys.TryResolve(
         key: out var key,
         name: cellKey
     ) &&
@@ -518,7 +518,7 @@ public sealed partial class WorldDocument {
 
         // The key is interned before the row is addressed: a lattice or ring row resolves a cell's position from
         // the interned NAME, so a write naming one of its own addresses reaches it rather than reading as absent.
-        if (!arena.Catalog.Keys.TryIntern(
+        if (!arena.Keys.TryIntern(
             key: out key,
             name: cellKey,
             reason: out var internReason
@@ -546,7 +546,7 @@ public sealed partial class WorldDocument {
             rowOrdinal: rowOrdinal
         )
         ) {
-            evictedKey = arena.Catalog.Keys[victim];
+            evictedKey = arena.Keys[victim];
         }
 
         return true;

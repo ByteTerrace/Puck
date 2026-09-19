@@ -261,6 +261,7 @@ public sealed partial class WorldPersistence {
 
         return true;
     }
+
     // Undo's own throwaway addon-prepare probe for an INTERMEDIATE journal-replay candidate: proves the row set
     // this candidate carries could still mount, without ever registering, disclosing, or journaling anything — the
     // plan is disposed immediately regardless of outcome. Only the FINAL candidate's prepare (after the loop above)
@@ -376,15 +377,15 @@ public sealed partial class WorldPersistence {
         }
     }
 
-    // A key-bound latch entry's LatchKey.Left is an ordinal this catalog interned, so it travels as the key's name
-    // and is interned again on the way back in. An unnamed entry's Left is a participant index, which the catalog
+    // A key-bound latch entry's LatchKey.Left is an ordinal this arena interned, so it travels as the key's name
+    // and is interned again on the way back in. An unnamed entry's Left is a participant index, which the arena
     // knows nothing about and which travels as itself.
     private WorldRuleLatchEntry[] FlattenLatch(RuleLatch latch, bool named) {
         var flattened = new List<(string Rule, LatchKey Binding, bool Held)>(capacity: latch.Count);
 
         latch.Flatten(into: flattened);
 
-        var keys = Host.Document.Definition.StateCatalog.Keys;
+        var keys = Host.Arena.Keys;
         var entries = new WorldRuleLatchEntry[flattened.Count];
 
         for (var index = 0; (index < flattened.Count); index++) {
@@ -413,7 +414,7 @@ public sealed partial class WorldPersistence {
         return entries;
     }
     private void RestoreLatch(RuleLatch latch, IReadOnlyList<WorldRuleLatchEntry> entries) {
-        var keys = Host.Document.Definition.StateCatalog.Keys;
+        var keys = Host.Arena.Keys;
 
         latch.Clear();
         foreach (var entry in entries) {
@@ -425,7 +426,7 @@ public sealed partial class WorldPersistence {
                     name: CellName.Parse(candidate: entry.Key),
                     reason: out var reason
                 )) {
-                    throw new InvalidOperationException(message: $"the checkpoint's latch entry for rule '{entry.Rule}' names cell key '{entry.Key}', which this catalog cannot intern: {reason}");
+                    throw new InvalidOperationException(message: $"the checkpoint's latch entry for rule '{entry.Rule}' names cell key '{entry.Key}', which this arena cannot intern: {reason}");
                 }
 
                 left = key.Ordinal;
@@ -441,8 +442,6 @@ public sealed partial class WorldPersistence {
             );
         }
     }
-
-
     /// <summary>The engine-tick threshold beyond which a checkpoint capture is refused rather than silently taken
     /// against state this record graph cannot represent — see <see cref="TryCaptureCheckpoint"/>.</summary>
     /// <returns><see langword="true"/> when this server's live state is outside what a checkpoint can capture.</returns>
@@ -499,6 +498,12 @@ public sealed partial class WorldPersistence {
         ArgumentNullException.ThrowIfNull(argument: hostRow);
 
         lock (Host.AuthorityGate) {
+            if (Host.Arena.Journal.Scopes != 0) {
+                checkpoint = null;
+                reason = "a checkpoint cannot capture while an arena transaction is open — retry at the next master boundary";
+
+                return false;
+            }
             if (AnyUncapturableStateEverLatched()) {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture pumped addon guests, a stepped machine without durable checkpoint support, or applied screen operations";
@@ -567,6 +572,10 @@ public sealed partial class WorldPersistence {
             }
 
             var server = new WorldServerCheckpoint(
+                ArenaKeys: [.. Host.Arena.Keys.Names.OrderBy(
+                    keySelector: static name => name.Value,
+                    comparer: StringComparer.Ordinal
+                )],
                 DefinitionJson: WorldDefinitionSerialization.Serialize(definition: Host.Document.Definition),
                 BaseDefinitionJson: WorldDefinitionSerialization.Serialize(definition: Host.Document.Base),
                 BaseOrigin: Host.Document.BaseOrigin,
@@ -638,6 +647,13 @@ public sealed partial class WorldPersistence {
             definition: restoredDefinition
         );
 
+        if (!Host.Arena.TryRestoreKeys(
+            names: server.ArenaKeys,
+            reason: out var arenaKeyReason
+        )) {
+            throw new InvalidOperationException(message: $"the checkpoint's arena keys do not restore: {arenaKeyReason}");
+        }
+
         var machineCheckpoint = (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty);
 
         if (Host.Machines is IWorldMachineCheckpointHost machineHost) {
@@ -671,14 +687,6 @@ public sealed partial class WorldPersistence {
         foreach (var intent in server.Intents) {
             Host.Tick.Intents.Enqueue(item: intent);
         }
-        RestoreLatch(
-            entries: server.RuleGateHeld,
-            latch: Host.RuleHost.RuleGateHeld
-        );
-        RestoreLatch(
-            entries: server.InteractionGateHeld,
-            latch: Host.RuleHost.InteractionGateHeld
-        );
         Host.RuleHost.GroupState.Clear();
         foreach (var entry in server.RuleGroups) {
             Host.RuleHost.GroupState.Restore(
@@ -767,6 +775,24 @@ public sealed partial class WorldPersistence {
         Host.Events.Restore(checkpoint: checkpoint.EventFeed);
         Host.Profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
         Host.RecompileRules(definition: Host.Document.Definition);
+        // RecompileRules relayouts onto the separately deserialized installed definition's catalog. Relayout carries
+        // the ledger, and this idempotent restore also covers its documented fresh-build fallback: whichever arena
+        // survives rule compilation retains every committed orphan name and its admission charge.
+        if (!Host.Arena.TryRestoreKeys(
+            names: server.ArenaKeys,
+            reason: out arenaKeyReason
+        )) {
+            throw new InvalidOperationException(message: $"the checkpoint's arena keys do not survive restored rule compilation: {arenaKeyReason}");
+        }
+        RestoreLatch(
+            entries: server.RuleGateHeld,
+            latch: Host.RuleHost.RuleGateHeld
+        );
+        RestoreLatch(
+            entries: server.InteractionGateHeld,
+            latch: Host.RuleHost.InteractionGateHeld
+        );
+        Host.RuleHost.PruneLatches();
         Decisions.Restore(checkpoint: server.Decisions);
         if (!Host.Search.TryRestore(
             checkpoint: (checkpoint.Search ?? ArenaSearchCheckpoint.Empty),

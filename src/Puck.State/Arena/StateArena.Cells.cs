@@ -47,7 +47,7 @@ public sealed partial class StateArena {
     }
     /// <summary>Reads one cell, or the carrier holding no case when the row holds no such cell.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <returns>The cell's value, or <see langword="null"/> when the cell is absent, the row is host-owned, or the
     /// address does not resolve.</returns>
     public CellValue? Read(int rowOrdinal, CellKey key) => (TryRead(
@@ -60,7 +60,7 @@ public sealed partial class StateArena {
     );
     /// <summary>Attempts to read one cell.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="value">The cell's value on success; otherwise the carrier holding no case.</param>
     /// <returns><see langword="true"/> when the row holds the cell.</returns>
     public bool TryRead(int rowOrdinal, CellKey key, out CellValue value) {
@@ -150,12 +150,9 @@ public sealed partial class StateArena {
                 ? 1
                 : m_memberCounts[rowOrdinal]
             ))) &&
-                (m_memberKeys[(layout.CellStart + position)] is >= 0 and var ordinal) &&
-                m_catalog.Keys.TryResolve(
-                key: out key,
-                name: m_catalog.Keys.Names[ordinal]
-            )
+                (m_memberKeys[(layout.CellStart + position)] is >= 0 and var ordinal)
             ) {
+                key = m_keys.KeyAt(ordinal: ordinal);
                 return true;
             }
             // A lattice cell's key is its topology's own key for that cell ordinal, and a cell the row does not hold
@@ -172,7 +169,7 @@ public sealed partial class StateArena {
                 name: out var cell,
                 reason: out _
             ) &&
-                m_catalog.Keys.TryResolve(
+                m_keys.TryResolve(
                 key: out key,
                 name: cell
             )
@@ -188,7 +185,7 @@ public sealed partial class StateArena {
     /// <summary>Attempts to resolve a cell key to its cell slot — the offset every interned key of a stored row
     /// has.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="slot">The cell slot on success; otherwise <c>-1</c>.</param>
     /// <returns><see langword="true"/> when the key addresses a slot of the row.</returns>
     public bool TryCellSlot(int rowOrdinal, CellKey key, out int slot) {
@@ -203,9 +200,10 @@ public sealed partial class StateArena {
 
         if (
             !layout.IsStored ||
-            !m_catalog.Keys.TryGetName(
+            !m_keys.TryGetAddress(
             key: key,
-            name: out var name
+            name: out var name,
+            ordinal: out var ordinal
         )
         ) {
             return false;
@@ -214,7 +212,7 @@ public sealed partial class StateArena {
         var resolved = m_slotOfKey[rowOrdinal];
 
         if (resolved.TryGetValue(
-            key: key.Ordinal,
+            key: ordinal,
             value: out slot
         )) {
             return true;
@@ -247,14 +245,16 @@ public sealed partial class StateArena {
         }
 
         slot = (layout.CellStart + position);
-        resolved[key.Ordinal] = slot;
+        if (ordinal >= 0) {
+            resolved[ordinal] = slot;
+        }
 
         return true;
     }
     /// <summary>Attempts a numeric write against a row's declared envelope, overflow policy, and symbolic
     /// domain.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="operand">The replacement for a set, or the addend for an add.</param>
     /// <param name="write">Set or add.</param>
     /// <param name="reason">Why the write was refused, or empty on success.</param>
@@ -303,7 +303,7 @@ public sealed partial class StateArena {
             symbols: symbols,
             write: write
         )) {
-            reason = $"row '{row.Name.Value}' cell '{m_catalog.Keys[key].Value}' {reason}";
+            reason = $"row '{row.Name.Value}' cell '{m_keys[key].Value}' {reason}";
 
             return false;
         }
@@ -311,7 +311,7 @@ public sealed partial class StateArena {
             (layout.Kind == CellKind.Bool) &&
             (next is not (0L or 1L))
         ) {
-            reason = $"row '{row.Name.Value}' cell '{m_catalog.Keys[key].Value}' would leave the row's envelope";
+            reason = $"row '{row.Name.Value}' cell '{m_keys[key].Value}' would leave the row's envelope";
 
             return false;
         }
@@ -329,7 +329,7 @@ public sealed partial class StateArena {
     }
     /// <summary>Attempts to set one cell to a carried value, whatever its kind.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="value">The value to store; its case must be the row's declared kind.</param>
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the write was admitted and stored.</returns>
@@ -397,7 +397,7 @@ public sealed partial class StateArena {
     }
     /// <summary>Attempts to set one text cell.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="text">The text to store.</param>
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the write was admitted and stored.</returns>
@@ -417,7 +417,7 @@ public sealed partial class StateArena {
             return false;
         }
         if ((text?.Length ?? 0) > StateCapacity.MaxTextValueLength) {
-            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' cell '{m_catalog.Keys[key].Value}' would store {text!.Length} characters, past the {StateCapacity.MaxTextValueLength}-character limit";
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' cell '{m_keys[key].Value}' would store {text!.Length} characters, past the {StateCapacity.MaxTextValueLength}-character limit";
 
             return false;
         }
@@ -490,7 +490,7 @@ public sealed partial class StateArena {
             rowOrdinal: rowOrdinal,
             slot: out slot
         )) {
-            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' holds no cell '{(m_catalog.Keys.TryGetName(
+            reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' holds no cell '{(m_keys.TryGetName(
                 key: key,
                 name: out var missing
             )
@@ -501,7 +501,7 @@ public sealed partial class StateArena {
             return false;
         }
         if (
-            m_catalog.Keys.TryGetName(
+            m_keys.TryGetName(
             key: key,
             name: out var name
         ) &&

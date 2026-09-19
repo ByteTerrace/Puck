@@ -24,7 +24,7 @@ public static partial class ArenaTransforms {
 
         if (
             (binding.BindsKey &&
-            (!context.Arena.Catalog.Keys.TryGetName(
+            (!context.Arena.Keys.TryGetName(
                 key: binding.Key,
                 name: out var name
             ) ||
@@ -49,6 +49,7 @@ public static partial class ArenaTransforms {
         var word = wordLease.Span;
         using var affectedLease = context.Arena.Scratch.Rent<int>(length: topology.CellCount);
         var affected = affectedLease.Span;
+
         if (!context.Arena.TryReadBoard(
             rowOrdinal: ray.RowOrdinal,
             values: values

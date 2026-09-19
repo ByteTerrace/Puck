@@ -531,7 +531,7 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
 
         if (
             key.IsValid &&
-            reader.Catalog.Keys.TryGetName(
+            reader.Arena.Keys.TryGetName(
             key: key,
             name: out var name
         )
@@ -718,12 +718,13 @@ public sealed class SymmetryOperand : RuleOperand, IStateAddressedOperand {
         );
     }
 }
-
 /// <summary>The candidate depth supplied by a search host, or zero on a live host.</summary>
 public sealed class SearchPlyOperand : RuleOperand {
     /// <summary>The shared instance.</summary>
     public static readonly SearchPlyOperand Instance = new();
+
     private SearchPlyOperand() : base(valueKind: CellKind.Int) { }
+
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>

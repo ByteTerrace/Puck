@@ -410,7 +410,7 @@ public sealed partial class StateArena {
             reason: out _,
             value: visibility
         ) ||
-            ((m_layout.Bytes + m_declarationVisibilityBytes + m_visibilityBytes - StateVisibilityStorage.RetainedBytes(value: m_visibilities?[slot]) + bytes) > ArenaCapacity.MaxBytes)
+            ((((((m_layout.Bytes + m_declarationVisibilityBytes) + m_visibilityBytes) + m_keys.Bytes) - StateVisibilityStorage.RetainedBytes(value: m_visibilities?[slot])) + bytes) > ArenaCapacity.MaxBytes)
         ) {
             return false;
         }

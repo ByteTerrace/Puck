@@ -25,6 +25,7 @@ public sealed partial class WorldRuleHost {
     // clears both.
     private readonly List<WorldMutation> m_documentArms = [];
     private readonly Dictionary<int, FixedVector3> m_preflightRigidVelocity = [];
+
     private WorldArenaPublication? m_proposedPublication;
     // The firing's document rows, past every gate and waiting on the commit.
     private WorldPreparedMutation? m_preparedDocument;
@@ -117,6 +118,7 @@ public sealed partial class WorldRuleHost {
             Principal: WorldPrincipal.World
         )
     );
+
     /// <inheritdoc/>
     public bool Fire(ICompiledFact effect, in EffectFiring firing, out EffectRefusal refusal) {
         switch (effect) {
@@ -150,7 +152,7 @@ public sealed partial class WorldRuleHost {
                     refusal: out refusal
                 );
             case WorldPoseCellEffect cellPose:
-                return FirePoseCell(cellPose, firing.Preflight, out refusal);
+                return FirePoseCell(effect: cellPose, preflight: firing.Preflight, refusal: out refusal);
             case WorldPoseEffect pose:
                 return FirePose(
                     effect: pose,
@@ -193,7 +195,7 @@ public sealed partial class WorldRuleHost {
         );
 
         return ((RuleReads.TryKeyIndex(
-            catalog: Host.Arena.Catalog,
+            keys: Host.Arena.Keys,
             index: out var index,
             key: resolved
         ) && (index >= 0L) && (index <= int.MaxValue))
@@ -460,18 +462,20 @@ public sealed partial class WorldRuleHost {
     // Body state, not document state: the same WorldBody.Pose door body.pose uses, as the world's own act — no
     // drive-gate or grant check, since a gated body is one a rule still needs to move.
     private bool FirePoseCell(WorldPoseCellEffect effect, bool preflight, out EffectRefusal refusal) {
-        var index = ResolveWorldBodyRef(effect.Body);
-        var topology = WorldTopologyCompilation.Find(Host.Definition, effect.Topology);
+        var index = ResolveWorldBodyRef(bodyRef: effect.Body);
+        var topology = WorldTopologyCompilation.Find(definition: Host.Definition, name: effect.Topology);
+
         if (Host.Body(index: index) is not { } body) {
             return Refuse(code: WorldRuleEffectRefusal.BodyInactive, reason: $"body:{index} is inactive", refusal: out refusal);
         }
-        if (topology is null || !RuleExpressions.TryEvaluate(fault: out _, kind: CellKind.Int, program: effect.Expression, reader: this, value: out var cell) || cell < 0 || cell >= topology.CellCount) {
+        if ((topology is null) || !RuleExpressions.TryEvaluate(fault: out _, kind: CellKind.Int, program: effect.Expression, reader: this, value: out var cell) || (cell < 0) || (cell >= topology.CellCount)) {
             return Refuse(code: WorldRuleEffectRefusal.BodyTargetInvalid, reason: "poseCell target is outside its topology", refusal: out refusal);
         }
         refusal = EffectRefusal.None;
         if (!preflight) {
-            var centre = topology.CellCentre((int)cell);
-            body.Pose(position: new FixedVector3(centre.X + effect.Offset.X, centre.Y + effect.Offset.Y, centre.Z + effect.Offset.Z),
+            var centre = topology.CellCentre(cell: ((int)cell));
+
+            body.Pose(position: new FixedVector3(X: (centre.X + effect.Offset.X), Y: (centre.Y + effect.Offset.Y), Z: (centre.Z + effect.Offset.Z)),
                 yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
         }
         return true;
@@ -607,7 +611,7 @@ public sealed partial class WorldRuleHost {
         )) {
             if (!Host.Arena.TryMint(
                 key: out _,
-                name: Host.Arena.Catalog.Keys[key],
+                name: Host.Arena.Keys[key],
                 reason: out reason,
                 rowOrdinal: laneOrdinal,
                 value: CellValue.Int(value: value)
@@ -755,7 +759,7 @@ public sealed partial class WorldRuleHost {
         ? ((int)cellIndex)
         : -1),
         CompiledBodyRefKind.Placement => ((bodyRef.PlacementOrdinals is not null)
-        ? Host.Population.BodyForPlacementOrdinal(ordinal: Host.PlacementOrdinalOf(id: (Host.Arena.Catalog.Keys.TryGetName(
+        ? Host.Population.BodyForPlacementOrdinal(ordinal: Host.PlacementOrdinalOf(id: (Host.Arena.Keys.TryGetName(
             key: BoundEachKey,
             name: out var placementName
         )

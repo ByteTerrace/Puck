@@ -106,7 +106,9 @@ public sealed class WorldRegionOccupancyOperand : WorldFactOperand {
 }
 /// <summary>The influence a placement's channel carries (<see cref="WorldRuleFacts.InfluencePrefix"/>).</summary>
 public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
-    private readonly Dictionary<CellKey, PlacementInfluenceOperand> m_resolved = [];
+    // Child operands are semantic names. Caching a runtime CellKey here would retain one arena's address when the
+    // compiled rule later serves a replacement arena.
+    private readonly Dictionary<string, PlacementInfluenceOperand> m_resolved = new(comparer: StringComparer.Ordinal);
     private readonly PlacementInfluenceOperand m_operand;
 
     /// <summary>Initializes the operand.</summary>
@@ -159,27 +161,31 @@ public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
             reference: in indirection
         );
 
-        if (!m_resolved.TryGetValue(
+        if (
+            !key.IsValid ||
+            !reader.Arena.Keys.TryGetName(
             key: key,
+            name: out var name
+        )) {
+            // The indirection named no cell, so no dealt child answers.
+            return RuleFact.Absent(kind: CellKind.Int);
+        }
+
+        if (!m_resolved.TryGetValue(
+            key: name.Value,
             value: out var child
         )) {
-            if (
-                !key.IsValid ||
-                !reader.Catalog.Keys.TryGetName(
-                key: key,
-                name: out var name
-            )
-            ) {
-                // The indirection named no cell, so no dealt child answers.
-                return RuleFact.Absent(kind: CellKind.Int);
+            // A speculative arena can mint and rewind arbitrarily many distinct names while retaining only the
+            // bounded live ledger. Keep this compiled-operand memo within that same bound.
+            if (m_resolved.Count >= StateCapacity.MaxCellKeys) {
+                m_resolved.Clear();
             }
-
             child = new PlacementInfluenceOperand(
                 channel: m_operand.Channel,
                 key: name.Value,
                 placementId: m_operand.PlacementId
             );
-            m_resolved[key] = child;
+            m_resolved[name.Value] = child;
         }
 
         return facet.Read(operand: child);
@@ -335,6 +341,8 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
     private readonly CellKey[] m_laneKeys;
     private readonly string m_fact;
 
+    private CellKeyTable? m_laneKeyTable;
+
     /// <summary>Initializes the operand.</summary>
     /// <param name="body">The body reference, in the world reader's own form.</param>
     /// <param name="fact">The fact key on the identity's row.</param>
@@ -350,23 +358,31 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
     /// <summary>Gets the identity lane row's catalog ordinal.</summary>
     public int LaneOrdinal { get; }
 
-    private CellKey LaneKey(StateCatalog catalog, int bodyIndex) {
+    // Compiled operands may serve a relayout that replaces an arena's runtime table. Cached addresses also cease
+    // to resolve after a speculative mint rewinds, so validate them before reuse.
+    private CellKey LaneKey(StateArena arena, int bodyIndex) {
+        var keys = arena.Keys;
+
+        if (!ReferenceEquals(m_laneKeyTable, keys)) {
+            Array.Clear(array: m_laneKeys);
+            m_laneKeyTable = keys;
+        }
         if (((uint)bodyIndex) >= ((uint)m_laneKeys.Length)) {
             return Mint(
                 bodyIndex: bodyIndex,
-                catalog: catalog
+                keys: keys
             );
         }
-        if (!m_laneKeys[bodyIndex].IsValid) {
+        if (!keys.TryGetName(key: m_laneKeys[bodyIndex], name: out _)) {
             m_laneKeys[bodyIndex] = Mint(
                 bodyIndex: bodyIndex,
-                catalog: catalog
+                keys: keys
             );
         }
 
         return m_laneKeys[bodyIndex];
     }
-    private CellKey Mint(StateCatalog catalog, int bodyIndex) => (catalog.Keys.TryResolve(
+    private CellKey Mint(CellKeyTable keys, int bodyIndex) => (keys.TryResolve(
         key: out var key,
         name: CellName.Parse(candidate: WorldIdentityFactLane.Key(
             bodyIndex: bodyIndex,
@@ -405,7 +421,7 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
 
         var key = LaneKey(
             bodyIndex: index,
-            catalog: reader.Catalog
+            arena: reader.Arena
         );
 
         return RuleFact.Finite(
@@ -457,7 +473,7 @@ public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         return RuleReads.TryKeyIndex(
-            catalog: reader.Catalog,
+            keys: reader.Arena.Keys,
             index: out index,
             key: ((IRuleKey)this).Resolve(
                 named: out _,

@@ -179,7 +179,7 @@ public sealed partial class StateArena {
 
                         (cells ??= []).Add(item: ExportCell(
                             layout: layout,
-                            name: m_catalog.Keys[key],
+                            name: m_keys[key],
                             slot: slot,
                             traits: traits
                         ));

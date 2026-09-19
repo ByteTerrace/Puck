@@ -334,7 +334,7 @@ public static class RuleReads {
             named = true;
 
             return IndexKey(
-                catalog: reader.Catalog,
+                keys: reader.Arena.Keys,
                 index: reader.BoundIndex(key: reference.Binding)
             );
         }
@@ -358,7 +358,7 @@ public static class RuleReads {
             return default;
         }
 
-        var catalog = reader.Catalog;
+        var keys = reader.Arena.Keys;
 
         if (reference.Kind == CellKind.Text) {
             // Text that spells no cell name addresses no cell: a rule may write any text into the pointer cell, so
@@ -384,7 +384,7 @@ public static class RuleReads {
 
             named = true;
 
-            return (catalog.Keys.TryResolve(
+            return (keys.TryResolve(
                 key: out var textKey,
                 name: name
             )
@@ -396,7 +396,7 @@ public static class RuleReads {
         named = true;
 
         return IndexKey(
-            catalog: catalog,
+            keys: keys,
             index: ReadPointer(
                 inner: inner,
                 reader: reader,
@@ -455,19 +455,19 @@ public static class RuleReads {
         );
 
         return TryKeyIndex(
-            catalog: reader.Catalog,
+            keys: reader.Arena.Keys,
             index: out index,
             key: key
         );
     }
     /// <summary>Returns the interned key whose name is an integer's decimal spelling, without minting one the
-    /// catalog does not already hold.</summary>
-    /// <param name="catalog">The catalog whose key table the name resolves through.</param>
+    /// arena does not already hold.</summary>
+    /// <param name="keys">The runtime key table whose names resolve through.</param>
     /// <param name="index">The integer.</param>
     /// <param name="key">The key, on success.</param>
-    /// <returns><see langword="true"/> when the catalog already interns the name.</returns>
-    public static bool TryIndexKey(StateCatalog catalog, long index, out CellKey key) {
-        ArgumentNullException.ThrowIfNull(argument: catalog);
+    /// <returns><see langword="true"/> when the arena already interns the name.</returns>
+    public static bool TryIndexKey(CellKeyTable keys, long index, out CellKey key) {
+        ArgumentNullException.ThrowIfNull(argument: keys);
 
         key = default;
 
@@ -475,20 +475,20 @@ public static class RuleReads {
             candidate: IndexKeyCache.Get(index: index),
             name: out var name,
             reason: out _
-        ) && catalog.Keys.TryResolve(
+        ) && keys.TryResolve(
             key: out key,
             name: name
         ));
     }
     /// <summary>Returns the integer an interned key's name spells.</summary>
-    /// <param name="catalog">The catalog that minted the key.</param>
+    /// <param name="keys">The runtime key table that resolves the key.</param>
     /// <param name="key">The key.</param>
     /// <param name="index">The integer, on success.</param>
     /// <returns><see langword="true"/> when the key's name is an integer.</returns>
-    public static bool TryKeyIndex(StateCatalog catalog, CellKey key, out long index) {
-        ArgumentNullException.ThrowIfNull(argument: catalog);
+    public static bool TryKeyIndex(CellKeyTable keys, CellKey key, out long index) {
+        ArgumentNullException.ThrowIfNull(argument: keys);
 
-        if (catalog.Keys.TryGetName(
+        if (keys.TryGetName(
             key: key,
             name: out var name
         )) {
@@ -510,14 +510,14 @@ public static class RuleReads {
         BoundKey.Token => reader.BoundTokenKey,
         BoundKey.Previous => reader.BoundPreviousKey,
         _ => IndexKey(
-        catalog: reader.Catalog,
+        keys: reader.Arena.Keys,
         index: reader.BoundIndex(key: binding)
     ),
     });
-    private static CellKey IndexKey(StateCatalog catalog, long index) => (TryIndexKey(
-        catalog: catalog,
+    private static CellKey IndexKey(CellKeyTable keys, long index) => (TryIndexKey(
         index: index,
-        key: out var key
+        key: out var key,
+        keys: keys
     )
         ? key
         : default

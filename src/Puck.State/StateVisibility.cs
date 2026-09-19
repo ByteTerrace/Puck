@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Text.Json.Serialization;
+using Puck.Maths;
 
 namespace Puck.State;
 
@@ -83,16 +84,62 @@ public sealed record StateVisibility(IReadOnlyList<string>? Readers = null, Hidd
         return false;
     }
 }
+/// <summary>The canonical deterministic fold of a visibility policy, shared by declaration and live-state hashes.</summary>
+public static class StateVisibilityHash {
+    /// <summary>Appends every visibility field, preserving the semantic differences between an absent policy, a
+    /// public null reader list, and an authority-only empty reader list. Reader order is authoritative.</summary>
+    /// <param name="hash">The running hash.</param>
+    /// <param name="visibility">The policy, or <see langword="null"/>.</param>
+    public static void Append(ref Fnv1aHash hash, StateVisibility? visibility) {
+        hash.Add(value: ((byte)((visibility is null) ? 0 : 1)));
+
+        if (visibility is null) {
+            return;
+        }
+
+        hash.Add(value: ((byte)visibility.Hidden));
+        AppendString(hash: ref hash, value: visibility.ReadersFrom);
+
+        var readers = visibility.Readers;
+
+        hash.Add(value: ((byte)((readers is null) ? 0 : 1)));
+
+        if (readers is null) {
+            return;
+        }
+
+        hash.Add(value: ((uint)readers.Count));
+
+        for (var index = 0; (index < readers.Count); index++) {
+            AppendString(hash: ref hash, value: readers[index]);
+        }
+    }
+
+    private static void AppendString(ref Fnv1aHash hash, string? value) {
+        if (value is null) {
+            hash.Add(value: uint.MaxValue);
+            return;
+        }
+
+        hash.Add(value: ((uint)value.Length));
+
+        foreach (var character in value) {
+            hash.Add(value: ((uint)character));
+        }
+    }
+}
 
 // The arena owns the collection it retains. Recognizing this marker makes a visibility already admitted by an
 // arena reusable without another copy, while arbitrary IReadOnlyList implementations are copied at the boundary.
 internal sealed class ArenaVisibilityReaders(string[] items) : IReadOnlyList<string> {
     public int Count => items.Length;
+
     public string this[int index] => items[index];
+
     public IEnumerator<string> GetEnumerator() => ((IEnumerable<string>)items).GetEnumerator();
+
     IEnumerator IEnumerable.GetEnumerator() => items.GetEnumerator();
 }
-
 internal static class StateVisibilityStorage {
     private const long ObjectBytes = 32L;
     private const long VisibilityBytes = 64L;
@@ -111,6 +158,7 @@ internal static class StateVisibilityStorage {
         reason: out reason,
         value: value
     );
+
     private static bool TryNormalize(StateVisibility? value, bool copy, out StateVisibility? normalized, out long bytes, out string reason) {
         normalized = value;
         bytes = 0L;
@@ -132,7 +180,7 @@ internal static class StateVisibilityStorage {
                 return false;
             }
 
-            for (var index = 0; index < readers.Count; index++) {
+            for (var index = 0; (index < readers.Count); index++) {
                 var reader = readers[index];
 
                 if (reader is null) {
@@ -148,7 +196,7 @@ internal static class StateVisibilityStorage {
             if (copy && (readers is not ArenaVisibilityReaders)) {
                 var copied = new string[readers.Count];
 
-                for (var index = 0; index < copied.Length; index++) {
+                for (var index = 0; (index < copied.Length); index++) {
                     copied[index] = readers[index];
                 }
 
@@ -172,9 +220,9 @@ internal static class StateVisibilityStorage {
         }
         if (value.Readers is { } readers) {
             // The normalized representation owns one wrapper and one tightly sized reference array.
-            bytes += (2L * ObjectBytes) + (((long)readers.Count) * sizeof(long));
+            bytes += ((2L * ObjectBytes) + (((long)readers.Count) * sizeof(long)));
 
-            for (var index = 0; index < readers.Count; index++) {
+            for (var index = 0; (index < readers.Count); index++) {
                 bytes += StringBytes(text: readers[index]);
             }
         }
@@ -184,6 +232,7 @@ internal static class StateVisibilityStorage {
 
     private static long StringBytes(string text) => (ObjectBytes + (2L * text.Length));
 }
+
 /// <summary>A persisted knowledge layer refreshed explicitly by the authority.</summary>
 /// <param name="Source">The integer/boolean board observed.</param>
 /// <param name="Mask">A boolean board over the same topology; true cells are currently observed.</param>

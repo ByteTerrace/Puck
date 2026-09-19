@@ -7,6 +7,57 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
+    private static void WriteArenaKey(WireWriter writer, CellName key) {
+        var value = key.Value;
+        var bytes = new byte[checked((value.Length * 2))];
+
+        for (var index = 0; (index < value.Length); index++) {
+            var codeUnit = value[index];
+
+            bytes[(index * 2)] = unchecked((byte)codeUnit);
+            bytes[((index * 2) + 1)] = unchecked((byte)(codeUnit >> 8));
+        }
+
+        writer.WriteBlock(value: bytes);
+    }
+    private static CellName ReadArenaKey(ref WireReader reader) {
+        var bytes = reader.ReadBlock(
+            field: "server arena key",
+            maxBytes: ((int)ArenaCapacity.MaxBytes)
+        );
+
+        if (!reader.Failed && ((bytes.Length & 1) != 0)) {
+            reader.Fail(
+                detail: $"server arena key carries {bytes.Length} bytes, which is not a whole number of UTF-16 code units",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        var characters = (reader.Failed ? [] : new char[(bytes.Length / 2)]);
+
+        for (var index = 0; (index < characters.Length); index++) {
+            characters[index] = unchecked((char)(bytes[(index * 2)] | (bytes[((index * 2) + 1)] << 8)));
+        }
+
+        var spelling = (reader.Failed ? string.Empty : new string(value: characters));
+        var name = default(CellName);
+
+        if (
+            !reader.Failed &&
+            !CellName.TryParse(
+                candidate: spelling,
+                name: out name,
+                reason: out var parseReason
+            )
+        ) {
+            reader.Fail(
+                detail: $"server arena key '{spelling}' is invalid: {parseReason}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return name;
+    }
     private static void WriteRuleLatchEntry(WireWriter writer, WorldRuleLatchEntry entry) {
         writer.WriteString(value: entry.Rule);
         writer.WriteString(value: entry.Key);
@@ -333,6 +384,11 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteString(value: section.BaseOrigin);
         WriteArray(
             writer: writer,
+            items: section.ArenaKeys,
+            writeItem: WriteArenaKey
+        );
+        WriteArray(
+            writer: writer,
             items: section.Journal,
             writeItem: static (w, entry) => {
                 w.WriteUInt64(value: entry.Tick);
@@ -451,6 +507,27 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "server base origin",
             maxBytes: MaxStringBytes
         );
+        var arenaKeys = ReadArray(
+            reader: ref reader,
+            field: "server arena keys",
+            maximum: StateCapacity.MaxCellKeys,
+            readItem: static (ref WireReader r) => ReadArenaKey(reader: ref r)
+        );
+
+        if (!reader.Failed) {
+            var distinct = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            for (var index = 0; (index < arenaKeys.Length); index++) {
+                if (!distinct.Add(item: arenaKeys[index].Value)) {
+                    reader.Fail(
+                        detail: $"server arena key '{arenaKeys[index].Value}' is duplicated",
+                        refusal: WireRefusal.PayloadMalformed
+                    );
+
+                    break;
+                }
+            }
+        }
         var journal = ReadArray(
             reader: ref reader,
             field: "server journal",
@@ -578,6 +655,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         section = new WorldServerCheckpoint(
+            ArenaKeys: arenaKeys,
             BaseDefinitionJson: baseDefinitionJson,
             BaseOrigin: baseOrigin,
             Decisions: decisions,

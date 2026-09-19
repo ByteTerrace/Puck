@@ -254,9 +254,9 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// step size from — and <see cref="Drive"/> refuses a disagreement with the embedded definition's own
 /// <see cref="WorldDefinition.SimulationRateHz"/>, right after deserializing it, for the identical reason the mount
 /// pin does: a wrong step size re-drives a different trajectory that would otherwise report as an ordinary mismatch.
-/// There is exactly one tape shape: the leading
-/// magic identifies a World tape and ShapeToken identifies its first version. Both are checked strictly;
-/// the first version is still developed in place, with no compatibility reader for development builds.</para>
+/// There is exactly one supported tape shape: the leading magic identifies a World tape and ShapeToken identifies
+/// the current binary and authoritative-hash contract. Both are checked strictly; older development shapes have no
+/// compatibility reader.</para>
 /// <para><b>Public, not <c>internal</c> behind an <c>InternalsVisibleTo</c> grant</b> (widen the member, not the
 /// assembly) — every instance member here was already <c>public</c>; only the class declaration
 /// (and <see cref="WorldReplaySeat"/>/<see cref="WorldReplayProfilePin"/>/<see cref="WorldReplayTickInput"/>/the
@@ -265,12 +265,11 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// convention — can exercise <see cref="ResolveStepWidth"/> without a grant.</para>
 /// </remarks>
 public sealed class WorldReplaySnapshot {
-    // The format is still at version 1. Change its definition directly, without development re-key histories.
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
-    // A shape-identity token, not a version sequence, pinned at 1 permanently: this build writes and reads exactly
-    // one tape shape, so there is no older shape to be newer than. A token that disagrees refuses the file by name
-    // (found vs. expected) instead of decoding it as nonsense.
-    private const uint ShapeToken = 1u;
+    // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
+    // The visibility hash became complete in this shape; refusing the previous token prevents an otherwise valid
+    // tape from loading only to report a false authoritative-hash divergence at every visibility-bearing tick.
+    private const uint ShapeToken = 2u;
 
     /// <summary>Gets the record-start world definition as its canonical UTF-8 JSON — the rehydrated starting state.</summary>
     public required byte[] DefinitionJson { get; init; }

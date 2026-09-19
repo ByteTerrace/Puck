@@ -93,7 +93,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
 
         if (
             key.IsValid &&
-            reader.Catalog.Keys.TryGetName(
+            reader.Arena.Keys.TryGetName(
             key: key,
             name: out var name
         )

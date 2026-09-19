@@ -90,7 +90,7 @@ public abstract class RuleKeyFact : IRuleKey {
             reader: reader
         );
 
-        if (reader.Catalog.Keys.TryGetName(
+        if (reader.Arena.Keys.TryGetName(
             key: key,
             name: out var name
         )) {

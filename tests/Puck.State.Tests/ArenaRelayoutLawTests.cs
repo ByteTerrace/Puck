@@ -34,7 +34,7 @@ public sealed class ArenaRelayoutLawTests {
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "did not intern"
+            expectedSubstring: "does not resolve"
         );
         Assert.False(condition: arena.TryTransfer(
             fromOrdinal: ArenaFixture.Deck,
@@ -46,7 +46,7 @@ public sealed class ArenaRelayoutLawTests {
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "did not intern"
+            expectedSubstring: "does not resolve"
         );
         Assert.Equal(
             actual: arena.ComputeHash(),

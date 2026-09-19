@@ -52,6 +52,11 @@ instead, and `Puck.State.StateArena` recomputes the board's cells on every keyed
 every load, so the journaled document already carries them. A candidate inside a journal scope keeps the same
 answer: a write to `tokens` rewrites only the moved token's own two board cells.
 
+The inverse declaration also proves a storage contract at validation and arena construction: every value admitted
+by `codes` (after its `min`/`max` envelope and optional enum are intersected) must be admitted by the board's own
+envelope and enum, and the board's `cellsOf.empty` value must be admitted by both. An incompatible declaration is
+refused before state is loaded; keep the two rows' numeric and symbolic domains aligned when changing a board.
+
 Grid keys are decimal `y * width + x` ordinals. Directions are `N`, `NE`, `E`,
 `SE`, `S`, `SW`, `W`, `NW`; `wrap` is `None`, `X`, `Y`, or `Both`. Rings use
 `width` cells, `depth: 1`, and `forward`/`backward`, with implicit wrapping.

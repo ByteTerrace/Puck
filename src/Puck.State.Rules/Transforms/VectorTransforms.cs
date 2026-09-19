@@ -112,7 +112,7 @@ public static partial class ArenaTransforms {
 
         // The destination cell may not exist yet, so the key travels as the name a mint interns rather than as an
         // address.
-        return (catalog.Keys.TryGetName(
+        return ((reader?.Arena.Keys ?? catalog.Keys).TryGetName(
             key: key,
             name: out var name
         )

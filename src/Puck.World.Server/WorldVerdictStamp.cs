@@ -76,7 +76,6 @@ public sealed class WorldVerdictStamp {
             )
         );
     }
-
     /// <summary>Determines whether a catalog ordinal addresses a verdict row or a witness of one.</summary>
     /// <param name="rowOrdinal">The catalog ordinal a mutation names.</param>
     /// <param name="verdictOrdinal">The ordinal of the verdict row that judges the write: the row itself, or the
@@ -111,14 +110,14 @@ public sealed class WorldVerdictStamp {
 
         return (
             arena.TryRead(
-            key: arena.Catalog.Keys.Intern(name: status),
+            key: arena.Keys.Intern(name: status),
             rowOrdinal: rowOrdinal,
             value: out var stored
         ) &&
             (stored.Kind == CellKind.Int) &&
             (stored.AsInt == WorldVerdict.Fail) &&
             arena.TryRead(
-            key: arena.Catalog.Keys.Intern(name: WorldVerdict.FiredTickKey),
+            key: arena.Keys.Intern(name: WorldVerdict.FiredTickKey),
             rowOrdinal: rowOrdinal,
             value: out var stamp
         ) &&
@@ -134,7 +133,7 @@ public sealed class WorldVerdictStamp {
     public static bool Stamp(StateArena arena, int rowOrdinal, ulong tick) {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
-        var key = arena.Catalog.Keys.Intern(name: WorldVerdict.FiredTickKey);
+        var key = arena.Keys.Intern(name: WorldVerdict.FiredTickKey);
 
         return (arena.TryCellSlot(
             key: key,

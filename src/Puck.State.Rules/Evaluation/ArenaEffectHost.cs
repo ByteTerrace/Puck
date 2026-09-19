@@ -31,7 +31,6 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
     private readonly ArenaDrawSite m_site;
     private readonly int m_ticksPerSecond;
 
-
     /// <summary>Initializes a host over an arena.</summary>
     /// <param name="arena">The store every read and write addresses.</param>
     /// <param name="generators">The section's declared draw sources, which a <c>generate</c> effect's row may name
@@ -226,7 +225,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
             return false;
         }
 
-        var key = Arena.Catalog.Keys.Intern(name: StateRow.SlotKey);
+        var key = Arena.Keys.Intern(name: StateRow.SlotKey);
         var emitted = ((fired.Text is { } text)
             ? Arena.TryWriteText(
                 key: key,
@@ -300,7 +299,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost {
             return Moved(
                 changed: Arena.TryMint(
                     key: out _,
-                    name: Arena.Catalog.Keys[key],
+                    name: Arena.Keys[key],
                     reason: out var mintReason,
                     rowOrdinal: ordinal,
                     value: Carry(

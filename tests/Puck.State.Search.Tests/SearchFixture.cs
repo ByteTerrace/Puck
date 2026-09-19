@@ -25,11 +25,20 @@ internal sealed class DelegateJudge(StateArena arena, JudgeStep judge, ScoreStep
 /// <summary>One position authored once: an arena seeded from the section, and a compile context over that same
 /// section, so an authored rule compiles against the catalog the arena stores.</summary>
 internal sealed class Position {
-    public Position(StateRow[] rows) {
+    public Position(StateRow[] rows, bool reverseInternOrder = false) {
         var section = new Section(rows: rows);
+        var catalog = StateCatalog.Compile(section: (reverseInternOrder
+            ? new Section(rows: [.. rows.Select(selector: static row => row with {
+                Cells = ((row.Cells is null)
+                    ? null
+                    : [.. row.Cells.Reverse()]
+                ),
+            })])
+            : section
+        ));
 
         Arena = new StateArena(
-            catalog: StateCatalog.Compile(section: section),
+            catalog: catalog,
             options: null,
             section: section,
             time: ArenaTime.Origin

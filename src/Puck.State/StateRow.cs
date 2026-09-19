@@ -236,6 +236,92 @@ public record StateRow(
     CellName? Enum = null,
     bool HostOwned = false
 ) {
+    /// <summary>Checks that every value a code row can admit is also a value a derived board can store.</summary>
+    /// <param name="board">The derived board.</param>
+    /// <param name="boardSymbols">The board's enum, or <see langword="null"/>.</param>
+    /// <param name="codes">The inverse codes row.</param>
+    /// <param name="codeSymbols">The codes row's enum, or <see langword="null"/>.</param>
+    /// <param name="reason">Why the inverse domain is not safe, or empty.</param>
+    /// <returns><see langword="true"/> when the code domain is a subset of the board domain and the board empty
+    /// value is admitted.</returns>
+    public static bool TryProveDerivedDomain(StateRow board, StateEnum? boardSymbols, StateRow codes, StateEnum? codeSymbols, out string reason) {
+        ArgumentNullException.ThrowIfNull(board);
+        ArgumentNullException.ThrowIfNull(codes);
+
+        if (
+            ((board.Kind != CellKind.Int) && (board.Kind != CellKind.Bool)) ||
+            (codes.Kind != CellKind.Int)
+        ) {
+            reason = $"derived board '{board.Name.Value}' must be an integer or bool row and inverse codes '{codes.Name.Value}' must be an integer row";
+
+            return false;
+        }
+        if (board.EffectiveDomain is not StateDomain.CellsOf boardDomain) {
+            reason = $"derived board '{board.Name.Value}' does not declare a cellsOf domain";
+
+            return false;
+        }
+        if (!TryAdmitDerivedValue(
+            row: board,
+            symbols: boardSymbols,
+            value: boardDomain.Empty,
+            out reason
+        )) {
+            reason = $"derived board '{board.Name.Value}' empty value {boardDomain.Empty} {reason}";
+
+            return false;
+        }
+
+        var boardLower = ((board.Kind == CellKind.Bool) ? 0L : (board.Min ?? long.MinValue));
+        var boardUpper = ((board.Kind == CellKind.Bool) ? 1L : (board.Max ?? long.MaxValue));
+        var codeLower = (codes.Min ?? long.MinValue);
+        var codeUpper = (codes.Max ?? long.MaxValue);
+
+        if (boardSymbols is { } boardEnum) {
+            boardLower = Math.Max(val1: boardLower, val2: 0L);
+            boardUpper = Math.Min(val1: boardUpper, val2: (boardEnum.Count - 1L));
+        }
+        if (codeSymbols is { } codeEnum) {
+            codeLower = Math.Max(val1: codeLower, val2: 0L);
+            codeUpper = Math.Min(val1: codeUpper, val2: (codeEnum.Count - 1L));
+        }
+
+        if ((boardLower > boardUpper) || (codeLower > codeUpper)) {
+            reason = $"derived board '{board.Name.Value}' or inverse codes '{codes.Name.Value}' has an empty admitted value domain";
+
+            return false;
+        }
+
+        if (
+            (codeLower < boardLower) ||
+            (codeUpper > boardUpper)
+        ) {
+            reason = $"derived board '{board.Name.Value}' admits {DescribeRange(lower: boardLower, upper: boardUpper)}, but inverse codes '{codes.Name.Value}' can admit {DescribeRange(lower: codeLower, upper: codeUpper)}";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+
+    private static bool TryAdmitDerivedValue(StateRow row, StateEnum? symbols, long value, out string reason) {
+        if (
+            (row.ClampToEnvelope(value: value) != value) ||
+            ((symbols is not null) && !symbols.Admits(value: value))
+        ) {
+            reason = $"is outside its declared value domain";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+    private static string DescribeRange(long lower, long upper) => $"{lower}..{upper}";
+
     /// <summary>Gets a value indicating whether the runtime or a lowering synthesized this row rather than an
     /// author declaring it. A console listing, a HUD binding, the decompiler, and the schema treat a generated row
     /// as implementation detail; the hash and the checkpoint still cover it.</summary>
@@ -548,7 +634,8 @@ public static class StateCapacity {
     /// construction, never by author diligence). An authored <see cref="StateRow.Capacity"/> may only narrow
     /// this, never widen it.</summary>
     public const int MaxCellsPerRow = TopologyCompilation.MaxCells;
-    /// <summary>The catalog-wide ceiling on distinct interned <see cref="CellKey"/> names. Interning collapses one
+    /// <summary>The per-table ceiling on distinct interned <see cref="CellKey"/> names. Each arena owns its runtime
+    /// additions and releases speculative names on rewind. Interning collapses one
     /// name used by many rows to one entry, so this admits sixteen fully disjoint
     /// <see cref="MaxCellsPerRow"/>-wide key sets before a mint refuses by name.</summary>
     public const int MaxCellKeys = (16 * MaxCellsPerRow);

@@ -221,6 +221,7 @@ public sealed partial class WorldServer {
             )
         );
     }
+
     // Re-seeds the arena from an installed document. A document whose catalog is the same instance keeps its
     // columns and reloads their values; a re-declared row set relayouts in place, which moves every column to its
     // new ordinal and carries the participant and identity lanes across, where a fresh build would drop them.
@@ -270,6 +271,7 @@ public sealed partial class WorldServer {
 
         BuildArena(definition: definition);
     }
+
     // The document and the arena agree on every row as they stand.
     private void MarkPublished() {
         var rows = m_arena.Layout.RowCount;
@@ -295,6 +297,7 @@ public sealed partial class WorldServer {
 
         return m_documentValueRows;
     }
+
     /// <summary>Composes what a publication would install, and installs nothing: the installed document carrying
     /// the arena's values as they stand, an open scope's writes included.</summary>
     /// <remarks>A proposal reads the rows whose version has moved since the document and the arena last agreed on
@@ -480,6 +483,7 @@ public sealed partial class WorldServer {
 
         return true;
     }
+
     private void SettleStateConsumers() {
         if (!m_consumersOwed) {
             return;
@@ -632,7 +636,7 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            var name = m_arena.Catalog.Keys[key].Value;
+            var name = m_arena.Keys[key].Value;
 
             if (
                 !int.TryParse(
@@ -675,6 +679,7 @@ public sealed partial class WorldServer {
 
         return best;
     }
+
     public WorldDefinition RecompileRules(WorldDefinition definition, WorldRuleCompilation? compilation = null) {
         definition = SettleInstalledRows(definition: definition);
         m_document.AdoptDefinition(definition: definition);
@@ -700,6 +705,7 @@ public sealed partial class WorldServer {
 
         return definition;
     }
+
     // The search jobs advance right after the rules, so a job judges the position this tick's rules settled and a
     // finished job's outputs are delivered with the same tick.
     private ulong m_searchTick;
@@ -717,7 +723,6 @@ public sealed partial class WorldServer {
             m_document.DeliverPending();
         }
     }
-
     /// <summary>Lists every search job's progress.</summary>
     public IReadOnlyList<ArenaSearchStatus> SearchStatus() {
         var status = new ArenaSearchStatus[m_search.Count];

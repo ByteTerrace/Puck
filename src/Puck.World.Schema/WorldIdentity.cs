@@ -377,7 +377,7 @@ public sealed class WorldIdentity {
             key: out var victim,
             rowOrdinal: handle.Ordinal
         )) {
-            evictedKey = arena.Catalog.Keys[victim];
+            evictedKey = arena.Keys[victim];
         }
 
         if (!arena.TryMint(
@@ -479,10 +479,12 @@ public sealed class WorldIdentity {
                 return false;
             }
 
-            WriteState(row: declared with { Cells = [.. cells, new StateCell(
+            WriteState(row: declared with {
+                Cells = [.. cells, new StateCell(
                     Key: key,
                     Value: CellValue.Int(value: value)
-                )] });
+                )],
+            });
         } else {
             WriteState(row: new WorldStateRow(
                 Name: definition.State,
@@ -522,7 +524,7 @@ public sealed class WorldIdentity {
             return true;
         }
 
-        var hostByName = hostSpaces.Where(predicate: static s => s is not null).ToDictionary(keySelector: static s => s.Name.Value, elementSelector: static s => s, comparer: StringComparer.Ordinal);
+        var hostByName = hostSpaces.Where(predicate: static s => (s is not null)).ToDictionary(keySelector: static s => s.Name.Value, elementSelector: static s => s, comparer: StringComparer.Ordinal);
 
         foreach (var space in identitySpaces) {
             if (space is null) {

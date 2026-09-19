@@ -61,7 +61,7 @@ public sealed class StateKernelReader : IStateReader {
         var keys = new CellKey[cells];
 
         for (var i = 0; (i < cells); ++i) {
-            keys[i] = Catalog.Keys.Intern(name: probe[i].Key);
+            keys[i] = Arena.Keys.Intern(name: probe[i].Key);
         }
 
         ProbeKeys = keys;

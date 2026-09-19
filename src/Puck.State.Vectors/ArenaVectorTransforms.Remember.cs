@@ -70,7 +70,7 @@ public static partial class ArenaVectorTransforms {
             ) {
                 existing[gathered++] = new NearestCandidate(
                     Components: stored,
-                    Key: arena.Catalog.Keys[key: key]
+                    Key: arena.Keys[key: key]
                 );
             }
         }
@@ -111,7 +111,7 @@ public static partial class ArenaVectorTransforms {
         var arena = into.Arena;
 
         if (
-            arena.Catalog.Keys.TryResolve(
+            arena.Keys.TryResolve(
             key: out var key,
             name: name
         ) &&

@@ -120,11 +120,11 @@ public readonly struct VectorColumn : IEquatable<VectorColumn> {
     );
     /// <summary>Returns the name behind one of the column's keys, for a message naming what a caller addressed.</summary>
     /// <param name="key">The cell key.</param>
-    /// <returns>The interned name, or the key's ordinal in angle brackets when the key belongs to no catalog this
+    /// <returns>The interned name, or the key's ordinal in angle brackets when the key belongs to no arena this
     /// view can read.</returns>
     public string KeyName(CellKey key) => ((
         (m_arena is { } arena) &&
-        arena.Catalog.Keys.TryGetName(
+        arena.Keys.TryGetName(
         key: key,
         name: out var name
     )

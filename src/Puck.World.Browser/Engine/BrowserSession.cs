@@ -403,7 +403,7 @@ public sealed class BrowserSession {
                 }
 
                 writes.Add(item: new BrowserWrite(
-                    Key: catalog.Keys[key: key].Value,
+                    Key: m_arena.Keys[key: key].Value,
                     New: Raw(value: in after),
                     Old: Raw(value: in stored),
                     Row: catalog.Descriptors[ordinal].Name
@@ -467,7 +467,7 @@ public sealed class BrowserSession {
             candidate: key,
             name: out var parsed,
             reason: out _
-        ) && m_arena.Catalog.Keys.TryIntern(
+        ) && m_arena.Keys.TryIntern(
             key: out cellKey,
             name: parsed,
             reason: out _

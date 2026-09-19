@@ -125,6 +125,7 @@ public sealed partial class WorldRuleHost {
             Payload: rows
         );
     }
+
     /// <summary>Answers one submitted query under the caller's own Observe verdict.</summary>
     /// <param name="query">The query.</param>
     /// <param name="principal">The querying principal.</param>
@@ -162,6 +163,7 @@ public sealed partial class WorldRuleHost {
         }
         return Answer(query: query);
     }
+
     // Either side resolving to no body reads false — no sight line to nothing.
     private bool ReadBodyLineOfSight(int indexA, int indexB) => (
         (indexA >= 0) &&
@@ -194,7 +196,7 @@ public sealed partial class WorldRuleHost {
                 (index == origin) ||
                 (Host.Body(index: index) is not { } candidate) ||
                 !RuleReads.TryIndexKey(
-                catalog: Host.Arena.Catalog,
+                keys: Host.Arena.Keys,
                 index: index,
                 key: out var key
             ) ||
@@ -281,12 +283,14 @@ public sealed partial class WorldRuleHost {
     // A '$cell:' key indirection: the cell's integer value spelled as a key; an absent cell reads 0 like any other.
     // The integer part of a Q48.16 value — the key or index a cell's value names.
     private static long IntegerOf(FixedQ4816 value) => (value.Value >> 16);
+
     // The static tables the definition references, in tables-row order; a validated document's rows are proven to
     // load, so a failure here is an invariant violation, never a reachable case.
     /// <summary>Recompiles the <c>tables</c> section from a definition — the boot compile the install path
     /// otherwise folds into <c>RecompileRules</c>.</summary>
     /// <param name="definition">The definition to compile from.</param>
     internal void RecompileTables(WorldDefinition definition) => m_tables = CompileTables(definition: definition);
+
     private static CompiledTable[] CompileTables(WorldDefinition definition) {
         var rows = (definition.Tables ?? []);
         var compiled = new CompiledTable[rows.Count];

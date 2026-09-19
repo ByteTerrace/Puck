@@ -99,27 +99,21 @@ public sealed partial class WorldServer : IWorldServerHost {
     private readonly WorldMutationBudgetMeter m_mutationBudget = new();
     // The multi-subscriber output hub — supports a local sink plus N future connections. See WorldOutputHub's own remarks.
     private readonly WorldOutputHub m_output = new();
-
-
     // The arena host every state effect and resolved transform fires through, rebuilt with the arena.
     private WorldArenaHost m_arenaHost = null!;
 
     // The tick facade: the intent and ordered queues, the step clock, the contribution fold and its read-back, the
     // engagement/transfer/field/music/response/board/deal per-tick work, and the snapshot it emits.
     private readonly WorldTick m_tick;
-
     // The persistence facade: journal undo, the authority checkpoint, the state hash, and the replay gate. It owns
     // no state — it walks the others.
     private readonly WorldPersistence m_persistence;
-
     // The document facade: the live definition, the journal and its base, the buffered live-edit ops, the compose
     // and apply pipeline, the solid field, and the delivery decision.
     private readonly WorldDocument m_document;
-
     // The rule facade: the evaluator, the compiled rules/groups/tables, the edge latches, the decision and pattern
     // runtimes, and the world facts and effect arms the evaluator reaches through.
     private readonly WorldRuleHost m_ruleHost;
-
     // The `search` jobs over the arena, rebuilt with the rules on every install.
     private readonly ArenaSearch m_search;
     private readonly Func<IReadOnlyList<ArenaSearchWrite>, bool> m_searchApply;
@@ -148,7 +142,7 @@ public sealed partial class WorldServer : IWorldServerHost {
 
         return (write switch {
             ArenaSearchWrite.Cell cell => new WorldMutation.UpsertStateCell(
-            Key: catalog.Keys[cell.Key].Value,
+            Key: m_arena.Keys[cell.Key].Value,
             Kind: WorldDocumentWriteKind.Set,
             Principal: WorldPrincipal.World,
             Row: catalog.Descriptors[cell.RowOrdinal].Name,
@@ -164,9 +158,6 @@ public sealed partial class WorldServer : IWorldServerHost {
             _ => throw new InvalidOperationException(message: $"unrecognized search write '{write.GetType().Name}'"),
         });
     }
-
-
-
 
     // The engagement fold — the seat/peer→screen route decision, its per-tick pad fold, and the
     // screen-removal admin cleanup. Assigned in the constructor (not a field initializer: it needs the constructor's

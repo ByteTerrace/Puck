@@ -56,24 +56,31 @@ public sealed partial class ArenaSearch {
     // candidate cursor and folds a weighted sum instead of a maximum; the rest of its window goes unused.
     private sealed class Level {
         public long Alpha = -SearchCapacity.MateScore;
+
         public long AlphaEntry;
         public long BaseTurn;
+
         public long Best = -SearchCapacity.MateScore;
         public int BestTarget = -1;
         public int BestToken = -1;
         public long Beta = SearchCapacity.MateScore;
+
         // The outcomes folded so far, each value times its weight, and the weight they carried. The sum is exact:
         // a baked table's whole weight fits one word, so values of MateScore magnitude under it stay inside 128 bits
         // however many outcomes share it.
         public Int128 ChanceSum;
         public ulong ChanceWeight;
+
         // The cell the candidate that opened this ply lands on, which is what the parent folds as its best move.
         public int EntryTarget = -1;
+
         // The position's key and the window's lower edge at entry, for the transposition table's store.
         public ulong Key;
+
         // The seat vector of the best line found at this ply. A scope rewind discards what the position carried, so
         // a max-n fold remembers the vector here instead of in the position it came from.
         public long[] Seats = [];
+
         public int Shape;
         public int Target;
         public int Token;
@@ -159,7 +166,6 @@ public sealed partial class ArenaSearch {
         // Ply zero. Iterative-deepening negamax is engaged only for a scored job; the root folds candidates into
         // its window but never cuts on it, so the root outputs never depend on whether a score is authored.
         public Level Root { get; } = new();
-
         public CellKey[] ScoreKeys { get; set; } = [];
 
         // The seat vector read off the arena, reused by every max-n fold.
@@ -235,6 +241,7 @@ public sealed partial class ArenaSearch {
     // never checkpointed, so it only ever says the fold may be reused; the stamp a job compares stays the fold of
     // the rows' content, which a restored arena reproduces.
     private bool m_stampFolded;
+    private ulong m_stampLedger;
     private ulong m_stampValue;
     private ulong[] m_stampVersions = [];
     private CellKey m_bestRevisionKey;
@@ -255,13 +262,13 @@ public sealed partial class ArenaSearch {
         m_arena = arena;
         m_narrate = narrate;
 
-        ResolveCatalogKeys();
+        ResolveArenaKeys();
     }
 
-    // The keys a landed job addresses its own output rows by. They are the catalog's, and a relayout replaces the
-    // catalog, so they are re-resolved on every install rather than held from construction.
-    private void ResolveCatalogKeys() {
-        var keys = m_arena.Catalog.Keys;
+    // The keys a landed job addresses its own output rows by. Relayout replaces the arena's runtime key table,
+    // so they are re-resolved on every install rather than held from construction.
+    private void ResolveArenaKeys() {
+        var keys = m_arena.Keys;
 
         _ = keys.TryResolve(key: out m_bestRevisionKey, name: CellName.Parse(candidate: "revision"));
 
@@ -308,7 +315,7 @@ public sealed partial class ArenaSearch {
             return false;
         }
 
-        ResolveCatalogKeys();
+        ResolveArenaKeys();
 
         var jobs = new Job[plans.Length];
         var rows = m_arena.Layout.RowCount;
@@ -347,7 +354,7 @@ public sealed partial class ArenaSearch {
             }
             if (
                 (plan.BestOrdinal >= 0) &&
-                (!m_bestScoreKey.IsValid || !m_bestTargetKey.IsValid || !m_bestTokenKey.IsValid || (plan.RevisionOrdinal >= 0 && !m_bestRevisionKey.IsValid))
+                (!m_bestScoreKey.IsValid || !m_bestTargetKey.IsValid || !m_bestTokenKey.IsValid || ((plan.RevisionOrdinal >= 0) && !m_bestRevisionKey.IsValid))
             ) {
                 reason = $"search '{plan.Name}' writes a best-move row, and this catalog interns no 'token', 'to', and 'score' keys to address it by";
 
@@ -419,7 +426,7 @@ public sealed partial class ArenaSearch {
         var stamp = Stamp();
 
         foreach (var job in m_jobs) {
-            if (job.Plan.EnabledOrdinal >= 0 && Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L) {
+            if ((job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) {
                 continue;
             }
             var work = job.Plan.Work;
@@ -562,8 +569,8 @@ public sealed partial class ArenaSearch {
             plan.TokensOrdinal,
             plan.TurnOrdinal,
             plan.VerdictOrdinal,
-            plan.EnabledOrdinal >= 0 ? plan.EnabledOrdinal : plan.TurnOrdinal,
-            plan.RevisionOrdinal >= 0 ? plan.RevisionOrdinal : plan.TurnOrdinal,
+            ((plan.EnabledOrdinal >= 0) ? plan.EnabledOrdinal : plan.TurnOrdinal),
+            ((plan.RevisionOrdinal >= 0) ? plan.RevisionOrdinal : plan.TurnOrdinal),
             ((plan.ScoresOrdinal >= 0)
                 ? plan.ScoresOrdinal
                 : plan.TurnOrdinal),
@@ -680,7 +687,7 @@ public sealed partial class ArenaSearch {
         // until the job lands it. Interning here, in the topology's own cell order, is what gives a landed write an
         // address at all.
         for (var cell = 0; (cell < keys.Length); cell++) {
-            keys[cell] = m_arena.Catalog.Keys.Intern(name: topology.NameOf(cell: cell));
+            keys[cell] = m_arena.Keys.Intern(name: topology.NameOf(cell: cell));
         }
 
         return keys;
@@ -745,16 +752,22 @@ public sealed partial class ArenaSearch {
     // not look like an input change and restart it.
     //
     // A row whose version has not moved holds the bytes it held, so the fold is taken again only when some input
-    // row's version has: an idle tick compares one counter per row rather than folding every cell of the arena.
+    // row's version has. The retained-key ledger and byte charge are also inputs because they limit a judge's
+    // future mints; their cached fold keeps an idle tick to one counter per row and constant extra work.
     private ulong Stamp() {
         var rows = m_arena.Layout.RowCount;
+
+        var ledger = Fnv1aHash.Create();
+
+        m_arena.AddKeyLedgerTo(hash: ref ledger);
+        ledger.Add(value: m_arena.Bytes);
 
         if (m_stampVersions.Length != rows) {
             m_stampFolded = false;
             m_stampVersions = new ulong[rows];
         }
 
-        var moved = !m_stampFolded;
+        var moved = (!m_stampFolded || (m_stampLedger != ledger.Value));
 
         for (var ordinal = 0; (ordinal < rows); ordinal++) {
             var version = m_arena.RowVersion(rowOrdinal: ordinal);
@@ -782,7 +795,11 @@ public sealed partial class ArenaSearch {
             );
         }
 
+        m_arena.AddKeyLedgerTo(hash: ref hash);
+        hash.Add(value: m_arena.Bytes);
+
         m_stampFolded = true;
+        m_stampLedger = ledger.Value;
         m_stampValue = hash.Value;
 
         return m_stampValue;
@@ -802,6 +819,11 @@ public sealed partial class ArenaSearch {
             );
             timed |= m_arena.Layout[ordinal].HasTraits;
         }
+
+        // A retained orphan name and the arena byte ledger govern whether a judge can mint a later member. They
+        // therefore belong to a candidate's cache identity even when no keyed row presently holds that name.
+        m_arena.AddKeyLedgerTo(hash: ref hash);
+        hash.Add(value: m_arena.Bytes);
 
         // A row carrying a value-over-time trait answers a live read from its stored epoch and the tick it is read
         // at, so a position over such a row is the same position only at the same tick pair.

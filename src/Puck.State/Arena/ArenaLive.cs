@@ -49,7 +49,7 @@ public sealed partial class StateArena {
             rowOrdinal: rowOrdinal
         ) ||
             !layout.HasTraits ||
-            !m_catalog.Keys.TryGetName(
+            !m_keys.TryGetName(
             key: key,
             name: out var name
         ) ||
@@ -73,7 +73,7 @@ public sealed partial class StateArena {
     /// rule, a write's operand, a disclosure and a hash all take; only <see cref="StateReader.TryReadEased"/>
     /// eases, for a presentation binding.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="time">The clocks the traits are evaluated against.</param>
     /// <param name="value">The live value on success; otherwise the carrier holding no case.</param>
     /// <returns><see langword="true"/> when the row holds the cell.</returns>
@@ -93,7 +93,7 @@ public sealed partial class StateArena {
         if (
             !layout.HasTraits ||
             (layout.Kind is (CellKind.Text or CellKind.Vector)) ||
-            !m_catalog.Keys.TryGetName(
+            !m_keys.TryGetName(
             key: key,
             name: out var name
         ) ||
@@ -135,7 +135,7 @@ public sealed partial class StateArena {
     }
     /// <summary>Reads one numeric cell's live value.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="time">The clocks the traits are evaluated against.</param>
     /// <param name="value">The live raw value on success; otherwise zero.</param>
     /// <returns><see langword="true"/> when the row holds a numeric cell there.</returns>
@@ -174,7 +174,7 @@ public sealed partial class StateArena {
     /// <summary>Attempts an explicit numeric write against a cell's live value, rebasing the clock the trait reads
     /// from.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="key">The cell key, interned by this arena's catalog.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
     /// <param name="operand">The replacement for a set, or the addend for an add.</param>
     /// <param name="write">Set or add.</param>
     /// <param name="time">The clocks the write settles the cell's clock to.</param>
@@ -208,7 +208,7 @@ public sealed partial class StateArena {
         }
 
         var row = DocumentRow(rowOrdinal: rowOrdinal);
-        var name = m_catalog.Keys[key];
+        var name = m_keys[key];
         var behavior = (layout.HasTraits
             ? BehaviorAt(
                 name: name,

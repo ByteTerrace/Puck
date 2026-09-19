@@ -171,8 +171,8 @@ public sealed class ArenaLayout {
     }
 
     /// <summary>Gets the bytes an arena over this layout reserves for its columns, indexes, and fixed-ceiling text
-    /// and provenance payloads. <see cref="StateArena.Bytes"/> adds the bounded visibility payload currently in
-    /// use.</summary>
+    /// and provenance payloads. <see cref="StateArena.Bytes"/> adds the bounded visibility payload and retained
+    /// key storage currently in use.</summary>
     public long Bytes { get; }
     /// <summary>Gets how many cell slots the layout reserves across every column.</summary>
     public int CellSlotCount { get; }
@@ -283,11 +283,11 @@ public sealed class ArenaLayout {
     private static void RequireFits(string what, long cellSlots, long textSlots, long rowCount, long maskWords, long laneSlots, long laneRoster, long vectorBytes) {
         var bytes = Measure(
             cellSlots: cellSlots,
-            textSlots: textSlots,
             laneRoster: laneRoster,
             laneSlots: laneSlots,
             maskWords: maskWords,
             rowCount: rowCount,
+            textSlots: textSlots,
             vectorBytes: vectorBytes
         );
 

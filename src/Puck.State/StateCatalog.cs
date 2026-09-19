@@ -126,7 +126,7 @@ public sealed class StateCatalog {
     public IReadOnlyList<StateDescriptor> Descriptors => m_readOnlyDescriptors;
     /// <summary>Gets the compiled row families in declaration order.</summary>
     public IReadOnlyList<RowFamily> Families => m_readOnlyFamilies;
-    /// <summary>Gets the intern table every cell key of this catalog resolves through.</summary>
+    /// <summary>Gets the compiled key symbols. Runtime names are owned by <see cref="StateArena.Keys"/>.</summary>
     public CellKeyTable Keys => m_keys;
     /// <summary>Gets the running count of calls to <see cref="MatchesShape"/> across every catalog. A
     /// recompilation site calls it once per candidate section; nothing on a warm read of an already-keyed catalog

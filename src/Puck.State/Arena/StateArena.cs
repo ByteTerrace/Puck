@@ -26,13 +26,19 @@ namespace Puck.State;
 public sealed partial class StateArena {
     private ulong[] m_appendGenerations;
     private StateCatalog m_catalog;
+    private CellKeyTable m_keys;
+
+    private int[] m_keyMarks = new int[16];
+    private long m_importVisibilityBytes = -1L;
 
     private readonly ArenaJournal m_journal;
 
     private ArenaLayout m_layout;
+
     private sbyte[] m_carried = [];
     private int[] m_reorderAt = [];
     private int[] m_reorderWhich = [];
+
     private IReadOnlyList<StateRow> m_rows;
     private ulong[] m_rowGenerations;
     private ulong[] m_rowVersions;
@@ -61,16 +67,23 @@ public sealed partial class StateArena {
     private long m_visibilityBytes;
     private string?[]? m_provenance;
     private string?[]? m_texts;
+
     private bool[] m_changeDiffers = [];
+
     private long m_changeEpoch;
+
     private long[] m_changeStamp = [];
+
     private long[] m_rowChangeStamp;
     private int[] m_reindexRow;
     private long[] m_reindexStamp;
     private int m_reindexCount;
     private long m_reindexEpoch;
+
     private byte[] m_touchedColumn = new byte[64];
+
     private int m_touchedCount;
+
     private int[] m_touchedIndex = new int[64];
     private int[] m_touchedSlot = new int[64];
 
@@ -126,6 +139,7 @@ public sealed partial class StateArena {
 
         m_appendGenerations = new ulong[layout.RowCount];
         m_catalog = catalog;
+        m_keys = catalog.Keys.Fork();
         m_historyCursors = new long[layout.RowCount];
         m_journal = new ArenaJournal();
         m_laneNumbers = new long[layout.LaneSlotCount];
@@ -148,8 +162,18 @@ public sealed partial class StateArena {
         );
         m_slotOfKey = new ArenaSlotMap[layout.RowCount];
         m_vectors = new sbyte[layout.VectorByteCount];
+        m_keys.SetByteBudget(budget: KeyByteBudget);
 
         if (reason.Length != 0) {
+            return;
+        }
+
+        if (!TryValidateDerivedDomains(
+            catalog: m_catalog,
+            layout: m_layout,
+            reason: out reason,
+            rows: m_rows
+        )) {
             return;
         }
 
@@ -174,6 +198,57 @@ public sealed partial class StateArena {
             Array.Clear(array: m_rowGenerations);
             Array.Clear(array: m_rowVersions);
         }
+    }
+
+    private static bool TryValidateDerivedDomains(StateCatalog catalog, ArenaLayout layout, IReadOnlyList<StateRow> rows, out string reason) {
+        for (var boardOrdinal = 0; (boardOrdinal < layout.RowCount); boardOrdinal++) {
+            ref readonly var boardLayout = ref layout[boardOrdinal];
+
+            if (
+                !boardLayout.IsDerivedBoard ||
+                (catalog.Descriptors[boardOrdinal].Lane != StateLane.Document)
+            ) {
+                continue;
+            }
+
+            var board = rows[catalog.Descriptors[boardOrdinal].LaneOrdinal];
+            var codesOrdinal = boardLayout.InverseCodesOrdinal;
+
+            if (
+                (codesOrdinal < 0) ||
+                (codesOrdinal >= catalog.Descriptors.Count) ||
+                (catalog.Descriptors[codesOrdinal].Lane != StateLane.Document)
+            ) {
+                reason = $"derived board '{board.Name.Value}' names an inverse codes row outside the document lane";
+
+                return false;
+            }
+
+            var codes = rows[catalog.Descriptors[codesOrdinal].LaneOrdinal];
+
+            _ = catalog.TryGetEnum(
+                handle: catalog.Descriptors[boardOrdinal].Handle,
+                symbols: out var boardSymbols
+            );
+            _ = catalog.TryGetEnum(
+                handle: catalog.Descriptors[codesOrdinal].Handle,
+                symbols: out var codeSymbols
+            );
+
+            if (!StateRow.TryProveDerivedDomain(
+                board: board,
+                boardSymbols: boardSymbols,
+                codeSymbols: codeSymbols,
+                codes: codes,
+                reason: out reason
+            )) {
+                return false;
+            }
+        }
+
+        reason = string.Empty;
+
+        return true;
     }
 
     /// <summary>Creates an arena over one compiled catalog, refusing an inadmissible section by row and cell name
@@ -257,16 +332,24 @@ public sealed partial class StateArena {
 
     /// <summary>Gets the catalog whose descriptors this arena stores.</summary>
     public StateCatalog Catalog => m_catalog;
+    /// <summary>Gets this arena's key table. Compiled catalog symbols remain readable; runtime additions belong
+    /// only to this arena and speculative additions are released on rewind.</summary>
+    public CellKeyTable Keys => m_keys;
+
     /// <summary>Gets the working storage an evaluation over this arena borrows instead of sizing a buffer from the
     /// document on the stack.</summary>
     public ArenaScratch Scratch { get; } = new();
+
     /// <summary>Gets the undo journal this arena's scopes record through.</summary>
     public ArenaJournal Journal => m_journal;
     /// <summary>Gets the column plan this arena stores into.</summary>
     public ArenaLayout Layout => m_layout;
-    /// <summary>Gets the bytes reserved by the layout plus the bounded visibility payload the arena currently
-    /// retains.</summary>
-    public long Bytes => (m_layout.Bytes + m_declarationVisibilityBytes + m_visibilityBytes);
+    /// <summary>Gets the bytes reserved by the layout plus the bounded visibility and key storage the arena
+    /// currently retains.</summary>
+    public long Bytes => (((m_layout.Bytes + m_declarationVisibilityBytes) + m_visibilityBytes) + m_keys.Bytes);
+
+    private long KeyByteBudget() => (((ArenaCapacity.MaxBytes - m_layout.Bytes) - m_declarationVisibilityBytes) - ((m_importVisibilityBytes >= 0L) ? m_importVisibilityBytes : m_visibilityBytes));
+
     /// <summary>Gets the authored rows the document lane was seeded from, with detached cell collections and
     /// normalized visibility policies.</summary>
     public IReadOnlyList<StateRow> Rows => m_rows;
@@ -277,7 +360,7 @@ public sealed partial class StateArena {
 
         bytes = 0L;
 
-        for (var rowIndex = 0; rowIndex < source.Count; rowIndex++) {
+        for (var rowIndex = 0; (rowIndex < source.Count); rowIndex++) {
             var row = source[rowIndex];
 
             if (row is null) {
@@ -297,13 +380,13 @@ public sealed partial class StateArena {
             bytes += rowBytes;
 
             var cells = row.Cells;
-            var copiedCells = (cells is null ? null : new StateCell[cells.Count]);
+            var copiedCells = ((cells is null) ? null : new StateCell[cells.Count]);
             // A caller may hand the record any IReadOnlyList implementation. Detach every non-null cell collection
             // even when its current visibility values need no normalization, so later list mutation cannot change
             // what the arena's declaration snapshot retains.
-            var changed = ((cells is not null) || !ReferenceEquals(row.Visibility, rowVisibility));
+            var changed = ((cells is not null) || !ReferenceEquals(objA: row.Visibility, objB: rowVisibility));
 
-            for (var cellIndex = 0; cellIndex < (cells?.Count ?? 0); cellIndex++) {
+            for (var cellIndex = 0; (cellIndex < (cells?.Count ?? 0)); cellIndex++) {
                 var cell = cells![cellIndex];
 
                 if (cell is null) {
@@ -321,8 +404,8 @@ public sealed partial class StateArena {
                 }
 
                 bytes += cellBytes;
-                changed |= !ReferenceEquals(cell.Visibility, cellVisibility);
-                copiedCells![cellIndex] = (ReferenceEquals(cell.Visibility, cellVisibility)
+                changed |= !ReferenceEquals(objA: cell.Visibility, objB: cellVisibility);
+                copiedCells![cellIndex] = (ReferenceEquals(objA: cell.Visibility, objB: cellVisibility)
                     ? cell
                     : (cell with { Visibility = cellVisibility })
                 );
@@ -350,7 +433,15 @@ public sealed partial class StateArena {
     /// <summary>Opens a journal scope: every write until the matching <see cref="Commit"/> or <see cref="Rewind"/>
     /// records the column position it overwrote. Scopes nest; close the innermost first.</summary>
     /// <returns>The mark the scope closes with.</returns>
-    public int BeginScope() => m_journal.BeginScope();
+    public int BeginScope() {
+        var depth = m_journal.Scopes;
+
+        if (depth == m_keyMarks.Length) {
+            Array.Resize(array: ref m_keyMarks, newSize: (depth * 2));
+        }
+        m_keyMarks[depth] = m_keys.Count;
+        return m_journal.BeginScope();
+    }
     /// <summary>Closes the innermost open scope, keeping its writes. Closing the outermost one settles
     /// <see cref="RowVersion"/>: a row whose bytes differ from what they held when that scope opened moves its
     /// version, and a row written back to what it held does not.</summary>
@@ -414,7 +505,7 @@ public sealed partial class StateArena {
         }
     }
     /// <summary>Closes the innermost open scope, restoring every column position it wrote to what it overwrote,
-    /// most recent write first.</summary>
+    /// most recent write first, and releasing keys first interned within the scope.</summary>
     /// <param name="mark">The mark <see cref="BeginScope"/> returned.</param>
     /// <exception cref="InvalidOperationException">No scope is open, or <paramref name="mark"/> does not close the
     /// innermost one.</exception>
@@ -453,6 +544,16 @@ public sealed partial class StateArena {
         }
 
         m_reindexCount = 0;
+        if (m_keys.Count != m_keyMarks[(m_journal.Scopes - 1)]) {
+            // Topology and ring addresses may have been cached without a membership journal entry. Drop those
+            // derived caches before an abandoned key ordinal can be reused for another name.
+            for (var row = 0; (row < m_layout.RowCount); row++) {
+                if (m_layout[row].Shape is (RowShape.Lattice or RowShape.Ring)) {
+                    m_slotOfKey[row].Clear();
+                }
+            }
+        }
+        m_keys.Rewind(count: m_keyMarks[(m_journal.Scopes - 1)]);
         m_journal.RewindScope(mark: mark);
     }
 

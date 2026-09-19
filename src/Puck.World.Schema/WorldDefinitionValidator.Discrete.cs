@@ -160,6 +160,23 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
+        var boardSymbols = ((row.Enum is { } boardEnumName)
+            ? definition.Enums.FirstOrDefault(predicate: candidate => (candidate.Name == boardEnumName))
+            : null);
+        var codeSymbols = ((codes.Enum is { } codeEnumName)
+            ? definition.Enums.FirstOrDefault(predicate: candidate => (candidate.Name == codeEnumName))
+            : null);
+
+        if (!StateRow.TryProveDerivedDomain(
+            board: row,
+            boardSymbols: boardSymbols,
+            codes: codes,
+            codeSymbols: codeSymbols,
+            reason: out var domainReason
+        )) {
+            errors.Add(item: $"state row '{row.Name}': inverse domain is incompatible — {domainReason}.");
+        }
+
         var tokenCells = (tokens.Cells ?? []);
         var codeCells = (codes.Cells ?? []);
         var sameShape = (tokenCells.Count == codeCells.Count);
@@ -192,6 +209,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"state row '{row.Name}': authored cells must be empty or match its inverse's derivation — the board is never authored, only derived.");
         }
     }
+
     // The arena's own recompute, read back as the derivation an authored board must match: loading a section is
     // what recomputes every derived board from its tokens and codes rows, so the walk checks against the store
     // rather than against a second reading of the same rule. One arena serves a whole validation pass, and is built
@@ -238,6 +256,7 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
+
     // Set comparison, not order-sensitive: an authored board's cell order is whatever the author or a prior save
     // wrote, while the derivation always walks cell order — the same board, spelled either way, must match.
     private static bool MatchesDerivation(IReadOnlyList<StateCell> authored, IReadOnlyList<StateCell> derived) {

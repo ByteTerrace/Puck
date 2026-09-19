@@ -49,7 +49,7 @@ public sealed partial class StateArena {
                 position: position,
                 rowOrdinal: rowOrdinal
             ) ||
-                !m_catalog.Keys.TryGetName(
+                !m_keys.TryGetName(
                 key: key,
                 name: out var name
             )

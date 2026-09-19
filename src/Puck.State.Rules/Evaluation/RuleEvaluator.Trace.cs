@@ -175,7 +175,7 @@ public sealed partial class RuleEvaluator {
             m_traceEntry = null;
         }
     }
-    private string? KeyName(CellKey key) => ((key.IsValid && m_host.Catalog.Keys.TryGetName(
+    private string? KeyName(CellKey key) => ((key.IsValid && m_host.Arena.Keys.TryGetName(
         key: key,
         name: out var name
     ))

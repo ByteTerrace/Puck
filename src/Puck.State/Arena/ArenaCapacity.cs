@@ -10,17 +10,18 @@ public static class ArenaCapacity {
     /// at its full width, the change stamps a settle keeps per position, the row and key indexes, the vector
     /// components, and the strings its reference columns point at, each counted at its length ceiling: a provenance
     /// for every cell slot and a text for every slot of a text row. <see cref="StateArena.Bytes"/> adds the bounded,
-    /// normalized visibility payload retained by its declaration snapshot and live cell columns. It is a document's
+    /// normalized visibility payload retained by its declaration snapshot and live cell columns, and the retained
+    /// key names and table entries. It is a document's
     /// memory bound, the one figure
     /// every row's capacity, every board and every lane is counted against, and a section that lays out past it is
     /// refused at the row that crossed.</summary>
-    public const long MaxBytes = (64L * 1024L * 1024L);
+    public const long MaxBytes = ((64L * 1024L) * 1024L);
     /// <summary>The bytes of undo record an arena's open scopes may hold, before a firing is refused and rewound:
     /// its entries, the vector components it snapshotted, and the texts, provenances and other references it
     /// overwrote, which the record alone keeps alive. It is checked between effects, so the record may pass it by
     /// the writes of the one effect that crossed it. The positions a settle visits are a subset of the record's, so
     /// this bounds that buffer too.</summary>
-    public const int MaxJournalBytes = (16 * 1024 * 1024);
+    public const int MaxJournalBytes = ((16 * 1024) * 1024);
     /// <summary>How many identity ordinals an arena's identity lane admits when its builder states no width: eight
     /// bytes a lane row per ordinal.</summary>
     public const int DefaultIdentities = 256;

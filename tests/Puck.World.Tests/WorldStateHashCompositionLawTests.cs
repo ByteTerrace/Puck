@@ -304,4 +304,42 @@ public sealed class WorldStateHashCompositionLawTests {
             )
         );
     }
+    [Fact]
+    public void DeclarationHashFoldsEveryRowVisibilityField() {
+        var baseline = DeclarationHash(visibility: new StateVisibility(Readers: null));
+
+        Assert.NotEqual(
+            actual: DeclarationHash(visibility: new StateVisibility(Readers: [])),
+            expected: baseline
+        );
+        Assert.NotEqual(
+            actual: DeclarationHash(visibility: new StateVisibility(
+                Hidden: HiddenCells.Count,
+                Readers: null
+            )),
+            expected: baseline
+        );
+        Assert.NotEqual(
+            actual: DeclarationHash(visibility: new StateVisibility(
+                Readers: null,
+                ReadersFrom: "audience"
+            )),
+            expected: baseline
+        );
+    }
+
+    private static ulong DeclarationHash(StateVisibility? visibility) {
+        var hash = Fnv1aHash.Create();
+
+        WorldStateHashComposition.AppendDeclaration(
+            hash: ref hash,
+            state: new WorldStateSection(World: [new WorldStateRow(
+                Name: CellName.Parse(candidate: "visible"),
+                Kind: CellKind.Int,
+                Visibility: visibility
+            )])
+        );
+
+        return hash.Value;
+    }
 }

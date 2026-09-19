@@ -49,8 +49,9 @@ public abstract class KeyFact<TFacet> : IFacetFact, ICompiledFact where TFacet :
     /// <summary>Appends every state cell the resolution reads through.</summary>
     /// <param name="into">The read set being collected.</param>
     public virtual void CollectReads(List<CellAccess> into) { }
-    /// <summary>Resolves the key for the evaluation in flight. Allocation-free in steady state: a key the host
-    /// mints once stays interned in the catalog's key table.</summary>
+    /// <summary>Resolves the key for the evaluation in flight. Allocation-free in steady state: a committed key
+    /// the host mints once stays interned in the owning arena's key table; a speculative mint is released when its
+    /// scope rewinds.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="facet">The facet the evaluator resolved from the host.</param>
     /// <returns>The interned key.</returns>
