@@ -13,34 +13,34 @@ the work.
 
 ## Implementation status
 
-Everything below is on `state/rebuild`, which has not landed on `main`.
+Everything below has landed on `main`.
 
 - **The rebuild.** The sweep that deletes the old substrate, the relocation
   into `Puck.State.Topology` and `Puck.State.Generators`, and the documentation
   true-up are merged. `tests/Puck.World.Tests` fails nothing on a built tree.
-  [The landing record](state-rebuild.md#where-the-sweep-stands) holds what is
-  left: the landing itself.
-- **Games.** Seven of sixteen are on `state/rebuild`: Reversi, Stratego,
+  [The landing record](state-rebuild.md#where-the-sweep-stands) holds what it
+  measured.
+- **Games.** Seven of sixteen are landed: Reversi, Stratego,
   Hearts, Snake, Codenames, Pong, Arena.
-- **Embeddings** is done. The reference schedule's evidence is on
-  `state/rebuild`: `src/Puck.State/ReferenceSchedule.json` pins eight targets
+- **Embeddings** is done. The reference schedule's evidence is landed:
+  `src/Puck.State/ReferenceSchedule.json` pins eight targets
   across two ISA families, prices the fourteen unary expression operations,
   and names every other coefficient — the binary, function, program and fold
   kernels, the ten effect arms, and the whole memory profile — as unmodeled,
   with a law that refuses a registered operation carrying neither. Pricing
   those remains C1's, as reviewed loop formulas per implementation family and
   a published-configuration memory profile.
-- **S1** is on `state/rebuild`: `WorldCompiler.Compile` is the one door, and
+- **S1** is landed: `WorldCompiler.Compile` is the one door, and
   `ProjectionLawTests` holds over every shipped source and a generated corpus
   of every registered construct. Owed: the language server does not go through
   that door — it publishes the parser's and `PuckLinter`'s findings and never
   runs `WorldSemanticValidator`, so no refusal `puck lint` reports reaches an
   editor.
-- **S2** is on `state/rebuild`: the syntax tree carries trivia, `puck fmt`,
+- **S2** is landed: the syntax tree carries trivia, `puck fmt`,
   the language server and `puck decompile` are parse-then-print through
   `PuckPrinter`, the text formatter is gone, and formatting every shipped
   source is a fixed point that moves no document.
-- **S4** is on `state/rebuild`: `src/Puck.World.Transpiler/Vocabulary`
+- **S4** is landed: `src/Puck.World.Transpiler/Vocabulary`
   describes every world construct once, keyed by where it is written and its
   keyword, with a member identified by its construct and its name; the
   parser's flag admission, the printer's sugar guards, completion, hover, and
@@ -56,19 +56,19 @@ Everything below is on `state/rebuild`, which has not landed on `main`.
   another vocabulary's. Owed: `PuckLinter.References`
   resolves a row name on a `state`, `comparandState`, `fromState` or operand
   field and inside a transform arm, and nowhere else.
-- **S5** is on `state/rebuild`: a migration is a named rewrite over the
+- **S5** is landed: a migration is a named rewrite over the
   syntax tree (`src/Puck.Transpiler/Rewriting`), and `puck migrate` applies
   one to a directory, stages every write, compiles each source before and
   after, and refuses a run that changes a member or a comment the migration
   did not declare. The registry is empty until a reshape needs it.
-- **S8's runner** is on `state/rebuild`: a tick-scheduled `schedule` section, a
+- **S8's runner** is landed: a tick-scheduled `schedule` section, a
   `verdict` row trait, and `puck test`. The five ways a test could pass when it
   should fail are closed — the section is inert unless the boot arms it and says
   only test steps, reaching the authored export tick is part of the verdict,
   only a rule's firing writes a verdict and the firing tick says so, every row
   declares the outcome it expects, and a scheduled run refuses to pretend it is
   resumable. The browser host is not covered.
-- **S8's `test` construct for a world** is on `state/rebuild`:
+- **S8's `test` construct for a world** is landed:
   `test "name" { given when expect }` at a world's root, described
   once in the construct table, lowering through `WorldCompiler.Compile` to one
   generated test world per block, and `puck test <file.puck | directory>`
@@ -156,12 +156,9 @@ implements, who reviews, and which model.
 
 ### The landing
 
-[State system rebuild](state-rebuild.md) is the in-flight record: WP11c, WP11d,
-WP11e, the sweep, WP8's relocation, WP9b's remainder, WP13, and WP14, each with its
-own check. Every wave lands on `state/rebuild` as soon as it is green beside
-the old substrate; the sweep deletes that substrate as its own commit. A package that
-owns only the transpiler (S1, S2) may start beside the landing; every other
-package below starts after the sweep.
+[State system rebuild](state-rebuild.md) is the record of the landing: every
+package it lists is landed on `main`, each with its own check, and the old
+substrate is deleted. Every package below branches from `main`.
 
 ### C1 — Ceilings as prices
 

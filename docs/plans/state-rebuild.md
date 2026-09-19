@@ -17,9 +17,8 @@ WP11d, WP11e, the costing evidence, S1, S2, and the dashboard schema-id
 sweep, each reviewed once by a fresh agent and merged with its suites green.
 The sweep — parts A, B, and C, the `StateCell` collapse and the nine deferred
 items included — and WP8's relocation are merged into `state/rebuild` too.
-The old substrate no longer builds beside the new one. Each package branches
-from `state/rebuild` and merges straight back to it; the integration branch is
-retired. What remains is WP13 and WP14.
+The old substrate is deleted, and the whole of it is squashed onto `main`;
+`state/rebuild` and the integration branch are retired.
 
 The automatic canary set is green on that head when the machine is quiet.
 Three proofs pin exact values at fences measured from where a piped console
@@ -98,8 +97,7 @@ fold of content, so a restored world continues as the uninterrupted one does.
 Each package lists **Owns**, **Deliverables**, **Check** (the command and the
 observable pass condition), and **Hand-off**. Load the skills each package
 names before starting. The order was the sweep, then the relocation and WP9b's
-remainder, then WP13, WP14; the sweep, the relocation (WP8) and WP13 are
-landed, and what remains is WP14. One
+remainder, then WP13, WP14, and all of it is landed. One
 integrator serializes edits to project references, `build/Architecture.props`,
 the generated project map, shared fact bases, and World ingress and
 serialization.
