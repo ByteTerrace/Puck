@@ -475,8 +475,9 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
     /// <param name="key">The literal source cell key, or the invalid default.</param>
     /// <param name="keyFrom">The live key indirection, or <see langword="null"/>.</param>
     /// <param name="board">The compiled query.</param>
-    /// <param name="targetFrom">The live destination indirection a <c>pathCost</c> query reads its target ordinal
-    /// from every evaluation, or <see langword="null"/> for a compile-time target.</param>
+    /// <param name="targetFrom">The live destination indirection a <c>pathCost</c> or <c>jumpDistance</c> query
+    /// reads every evaluation. A jump destination is an in-range integer ordinal; <see langword="null"/> selects a
+    /// compile-time target.</param>
     public BoardOperand(int rowOrdinal, CellKey key, CompiledCellRef? keyFrom, BoardQuery board, CompiledCellRef? targetFrom = null) : base(valueKind: CellKind.Int) {
         ArgumentNullException.ThrowIfNull(argument: board);
 
@@ -489,8 +490,8 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
 
     /// <summary>Gets the compiled query.</summary>
     public BoardQuery Board { get; }
-    /// <summary>Gets the live destination indirection a <c>pathCost</c> query reads its target ordinal from, or
-    /// <see langword="null"/>.</summary>
+    /// <summary>Gets the live destination indirection a <c>pathCost</c> or <c>jumpDistance</c> query reads. A jump
+    /// destination must be an in-range integer ordinal, or this is <see langword="null"/> for a compile-time target.</summary>
     public CompiledCellRef? TargetFrom { get; }
     /// <summary>Gets the literal source cell key, or the invalid default.</summary>
     public CellKey Key { get; }
@@ -559,11 +560,28 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
         var dynamicTarget = 0;
 
         if (TargetFrom is { } targetFrom) {
-            dynamicTarget = ((int)(RuleReads.ReadFixed(
-                key: targetFrom.Key,
-                reader: reader,
-                rowOrdinal: targetFrom.RowOrdinal
-            ).Value >> FixedQ4816.FractionBitCount));
+            if (Board is BoardJumpDistanceQuery) {
+                var time = reader.Time;
+
+                if (!reader.Arena.TryReadLiveNumber(
+                    key: targetFrom.Key,
+                    rowOrdinal: targetFrom.RowOrdinal,
+                    time: in time,
+                    value: out var target
+                ) || (target < 0L) || (target >= Board.Topology.CellCount)) {
+                    return RuleFact.Finite(
+                        kind: CellKind.Int,
+                        value: -1L
+                    );
+                }
+                dynamicTarget = ((int)target);
+            } else {
+                dynamicTarget = ((int)(RuleReads.ReadFixed(
+                    key: targetFrom.Key,
+                    reader: reader,
+                    rowOrdinal: targetFrom.RowOrdinal
+                ).Value >> FixedQ4816.FractionBitCount));
+            }
         }
 
         using var values = reader.Scratch.Rent<long>(length: Board.Topology.CellCount);

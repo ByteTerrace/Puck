@@ -115,6 +115,7 @@ Rule operands accept these bounded channels:
 | Channel | Result |
 |---|---|
 | `$board:neighbour:<row>:<direction>` | Neighbour ordinal, or -1 at the edge |
+| `$board:jumpDistance:<row>:<target>` or `$board:jumpDistance:<row>:cell:<targetRow>:<targetKey>` | Fewest non-capturing hops over occupied neighbours onto empty cells, changing direction as needed; the moving source is vacated. The live target is an integer cell ordinal, and an absent or out-of-range target returns -1. Returns 0 for the source, -1 when unreachable. Visits each cell once, works on boards wider than 64 cells. |
 | `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` or `$board:pathCost:<row>:cell:<targetRow>:<targetKey>:<maxCost>:<maxVisits>` | Minimum terrain entry cost to the literal `<target>` cell, or to whichever cell `<targetRow>`.`<targetKey>` holds at evaluation time; -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
 | `$board:mask:<row>:<min>:<max>` | The 64-bit cell-set mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
 | `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |

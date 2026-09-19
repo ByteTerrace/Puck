@@ -545,8 +545,8 @@ public static class BoardQueries {
     /// <param name="empty">The unoccupied value for a ray.</param>
     /// <param name="source">The source cell for neighbour, ray and path queries.</param>
     /// <param name="dynamicTarget">The live-resolved destination ordinal for a <see cref="BoardPathCostQuery"/>
-    /// whose <see cref="BoardPathCostQuery.TargetIsLive"/> is set; ignored otherwise, and irrelevant for every other
-    /// query kind. The caller resolves it (a tick-dependent state read) before this otherwise tick-agnostic
+    /// or <see cref="BoardJumpDistanceQuery"/> whose TargetIsLive is set; ignored otherwise. The caller
+    /// resolves it (a tick-dependent state read) before this otherwise tick-agnostic
     /// evaluation runs.</param>
     /// <returns>The result in the query's documented integer domain.</returns>
     public static long Evaluate(BoardQuery query, ReadOnlySpan<long> values, long empty, int source, int dynamicTarget = 0) {
@@ -596,6 +596,9 @@ public static class BoardQueries {
                 ? dynamicTarget
                 : pathCost.Target)
             );
+        }
+        if (query is BoardJumpDistanceQuery jump) {
+            return jump.Evaluate(values, empty, source, jump.TargetIsLive ? dynamicTarget : jump.Target);
         }
         if (query is BoardAttacksQuery attacks) {
             var directions = attacks.Directions;

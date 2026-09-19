@@ -7,27 +7,17 @@
   "expectsStateChange": true,
   "steps": [
     {
-      "advance": 30
+      "advance": 300
     },
     {
       "set": {
-        "row": "pieceCell",
-        "key": "s0p1",
-        "value": 14
+        "row": "aiSide",
+        "key": "$value",
+        "value": 0
       }
     },
     {
-      "advance": 60
-    },
-    {
-      "set": {
-        "row": "pieceCell",
-        "key": "s0p0",
-        "value": 30
-      }
-    },
-    {
-      "advance": 510
+      "advance": 900
     }
   ]
 }

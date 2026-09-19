@@ -216,46 +216,53 @@ same seed make the same choice.
 [BackgammonLawTests](../../../../../tests/Puck.World.Tests/BackgammonLawTests.cs)
 proves the document: the bar-occupied refusal (with its control—a checker's
 own bar entry stays legal) and the same position with a clear bar.
-## Chinese Checkers—chains and many seats
+## Chinese Checkers—physical marbles and jump chains
 
-[chinese-checkers.puck](chinese-checkers.puck) is the market's probe for two `search`
-primitives: the `jump` shape's chain (a candidate is 1..`maxHops` hops, each over an occupied cell onto an
-empty one, never revisiting a cell) and an n-seat `scores` row (a level maximizes the mover seat's own
-entry rather than negating the reply—max-n, no zero-sum assumption). Unlike its siblings this document
-is self-bootable (`schema`/`documentId` authored directly) rather than a bare fragment, so `--world` can
-run it standing alone; it is not yet imported into `puck.world.json`.
+[chinese-checkers.puck](chinese-checkers.puck) boots on its own with a wooden
+board, 121 recessed holes, and ten physical marbles per player. The default
+three players occupy alternating camps. Change the source's `playerCamps` to
+`[0, 3]` for two players, `[0, 1, 3, 4]` for four, or `[0, 1, 2, 3, 4, 5]` for
+six, then recompile. The graph, placements, ownership and opposite goals all
+come from the same compile-time collections. It is not imported into Nexus.
 
-The board is a `hex` topology of radius 3 (37 cells); three seats (0, 1, 2) each hold two pieces in a
-home cluster near one of the hexagon's corners and race for the cluster at the opposite corner. `pieceCell`
-is the search's `tokens` row; `pieceCellPrev` mirrors it one commit behind so the judge rule can read which
-token moved and by how far without a reserved channel for it—`moverSeat`, `moverFrom`, `moverCell`,
-`movedCount`, and `collisionCount` are that comparison's own terms, all ordinary rows. A candidate is
-accepted when exactly one token moved, it belongs to the seat whose `turn` it is, nothing else already
-stood where it landed, and the hop was either adjacent (a step) or an even distance (a chain the `jump`
-shape's own geometry already verified before the judge ever ran—see the schema's search section for what
-the shape checks and what the judge must). `scores` holds one cell per seat: a piece count on its own
-target cluster times 100, less its pieces' summed `hexDistance` to a representative cell of that cluster.
-`ccSearch`'s landed `best` is applied by a second rule (`cc-apply-best`), gated on `best` differing from
-what was last applied, which also advances the real `turn` and re-syncs `pieceCellPrev`—the judge rule's
-own turn flip lives entirely inside the search's hypothetical frame and never needs to reach the real one.
-`home0`/`home1`/`home2` and `winner` are the win-condition read-back: a seat's row reaching its own piece
-count sets `winner` to that seat, checked by
-[ChineseCheckersLawTests](../../../../../tests/Puck.World.Tests/ChineseCheckersLawTests.cs). The max-n
-fold is exercised in isolation, against a hand-built arena with no world document, by
-[ArenaSearchSeatScoreLawTests](../../../../../tests/Puck.State.Search.Tests/ArenaSearchSeatScoreLawTests.cs).
+A turn moves exactly one marble to an empty adjacent hole, or through a chain
+of jumps over adjacent marbles of either color. Every jump lands in the empty
+hole immediately beyond its blocker; chains can turn, stop early, and have no
+fixed hop limit. Jumps do not capture. A step cannot be combined with jumps.
+The first player to occupy all ten holes of the opposite camp wins, and play
+then stops. This version allows movement through and into any camp, including
+leaving a goal camp; target-locking, long-jump and anti-blocking house rules
+are not enabled.
 
-Two things this probe does not do: `maxHops` is 2, not deep enough to force the long multi-jump chains a
-tournament board invites, and `Relocate`'s own geometry admits any cell, so a step's adjacency and a
-chain's even distance are both judged after the fact by the rule above rather than by the shape refusing a
-non-adjacent single step outright—a genuine `Relocate` distance-2 move with nothing to jump over reads
-as legal here. Both are probe-scale simplifications, not the shape's own limits.
+After one second of physical rest, the rules compare every marble with its
+last accepted position. Wrong-seat moves, missing marbles, collisions and
+multiple moves are rejected without changing the turn or legal snapshot.
+The board records an illegal arrangement and leaves it visible for correction;
+restoring the position consumes no turn. `turn`, `verdict`, `move`, `home`,
+`winner`, `moveCount` and `illegalCount` expose the result.
+
+The optional opponent is disabled initially. Enable seat 1 (the second player)
+with `world.state.cell.set aiSide $value 1`; use `-1` to disable it. Its bounded
+one-ply max-n search scores each player's goal occupancy and remaining distance.
+It judges candidates with the same rules as physical play, moves the chosen
+body once, and waits for it to settle. Position revisions prevent a completed
+answer from being applied to a different board. This is a simple positional
+opponent, without deeper tactical search.
+
+The generic `$board:jumpDistance` query visits each reachable cell once rather
+than enumerating every possible hop sequence. The AI considers at most
+`pieceCount * 121` endpoints per search, under the engine's per-tick work budget.
+[ChineseCheckersLawTests](../../../../../tests/Puck.World.Tests/ChineseCheckersLawTests.cs)
+compares the authored judge with an independent endpoint oracle and exercises
+physical correction, AI turns and stale answers. Run `puck test` on the source
+for standalone physical settling and AI tests through the real executable.
 
 ## Reversi—rays, brackets, and an inverse board
 
 [reversi.puck](reversi.puck) is 8x8 Reversi (Othello) under the
 [World Othello Federation's official rules](https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english),
 a standalone, self-bootable document (its own `documentId`, headless
-`host.presentation: "None"`) like backgammon and Chinese Checkers. `reversiBoard`
+`host.presentation: "None"`) like backgammon. `reversiBoard`
 is a `cellsOf` row over an 8x8 `Grid` whose eight default compass directions are
 the eight rays a move brackets along: 0 empty, 1 black, 2 white, cell ordinal
 `row * 8 + file`, black to move first from the four opening discs on 27, 28, 35
