@@ -4,9 +4,188 @@
 // Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
 // 'for' in it, none of which the document carries.
 
-export action board, gameStarted, move
-export binding illegalCount, inCheck, turn, verdict
-export read board, chessBoard, gameStarted, inCheck, move, plan, turn, verdict
+schema: "puck.world.definition.v1"
+basis: "../standard.basis.json"
+documentId: "chess"
+
+
+grants [
+  {
+    capability: "Mutate"
+    principal: "seat1"
+    subject: "section:state"
+  }
+  {
+    capability: "Edit"
+    principal: "seat1"
+    subject: "all"
+  }
+  {
+    capability: "Control"
+    principal: "seat1"
+    subject: "all"
+  }
+  {
+    capability: "Drive"
+    principal: "seat1"
+    subject: "all"
+  }
+]
+
+simulation {
+  rateHz: 60
+}
+
+channels [
+  { name: "forward", role: "MoveAdvance", shape: "Bipolar", frame: "Heading" }
+  { name: "strafe", role: "MoveStrafe", shape: "Bipolar", frame: "Heading" }
+  { name: "turn", role: "Turn", shape: "Bipolar" }
+]
+
+views {
+  layout "action" {
+    seatCount: 0
+    slots [
+      { height: 1, width: 1, x: 0, y: 0 }
+    ]
+    transitionRenderScale: 0.5
+    transitionSeconds: 0.4
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: "World"
+  }
+
+  seatRig "seatChase" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5.4626, pitch: 0.4145, yaw: 0)
+      lookAt(subject: reference(), targetOffset: [0, 1, 0], worldAxes: false)
+      fieldOfView(fieldOfViewRadians: 0.9599)
+    ]
+  }
+}
+
+bodies {
+  capacity: 40
+  localSeats: 1
+}
+
+bodyMotionPrograms [
+  {
+    kind: "Motion"
+    name: "walk"
+    operations [
+      "ResolveYawAttitudeAndPlanarFrame"
+      "ResolveHold"
+      "ComputePlanarTargetVelocity"
+      "ShapeVelocity"
+      "SnapYawToPlanarIntent"
+      "RunActionTriggers"
+      "ApplyHold"
+      "IntegratePlanarAndVerticalVelocity"
+      "CommitPose"
+    ]
+    version: "puck.body.program.v1"
+  }
+]
+
+collision {
+  contactSkin: 0.02
+  gradientProbe: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements [
+    "SmoothUnionContact"
+  ]
+}
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  softeningLength: 0.5
+  solver: "Pairwise"
+  uniform [0, -46, 0]
+}
+
+looks {
+  rows [
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_white_pawn"
+      scale: 1
+      source: creation(prototypeId: "piece_white_pawn")
+    }
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_white_knight"
+      scale: 1
+      source: creation(prototypeId: "piece_white_knight")
+    }
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_white_bishop"
+      scale: 1
+      source: creation(prototypeId: "piece_white_bishop")
+    }
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_white_rook"
+      scale: 1
+      source: creation(prototypeId: "piece_white_rook")
+    }
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_white_queen"
+      scale: 1
+      source: creation(prototypeId: "piece_white_queen")
+    }
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_white_king"
+      scale: 1
+      source: creation(prototypeId: "piece_white_king")
+    }
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_black_pawn"
+      scale: 1
+      source: creation(prototypeId: "piece_black_pawn")
+    }
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_black_knight"
+      scale: 1
+      source: creation(prototypeId: "piece_black_knight")
+    }
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_black_bishop"
+      scale: 1
+      source: creation(prototypeId: "piece_black_bishop")
+    }
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_black_rook"
+      scale: 1
+      source: creation(prototypeId: "piece_black_rook")
+    }
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_black_queen"
+      scale: 1
+      source: creation(prototypeId: "piece_black_queen")
+    }
+    {
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+      name: "piece_black_king"
+      scale: 1
+      source: creation(prototypeId: "piece_black_king")
+    }
+  ]
+}
 
 let boardCoords = [-0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7]
 let backRankTypes = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"]
@@ -983,5 +1162,178 @@ state {
     slot boardChanged: Int = 0 bounds(minimum: 0, maximum: 64)
 
     slot boardCollisions: Int = 0 bounds(minimum: 0, maximum: 64)
+  }
+}
+
+test "pieces settle and derive initial board cells" {
+  when {
+    ticks 400
+  }
+  expect {
+    pieceCell[piece12] == 12
+    pieceCode[piece12] == 1
+  }
+}
+
+test "e2e4 records legal" {
+  when {
+    ticks 400
+    seat1: body.pose -7.9 1.3 11.9 0 0 0 27
+    ticks 400
+  }
+  expect {
+    verdict == 1
+    pieceCell[piece12] == 28
+    turn == 1
+  }
+}
+
+test "illegal knight move records illegal then legal succeeds" {
+  when {
+    ticks 400
+    seat1: body.pose -7.5 1.3 11.7 0 0 0 33
+    ticks 400
+    seat1: body.pose -7.7 1.3 11.7 0 0 0 33
+    ticks 400
+  }
+  expect {
+    verdict == 1
+    illegalCount == 1
+    pieceCell[piece6] == 21
+    turn == 1
+  }
+}
+
+test "king step records legal and multi step refused" {
+  when {
+    seat1: body.pose -7.1 1.3 11.7 0 0 0 27
+    ticks 400
+    seat1: body.pose -7.9 1.3 11.7 0 0 0 35
+    ticks 400
+    seat1: body.pose -7.9 1.3 11.5 0 0 0 35
+    ticks 400
+  }
+  expect {
+    verdict == 1
+    illegalCount == 1
+    move[kind] == 1
+    move[mover] == 6
+    pieceCell[piece4] == 12
+    turn == 1
+  }
+}
+
+test "knight capture records move kind two" {
+  when {
+    seat1: body.pose -8.3 1.3 11.7 0 0 0 23
+    ticks 400
+    seat1: body.pose -7.1 1.3 11.7 0 0 0 23
+    seat1: body.pose -8.3 1.3 11.7 0 0 0 38
+    ticks 400
+  }
+  expect {
+    verdict == 1
+    move[kind] == 2
+    move[captured] == -1
+    pieceCell[piece1] == 18
+    pieceCell[piece16] == -1
+    turn == 1
+  }
+}
+
+test "pawn diagonal capture records legal" {
+  when {
+    seat1: body.pose -8.1 1.3 11.7 0 0 0 20
+    ticks 400
+    seat1: body.pose -7.1 1.3 11.7 0 0 0 20
+    seat1: body.pose -8.1 1.3 11.7 0 0 0 27
+    ticks 400
+  }
+  expect {
+    verdict == 1
+    move[kind] == 2
+    move[captured] == -1
+    move[mover] == 1
+    pieceCell[piece12] == 19
+    pieceCell[piece19] == -1
+    turn == 1
+  }
+}
+
+test "queen diagonal slide records legal" {
+  when {
+    seat1: body.pose -7.1 1.3 11.7 0 0 0 27
+    ticks 400
+    seat1: body.pose -7.3 1.3 12.1 0 0 0 36
+    ticks 400
+  }
+  expect {
+    verdict == 1
+    move[kind] == 1
+    move[mover] == 5
+    pieceCell[piece3] == 39
+    turn == 1
+  }
+}
+
+test "white kingside castle records legal" {
+  when {
+    seat1: body.pose -7.1 1.3 11.3 0 0 0 34
+    seat1: body.pose -7.1 1.3 11.5 0 0 0 33
+    ticks 400
+    seat1: body.pose -7.1 1.3 11.7 0 0 0 32
+    ticks 400
+    seat1: body.pose -7.3 1.3 11.3 0 0 0 32
+    ticks 400
+    seat1: body.pose -7.5 1.3 11.3 0 0 0 35
+    seat1: body.pose -7.7 1.3 11.3 0 0 0 32
+    ticks 400
+  }
+  expect {
+    verdict == 1
+    move[kind] == 4
+    move[mover] == 6
+    move[from] == 4
+    move[to] == 6
+    pieceCell[piece4] == 6
+    pieceCell[piece7] == 5
+    castleRights == 3
+    turn == 1
+  }
+}
+
+test "castle cannot cross knight attack" {
+  when {
+    seat1: body.pose -7.1 1.3 11.3 0 0 0 34
+    seat1: body.pose -7.1 1.3 11.5 0 0 0 33
+    seat1: body.pose -7.5 1.3 11.7 0 0 0 9
+    ticks 400
+    seat1: body.pose -7.5 1.3 11.3 0 0 0 35
+    seat1: body.pose -7.7 1.3 11.3 0 0 0 32
+    ticks 400
+  }
+  expect {
+    castleTransitAttacked[wk] == 1
+    verdict == 0
+    turn == 0
+    castleRights == 0
+  }
+}
+
+test "castle safe when knight does not attack transit" {
+  when {
+    seat1: body.pose -7.1 1.3 11.3 0 0 0 34
+    seat1: body.pose -7.1 1.3 11.5 0 0 0 33
+    seat1: body.pose -8.5 1.3 11.7 0 0 0 9
+    ticks 400
+    seat1: body.pose -7.5 1.3 11.3 0 0 0 35
+    seat1: body.pose -7.7 1.3 11.3 0 0 0 32
+    ticks 400
+  }
+  expect {
+    castleTransitAttacked[wk] == 0
+    verdict == 1
+    turn == 1
+    castleRights == 3
   }
 }

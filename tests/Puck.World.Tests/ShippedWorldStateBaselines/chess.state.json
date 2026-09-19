@@ -1,11 +1,11 @@
 {
   "schema": "puck.world.state-export.v1",
   "tick": 600,
-  "engineTick": 1008000,
+  "engineTick": 504000,
   "hashes": {
-    "authoritative": "69b8b68b30a4bdad",
-    "capture": "5431996f2b3bcf39",
-    "pose": "cae81dceb2293680",
+    "authoritative": "8084603b6c585865",
+    "capture": "f857ec0292e04805",
+    "pose": "558cf1c8b5342340",
     "world": "603c3a64aa69b7e4"
   },
   "state": {

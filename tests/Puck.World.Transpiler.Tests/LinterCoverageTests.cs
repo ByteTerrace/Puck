@@ -130,7 +130,7 @@ public class LinterCoverageTests {
     public void ModuleWithNoSchemaAndNoBasisIsNotARoot() {
         var fullPath = Path.Combine(
             path1: ShippedWorlds.FindDirectory(),
-            path2: "games/chess.world.json"
+            path2: "games/dominoes.world.json"
         );
 
         var document = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path: fullPath))!.AsObject();

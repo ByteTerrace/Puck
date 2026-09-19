@@ -3,10 +3,10 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Checks the shipped board programs against coordinate arithmetic, independent of their bitboards,
-/// direction names, shifts, and attack queries. The physical chess import is covered by ChessModuleImportLawTests.</summary>
+/// direction names, shifts, and attack queries. The physical chess import is covered by <c>games/chess.puck</c>.</summary>
 public sealed class AuthoredBoardRulesLawTests {
     private static readonly WorldDefinition Garden = AuthoredGameFixtures.Program(module: "tictactoe");
-    private static readonly WorldDefinition ChessModule = Load(relativePath: "tests/Puck.World.Tests/Fixtures/minimal-chess-host.world.json");
+    private static readonly WorldDefinition ChessModule = Load(relativePath: "src/Puck.World/Assets/worlds/games/chess.world.json");
 
     private static bool Attacked(long[] board, int king, int attackerSign) {
         if (king < 0) { return false; }

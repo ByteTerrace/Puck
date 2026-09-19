@@ -65,10 +65,12 @@ public sealed class ArenaBoardAnchorLawTests {
             condition: WorldDefinitionLoader.TryLoadFile(
                 path: Path.Combine(
                     directory!.FullName,
-                    "tests",
-                    "Puck.World.Tests",
-                    "Fixtures",
-                    "minimal-chess-host.world.json"
+                    "src",
+                    "Puck.World",
+                    "Assets",
+                    "worlds",
+                    "games",
+                    "chess.world.json"
                 ),
                 definition: out var loaded,
                 reason: out var reason

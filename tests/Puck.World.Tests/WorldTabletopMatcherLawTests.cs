@@ -3,7 +3,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Exercises the shipped forward judge with complete observations, independently constructed moves,
-/// and adversarial changes outside their footprints. Physical sampling is covered by ChessModuleImportLawTests.</summary>
+/// and adversarial changes outside their footprints. Physical sampling is covered by <c>games/chess.puck</c>.</summary>
 public sealed class WorldTabletopMatcherLawTests {
     private static readonly WorldDefinition Garden = Load();
 
@@ -164,7 +164,7 @@ public sealed class WorldTabletopMatcherLawTests {
             condition: WorldDefinitionLoader.TryLoadFile(
                 Path.Combine(
                     path1: root!.FullName,
-                    path2: "tests/Puck.World.Tests/Fixtures/minimal-chess-host.world.json"
+                    path2: "src/Puck.World/Assets/worlds/games/chess.world.json"
                 ),
                 out var result,
                 out var reason
