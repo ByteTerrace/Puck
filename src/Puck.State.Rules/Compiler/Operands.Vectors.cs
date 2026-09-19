@@ -135,7 +135,7 @@ public sealed class VectorCallOperand : RuleOperand {
         Right.CollectReads(into: into);
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => (Operation switch {
+    public override RuleWork Cost(IRuleCostContext context) => (Operation switch {
         ExpressionOp.Similarity => (2L + (3L * Dimensions)),
         _ => (2L + Dimensions),
     });

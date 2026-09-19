@@ -77,7 +77,7 @@ public sealed class WorldPlacementEffectCostLawTests {
         ? WorldPlacementEffectCost.Of(
             definition: definition,
             placement: placement
-        )
+        ).Units
         : WorldPlacementEffectCost.DocumentCost);
 
     [Fact]

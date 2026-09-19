@@ -10,13 +10,13 @@ namespace Puck.World;
 /// <param name="RuleRows">The rule count.</param>
 /// <param name="InteractionRows">The interaction count.</param>
 /// <param name="EvaluationSlots">The evaluations per tick, every multiplier summed.</param>
-/// <param name="WorkUnitsPerTick">The worst-case work units per tick.</param>
+/// <param name="WorkUnitsPerTick">The worst-case work units per tick, or why no number bounds them.</param>
 /// <param name="FlockAffinityWorkUnitsPerTick">The flock-affinity share.</param>
 /// <param name="DecisionImagePointsPerTick">The pose-image points a decision perception pass copies.</param>
 /// <param name="DecisionGridBuildsPerTick">The grids a decision perception pass builds, one per distinct cell width.</param>
 /// <param name="DecisionGridPointsPerTick">The points those grids group.</param>
-public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionRows, long EvaluationSlots, long WorkUnitsPerTick,
-    long FlockAffinityWorkUnitsPerTick = 0, int DecisionImagePointsPerTick = 0, int DecisionGridBuildsPerTick = 0, long DecisionGridPointsPerTick = 0) {
+public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionRows, long EvaluationSlots, RuleWork WorkUnitsPerTick,
+    RuleWork FlockAffinityWorkUnitsPerTick = default, int DecisionImagePointsPerTick = 0, int DecisionGridBuildsPerTick = 0, long DecisionGridPointsPerTick = 0) {
     internal static IReadOnlyList<(string Rule, string Cell)> ContradictoryGates(CompiledRule[] rules, StateCatalog catalog) {
         var result = new List<(string, string)>();
 
@@ -43,7 +43,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         );
 
         contributors.Sort(comparison: static (left, right) => {
-            var byWork = right.WorkUnits.CompareTo(value: left.WorkUnits);
+            var byWork = RuleWork.Compare(
+                left: right.WorkUnits,
+                right: left.WorkUnits
+            );
 
             return ((byWork != 0)
                 ? byWork
@@ -93,26 +96,15 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             : definition.Population.Capacity
         );
         var gridPoints = (((long)definition.Population.Capacity) * decisionScales.Count);
-        // All policies may reconsider together. A pose image is shared; each grid copies and groups its points.
-        var perceptionCost = RuleWorkBudget.SaturatingAdd(
-            left: imagePoints,
-            right: RuleWorkBudget.SaturatingMultiply(
-                left: 2,
-                right: gridPoints
-            )
-        );
+        // All policies may reconsider together. The pose image is shared and visits every slot once; each distinct
+        // grid keys its points, sorts them, and groups the sorted run into cells.
+        var perceptionCost = (imagePoints + (decisionScales.Count * ((2L * definition.Population.Capacity) + RuleWorkBudget.IntrosortWork(count: definition.Population.Capacity))));
 
         return new WorldRuleWorkBudget(
             RuleRows: rules.Length,
             InteractionRows: interactions.Length,
             EvaluationSlots: slots,
-            WorkUnitsPerTick: RuleWorkBudget.SaturatingAdd(
-                left: RuleWorkBudget.SaturatingAdd(
-                    left: work,
-                    right: flockCost
-                ),
-                right: perceptionCost
-            ),
+            WorkUnitsPerTick: ((work + flockCost) + perceptionCost),
             FlockAffinityWorkUnitsPerTick: flockCost,
             DecisionImagePointsPerTick: imagePoints,
             DecisionGridBuildsPerTick: decisionScales.Count,
@@ -128,8 +120,8 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         return $"region '{placementId}' {terms} = {bound}";
     }
-    private static long FlockAffinityCost(WorldDefinition definition, WorldFactsCompileContext context) {
-        var maximum = 0L;
+    private static RuleWork FlockAffinityCost(WorldDefinition definition, WorldFactsCompileContext context) {
+        var maximum = RuleWork.Zero;
 
         foreach (var kit in definition.Kits) {
             foreach (var producer in kit.Producers.Values) {
@@ -140,21 +132,15 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                     profile: profile
                 );
 
-                maximum = Math.Max(
-                    val1: maximum,
-                    val2: RuleWorkBudget.SaturatingMultiply(
-                        left: profile.MaxNeighbors,
-                        right: compiled.WorkUnitsPerNeighbor
-                    )
+                maximum = RuleWork.Max(
+                    left: maximum,
+                    right: (profile.MaxNeighbors * compiled.WorkUnitsPerNeighbor)
                 );
             }
         }
 
         // Initial samples and explicit producer changes may align every observer, regardless of normal cadence.
-        return RuleWorkBudget.SaturatingMultiply(
-            left: definition.Population.Capacity,
-            right: maximum
-        );
+        return (definition.Population.Capacity * maximum);
     }
     // FromCreation carries no statically-derivable footprint; the caller falls back to the population capacity for it.
     private static float? FootprintRadius(WorldCollider? collider) => collider switch {
@@ -221,24 +207,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     // per body; nothing here needs to special-case that shape.
     private static long Multiplier(WorldDefinition definition, WorldFactsCompileContext context, CompiledRule rule) {
         if ((rule as CompiledWorldFactsRule)?.Interaction is { } interaction) {
-            var others = Math.Max(
-                val1: 0,
-                val2: (definition.Population.Capacity - 1)
-            );
-
-            return (interaction.CoOccurrence switch {
-                WorldInteractionCoOccurrence.Distance => (((long)definition.Population.Capacity) * ((interaction.Neighbours > 0)
-                ? Math.Min(
-                    val1: interaction.Neighbours,
-                    val2: others
-                )
-                : others)),
-                WorldInteractionCoOccurrence.Region => RegionCapacityBound(
-                definition: definition,
-                placementId: interaction.Right
-            ).Bound,
-                _ => definition.Population.Capacity,
-            });
+            return WorldInteractionBound.Of(
+                context: context,
+                interaction: interaction
+            ).Evaluations;
         }
 
         return RuleWorkBudget.ForEachCount(
@@ -254,7 +226,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     /// <see cref="SmallestKitFootprintRadius"/> cannot answer for it — the packing argument holds only among kits
     /// that mutually exclude each other, and a property (the tag a region interaction's <c>left</c> names) carries
     /// no static link to a kit, so any body of any kit could be the one standing in the region.</summary>
-    private static (long Bound, string Terms) RegionCapacityBound(WorldDefinition definition, string placementId) {
+    internal static (long Bound, string Terms) RegionCapacityBound(WorldDefinition definition, string placementId) {
         var capacity = ((long)definition.Population.Capacity);
         var region = WorldDefinitionRows.FindPlacement(
             placements: definition.Placements,
@@ -335,24 +307,21 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: rule);
 
-        var capacity = definition.Population.Capacity;
-
         if ((rule as CompiledWorldFactsRule)?.Interaction is { } interaction) {
-            var others = Math.Max(
-                val1: 0,
-                val2: (capacity - 1)
+            var bound = WorldInteractionBound.Of(
+                context: WorldFactsCompiler.Context(definition: definition),
+                interaction: interaction
             );
 
-            return (interaction.CoOccurrence switch {
-                WorldInteractionCoOccurrence.Distance => $"distance carrier pairs: population {capacity} x min(neighbours {((interaction.Neighbours > 0)
-                ? interaction.Neighbours.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
-                : "unbounded")}, others {others})",
-                WorldInteractionCoOccurrence.Region => DescribeRegionMultiplier(
-                definition: definition,
-                placementId: interaction.Right
-            ),
-                _ => $"population capacity {capacity}",
-            });
+            return ((interaction.CoOccurrence == WorldInteractionCoOccurrence.Region)
+                ? $"{DescribeRegionMultiplier(
+                    definition: definition,
+                    placementId: interaction.Right
+                )}, of {bound.Lefts} left carriers"
+                : $"distance: {bound.Lefts} left carriers x min(neighbours {((interaction.Neighbours > 0)
+                    ? interaction.Neighbours.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
+                    : "unbounded")}, {bound.Rights} right carriers, every other body) = {bound.Evaluations} evaluations, after {bound.Lefts} x {bound.Rights} distance tests charged as setup"
+            );
         }
 
         return ((rule.ForEachOrdinal >= 0)
@@ -364,7 +333,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         );
     }
     /// <summary>Returns the work units an expression costs against a document.</summary>
-    public static long ExpressionCost(CompiledExpressionToken[] tokens, WorldDefinition definition) => RuleWorkBudget.ExpressionCost(
+    public static RuleWork ExpressionCost(CompiledExpressionToken[] tokens, WorldDefinition definition) => RuleWorkBudget.ExpressionCost(
         tokens: tokens,
         context: WorldFactsCompiler.Context(definition: definition)
     );

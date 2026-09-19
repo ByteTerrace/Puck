@@ -1894,12 +1894,18 @@ Perception scratch and range-level grids are reused; `world.decisions` exposes
 image size, grid builds, inspections, score evaluations, sight tests, and limited
 queries. `world.budget` charges candidate gates and expanded scores, even when
 ordinary cadence would usually spread them across ticks. It also charges one
-shared pose-image visit per population slot and two point visits per grid
-rebuild (copying and grouping). The cost sheet separately reports the maximum
-poses copied, distinct range-scale grids rebuilt, and total grid points sorted.
-Those ceilings assume simultaneous reconsideration; sharing a range scale does
-not charge a new grid per option or observer. Structural work units are not a
-CPU-time or sort-comparison bound: whole-frame performance still needs measurement.
+shared pose-image visit per population slot and, per grid rebuild, two point
+visits (keying and grouping) plus the sort of the keyed points. A neighbours
+option is charged the 27 cell lookups around its observer, the query's walk and
+retained-neighbour heap over the candidate budget, a perception test and the
+option's gate per candidate, a score per retained candidate, and the sort of the
+retained choices. A line-of-sight test is a flat weight: the march behind it
+walks the baked field's cells, a count the document does not carry. The cost
+sheet separately reports the maximum poses copied, distinct range-scale grids
+rebuilt, and total grid points sorted. Those ceilings assume simultaneous
+reconsideration; sharing a range scale does not charge a new grid per option or
+observer. Work units are heuristic weights, not CPU time: whole-frame
+performance still needs measurement.
 
 `world.decisions` reports choices, last evaluated raw scores, timers, and draw
 counts. `world.budget` includes all option gates/scores, the current-option and
@@ -2263,24 +2269,33 @@ sphere to the lattice, clamps every result to the field envelope, and caps its
 radius at eight cells, bounding one firing to at most 4,913 candidate visits.
 
 Rule execution admits at most 64 top-level effects per rule/interaction and
-2,000,000 statically derived heuristic work units per tick. There is no separate
-ordinary-rule count ceiling. The cost includes gate/expression operands, keyed scans, `forEach`, the
-quadratic worst case of distance interactions, mutation rebuild weights, nested
-transaction preflight, field-paint candidate visits, and flock-affinity expressions
-for every body's worst-case simultaneous initial sample. Validation refuses a
-document above the aggregate ceiling, naming the three costliest lines with
-their multipliers; `world.budget` prints the current rule,
+4,000,000 statically derived heuristic work units per tick. There is no separate
+ordinary-rule count ceiling. A line has three parts: setup, paid once per sweep;
+check, paid once per evaluation whether or not the gate holds; and firing, paid
+once per evaluation whose effects run. The cost includes gate/expression
+operands, keyed scans, the `forEach` key snapshot, mutation rebuild weights,
+nested transaction preflight, the insertion sort a reordering transform runs,
+field-paint candidate visits, and flock-affinity expressions for every body's
+worst-case simultaneous initial sample. A bound is a number, an operation nothing
+prices, or an overflow; the last two survive every sum and product, fit no
+ceiling, and are refused by what they are rather than admitted as a number.
+Validation refuses a document above the aggregate ceiling, naming the three
+costliest lines with their multipliers; `world.budget` prints the current rule,
 interaction, evaluation-slot, and work-unit totals, and `world.budget.rules
-[top]` lists every rule's and interaction's line—multiplier, unit cost,
-total, and the cell its firing effects price exclusively under—costliest first,
-so the total is traceable to the rows that make it up. All candidate checks sum
-even when firing effects are mutually exclusive. A `forEach` line's multiplier
-is its row's capacity: a row left at the default room prices at 128 cells, a
-registry-sized row authors the capacity it needs. Interaction `range` is an
-exact JSON decimal lowered directly to fixed point, with no binary32 round trip.
-A distance interaction's `neighbours` (1..64) evaluates at most that many right
-carriers per left carrier—the nearest first, ties by the lower body index—
-and its line prices pairs at that budget instead of the population squared.
+[top]` lists every rule's and interaction's line—multiplier, setup, check,
+firing, total, and the cell its firing effects price exclusively under—costliest
+first, so the total is traceable to the rows that make it up. All candidate
+checks sum even when firing effects are mutually exclusive. A `forEach` line's
+multiplier is its row's capacity: a row left at the default room prices at 128
+cells, a registry-sized row authors the capacity it needs. Interaction `range`
+is an exact JSON decimal lowered directly to fixed point, with no binary32 round
+trip. A distance interaction's setup gathers both carrier sets (a scan of each
+tag row and a sort of its carriers) and tests every left against every right;
+a carrier set is no larger than its tag row or the population. Its `neighbours`
+(1..64) evaluates at most that many right carriers per left carrier—the nearest
+first, ties by the lower body index—so the limit bounds the evaluations and adds
+the selection it makes, and never removes a distance test.
+`world.budget.rules --why <interaction>` prints those terms.
 
 The [portable costing brief](../../docs/plans/abstract-machine-costing.md)
 defines the proposed replacement. Its cycle schedule remains uncalibrated.

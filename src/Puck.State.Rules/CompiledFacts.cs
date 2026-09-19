@@ -16,7 +16,7 @@ public interface IRuleOperand : ICompiledFact {
     /// <summary>Returns the conservative work units one read costs.</summary>
     /// <param name="context">The context the operand was priced against.</param>
     /// <returns>The work units.</returns>
-    long Cost(IRuleCostContext context);
+    RuleWork Cost(IRuleCostContext context);
     /// <summary>Reads the operand's live fact for the evaluation in flight.</summary>
     /// <param name="reader">The evaluation in flight, which is also the host serving every facet it advertises.</param>
     /// <returns>The fact.</returns>
@@ -38,7 +38,7 @@ public abstract class RuleOperand : IRuleOperand {
     /// <inheritdoc/>
     public virtual void CollectReads(List<CellAccess> into) { }
     /// <inheritdoc/>
-    public abstract long Cost(IRuleCostContext context);
+    public abstract RuleWork Cost(IRuleCostContext context);
     /// <inheritdoc/>
     public abstract RuleFact Read(IStateReader reader);
 }
@@ -131,7 +131,7 @@ public interface IRuleEffect : ICompiledFact, IEffectNeeds {
     /// <summary>Returns the conservative work units one firing costs.</summary>
     /// <param name="context">The context the effect was priced against.</param>
     /// <returns>The work units.</returns>
-    long Cost(IRuleCostContext context);
+    RuleWork Cost(IRuleCostContext context);
     /// <summary>Fires an arm the evaluator does not apply itself. The evaluator owns the mutation door for the
     /// library's own cases and never calls this for one; what reaches here is a document project's registered
     /// effect, which bridges to its own facet-typed firing, or a library case whose kernel lives outside this
@@ -165,7 +165,7 @@ public abstract class RuleEffect : IRuleEffect {
     /// <inheritdoc/>
     public virtual void CollectWrites(List<CellAccess> into) { }
     /// <inheritdoc/>
-    public abstract long Cost(IRuleCostContext context);
+    public abstract RuleWork Cost(IRuleCostContext context);
     /// <summary>Fires an arm the evaluator does not apply itself. The default hands the effect to the host, which
     /// refuses by name unless it serves that arm.</summary>
     /// <param name="host">The mutation door.</param>

@@ -556,6 +556,30 @@ execution traces on exhaustively enumerated small worlds. The specification is
 enumerated worlds; the adversarial cases in costing §8; equal reports native
 and WASM.
 
+**Status:** the accounting is corrected; search is not yet bounded. A bound is
+a `RuleWork`: a number of heuristic work units, an operation nothing prices, or
+an overflow, and the last two survive every composition and fit no ceiling. A
+line is setup, check, and firing, with the exclusion trie over firing work
+alone. An interaction's sweep (carrier gathering, every left against every
+right, nearest-neighbour selection) is setup, and its neighbour limit bounds
+only the evaluations; a decision is charged its cell lookups, query walk, heap,
+per-candidate perception and gate, retained scores, and sorts; a reordering
+transform is charged the insertion sort it runs; a transaction is charged the
+costlier of its two paths. `WorkSheetTraceLawTests` enumerates small worlds and
+holds the evaluator's own trace under the admitted sheet.
+
+Owed: search still spends `leftover / JudgeCost` judge runs per step. Its walk
+charges the budget only when a judge runs, so candidates that resolve to nothing
+are inspected for free, and a chance node, at the root or inside the walk,
+evaluates its whole subtree inside one step. Costing §6 is the work: a
+per-job allowance in work units, every unit reserved before it runs, and chance
+and playouts resumed through continuation state the checkpoint carries. A
+line-of-sight test is a flat weight, because the march behind it walks the baked
+field's cells and the document does not carry that count; its traversal bound
+needs the baked artifact's cell size in the cost context. No document can spell
+an unpriced operation or an overflowing count, so admission's refusal of one is
+held at the sheet, not through a world.
+
 ### Embeddings (done)
 
 **Owns:** `src/Puck.Embeddings`, `EmbeddingLock`, `EmbedCommand`,

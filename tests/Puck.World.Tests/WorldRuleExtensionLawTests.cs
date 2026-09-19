@@ -526,7 +526,7 @@ public sealed class WorldRuleExtensionLawTests {
 
         static WorldDefinition With(int? neighbours, WorldInteractionCoOccurrence coOccurrence = WorldInteractionCoOccurrence.Distance) => Document(
             state: [Keyed(
-                    capacity: 2,
+                    capacity: 64,
                     cells: [],
                     name: Property
                 )],
@@ -551,12 +551,26 @@ public sealed class WorldRuleExtensionLawTests {
             actual: budgeted.Interaction!.Value.Neighbours
         );
         var capacity = With(neighbours: 1).Population.Capacity;
-        var every = WorldRuleWorkBudget.Measure(definition: With(neighbours: null)).WorkUnitsPerTick;
-        var one = WorldRuleWorkBudget.Measure(definition: With(neighbours: 1)).WorkUnitsPerTick;
-        // Every pair prices at capacity·(capacity−1); one neighbour per carrier prices at capacity·1.
+        var every = Assert.Single(collection: WorldRuleWorkBudget.Contributors(definition: With(neighbours: null)));
+        var one = Assert.Single(collection: WorldRuleWorkBudget.Contributors(definition: With(neighbours: 1)));
+
+        // Every carrier evaluates every other carrier, or the one the limit keeps. The limit removes no distance
+        // test, so it is the evaluations it bounds and never the sweep.
+        Assert.True(condition: (capacity > 2));
+        Assert.Equal(
+            expected: (((long)capacity) * (capacity - 1L)),
+            actual: every.Multiplier
+        );
+        Assert.Equal(
+            expected: capacity,
+            actual: one.Multiplier
+        );
         Assert.True(
-            condition: ((capacity > 2) && (one < every)),
-            userMessage: $"capacity {capacity}: every={every} one={one}"
+            condition: (RuleWork.Compare(
+                left: every.Cost.Setup,
+                right: one.Cost.Setup
+            ) < 0),
+            userMessage: $"every={every.Cost.Setup} one={one.Cost.Setup}"
         );
 
         Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAllInteractions(definition: With(neighbours: 0)));
@@ -592,7 +606,7 @@ public sealed class WorldRuleExtensionLawTests {
 
         var budget = WorldRuleWorkBudget.Measure(definition: definition);
 
-        Assert.True(condition: (budget.WorkUnitsPerTick > RuleCapacity.MaxWorkUnitsPerTick));
+        Assert.False(condition: budget.WorkUnitsPerTick.Fits(ceiling: RuleCapacity.MaxWorkUnitsPerTick));
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: definition,
             reason: out var reason

@@ -53,7 +53,7 @@ public readonly record struct CompiledValueSource(long RawValue = 0L, IRuleOpera
     /// <param name="context">The context the source was priced against.</param>
     /// <param name="kind">The kind an expression source is evaluated in.</param>
     /// <returns>The work units.</returns>
-    public long Cost(IRuleCostContext context, CellKind kind = CellKind.Fixed) {
+    public RuleWork Cost(IRuleCostContext context, CellKind kind = CellKind.Fixed) {
         if (Operand is { } operand) {
             return operand.Cost(context: context);
         }

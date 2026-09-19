@@ -74,7 +74,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
             Comparison: ActionStateComparison.Equal,
             Value: value
         );
-    private static long Work(params WorldRule[] rules) => WorldRuleWorkBudget.Measure(definition: Document(rules)).WorkUnitsPerTick;
+    private static long Work(params WorldRule[] rules) => WorldRuleWorkBudget.Measure(definition: Document(rules)).WorkUnitsPerTick.Units;
 
     [Fact]
     public void AFurtherPinnedCellNestsUnderTheFirstSoSubphasesAreExclusiveToo() {
@@ -402,13 +402,13 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
         var lineA = WorldRuleWorkBudget.Contributors(definition: Document(a)).Single();
         var checkA = lineA.CheckUnits;
         var firingA = lineA.FiringUnits;
-        var one = WorldRuleWorkBudget.Measure(definition: Document(a)).WorkUnitsPerTick;
+        var one = WorldRuleWorkBudget.Measure(definition: Document(a)).WorkUnitsPerTick.Units;
 
         var exclusive = WorldRuleWorkBudget.Measure(definition: Document(
             a,
             b,
             c
-        )).WorkUnitsPerTick;
+        )).WorkUnitsPerTick.Units;
         // All checks sum, but exclusive firing takes the maximum rather than summing.
         Assert.Equal(
             actual: exclusive,
@@ -421,7 +421,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
                 "b",
                 PhaseIs(value: 0)
             )
-        )).WorkUnitsPerTick;
+        )).WorkUnitsPerTick.Units;
 
         Assert.Equal(
             actual: shared,
@@ -431,14 +431,14 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
         var alone = WorldRuleWorkBudget.Measure(definition: Document(Rule(
             "b",
             null
-        ))).WorkUnitsPerTick;
+        ))).WorkUnitsPerTick.Units;
         var ungated = WorldRuleWorkBudget.Measure(definition: Document(
             a,
             Rule(
                 "b",
                 null
             )
-        )).WorkUnitsPerTick;
+        )).WorkUnitsPerTick.Units;
 
         Assert.Equal(
             actual: ungated,
@@ -462,7 +462,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
                         Value: 9m
                     )])
             )
-        )).WorkUnitsPerTick;
+        )).WorkUnitsPerTick.Units;
 
         Assert.True(condition: (conjoined < (2 * one)));
     }

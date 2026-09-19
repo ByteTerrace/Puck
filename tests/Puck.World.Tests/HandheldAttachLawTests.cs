@@ -382,9 +382,9 @@ public sealed class RealArcadeModuleLawTests {
     public void TheIslandsRuleWorkStaysUnderTheCeilingWithHeadroomAfterTheHandheldShips() {
         var budget = WorldRuleWorkBudget.Measure(definition: AuthoredGameFixtures.Nexus);
 
-        Assert.True(condition: (budget.WorkUnitsPerTick < RuleCapacity.MaxWorkUnitsPerTick));
+        Assert.True(condition: (budget.WorkUnitsPerTick.Units < RuleCapacity.MaxWorkUnitsPerTick));
         // The headroom is a live measurement, not a knob; a future authoring change is free to spend it, but this
         // pins that the pair did not eat it all.
-        Assert.True(condition: ((RuleCapacity.MaxWorkUnitsPerTick - budget.WorkUnitsPerTick) > 10_000L));
+        Assert.True(condition: ((RuleCapacity.MaxWorkUnitsPerTick - budget.WorkUnitsPerTick.Units) > 10_000L));
     }
 }

@@ -63,7 +63,7 @@ public sealed class TopCardOperand : OperandFact<ICardFacts> {
     public TopCardOperand() : base(valueKind: CellKind.Int) { }
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, ICardFacts facet) => RuleFact.Finite(
         kind: CellKind.Int,
@@ -76,7 +76,7 @@ public sealed class TemperatureOperand : OperandFact<IWeatherFacts> {
     public TemperatureOperand() : base(valueKind: CellKind.Int) { }
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWeatherFacts facet) => RuleFact.Finite(
         kind: CellKind.Int,
@@ -97,7 +97,7 @@ public sealed class SaveCardEffect : EffectFact<ICardFacts> {
     public override EffectNeeds Needs => EffectNeeds.Irreversible;
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override bool TryFire(IEffectHost host, ICardFacts facet, in EffectFiring firing, out EffectRefusal refusal) {
         refusal = EffectRefusal.None;
@@ -114,7 +114,7 @@ public sealed class StampCardEffect : EffectFact<ICardFacts> {
     public override EffectNeeds Needs => EffectNeeds.ReadsTick;
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override bool TryFire(IEffectHost host, ICardFacts facet, in EffectFiring firing, out EffectRefusal refusal) {
         refusal = EffectRefusal.None;

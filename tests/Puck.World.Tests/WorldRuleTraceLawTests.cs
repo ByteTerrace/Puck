@@ -300,7 +300,7 @@ public sealed class WorldRuleTraceLawTests {
             budget[0]
         );
         Assert.StartsWith(
-            "[world.budget.rules strike x1 unit=",
+            "[world.budget.rules strike x1 setup=0 check=",
             budget[1],
             StringComparison.Ordinal
         );

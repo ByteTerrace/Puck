@@ -237,12 +237,12 @@ public sealed class ExpressionIrLawTests {
             context: reader.Context,
             kind: CellKind.Int,
             tokens: reader.Compile(text: "count(scores, s -> s > 0)")
-        );
+        ).Units;
         var deeper = Rules.RuleWorkBudget.ExpressionCost(
             context: reader.Context,
             kind: CellKind.Int,
             tokens: reader.Compile(text: "count(scores, s -> s * s * s > 0)")
-        );
+        ).Units;
 
         Assert.True(
             condition: (deeper > one),
@@ -271,7 +271,7 @@ public sealed class ExpressionIrLawTests {
                 context: reader.Context,
                 kind: CellKind.Int,
                 tokens: reader.Compile(text: "count(scores, s -> s * s > 0)")
-            );
+            ).Units;
         }
     }
     // A predicate fold's body computes in its member's kind, so a Fixed family folds like an Int one.

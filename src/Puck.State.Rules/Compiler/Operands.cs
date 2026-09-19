@@ -48,7 +48,7 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
         );
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
@@ -110,7 +110,7 @@ public sealed class LocalOperand : RuleOperand {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
@@ -158,7 +158,7 @@ public sealed class TableOperand : RuleOperand {
         reference: KeyFrom
     );
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => (2L + System.Numerics.BitOperations.Log2(value: ((uint)Math.Max(
+    public override RuleWork Cost(IRuleCostContext context) => (2L + System.Numerics.BitOperations.Log2(value: ((uint)Math.Max(
         val1: Table.Count,
         val2: 1
     ))));
@@ -201,7 +201,7 @@ public sealed class TickOperand : RuleOperand {
     private TickOperand() : base(valueKind: CellKind.Int) { }
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
@@ -272,14 +272,12 @@ public sealed class ReductionOperand : RuleOperand {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => RuleWorkBudget.SaturatingMultiply(
-        left: ((RowFrom is { } live)
+    public override RuleWork Cost(IRuleCostContext context) => (((long)((RowFrom is { } live)
         ? live.SelectionCapacity
-        : Capacity),
-        right: ((Range is null)
-        ? 1L
-        : 3L)
-    );
+        : Capacity)) * RuleWork.Known(units: ((Range is null)
+            ? 1L
+            : 3L
+        )));
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
@@ -399,16 +397,14 @@ public sealed class HistoryOperand : RuleOperand {
         );
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => RuleWorkBudget.SaturatingAdd(
-        left: 1L,
-        right: ((AgeExpression is { } expression)
+    public override RuleWork Cost(IRuleCostContext context) => (1L + ((AgeExpression is { } expression)
         ? RuleWorkBudget.ExpressionCost(
             context: context,
             kind: CellKind.Int,
             tokens: expression
         )
-        : 0L)
-    );
+        : RuleWork.Zero
+    ));
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
@@ -461,7 +457,7 @@ public sealed class PhaseOperand : RuleOperand {
         ));
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
@@ -521,7 +517,7 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
         );
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => (Board.Topology.CellCount + Board.Visits);
+    public override RuleWork Cost(IRuleCostContext context) => (Board.Topology.CellCount + Board.Visits);
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
@@ -706,7 +702,7 @@ public sealed class SymmetryOperand : RuleOperand, IStateAddressedOperand {
         );
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

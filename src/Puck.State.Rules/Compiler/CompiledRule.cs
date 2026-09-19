@@ -101,27 +101,21 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
     /// locals, and the effects.</summary>
     /// <param name="context">The context the rule was priced against.</param>
     /// <returns>The work units.</returns>
-    public virtual long Cost(IRuleCostContext context) => CostBreakdown(context: context).Total;
+    public virtual RuleWork Cost(IRuleCostContext context) => CostBreakdown(context: context).Total;
     /// <summary>Returns the orthogonal cost components: per-rule setup, per-evaluation check, and per-firing effects.</summary>
     /// <param name="context">The context the rule was priced against.</param>
     /// <returns>The breakdown.</returns>
     public virtual RuleCost CostBreakdown(IRuleCostContext context) {
-        var check = RuleWorkBudget.SaturatingAdd(
-            left: 1L,
-            right: RuleWorkBudget.GateCost(
-                context: context,
-                tokens: Gate
-            )
-        );
+        var check = (1L + RuleWorkBudget.GateCost(
+            context: context,
+            tokens: Gate
+        ));
 
         foreach (var local in (Locals ?? [])) {
-            check = RuleWorkBudget.SaturatingAdd(
-                left: check,
-                right: RuleWorkBudget.ExpressionCost(
-                    context: context,
-                    kind: local.Kind,
-                    tokens: local.Expression
-                )
+            check += RuleWorkBudget.ExpressionCost(
+                context: context,
+                kind: local.Kind,
+                tokens: local.Expression
             );
         }
 
@@ -131,23 +125,21 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
                 context: context,
                 effects: Effects
             ),
-            Setup: 0L
+            Setup: RuleWorkBudget.ForEachSetup(
+                context: context,
+                rule: this
+            )
         );
     }
 }
 /// <summary>The orthogonal cost components of one compiled rule.</summary>
 /// <param name="Check">What one evaluation costs before any effect fires.</param>
 /// <param name="Effects">What one firing's effects cost.</param>
-/// <param name="Setup">What installing the rule costs once.</param>
-public readonly record struct RuleCost(long Check, long Effects, long Setup) {
-    /// <summary>Gets the saturating sum of the three components.</summary>
-    public long Total => RuleWorkBudget.SaturatingAdd(
-        left: Setup,
-        right: RuleWorkBudget.SaturatingAdd(
-            left: Check,
-            right: Effects
-        )
-    );
+/// <param name="Setup">What one sweep of the rule costs before its first evaluation, whatever the evaluations
+/// number.</param>
+public readonly record struct RuleCost(RuleWork Check, RuleWork Effects, RuleWork Setup) {
+    /// <summary>Gets the sum of the three components.</summary>
+    public RuleWork Total => ((Setup + Check) + Effects);
 
     /// <summary>Reports the unresolved conversion from heuristic work units to reference cycles.</summary>
     /// <returns>The unmodeled bound.</returns>

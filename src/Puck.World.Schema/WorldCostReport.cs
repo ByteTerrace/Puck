@@ -17,7 +17,8 @@ namespace Puck.World;
 /// <param name="Admitted">Whether the combined cost satisfies rate-based admission.</param>
 /// <param name="Contributors">The individual rule and interaction contributor lines, costliest first.</param>
 /// <param name="Issues">Any unmodeled operations or overflow issues encountered during analysis.</param>
-/// <param name="HeuristicWorkUnitsPerTick">The existing work-unit estimate; never interpreted as reference cycles.</param>
+/// <param name="HeuristicWorkUnitsPerTick">The heuristic work-unit bound, or why no number bounds it; never
+/// interpreted as reference cycles.</param>
 public sealed record WorldCostReport(
     string ModelId,
     string Scope,
@@ -31,7 +32,7 @@ public sealed record WorldCostReport(
     bool Admitted,
     IReadOnlyList<RuleWorkContributor> Contributors,
     IReadOnlyList<string> Issues,
-    long HeuristicWorkUnitsPerTick
+    RuleWork HeuristicWorkUnitsPerTick
 ) {
     /// <summary>Generates an analysis report for a structurally compilable world, including unresolved costs.</summary>
     /// <param name="definition">The world definition.</param>
@@ -60,6 +61,10 @@ public sealed record WorldCostReport(
 
         var recurringBound = CostBound.Unmodeled(reason: "Recurring authored work has heuristic weights, not calibrated portable cycle bounds.");
         var issues = new List<string> { recurringBound.Reason! };
+
+        if (!budget.WorkUnitsPerTick.IsKnown) {
+            issues.Add(item: $"Heuristic work per tick has no number: {budget.WorkUnitsPerTick}.");
+        }
 
         // Check search reservations
         var searchReservations = CostBound.Zero;

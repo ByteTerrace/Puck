@@ -43,7 +43,7 @@ public sealed class WorldPopulationOperand : WorldFactOperand {
     private WorldPopulationOperand() : base(valueKind: CellKind.Int) { }
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -60,7 +60,7 @@ public sealed class WorldPhysicsQuiescentOperand : WorldFactOperand {
     private WorldPhysicsQuiescentOperand() : base(valueKind: CellKind.Bool) { }
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => PopulationCapacity(context: context);
+    public override RuleWork Cost(IRuleCostContext context) => PopulationCapacity(context: context);
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -76,7 +76,7 @@ public sealed class WorldClockOperand : WorldFactOperand {
     private WorldClockOperand() : base(valueKind: CellKind.Int) { }
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -96,7 +96,7 @@ public sealed class WorldRegionOccupancyOperand : WorldFactOperand {
     public string PlacementId => m_operand.PlacementId;
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => PopulationCapacity(context: context);
+    public override RuleWork Cost(IRuleCostContext context) => PopulationCapacity(context: context);
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -141,7 +141,7 @@ public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
     /// is what an influence count walks.</summary>
     /// <param name="context">The compile context.</param>
     /// <returns>The work units.</returns>
-    public override long Cost(IRuleCostContext context) => Math.Max(
+    public override RuleWork Cost(IRuleCostContext context) => Math.Max(
         val1: 1L,
         val2: ((WorldFactsCompileContext)context).Definition.Placements.Sum(selector: static placement => ((long)(placement.Spatial?.Count ?? 0)))
     );
@@ -203,7 +203,7 @@ public sealed class WorldMachineMemoryOperand : WorldFactOperand {
     public int Screen => m_operand.Screen;
 
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -253,7 +253,7 @@ public sealed class WorldArgBodyOperand : WorldFactOperand {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) {
+    public override RuleWork Cost(IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         return context.RowCapacity(rowOrdinal: RowOrdinal);
@@ -319,7 +319,7 @@ public sealed class WorldBodyFactOperand : WorldFactOperand {
         }
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => m_cost;
+    public override RuleWork Cost(IRuleCostContext context) => m_cost;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
@@ -387,7 +387,7 @@ public sealed class WorldIdentityFactOperand : WorldFactOperand {
         ));
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);

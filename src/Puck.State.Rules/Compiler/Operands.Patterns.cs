@@ -333,20 +333,14 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
         );
     }
     /// <inheritdoc/>
-    public override long Cost(IRuleCostContext context) => ((Board is { } board)
-        ? (board.Topology.CellCount + board.Visits)
-        : RuleWorkBudget.SaturatingMultiply(
-            left: ((RowFrom is { } live)
+    public override RuleWork Cost(IRuleCostContext context) => ((Board is { } board)
+        ? RuleWork.Known(units: (board.Topology.CellCount + board.Visits))
+        : (((long)((RowFrom is { } live)
             ? live.SelectionCapacity
-            : Capacity),
-            right: RuleWorkBudget.SaturatingAdd(
-                left: 1L,
-                right: RuleWorkBudget.ExpressionCost(
-                    context: context,
-                    tokens: (TokenExpression ?? [])
-                )
-            )
-        )
+            : Capacity)) * (1L + RuleWorkBudget.ExpressionCost(
+                context: context,
+                tokens: (TokenExpression ?? [])
+            )))
     );
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader) {

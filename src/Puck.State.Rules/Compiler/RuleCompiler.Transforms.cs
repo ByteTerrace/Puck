@@ -67,7 +67,7 @@ public static partial class RuleCompiler {
         CompiledValueSource? pushValue = null;
         LiveRow? fromRow = null;
         LiveRow? toRow = null;
-        var sourceCost = 0L;
+        var sourceCost = RuleWork.Zero;
 
         resolved = null;
 
@@ -604,14 +604,11 @@ public static partial class RuleCompiler {
 
         return new TransformStateEffect(
             arena: resolved!,
-            cost: RuleWorkBudget.SaturatingAdd(
-                left: TransformCost(
-                    context: context,
-                    fromRow: fromRow,
-                    transform: transform
-                ),
-                right: sourceCost
-            ),
+            cost: (TransformCost(
+                context: context,
+                fromRow: fromRow,
+                transform: transform
+            ) + sourceCost),
             describe: DescribeTransform(transform: transform),
             fromRow: fromRow,
             keyRef: keyRef,
@@ -695,14 +692,14 @@ public static partial class RuleCompiler {
         StateTransform.Transfer transfer => $"transformState Transfer {transfer.From} to {transfer.To} {transfer.Selector}",
         _ => $"transformState {transform.GetType().Name}",
     });
-    private static long TransformCost(StateTransform transform, RuleCompileContext context, LiveRow? fromRow) {
+    private static RuleWork TransformCost(StateTransform transform, RuleCompileContext context, LiveRow? fromRow) {
         var storage = 0L;
 
         foreach (var row in context.Rows) {
             storage += row.CellCeiling;
         }
 
-        var cost = (4_096L + storage);
+        var cost = RuleWork.Known(units: (4_096L + storage));
 
         switch (transform) {
             case StateTransform.SetRay ray:
@@ -733,14 +730,20 @@ public static partial class RuleCompiler {
 
                 break;
             case StateTransform.SortZone sortZone:
-                cost += ((2L * context.RowCapacity(name: sortZone.Row)) * Math.Max(
-                    val1: 1,
-                    val2: sortZone.By.Count
-                ));
+                cost += RuleWorkBudget.InsertionSortWork(
+                    count: context.RowCapacity(name: sortZone.Row),
+                    keys: Math.Max(
+                        val1: 1,
+                        val2: sortZone.By.Count
+                    )
+                );
 
                 break;
             case StateTransform.SortKeyed sortKeyed:
-                cost += (2L * context.RowCapacity(name: sortKeyed.Row));
+                cost += RuleWorkBudget.InsertionSortWork(
+                    count: context.RowCapacity(name: sortKeyed.Row),
+                    keys: 1
+                );
 
                 break;
             case StateTransform.Shuffle shuffle:

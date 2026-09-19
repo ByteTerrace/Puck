@@ -696,7 +696,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget.rules",
-            description: "Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): world.budget.rules [top] | --why <rule>. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the cost of one evaluation, the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under; a trailing total line reads work=<sum of the exclusion tree> of <RuleCapacity.MaxWorkUnitsPerTick>. '--why <rule>' prints one line's derivation terms instead: the multiplier's source and every effect's own cost.",
+            description: "Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): world.budget.rules [top] | --why <rule>. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), what one sweep costs before its first evaluation (setup), what one evaluation costs whether or not its gate holds (check), what one firing costs (fire), the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under; a trailing total line reads work=<sum of the exclusion tree> of <RuleCapacity.MaxWorkUnitsPerTick>. '--why <rule>' prints one line's derivation terms instead: the multiplier's source and every effect's own cost.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -750,7 +750,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
                     output.Add(item: $"[world.budget.rules {line.Name}{(line.IsInteraction
                         ? " interaction"
-                        : string.Empty)} x{line.Multiplier} unit={line.UnitCost} work={line.WorkUnits}{((line.Discriminators.Count > 0)
+                        : string.Empty)} x{line.Multiplier} setup={line.Cost.Setup} check={line.Cost.Check} fire={line.Cost.Effects} work={line.WorkUnits}{((line.Discriminators.Count > 0)
                         ? $" exclusive {string.Join(
                             separator: ",",
                             values: line.Discriminators.Select(selector: pinned => pinned.Describe(catalog: server.Definition.StateCatalog))

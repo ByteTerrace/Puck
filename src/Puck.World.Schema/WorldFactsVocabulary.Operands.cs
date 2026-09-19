@@ -409,7 +409,7 @@ public static partial class WorldFactsVocabulary {
                     fact = BodyFact(
                         bodyA: bodyA,
                         bodyB: bodyB,
-                        cost: 1L,
+                        cost: WorldRuleCapacity.SightTestWork,
                         describe: name,
                         read: facet => facet.Read(operand: operand),
                         rowOrdinal: -1,

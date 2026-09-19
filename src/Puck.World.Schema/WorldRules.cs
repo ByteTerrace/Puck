@@ -98,6 +98,9 @@ public static class WorldRuleCapacity {
     public const int MaxDecisionOptions = 32;
     /// <summary>The largest cube radius a field paint covers.</summary>
     public const int MaxFieldPaintRadius = 8;
+    /// <summary>The work units one line-of-sight test costs. The march behind it walks the baked field's cells along
+    /// the segment, a count the document does not carry, so this is a flat weight rather than a traversal bound.</summary>
+    public const long SightTestWork = 64L;
 }
 /// <summary>The compile-time refusals only a world's own arms raise; the rule compiler's own are
 /// <see cref="Puck.State.Rules.RuleRefusal"/>. Both travel in a <see cref="RuleException"/>.</summary>

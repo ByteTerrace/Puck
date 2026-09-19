@@ -470,9 +470,10 @@ public sealed class WorldDecisionNeighborLawTests {
             (2 * capacity),
             separate.DecisionGridPointsPerTick
         );
+        // A second grid keys its points, sorts them, and groups the sorted run.
         Assert.Equal(
-            (2 * capacity),
-            (separate.WorkUnitsPerTick - shared.WorkUnitsPerTick)
+            ((2L * capacity) + Puck.State.Rules.RuleWorkBudget.IntrosortWork(count: capacity).Units),
+            (separate.WorkUnitsPerTick.Units - shared.WorkUnitsPerTick.Units)
         );
         var noNeighbors = WorldRuleWorkBudget.Measure(definition: Document(policy: Policy() with { Options = [option with { Neighbors = null }] }));
 

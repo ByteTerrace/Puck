@@ -254,8 +254,13 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
             4096L,
             lines[0].Multiplier
         );
+        // The sweep snapshots the iterated row's keys once, then checks and fires once per key.
         Assert.Equal(
-            (lines[0].Multiplier * lines[0].UnitCost),
+            RuleWork.Known(units: 4096L),
+            lines[0].Cost.Setup
+        );
+        Assert.Equal(
+            (lines[0].Cost.Setup + (lines[0].Multiplier * (lines[0].Cost.Check + lines[0].Cost.Effects))),
             lines[0].WorkUnits
         );
         Assert.Equal(
@@ -269,13 +274,13 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
         Assert.Empty(collection: lines[0].Discriminators);
 
         // p0 and p1 are exclusive on phase, so all checks sum, but firing carries one of them, not both.
-        var totalChecks = lines.Sum(selector: line => line.CheckUnits);
-        var unconditionalFiring = lines.Where(predicate: line => (line.Discriminators.Count == 0)).Sum(selector: line => line.FiringUnits);
-        var exclusiveFiring = lines.Where(predicate: line => (line.Discriminators.Count > 0)).Max(selector: line => line.FiringUnits);
+        var totalChecks = lines.Sum(selector: line => line.CheckUnits.Units);
+        var unconditionalFiring = lines.Where(predicate: line => (line.Discriminators.Count == 0)).Sum(selector: line => line.FiringUnits.Units);
+        var exclusiveFiring = lines.Where(predicate: line => (line.Discriminators.Count > 0)).Max(selector: line => line.FiringUnits.Units);
 
         Assert.Equal(
             ((totalChecks + unconditionalFiring) + exclusiveFiring),
-            WorldRuleWorkBudget.Measure(definition: document).WorkUnitsPerTick
+            WorldRuleWorkBudget.Measure(definition: document).WorkUnitsPerTick.Units
         );
     }
 }

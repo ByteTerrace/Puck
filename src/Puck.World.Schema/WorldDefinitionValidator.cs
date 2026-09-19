@@ -1582,7 +1582,7 @@ public static partial class WorldDefinitionValidator {
                 rules: compiledRules
             );
 
-            if (ruleBudget.WorkUnitsPerTick > RuleCapacity.MaxWorkUnitsPerTick) {
+            if (!ruleBudget.WorkUnitsPerTick.Fits(ceiling: RuleCapacity.MaxWorkUnitsPerTick)) {
                 var costliest = string.Join(
                     separator: ", ",
                     values: WorldRuleWorkBudget.Contributors(
@@ -1592,7 +1592,9 @@ public static partial class WorldDefinitionValidator {
                     ).Take(count: 3).Select(selector: static line => $"'{line.Name}' x{line.Multiplier} = {line.WorkUnits}")
                 );
 
-                errors.Add(item: $"rules/interactions/flock affinities derive {ruleBudget.WorkUnitsPerTick} worst-case work units per tick, exceeding the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} (a forEach line's multiplier is its row's capacity, so author the capacity the row needs; world.budget.rules lists every line).");
+                errors.Add(item: $"rules/interactions/flock affinities derive {(ruleBudget.WorkUnitsPerTick.IsKnown
+                    ? $"{ruleBudget.WorkUnitsPerTick} worst-case work units per tick, exceeding"
+                    : $"no bound on their work per tick ({ruleBudget.WorkUnitsPerTick}), which cannot be admitted under")} the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} (a forEach line's multiplier is its row's capacity, so author the capacity the row needs; world.budget.rules lists every line).");
             }
         }
         if (errors.Count == 0) {

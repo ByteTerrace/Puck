@@ -556,7 +556,7 @@ public sealed class ArmLedger {
 
         public override bool SubmitsMutation => false;
 
-        public override long Cost(IRuleCostContext context) => 1L;
+        public override RuleWork Cost(IRuleCostContext context) => 1L;
         public override bool TryFire(IEffectHost host, in EffectFiring firing, out EffectRefusal refusal) {
             refusal = EffectRefusal.None;
 
@@ -594,7 +594,7 @@ public sealed class ArmLedger {
         public override EffectNeeds Needs => EffectNeeds.Irreversible;
         public override bool SubmitsMutation => false;
 
-        public override long Cost(IRuleCostContext context) => 1L;
+        public override RuleWork Cost(IRuleCostContext context) => 1L;
         public override bool TryFire(IEffectHost host, in EffectFiring firing, out EffectRefusal refusal) {
             ArgumentNullException.ThrowIfNull(argument: host);
 

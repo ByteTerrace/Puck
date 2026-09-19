@@ -34,7 +34,7 @@ public sealed partial class WorldPopulation {
                 );
                 maximum = Math.Max(
                     val1: maximum,
-                    val2: (profile.MaxNeighbors * compiled.WorkUnitsPerNeighbor)
+                    val2: (profile.MaxNeighbors * compiled.WorkUnitsPerNeighbor.Units)
                 );
             }
         }

@@ -1,22 +1,20 @@
 namespace Puck.State.Rules;
 
 /// <summary>The static pricing every compiled shape reports its cost through. These are heuristic units, not
-/// calibrated cycles; the arithmetic saturates so a pathological program reports the ceiling rather than wrapping.</summary>
+/// calibrated cycles. A sum no <see cref="long"/> holds is an overflow and an operation nothing prices is
+/// unmodeled; both survive every composition, so neither is ever admitted as a number.</summary>
 public static partial class RuleWorkBudget {
     /// <summary>Returns the work units a list of effects costs.</summary>
     /// <param name="effects">The compiled effects.</param>
     /// <param name="context">The context the effects were priced against.</param>
     /// <returns>The work units.</returns>
-    public static long EffectsCost(IRuleEffect[] effects, IRuleCostContext context) {
+    public static RuleWork EffectsCost(IRuleEffect[] effects, IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: effects);
 
-        var cost = 0L;
+        var cost = RuleWork.Zero;
 
         foreach (var effect in effects) {
-            cost = SaturatingAdd(
-                left: cost,
-                right: effect.Cost(context: context)
-            );
+            cost += effect.Cost(context: context);
         }
 
         return cost;
@@ -25,7 +23,7 @@ public static partial class RuleWorkBudget {
     /// <param name="tokens">The compiled postfix program.</param>
     /// <param name="context">The context the program was priced against.</param>
     /// <returns>The work units.</returns>
-    public static long ExpressionCost(CompiledExpressionToken[] tokens, IRuleCostContext context) => ExpressionCost(
+    public static RuleWork ExpressionCost(CompiledExpressionToken[] tokens, IRuleCostContext context) => ExpressionCost(
         context: context,
         kind: CellKind.Int,
         tokens: tokens
@@ -37,41 +35,33 @@ public static partial class RuleWorkBudget {
     /// <param name="kind">The kind the program computes in.</param>
     /// <param name="context">The context the program was priced against.</param>
     /// <returns>The work units.</returns>
-    public static long ExpressionCost(CompiledExpressionToken[] tokens, CellKind kind, IRuleCostContext context) {
+    public static RuleWork ExpressionCost(CompiledExpressionToken[] tokens, CellKind kind, IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: tokens);
 
-        var cost = 0L;
+        var cost = RuleWork.Zero;
 
         foreach (var token in tokens) {
-            var tokenCost = token switch {
+            cost += token switch {
                 { Operand: { } operand } => operand.Cost(context: context),
-                { Fold: { } fold } => SaturatingMultiply(
-                left: Math.Max(
+                { Fold: { } fold } => (Math.Max(
                     val1: 1L,
                     val2: fold.Members
-                ),
-                right: ExpressionCost(
+                ) * ExpressionCost(
                     context: context,
                     kind: fold.MemberKind,
                     tokens: fold.Body
-                )
-            ),
+                )),
                 { Call: { } call } => ExpressionCost(
-                context: context,
-                kind: kind,
-                tokens: call.Body
-            ),
+                    context: context,
+                    kind: kind,
+                    tokens: call.Body
+                ),
                 _ => OperationCost(
-                board: token.Board,
-                kind: kind,
-                operation: token.Operation
-            ),
+                    board: token.Board,
+                    kind: kind,
+                    operation: token.Operation
+                ),
             };
-
-            cost = SaturatingAdd(
-                left: cost,
-                right: tokenCost
-            );
         }
 
         return cost;
@@ -81,64 +71,90 @@ public static partial class RuleWorkBudget {
     /// <param name="tokens">The compiled postfix gate.</param>
     /// <param name="context">The context the gate was priced against.</param>
     /// <returns>The work units.</returns>
-    public static long GateCost(GateToken[] tokens, IRuleCostContext context) {
+    public static RuleWork GateCost(GateToken[] tokens, IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: tokens);
 
-        var cost = 0L;
+        var cost = RuleWork.Zero;
 
         foreach (var token in tokens) {
-            var sides = SaturatingAdd(
-                left: token.LeftSource.Cost(
-                    context: context,
-                    kind: token.ValueKind
-                ),
-                right: token.RightSource.Cost(
-                    context: context,
-                    kind: token.ValueKind
-                )
-            );
+            var sides = (token.LeftSource.Cost(
+                context: context,
+                kind: token.ValueKind
+            ) + token.RightSource.Cost(
+                context: context,
+                kind: token.ValueKind
+            ));
 
-            cost = SaturatingAdd(
-                left: cost,
-                right: ((token.LeftSource.IsExpression || token.RightSource.IsExpression)
-                ? SaturatingAdd(
-                        left: 1L,
-                        right: sides
-                    )
-                : sides)
+            cost += ((token.LeftSource.IsExpression || token.RightSource.IsExpression)
+                ? (1L + sides)
+                : sides
             );
         }
 
         return cost;
     }
+    /// <summary>Returns the work units a stable insertion sort of <paramref name="count"/> members over
+    /// <paramref name="keys"/> key columns costs, which is the sort every reordering transform runs. Each member is
+    /// read, ordered, and written back once; each of the <c>count x (count - 1) / 2</c> pairs a reversed input
+    /// compares costs one comparison per key column, the position tiebreak, and one move.</summary>
+    /// <param name="count">The most members the sort can hold.</param>
+    /// <param name="keys">The key columns one comparison reads.</param>
+    /// <returns>The work units.</returns>
+    public static RuleWork InsertionSortWork(long count, int keys) {
+        var members = Math.Max(
+            val1: 0L,
+            val2: count
+        );
+        var perStep = RuleWork.Known(units: (((long)keys) + 2L));
+        // One of the two factors is even, so halving it first keeps the pair count exact.
+        var pairs = ((((members & 1L) == 0L)
+            ? ((members / 2L) * RuleWork.Known(units: Math.Max(
+                val1: 0L,
+                val2: (members - 1L)
+            )))
+            : (members * RuleWork.Known(units: ((members - 1L) / 2L)))
+        ));
+
+        return ((members * perStep) + ((pairs.IsKnown
+            ? (pairs.Units * perStep)
+            : pairs
+        )));
+    }
+    /// <summary>Returns the comparisons and moves the runtime's introspective sort can spend ordering
+    /// <paramref name="count"/> members, which is the sort behind <see cref="List{T}.Sort()"/> and
+    /// <see cref="MemoryExtensions.Sort{T}(Span{T})"/>.</summary>
+    /// <remarks>The sort partitions to a depth of <c>2 x (floor(log2 n) + 1)</c> before it falls back to a heap sort,
+    /// and insertion-sorts a partition of sixteen or fewer. A member is compared at most twice per partition depth
+    /// (the scan and the median-of-three), at most <c>2 x (floor(log2 n) + 1)</c> times by the heap sort, and fewer
+    /// than eight times by the insertion sort; each comparison is paired with at most one move. That is
+    /// <c>2 x n x (6 x (floor(log2 n) + 1) + 8)</c>.</remarks>
+    /// <param name="count">The most members the sort can hold.</param>
+    /// <returns>The work units.</returns>
+    public static RuleWork IntrosortWork(long count) => ((count < 2L)
+        ? RuleWork.Zero
+        : ((2L * count) * RuleWork.Known(units: ((6L * SearchSteps(count: count)) + 8L)))
+    );
+    /// <summary>Returns the probes a binary search or one heap sift over <paramref name="count"/> members makes:
+    /// <c>floor(log2 count) + 1</c>, and one for an empty set.</summary>
+    /// <param name="count">The members searched.</param>
+    /// <returns>The probes.</returns>
+    public static long SearchSteps(long count) => ((count < 1L)
+        ? 1L
+        : (System.Numerics.BitOperations.Log2(value: ((ulong)count)) + 1L)
+    );
     /// <summary>Returns the work units one operation token costs. Every price comes from the operator table; a
-    /// board token refines its row's ceiling with the topology the query actually walks. An unknown operation
-    /// receives the rejecting sentinel, so a program carrying one prices past every ceiling.</summary>
+    /// board token refines its row's ceiling with the topology the query actually walks. An operation the table
+    /// does not register is unmodeled, so a program carrying one is admitted under no ceiling.</summary>
     /// <param name="operation">The operation.</param>
     /// <param name="kind">The numeric kind the program computes in.</param>
     /// <param name="board">The compiled board query for a board token.</param>
     /// <returns>The work units.</returns>
-    public static long OperationCost(ExpressionOp operation, CellKind kind = CellKind.Int, BoardQuery? board = null) => ((board, operation) switch {
-        ( { } shifted, (ExpressionOp.BoardShift or ExpressionOp.BoardImage)) => ((shifted.Topology.CellCount / 2) + shifted.Visits),
-        ( { } fill, ExpressionOp.BoardFill) => (((long)fill.Topology.CellCount) * ((fill.Topology.CellCount / 2) + fill.Visits)),
-        _ => (ExpressionOperators.Find(operation: operation)?.Cost ?? long.MaxValue),
+    public static RuleWork OperationCost(ExpressionOp operation, CellKind kind = CellKind.Int, BoardQuery? board = null) => ((board, operation) switch {
+        ( { } shifted, (ExpressionOp.BoardShift or ExpressionOp.BoardImage)) => RuleWork.Known(units: ((shifted.Topology.CellCount / 2) + shifted.Visits)),
+        ( { } fill, ExpressionOp.BoardFill) => (((long)fill.Topology.CellCount) * RuleWork.Known(units: ((fill.Topology.CellCount / 2) + fill.Visits))),
+        _ => ((ExpressionOperators.Find(operation: operation) is { } row)
+            ? RuleWork.Known(units: row.Cost)
+            : RuleWork.Unmodeled(reason: $"expression operation {((byte)operation)} is not registered")
+        ),
     });
-    /// <summary>Adds, clamping at <see cref="long.MaxValue"/>.</summary>
-    /// <param name="left">The left addend.</param>
-    /// <param name="right">The right addend.</param>
-    /// <returns>The sum.</returns>
-    public static long SaturatingAdd(long left, long right) => ((left > (long.MaxValue - right))
-        ? long.MaxValue
-        : (left + right)
-    );
-    /// <summary>Multiplies, clamping at <see cref="long.MaxValue"/>.</summary>
-    /// <param name="left">The left factor.</param>
-    /// <param name="right">The right factor.</param>
-    /// <returns>The product.</returns>
-    public static long SaturatingMultiply(long left, long right) => (((left == 0L) || (right == 0L))
-        ? 0L
-        : ((left > (long.MaxValue / right))
-            ? long.MaxValue
-            : (left * right)
-    ));
 }

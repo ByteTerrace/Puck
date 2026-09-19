@@ -27,13 +27,13 @@ public sealed class CompiledWorldFlockAffinities {
             : null
         );
         WorkUnitsPerNeighbor = (((Cohesion is null)
-            ? 0
+            ? RuleWork.Zero
             : WorldRuleWorkBudget.ExpressionCost(
                 Cohesion,
                 definition
             )) +
             ((Alignment is null)
-            ? 0
+            ? RuleWork.Zero
             : WorldRuleWorkBudget.ExpressionCost(
                 Alignment,
                 definition
@@ -45,5 +45,5 @@ public sealed class CompiledWorldFlockAffinities {
     /// <summary>Gets the centroid expression, or null for uniform influence.</summary>
     public CompiledExpressionToken[]? Cohesion { get; }
     /// <summary>Gets the conservative token and state-candidate-visit cost of evaluating both expressions once.</summary>
-    public long WorkUnitsPerNeighbor { get; }
+    public RuleWork WorkUnitsPerNeighbor { get; }
 }

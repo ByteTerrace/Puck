@@ -29,7 +29,7 @@ public abstract class OperandFact<TFacet> : IFacetFact, ICompiledFact where TFac
     /// scans, 1 for a direct read.</summary>
     /// <param name="context">The compile context the operand was resolved against.</param>
     /// <returns>The work units.</returns>
-    public abstract long Cost(IRuleCostContext context);
+    public abstract RuleWork Cost(IRuleCostContext context);
     /// <summary>Reads the operand's live fact for the evaluation in flight.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="facet">The facet the evaluator resolved from the host.</param>

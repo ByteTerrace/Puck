@@ -330,7 +330,7 @@ public sealed partial class WorldPopulation {
             ? 1
             : 0)),
             LineOfSightTests = (FlockStatistics.LineOfSightTests + sightTests),
-            AffinityWorkUnits = (FlockStatistics.AffinityWorkUnits + (count * (affinities?.WorkUnitsPerNeighbor ?? 0))),
+            AffinityWorkUnits = (FlockStatistics.AffinityWorkUnits + (count * (affinities?.WorkUnitsPerNeighbor.Units ?? 0L))),
         };
     }
     private BodySensorTarget ReadFlockTarget(Entry entry, in FixedVector3 self) {

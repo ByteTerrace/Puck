@@ -525,7 +525,7 @@ public static class WorldSearchCompilation {
     /// sum.</summary>
     /// <param name="judge">The judge rules.</param>
     /// <param name="context">The compile context.</param>
-    public static long JudgeCost(CompiledRule[] judge, WorldFactsCompileContext context) {
+    public static RuleWork JudgeCost(CompiledRule[] judge, WorldFactsCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: judge);
         ArgumentNullException.ThrowIfNull(argument: context);
 
@@ -552,9 +552,9 @@ public static class WorldSearchCompilation {
             writers: RuleWorkBudget.CountWriters(rules: multiplied)
         );
 
-        return Math.Max(
-            val1: 1L,
-            val2: work
+        return RuleWork.Max(
+            left: RuleWork.Known(units: 1L),
+            right: work
         );
     }
     /// <summary>Returns the rules a frame evaluates: every rule that is neither an interaction nor a decision and
@@ -1070,16 +1070,29 @@ public static class WorldSearchCompilation {
             judge: judge
         );
         var sheet = WorldRuleWorkBudget.Measure(definition: definition).WorkUnitsPerTick;
+
+        // A sheet or a judge no number bounds leaves no allowance to divide, and says why.
+        if (
+            !sheet.IsKnown ||
+            !judgeCost.IsKnown
+        ) {
+            reason = $"search has no work allowance: {(sheet.IsKnown
+                ? $"one judge run is {judgeCost}"
+                : $"the rules' work per tick is {sheet}")}";
+
+            return false;
+        }
+
         var leftover = (Math.Max(
             val1: 0L,
-            val2: (RuleCapacity.MaxWorkUnitsPerTick - sheet)
+            val2: (RuleCapacity.MaxWorkUnitsPerTick - sheet.Units)
         ) / rows.Count);
 
         for (var index = 0; (index < rows.Count); index++) {
             if (!TryPlan(
                 definition: definition,
                 row: rows[index],
-                judgeCost: judgeCost,
+                judgeCost: judgeCost.Units,
                 leftover: leftover,
                 context: context,
                 plan: out var plan,

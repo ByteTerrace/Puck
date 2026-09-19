@@ -49,7 +49,7 @@ public sealed class ArenaSearchJudgeLawTests {
     private sealed class StampEffect() : Puck.State.Rules.RuleEffect(describe: "stamp") {
         public override EffectNeeds Needs => EffectNeeds.Irreversible;
 
-        public override long Cost(IRuleCostContext context) => 1L;
+        public override RuleWork Cost(IRuleCostContext context) => 1L;
     }
     // Counts how often the search asks whether it may run at all.
     private sealed class CountingJudge(IArenaSearchJudge inner) : IArenaSearchJudge {

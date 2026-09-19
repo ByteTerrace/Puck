@@ -1,5 +1,3 @@
-using RuleWorkBudget = Puck.State.Rules.RuleWorkBudget;
-
 namespace Puck.World;
 
 /// <summary>Derives what installing one placement row actually rebuilds — never a cost independent of the row's own
@@ -33,7 +31,7 @@ public static class WorldPlacementEffectCost {
     /// (<see cref="WorldPlacementInhabit.DeclaredMax"/> — zero for a decoration or an attach-only row) plus one
     /// <see cref="SolidShapeCost"/> per shape its referenced prototype contributes when it carries
     /// <see cref="WorldPlacement.Solid"/>.</summary>
-    public static long Of(WorldPlacement placement, WorldDefinition definition) {
+    public static RuleWork Of(WorldPlacement placement, WorldDefinition definition) {
         var populationEntries = ((long)(placement.Inhabit?.DeclaredMax(peerCapacity: definition.Population.Capacity) ?? 0));
         var solidShapes = ((placement.Solid is not null)
             ? ShapeCount(
@@ -43,18 +41,6 @@ public static class WorldPlacementEffectCost {
             : 0L
         );
 
-        return RuleWorkBudget.SaturatingAdd(
-            left: DocumentCost,
-            right: RuleWorkBudget.SaturatingAdd(
-                left: RuleWorkBudget.SaturatingMultiply(
-                    left: PopulationEntryCost,
-                    right: populationEntries
-                ),
-                right: RuleWorkBudget.SaturatingMultiply(
-                    left: SolidShapeCost,
-                    right: solidShapes
-                )
-            )
-        );
+        return ((DocumentCost + (populationEntries * RuleWork.Known(units: PopulationEntryCost))) + (solidShapes * RuleWork.Known(units: SolidShapeCost)));
     }
 }
