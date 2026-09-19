@@ -80,6 +80,7 @@ public static partial class RuleCompiler {
         var kind = (tokens[1] switch {
             "neighbour" => BoardQueryKind.Neighbour,
             "pathCost" => BoardQueryKind.PathCost,
+            "jumpDistance" => BoardQueryKind.JumpDistance,
             "mask" => BoardQueryKind.Mask,
             "canonical" => BoardQueryKind.Canonical,
             "offset" => BoardQueryKind.Offset,
@@ -170,6 +171,17 @@ public static partial class RuleCompiler {
                 topology: topology,
                 upper: upper
             );
+        } else if (kind == BoardQueryKind.JumpDistance) {
+            var dynamicTarget = tokens.Length == 6 && tokens[3] == "cell";
+            var target = 0;
+            if (row.Kind is not (CellKind.Int or CellKind.Bool) ||
+                (!dynamicTarget && (tokens.Length != 4 || !topology.TryCell(tokens[3], out target)))) {
+                throw Invalid(detail: "jumpDistance requires <targetCell> or cell:<row>:<key> on an integer or boolean board row");
+            }
+            if (dynamicTarget) {
+                pathTargetFrom = ResolveCellRef(channel: name, context: context, key: tokens[5], row: tokens[4], ruleName: ruleName);
+            }
+            query = new BoardJumpDistanceQuery(topology, target, dynamicTarget);
         } else if (kind == BoardQueryKind.PathCost) {
             if (row.Kind != CellKind.Int) {
                 throw Invalid(detail: "pathCost requires <targetCell>:<maxCost>:<maxVisits> or cell:<row>:<key>:<maxCost>:<maxVisits> on an integer terrain row");
